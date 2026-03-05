@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AppBar,
   Box,
@@ -58,6 +58,7 @@ export default function Shell() {
   const nav = useNavigate();
   const loc = useLocation();
   const isOrgSuper = hasAnyRole([...ORG_SUPER_ROLES]);
+  const queryClient = useQueryClient();
   const [selectedClientId, setSelectedClientIdState] = useState(getSelectedClientId() ?? "");
   const [loggingOut, setLoggingOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -85,8 +86,11 @@ export default function Shell() {
     if (selected && selected !== selectedClientId) {
       setSelectedClientIdState(selected);
       setSelectedClientId(selected);
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] !== "clients"
+      });
     }
-  }, [clients.data, currentUser?.clientId, isOrgSuper, selectedClientId]);
+  }, [clients.data, currentUser?.clientId, isOrgSuper, queryClient, selectedClientId]);
 
   async function onLogout() {
     if (loggingOut) return;
@@ -173,6 +177,9 @@ export default function Shell() {
                 const value = e.target.value;
                 setSelectedClientIdState(value);
                 setSelectedClientId(value || null);
+                queryClient.invalidateQueries({
+                  predicate: (query) => query.queryKey[0] !== "clients"
+                });
               }}
               sx={{ minWidth: 240, mr: 1.5 }}
             >
