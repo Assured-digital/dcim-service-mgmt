@@ -15,6 +15,8 @@ import {
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import InboxIcon from "@mui/icons-material/Inbox";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import StorageIcon from "@mui/icons-material/Storage";
 import FactCheckIcon from "@mui/icons-material/FactCheck";
 import { revokeAndLogout } from "../lib/api";
@@ -25,6 +27,8 @@ const items = [
   { label: "Dashboard", path: "/", icon: <DashboardIcon /> },
   { label: "Triage", path: "/triage", icon: <InboxIcon /> },
   { label: "Service Requests", path: "/service-requests", icon: <ConfirmationNumberIcon /> },
+  { label: "Incidents", path: "/incidents", icon: <WarningAmberIcon /> },
+  { label: "Tasks", path: "/tasks", icon: <TaskAltIcon /> },
   { label: "Assets", path: "/assets", icon: <StorageIcon /> },
   { label: "Surveys & Audits", path: "/surveys", icon: <FactCheckIcon /> }
 ];

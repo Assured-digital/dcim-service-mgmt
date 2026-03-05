@@ -5,12 +5,22 @@ import { Box, Card, CardContent, Grid, Stack, Typography } from "@mui/material";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 
 type SR = { id: string; status: string };
+type Incident = { id: string; status: string };
+type Task = { id: string; status: string };
 type Asset = { id: string };
 type Survey = { id: string; status: string };
 type Submission = { id: string; status: string };
 
 export default function DashboardPage() {
   const srs = useQuery({ queryKey: ["srs"], queryFn: async () => (await api.get<SR[]>("/service-requests")).data });
+  const incidents = useQuery({
+    queryKey: ["incidents"],
+    queryFn: async () => (await api.get<Incident[]>("/incidents")).data
+  });
+  const tasks = useQuery({
+    queryKey: ["tasks"],
+    queryFn: async () => (await api.get<Task[]>("/tasks")).data
+  });
   const assets = useQuery({ queryKey: ["assets"], queryFn: async () => (await api.get<Asset[]>("/assets")).data });
   const surveys = useQuery({ queryKey: ["surveys"], queryFn: async () => (await api.get<Survey[]>("/surveys")).data });
   const triage = useQuery({
@@ -20,14 +30,18 @@ export default function DashboardPage() {
 
   const triageInbox = (triage.data ?? []).filter((x) => x.status === "NEW").length;
   const openTickets = (srs.data ?? []).filter((x) => x.status !== "CLOSED").length;
-  const degradedAssets = 0; // placeholder for asset health modelling
+  const openIncidents = (incidents.data ?? []).filter(
+    (x) => !["RESOLVED", "CLOSED"].includes(x.status)
+  ).length;
+  const openTasks = (tasks.data ?? []).filter((x) => !["DONE"].includes(x.status)).length;
   const activeSurveys = (surveys.data ?? []).filter((x) => x.status !== "COMPLETED").length;
 
   const cards = [
     { label: "Triage Inbox", value: triageInbox, tone: "#f59e0b" },
     { label: "Open Tickets", value: openTickets, tone: "#2563eb" },
+    { label: "Open Incidents", value: openIncidents, tone: "#dc2626" },
+    { label: "Open Tasks", value: openTasks, tone: "#0f766e" },
     { label: "Assets", value: assets.data?.length ?? 0, tone: "#0f766e" },
-    { label: "Degraded Assets", value: degradedAssets, tone: "#dc2626" },
     { label: "Active Surveys", value: activeSurveys, tone: "#7c3aed" }
   ];
 
@@ -41,7 +55,7 @@ export default function DashboardPage() {
       </Typography>
       <Grid container spacing={2}>
         {cards.map((c) => (
-          <Grid item xs={12} sm={6} md={2.4 as any} key={c.label}>
+          <Grid item xs={12} sm={6} md={4} lg={2.4 as any} key={c.label}>
             <Card sx={{ overflow: "hidden" }}>
               <Box sx={{ height: 4, bgcolor: c.tone }} />
               <CardContent>
