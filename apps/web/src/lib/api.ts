@@ -1,5 +1,6 @@
 import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
-import { clearSession, getToken, setSession } from "./auth";
+import { clearSession, getCurrentUser, getToken, setSession } from "./auth";
+import { getSelectedClientId } from "./scope";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
@@ -113,6 +114,26 @@ function normaliseApiError(err: unknown): ApiError {
 }
 
 // Response interceptor: handle auth + return consistent errors
+api.interceptors.request.use((config) => {
+  const user = getCurrentUser();
+  if (user?.role === "ADMIN") {
+    const hasExplicitScopeHeader =
+      !!config.headers &&
+      (Object.prototype.hasOwnProperty.call(config.headers, "x-client-id") ||
+        Object.prototype.hasOwnProperty.call(config.headers, "X-Client-Id"));
+    if (hasExplicitScopeHeader) return config;
+
+    const selectedClientId = getSelectedClientId();
+    if (selectedClientId) {
+      config.headers = {
+        ...(config.headers ?? {}),
+        "x-client-id": selectedClientId
+      };
+    }
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (res) => res,
   async (err) => {

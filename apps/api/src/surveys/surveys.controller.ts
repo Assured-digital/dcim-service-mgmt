@@ -8,13 +8,14 @@ import { UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { getJwtUser, resolveClientScope } from "../auth/request-context";
+import { PrismaService } from "../prisma/prisma.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("surveys")
 @ApiBearerAuth()
 @Controller("surveys")
 export class SurveysController {
-  constructor(private surveys: SurveysService) {}
+  constructor(private surveys: SurveysService, private prisma: PrismaService) {}
 
   @Get()
   @Roles(
@@ -26,7 +27,7 @@ export class SurveysController {
   )
   async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.surveys.listForClient(clientId);
   }
 
@@ -40,7 +41,7 @@ export class SurveysController {
   )
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.surveys.getForClient(clientId, id);
   }
 
@@ -52,7 +53,7 @@ export class SurveysController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.surveys.createForClient(clientId, dto);
   }
 
@@ -60,7 +61,7 @@ export class SurveysController {
   @Roles(Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async start(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.surveys.startSurvey(clientId, id);
   }
 
@@ -73,7 +74,7 @@ export class SurveysController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.surveys.addItem(clientId, id, dto);
   }
 
@@ -87,7 +88,7 @@ export class SurveysController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.surveys.updateItem(clientId, id, itemId, dto);
   }
 
@@ -95,7 +96,7 @@ export class SurveysController {
   @Roles(Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async complete(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.surveys.completeSurvey(clientId, id);
   }
 }

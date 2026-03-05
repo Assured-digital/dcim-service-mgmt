@@ -73,7 +73,7 @@ export default function UsersPage() {
   const users = useQuery({
     queryKey: ["users", scopeClientId],
     queryFn: async () => {
-      const headers = scopeClientId ? { "x-client-id": scopeClientId } : undefined;
+      const headers = { "x-client-id": scopeClientId || "" };
       return (await api.get<UserRecord[]>("/users", { headers })).data;
     }
   });
@@ -133,6 +133,7 @@ export default function UsersPage() {
   const mutationErrorMessage = Array.isArray(mutationError?.message)
     ? mutationError.message.join(", ")
     : mutationError?.message;
+  const clientLabelById = new Map((clientOptions ?? []).map((c) => [c.id, c.name]));
 
   return (
     <Box>
@@ -300,7 +301,7 @@ export default function UsersPage() {
                           label={row.isActive ? "active" : "inactive"}
                         />
                       </TableCell>
-                      <TableCell>{user.clientId ?? "-"}</TableCell>
+                      <TableCell>{(user.clientId && clientLabelById.get(user.clientId)) || user.clientId || "-"}</TableCell>
                       <TableCell>{new Date(user.updatedAt).toLocaleDateString()}</TableCell>
                       <TableCell align="right">
                         <Button

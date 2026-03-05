@@ -8,13 +8,14 @@ import { UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { getJwtUser, resolveClientScope } from "../auth/request-context";
+import { PrismaService } from "../prisma/prisma.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("service-requests")
 @ApiBearerAuth()
 @Controller("service-requests")
 export class ServiceRequestsController {
-  constructor(private srs: ServiceRequestsService) {}
+  constructor(private srs: ServiceRequestsService, private prisma: PrismaService) {}
 
   @Get()
   @Roles(
@@ -26,7 +27,7 @@ export class ServiceRequestsController {
   )
   async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.srs.listForClient(clientId);
   }
 
@@ -40,7 +41,7 @@ export class ServiceRequestsController {
   )
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.srs.getForClient(clientId, id);
   }
 
@@ -52,7 +53,7 @@ export class ServiceRequestsController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     const userId = user.userId ?? null;
     return this.srs.createForClient(clientId, userId, dto);
   }
@@ -66,7 +67,7 @@ export class ServiceRequestsController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     const userId = user.userId;
     return this.srs.closeForClient(clientId, id, userId, dto.closureSummary);
   }

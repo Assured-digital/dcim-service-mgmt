@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
   Headers,
   Param,
@@ -13,15 +12,17 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@prisma/client";
 import { JwtAuthGuard } from "../auth/jwt.guard";
+import { getJwtUser, resolveClientScope } from "../auth/request-context";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { PrismaService } from "../prisma/prisma.service";
 import { ConvertPublicSubmissionDto, CreatePublicSubmissionDto } from "./dto";
 import { PublicSubmissionsService } from "./public-submissions.service";
 
 @ApiTags("public-submissions")
 @Controller("public-submissions")
 export class PublicSubmissionsController {
-  constructor(private submissions: PublicSubmissionsService) {}
+  constructor(private submissions: PublicSubmissionsService, private prisma: PrismaService) {}
 
   @Post("public")
   async createPublic(@Body() dto: CreatePublicSubmissionDto) {
@@ -34,7 +35,8 @@ export class PublicSubmissionsController {
   @Get()
   @Roles(Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST)
   async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
-    const clientId = this.resolveClientScope(req.user, requestedClientId);
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.submissions.listForClient(clientId);
   }
 
@@ -48,32 +50,10 @@ export class PublicSubmissionsController {
     @Body() dto: ConvertPublicSubmissionDto,
     @Headers("x-client-id") requestedClientId?: string
   ) {
-    const clientId = this.resolveClientScope(req.user, requestedClientId);
-    const actorUserId = req.user?.userId;
-    if (!actorUserId) throw new ForbiddenException("Missing user context");
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    const actorUserId = user.userId;
 
     return this.submissions.convertForClient(clientId, id, actorUserId, dto.priority);
-  }
-
-  private resolveClientScope(user: any, requestedClientId?: string) {
-    const requested = requestedClientId?.trim();
-    const role = user?.role as Role | undefined;
-    const userClientId = user?.clientId as string | undefined;
-
-    if (!role) throw new ForbiddenException("Missing role");
-
-    if (role === Role.ADMIN) {
-      const scoped = requested || userClientId;
-      if (!scoped) {
-        throw new BadRequestException("Admin requests need x-client-id or user clientId");
-      }
-      return scoped;
-    }
-
-    if (!userClientId) throw new ForbiddenException("Missing client scope");
-    if (requested && requested !== userClientId) {
-      throw new ForbiddenException("Cross-client access denied");
-    }
-    return userClientId;
   }
 }

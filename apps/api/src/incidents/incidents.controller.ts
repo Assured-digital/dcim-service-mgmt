@@ -5,6 +5,7 @@ import { JwtAuthGuard } from "../auth/jwt.guard";
 import { getJwtUser, resolveClientScope } from "../auth/request-context";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { PrismaService } from "../prisma/prisma.service";
 import { CreateIncidentDto, UpdateIncidentStatusDto } from "./dto";
 import { IncidentsService } from "./incidents.service";
 
@@ -13,7 +14,7 @@ import { IncidentsService } from "./incidents.service";
 @ApiBearerAuth()
 @Controller("incidents")
 export class IncidentsController {
-  constructor(private incidents: IncidentsService) {}
+  constructor(private incidents: IncidentsService, private prisma: PrismaService) {}
 
   @Get()
   @Roles(
@@ -25,7 +26,7 @@ export class IncidentsController {
   )
   async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.incidents.listForClient(clientId);
   }
 
@@ -39,7 +40,7 @@ export class IncidentsController {
   )
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.incidents.getForClient(clientId, id);
   }
 
@@ -51,7 +52,7 @@ export class IncidentsController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.incidents.createForClient(clientId, user.userId, dto);
   }
 
@@ -64,7 +65,7 @@ export class IncidentsController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.incidents.updateStatusForClient(clientId, id, dto.status);
   }
 }

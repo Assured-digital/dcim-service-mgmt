@@ -5,6 +5,7 @@ import { JwtAuthGuard } from "../auth/jwt.guard";
 import { getJwtUser, resolveClientScope } from "../auth/request-context";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { PrismaService } from "../prisma/prisma.service";
 import { CreateTaskDto, UpdateTaskStatusDto } from "./dto";
 import { TasksService } from "./tasks.service";
 
@@ -13,7 +14,7 @@ import { TasksService } from "./tasks.service";
 @ApiBearerAuth()
 @Controller("tasks")
 export class TasksController {
-  constructor(private tasks: TasksService) {}
+  constructor(private tasks: TasksService, private prisma: PrismaService) {}
 
   @Get()
   @Roles(
@@ -25,7 +26,7 @@ export class TasksController {
   )
   async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.tasks.listForClient(clientId);
   }
 
@@ -39,7 +40,7 @@ export class TasksController {
   )
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.tasks.getForClient(clientId, id);
   }
 
@@ -47,7 +48,7 @@ export class TasksController {
   @Roles(Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async create(@Req() req: any, @Body() dto: CreateTaskDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.tasks.createForClient(clientId, user.userId, dto);
   }
 
@@ -60,7 +61,7 @@ export class TasksController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.tasks.updateStatusForClient(clientId, id, dto.status);
   }
 }

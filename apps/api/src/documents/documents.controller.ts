@@ -8,13 +8,14 @@ import { UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { getJwtUser, resolveClientScope } from "../auth/request-context";
+import { PrismaService } from "../prisma/prisma.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("documents")
 @ApiBearerAuth()
 @Controller("documents")
 export class DocumentsController {
-  constructor(private docs: DocumentsService) {}
+  constructor(private docs: DocumentsService, private prisma: PrismaService) {}
 
   @Get()
   @Roles(
@@ -26,7 +27,7 @@ export class DocumentsController {
   )
   async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.docs.listForClient(clientId);
   }
 
@@ -38,7 +39,7 @@ export class DocumentsController {
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
-    const clientId = resolveClientScope(user, requestedClientId);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.docs.createForClient(clientId, dto);
   }
 }
