@@ -12,6 +12,246 @@ import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+function clientCode(clientId: string): string {
+  return clientId.replace(/-/g, "").slice(0, 6).toUpperCase();
+}
+
+async function seedClientData(params: {
+  client: { id: string; name: string };
+  assigneeId: string;
+  createdById: string;
+}) {
+  const { client, assigneeId, createdById } = params;
+  const code = clientCode(client.id);
+  const isNova = client.name === "Nova Logistics";
+
+  const serviceRequests = isNova
+    ? [
+        {
+          reference: "SR-2026-0001",
+          subject: "Network latency on VLAN 200",
+          description: "Users report increased latency; investigate switch uplinks and QoS.",
+          status: ServiceRequestStatus.IN_PROGRESS,
+          priority: "high"
+        },
+        {
+          reference: "SR-2026-0002",
+          subject: "Scheduled power maintenance Zone C",
+          description: "Planned maintenance; confirm outage window and comms.",
+          status: ServiceRequestStatus.ASSIGNED,
+          priority: "medium"
+        }
+      ]
+    : [
+        {
+          reference: `SR-${code}-0001`,
+          subject: `${client.name}: Access control panel intermittent errors`,
+          description: "Panel in operations corridor intermittently denies valid badges.",
+          status: ServiceRequestStatus.NEW,
+          priority: "medium"
+        },
+        {
+          reference: `SR-${code}-0002`,
+          subject: `${client.name}: Planned electrical maintenance window`,
+          description: "Coordinate maintenance runbook and client communications.",
+          status: ServiceRequestStatus.ASSIGNED,
+          priority: "high"
+        }
+      ];
+
+  for (const item of serviceRequests) {
+    const existing = await prisma.serviceRequest.findUnique({
+      where: { reference: item.reference }
+    });
+    if (!existing) {
+      await prisma.serviceRequest.create({
+        data: {
+          reference: item.reference,
+          clientId: client.id,
+          subject: item.subject,
+          description: item.description,
+          status: item.status,
+          priority: item.priority,
+          assigneeId,
+          createdById
+        }
+      });
+    }
+  }
+
+  const surveyTitle = isNova
+    ? "Q1 2026 Facility Walkthrough"
+    : `${client.name} Quarterly Facility Walkthrough`;
+  const existingSurvey = await prisma.survey.findFirst({
+    where: { clientId: client.id, title: surveyTitle }
+  });
+  if (!existingSurvey) {
+    await prisma.survey.create({
+      data: {
+        clientId: client.id,
+        title: surveyTitle,
+        surveyType: "Facility",
+        status: SurveyStatus.IN_PROGRESS,
+        scheduledAt: new Date(),
+        assigneeId,
+        items: {
+          create: [
+            { label: "Fire exits clear and signed" },
+            { label: "UPS alarms checked" },
+            { label: "Cooling operating within range" }
+          ]
+        }
+      }
+    });
+  }
+
+  const triageSamples = isNova
+    ? [
+        {
+          requesterName: "Alex Turner",
+          requesterEmail: "alex.turner@novalogistics.example",
+          subject: "Intermittent rack access badge failure",
+          description: "Badge readers in zone B2 fail intermittently for on-call engineers."
+        },
+        {
+          requesterName: "Priya Shah",
+          requesterEmail: "priya.shah@novalogistics.example",
+          subject: "Cooling alert in aisle 4",
+          description: "Temperature spikes observed overnight; request urgent triage."
+        }
+      ]
+    : [
+        {
+          requesterName: "Operations Desk",
+          requesterEmail: `ops+${code.toLowerCase()}@example.local`,
+          subject: `${client.name}: UPS alert requires triage`,
+          description: "Critical UPS warning observed during shift handover."
+        },
+        {
+          requesterName: "Site Engineer",
+          requesterEmail: `engineer+${code.toLowerCase()}@example.local`,
+          subject: `${client.name}: CCTV stream intermittent`,
+          description: "Camera feed drops every few minutes in corridor 2."
+        }
+      ];
+
+  for (const sample of triageSamples) {
+    const existing = await prisma.publicSubmission.findFirst({
+      where: {
+        clientId: client.id,
+        requesterEmail: sample.requesterEmail,
+        subject: sample.subject
+      }
+    });
+
+    if (!existing) {
+      await prisma.publicSubmission.create({
+        data: {
+          clientId: client.id,
+          requesterName: sample.requesterName,
+          requesterEmail: sample.requesterEmail,
+          subject: sample.subject,
+          description: sample.description,
+          status: "NEW"
+        }
+      });
+    }
+  }
+
+  const incidentRefs = isNova
+    ? ["IN-2026-0001", "IN-2026-0002"]
+    : [`IN-${code}-0001`, `IN-${code}-0002`];
+
+  let incidentA = await prisma.incident.findUnique({
+    where: { reference: incidentRefs[0] }
+  });
+  if (!incidentA) {
+    incidentA = await prisma.incident.create({
+      data: {
+        reference: incidentRefs[0],
+        clientId: client.id,
+        title: `${client.name}: Core switch packet drops`,
+        description: "Intermittent packet drops detected on core switch uplink ports.",
+        status: IncidentStatus.INVESTIGATING,
+        severity: IncidentSeverity.HIGH,
+        priority: "high",
+        assigneeId,
+        createdById
+      }
+    });
+  }
+
+  const incidentB = await prisma.incident.findUnique({
+    where: { reference: incidentRefs[1] }
+  });
+  if (!incidentB) {
+    await prisma.incident.create({
+      data: {
+        reference: incidentRefs[1],
+        clientId: client.id,
+        title: `${client.name}: Cooling threshold breach`,
+        description: "Temperature breached threshold for 12 minutes in one zone.",
+        status: IncidentStatus.NEW,
+        severity: IncidentSeverity.CRITICAL,
+        priority: "high",
+        assigneeId,
+        createdById
+      }
+    });
+  }
+
+  const taskSamples = [
+    {
+      title: `${client.name}: Validate switch firmware integrity`,
+      description: "Run vendor diagnostics and compare firmware checksums.",
+      status: TaskStatus.IN_PROGRESS,
+      priority: "high",
+      incidentId: incidentA.id
+    },
+    {
+      title: `${client.name}: Capture thermal sensor logs`,
+      description: "Export 24h logs from aisle zone sensors.",
+      status: TaskStatus.OPEN,
+      priority: "medium",
+      incidentId: null as string | null
+    }
+  ];
+
+  for (const task of taskSamples) {
+    const existing = await prisma.task.findFirst({
+      where: { clientId: client.id, title: task.title }
+    });
+    if (!existing) {
+      await prisma.task.create({
+        data: {
+          clientId: client.id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          priority: task.priority,
+          incidentId: task.incidentId,
+          assigneeId,
+          createdById
+        }
+      });
+    }
+  }
+
+  await prisma.asset.createMany({
+    data: [
+      {
+        assetTag: `CL-${code}-RTR-01`,
+        name: `${client.name} Core Router`,
+        assetType: "ROUTER",
+        ownerType: OwnerType.CLIENT,
+        clientId: client.id,
+        location: "Network Room"
+      }
+    ],
+    skipDuplicates: true
+  });
+}
+
 async function main() {
   // 1) Organization (stable by name)
   const orgName = "DCMS Default Organization";
@@ -52,6 +292,22 @@ async function main() {
     });
   }
 
+  const existingClientB = await prisma.client.findFirst({
+    where: { name: "Apex Data Centers" }
+  });
+
+  const clientB =
+    existingClientB ??
+    (await prisma.client.create({
+      data: { name: "Apex Data Centers", status: "ACTIVE", organizationId: organization.id }
+    }));
+  if (clientB.organizationId !== organization.id) {
+    await prisma.client.update({
+      where: { id: clientB.id },
+      data: { organizationId: organization.id }
+    });
+  }
+
   // 3) Admin user (stable by email)
   const adminEmail = "admin@dcm.local";
   const admin = await prisma.user.upsert({
@@ -71,47 +327,7 @@ async function main() {
     }
   });
 
-  // 4) Service Requests (idempotent by fixed references)
-  const sr1Ref = "SR-2026-0001";
-  const sr2Ref = "SR-2026-0002";
-
-  const sr1 = await prisma.serviceRequest.findFirst({
-    where: { clientId: clientA.id, reference: sr1Ref }
-  });
-
-  if (!sr1) {
-    await prisma.serviceRequest.create({
-      data: {
-        reference: sr1Ref,
-        clientId: clientA.id,
-        subject: "Network latency on VLAN 200",
-        description: "Users report increased latency; investigate switch uplinks and QoS.",
-        status: ServiceRequestStatus.IN_PROGRESS,
-        priority: "high",
-        assigneeId: admin.id
-      }
-    });
-  }
-
-  const sr2 = await prisma.serviceRequest.findFirst({
-    where: { clientId: clientA.id, reference: sr2Ref }
-  });
-
-  if (!sr2) {
-    await prisma.serviceRequest.create({
-      data: {
-        reference: sr2Ref,
-        clientId: clientA.id,
-        subject: "Scheduled power maintenance Zone C",
-        description: "Planned maintenance; confirm outage window and comms.",
-        status: ServiceRequestStatus.ASSIGNED,
-        priority: "medium",
-        assigneeId: admin.id
-      }
-    });
-  }
-
-  // 5) Assets (assumes assetTag is unique; skipDuplicates prevents repeats)
+  // 4) Global Assets (internal shared assets)
   await prisma.asset.createMany({
     data: [
       {
@@ -132,159 +348,25 @@ async function main() {
     skipDuplicates: true
   });
 
-  // 6) Survey (idempotent by (clientId + title))
-  const surveyTitle = "Q1 2026 Facility Walkthrough";
-
-  let survey = await prisma.survey.findFirst({
-    where: { clientId: clientA.id, title: surveyTitle }
+  const orgClients = await prisma.client.findMany({
+    where: { organizationId: organization.id },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true }
   });
 
-  if (!survey) {
-    survey = await prisma.survey.create({
-      data: {
-        clientId: clientA.id,
-        title: surveyTitle,
-        surveyType: "Facility",
-        status: SurveyStatus.IN_PROGRESS,
-        scheduledAt: new Date(),
-        assigneeId: admin.id,
-        items: {
-          create: [
-            { label: "Fire exits clear and signed" },
-            { label: "UPS alarms checked" },
-            { label: "Cooling operating within range" }
-          ]
-        }
-      }
+  for (const client of orgClients) {
+    await seedClientData({
+      client,
+      assigneeId: admin.id,
+      createdById: admin.id
     });
-  }
-
-  // 7) Public submissions for triage inbox (idempotent by requesterEmail + subject + client)
-  const triageSamples = [
-    {
-      requesterName: "Alex Turner",
-      requesterEmail: "alex.turner@novalogistics.example",
-      subject: "Intermittent rack access badge failure",
-      description: "Badge readers in zone B2 fail intermittently for on-call engineers."
-    },
-    {
-      requesterName: "Priya Shah",
-      requesterEmail: "priya.shah@novalogistics.example",
-      subject: "Cooling alert in aisle 4",
-      description: "Temperature spikes observed overnight; request urgent triage."
-    }
-  ];
-
-  for (const sample of triageSamples) {
-    const existing = await prisma.publicSubmission.findFirst({
-      where: {
-        clientId: clientA.id,
-        requesterEmail: sample.requesterEmail,
-        subject: sample.subject
-      }
-    });
-
-    if (!existing) {
-      await prisma.publicSubmission.create({
-        data: {
-          clientId: clientA.id,
-          requesterName: sample.requesterName,
-          requesterEmail: sample.requesterEmail,
-          subject: sample.subject,
-          description: sample.description,
-          status: "NEW"
-        }
-      });
-    }
-  }
-
-  // 8) Incidents (idempotent by reference + client)
-  const inc1Ref = "IN-2026-0001";
-  const inc2Ref = "IN-2026-0002";
-
-  const inc1 = await prisma.incident.findFirst({
-    where: { clientId: clientA.id, reference: inc1Ref }
-  });
-
-  const incidentA =
-    inc1 ??
-    (await prisma.incident.create({
-      data: {
-        reference: inc1Ref,
-        clientId: clientA.id,
-        title: "Core switch packet drops",
-        description: "Intermittent packet drops detected on core switch uplink ports.",
-        status: IncidentStatus.INVESTIGATING,
-        severity: IncidentSeverity.HIGH,
-        priority: "high",
-        assigneeId: admin.id,
-        createdById: admin.id
-      }
-    }));
-
-  const inc2 = await prisma.incident.findFirst({
-    where: { clientId: clientA.id, reference: inc2Ref }
-  });
-
-  if (!inc2) {
-    await prisma.incident.create({
-      data: {
-        reference: inc2Ref,
-        clientId: clientA.id,
-        title: "Cooling threshold breach - zone C",
-        description: "Temperature breached threshold for 12 minutes in zone C.",
-        status: IncidentStatus.NEW,
-        severity: IncidentSeverity.CRITICAL,
-        priority: "high",
-        assigneeId: admin.id,
-        createdById: admin.id
-      }
-    });
-  }
-
-  // 9) Tasks (idempotent by title + client)
-  const taskSamples = [
-    {
-      title: "Validate switch firmware integrity",
-      description: "Run vendor diagnostics and compare firmware checksums.",
-      status: TaskStatus.IN_PROGRESS,
-      priority: "high",
-      incidentId: incidentA.id
-    },
-    {
-      title: "Capture thermal sensor logs",
-      description: "Export 24h logs from aisle zone C sensors.",
-      status: TaskStatus.OPEN,
-      priority: "medium",
-      incidentId: null as string | null
-    }
-  ];
-
-  for (const task of taskSamples) {
-    const existing = await prisma.task.findFirst({
-      where: { clientId: clientA.id, title: task.title }
-    });
-    if (!existing) {
-      await prisma.task.create({
-        data: {
-          clientId: clientA.id,
-          title: task.title,
-          description: task.description,
-          status: task.status,
-          priority: task.priority,
-          incidentId: task.incidentId,
-          assigneeId: admin.id,
-          createdById: admin.id
-        }
-      });
-    }
   }
 
   console.log("Seed complete:", {
     organization: organization.id,
-    clientA: clientA.id,
+    clientsSeeded: orgClients.length,
     admin: admin.email,
-    survey: survey.id
+    clientNames: orgClients.map((c) => c.name)
   });
 }
 
