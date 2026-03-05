@@ -130,13 +130,23 @@ export default function UsersPage() {
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
-            <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth />
+            <TextField
+              label="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              autoComplete="off"
+              inputProps={{ autoComplete: "off" }}
+            />
             <TextField
               label="Temporary Password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               fullWidth
+              InputLabelProps={{ shrink: true }}
+              autoComplete="new-password"
             />
             <TextField select label="Role" value={role} onChange={(e) => setRole(e.target.value)} sx={{ minWidth: 220 }}>
               {allowedRoles.map((r) => (
