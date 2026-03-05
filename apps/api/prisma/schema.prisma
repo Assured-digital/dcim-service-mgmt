@@ -43,6 +43,28 @@ enum SurveyItemResponse {
   NA
 }
 
+enum IncidentStatus {
+  NEW
+  INVESTIGATING
+  MITIGATED
+  RESOLVED
+  CLOSED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
 model Client {
   id        String   @id @default(uuid())
   name      String
@@ -54,6 +76,8 @@ model Client {
   serviceRequests ServiceRequest[]
   assets    Asset[]
   surveys   Survey[]
+  incidents Incident[]
+  tasks     Task[]
   publicSubmissions PublicSubmission[]
   documents DocumentReference[]
 }
@@ -72,6 +96,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   assignedServiceRequests ServiceRequest[] @relation("AssignedSR")
+  assignedIncidents Incident[] @relation("AssignedIncident")
+  assignedTasks Task[] @relation("AssignedTask")
 }
 
 model PublicSubmission {
@@ -144,6 +170,43 @@ model SurveyItem {
   response    SurveyItemResponse?
   notes       String?
   photoObjectKey String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Incident {
+  id          String   @id @default(uuid())
+  reference   String   @unique
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  title       String
+  description String
+  status      IncidentStatus @default(NEW)
+  severity    IncidentSeverity @default(MEDIUM)
+  priority    String   @default("medium")
+  assigneeId  String?
+  assignee    User?    @relation("AssignedIncident", fields: [assigneeId], references: [id])
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks       Task[]
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  title       String
+  description String?
+  status      TaskStatus @default(OPEN)
+  priority    String   @default("medium")
+  dueAt       DateTime?
+  assigneeId  String?
+  assignee    User?    @relation("AssignedTask", fields: [assigneeId], references: [id])
+  incidentId  String?
+  incident    Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 

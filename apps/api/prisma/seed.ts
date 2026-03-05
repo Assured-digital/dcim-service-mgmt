@@ -1,4 +1,13 @@
-import { PrismaClient, Role, OwnerType, ServiceRequestStatus, SurveyStatus } from "@prisma/client";
+import {
+  PrismaClient,
+  Role,
+  OwnerType,
+  ServiceRequestStatus,
+  SurveyStatus,
+  IncidentSeverity,
+  IncidentStatus,
+  TaskStatus
+} from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -151,6 +160,88 @@ async function main() {
           subject: sample.subject,
           description: sample.description,
           status: "NEW"
+        }
+      });
+    }
+  }
+
+  // 7) Incidents (idempotent by reference + client)
+  const inc1Ref = "IN-2026-0001";
+  const inc2Ref = "IN-2026-0002";
+
+  const inc1 = await prisma.incident.findFirst({
+    where: { clientId: clientA.id, reference: inc1Ref }
+  });
+
+  const incidentA =
+    inc1 ??
+    (await prisma.incident.create({
+      data: {
+        reference: inc1Ref,
+        clientId: clientA.id,
+        title: "Core switch packet drops",
+        description: "Intermittent packet drops detected on core switch uplink ports.",
+        status: IncidentStatus.INVESTIGATING,
+        severity: IncidentSeverity.HIGH,
+        priority: "high",
+        assigneeId: admin.id,
+        createdById: admin.id
+      }
+    }));
+
+  const inc2 = await prisma.incident.findFirst({
+    where: { clientId: clientA.id, reference: inc2Ref }
+  });
+
+  if (!inc2) {
+    await prisma.incident.create({
+      data: {
+        reference: inc2Ref,
+        clientId: clientA.id,
+        title: "Cooling threshold breach - zone C",
+        description: "Temperature breached threshold for 12 minutes in zone C.",
+        status: IncidentStatus.NEW,
+        severity: IncidentSeverity.CRITICAL,
+        priority: "high",
+        assigneeId: admin.id,
+        createdById: admin.id
+      }
+    });
+  }
+
+  // 8) Tasks (idempotent by title + client)
+  const taskSamples = [
+    {
+      title: "Validate switch firmware integrity",
+      description: "Run vendor diagnostics and compare firmware checksums.",
+      status: TaskStatus.IN_PROGRESS,
+      priority: "high",
+      incidentId: incidentA.id
+    },
+    {
+      title: "Capture thermal sensor logs",
+      description: "Export 24h logs from aisle zone C sensors.",
+      status: TaskStatus.OPEN,
+      priority: "medium",
+      incidentId: null as string | null
+    }
+  ];
+
+  for (const task of taskSamples) {
+    const existing = await prisma.task.findFirst({
+      where: { clientId: clientA.id, title: task.title }
+    });
+    if (!existing) {
+      await prisma.task.create({
+        data: {
+          clientId: clientA.id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          priority: task.priority,
+          incidentId: task.incidentId,
+          assigneeId: admin.id,
+          createdById: admin.id
         }
       });
     }

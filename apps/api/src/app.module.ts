@@ -9,6 +9,8 @@ import { DocumentsModule } from "./documents/documents.module";
 import { StorageModule } from "./storage/storage.module";
 import { HealthController } from "./health/health.controller";
 import { PublicSubmissionsModule } from "./public-submissions/public-submissions.module";
+import { IncidentsModule } from "./incidents/incidents.module";
+import { TasksModule } from "./tasks/tasks.module";
 
 @Module({
   imports: [
@@ -20,7 +22,9 @@ import { PublicSubmissionsModule } from "./public-submissions/public-submissions
     AssetsModule,
     SurveysModule,
     DocumentsModule,
-    PublicSubmissionsModule
+    PublicSubmissionsModule,
+    IncidentsModule,
+    TasksModule
   ],
   controllers: [HealthController]
 })

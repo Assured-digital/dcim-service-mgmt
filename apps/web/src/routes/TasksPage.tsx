@@ -1,0 +1,211 @@
+import React, { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, type ApiError } from "../lib/api";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography
+} from "@mui/material";
+import { priorityChipSx, statusChipSx } from "../lib/ui";
+
+type IncidentOption = { id: string; reference: string; title: string };
+
+type Task = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueAt?: string | null;
+  incident?: IncidentOption | null;
+  updatedAt: string;
+};
+
+const statusOptions = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"];
+
+export default function TasksPage() {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [dueAt, setDueAt] = useState("");
+  const [incidentId, setIncidentId] = useState("");
+  const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
+
+  const tasks = useQuery({
+    queryKey: ["tasks"],
+    queryFn: async () => (await api.get<Task[]>("/tasks")).data
+  });
+
+  const incidents = useQuery({
+    queryKey: ["incidents-options"],
+    queryFn: async () => (await api.get<IncidentOption[]>("/incidents")).data
+  });
+
+  const incidentOptions = useMemo(() => incidents.data ?? [], [incidents.data]);
+
+  const create = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post("/tasks", {
+          title,
+          description: description || undefined,
+          priority,
+          dueAt: dueAt || undefined,
+          incidentId: incidentId || undefined
+        })
+      ).data,
+    onSuccess: async () => {
+      setTitle("");
+      setDescription("");
+      setPriority("medium");
+      setDueAt("");
+      setIncidentId("");
+      await qc.invalidateQueries({ queryKey: ["tasks"] });
+    }
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async (payload: { id: string; status: string }) =>
+      (await api.post(`/tasks/${payload.id}/status`, { status: payload.status })).data,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["tasks"] });
+    }
+  });
+
+  const mutationError = [create.error, updateStatus.error].find(Boolean) as ApiError | undefined;
+  const mutationErrorMessage = Array.isArray(mutationError?.message)
+    ? mutationError?.message.join(", ")
+    : mutationError?.message;
+
+  return (
+    <Box>
+      <Typography variant="h4" sx={{ mb: 0.5 }}>
+        Tasks
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        Actionable work items linked to operations and incident response.
+      </Typography>
+
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
+            <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+            <TextField
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              fullWidth
+            />
+            <TextField select label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} sx={{ minWidth: 140 }}>
+              {["low", "medium", "high"].map((p) => (
+                <MenuItem key={p} value={p}>
+                  {p}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              type="date"
+              label="Due"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ minWidth: 170 }}
+            />
+            <TextField select label="Incident" value={incidentId} onChange={(e) => setIncidentId(e.target.value)} sx={{ minWidth: 220 }}>
+              <MenuItem value="">Unlinked</MenuItem>
+              {incidentOptions.map((inc) => (
+                <MenuItem key={inc.id} value={inc.id}>
+                  {inc.reference}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button variant="contained" onClick={() => create.mutate()} disabled={!title.trim() || create.isPending}>
+              Create
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          {tasks.isLoading ? <Typography>Loading…</Typography> : null}
+          {tasks.error ? <Alert severity="error">Failed to load tasks</Alert> : null}
+          {mutationErrorMessage ? <Alert severity="error" sx={{ mb: 2 }}>{mutationErrorMessage}</Alert> : null}
+
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Title</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Priority</TableCell>
+                  <TableCell>Incident</TableCell>
+                  <TableCell>Due</TableCell>
+                  <TableCell>Updated</TableCell>
+                  <TableCell align="right">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(tasks.data ?? []).map((task) => {
+                  const selected = draftStatus[task.id] ?? task.status;
+                  return (
+                    <TableRow key={task.id}>
+                      <TableCell sx={{ fontWeight: 700 }}>{task.title}</TableCell>
+                      <TableCell>
+                        <Chip size="small" sx={statusChipSx(task.status)} label={task.status.toLowerCase()} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip size="small" sx={priorityChipSx(task.priority)} label={task.priority} />
+                      </TableCell>
+                      <TableCell>{task.incident?.reference ?? "-"}</TableCell>
+                      <TableCell>{task.dueAt ? new Date(task.dueAt).toLocaleDateString() : "-"}</TableCell>
+                      <TableCell>{new Date(task.updatedAt).toLocaleDateString()}</TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <TextField
+                            select
+                            size="small"
+                            value={selected}
+                            sx={{ minWidth: 150 }}
+                            onChange={(e) => setDraftStatus((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                          >
+                            {statusOptions.map((s) => (
+                              <MenuItem key={s} value={s}>
+                                {s.toLowerCase()}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={selected === task.status || updateStatus.isPending}
+                            onClick={() => updateStatus.mutate({ id: task.id, status: selected })}
+                          >
+                            Save
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}
