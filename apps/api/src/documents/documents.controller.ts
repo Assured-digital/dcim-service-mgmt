@@ -4,7 +4,11 @@ import { DocumentsService } from "./documents.service";
 import { CreateDocumentReferenceDto } from "./dto";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
+import { UseGuards } from "@nestjs/common";
+import { JwtAuthGuard } from "../auth/jwt.guard";
+import { RolesGuard } from "../auth/roles.guard";
 
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("documents")
 @ApiBearerAuth()
 @Controller("documents")

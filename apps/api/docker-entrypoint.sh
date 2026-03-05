@@ -1,12 +1,14 @@
 #!/bin/sh
 set -e
 
-echo "Running Prisma migrations..."
-npx prisma migrate deploy || true
+echo "Ensuring Prisma client is generated..."
+npx prisma generate
 
-echo "Attempting seed (idempotent upserts)..."
-node -e "console.log('Seeding via ts-node...')" >/dev/null 2>&1 || true
-npx ts-node prisma/seed.ts || true
+echo "Syncing schema to DB (MVP: db push)..."
+npx prisma db push
 
-echo "Starting API..."
-node dist/main.js
+echo "Seeding (idempotent)..."
+npx ts-node prisma/seed.ts
+
+echo "Starting API (dev mode)..."
+npm run start:dev

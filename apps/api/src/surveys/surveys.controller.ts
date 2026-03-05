@@ -4,7 +4,11 @@ import { SurveysService } from "./surveys.service";
 import { CreateSurveyDto } from "./dto";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
+import { UseGuards } from "@nestjs/common";
+import { JwtAuthGuard } from "../auth/jwt.guard";
+import { RolesGuard } from "../auth/roles.guard";
 
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("surveys")
 @ApiBearerAuth()
 @Controller("surveys")

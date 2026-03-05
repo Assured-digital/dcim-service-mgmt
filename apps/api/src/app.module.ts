@@ -7,6 +7,7 @@ import { AssetsModule } from "./assets/assets.module";
 import { SurveysModule } from "./surveys/surveys.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { StorageModule } from "./storage/storage.module";
+import { HealthController } from "./health/health.controller";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { StorageModule } from "./storage/storage.module";
     AssetsModule,
     SurveysModule,
     DocumentsModule
-  ]
+  ],
+  controllers: [HealthController]
 })
 export class AppModule {}
