@@ -1,5 +1,5 @@
-import axios, { AxiosError } from "axios";
-import { clearToken, getToken } from "./auth";
+import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
+import { clearToken, getToken, setToken } from "./auth";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
@@ -13,7 +13,7 @@ export type ApiError = {
 
 export type LoginResponse = {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
   user: {
     userId: string;
     email: string;
@@ -41,6 +41,54 @@ export function logout() {
   setAuthToken(null);
 }
 
+type RetryableConfig = AxiosRequestConfig & {
+  _retry?: boolean;
+  skipAuthRefresh?: boolean;
+};
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function tryRefreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    try {
+      const res = await axios.post<{ accessToken: string }>(
+        `${baseURL}/auth/refresh`,
+        {},
+        { withCredentials: true }
+      );
+
+      const token = res.data?.accessToken;
+      if (!token) return null;
+
+      setToken(token);
+      setAuthToken(token);
+      return token;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
+export async function revokeAndLogout() {
+  try {
+    const config: RetryableConfig = { skipAuthRefresh: true };
+    await api.post("/auth/logout", {}, config);
+  } catch {
+    // Local logout should still happen if revoke call fails.
+  } finally {
+    logout();
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+  }
+}
+
 function normaliseApiError(err: unknown): ApiError {
   const fallback: ApiError = { statusCode: 0, message: "Request failed" };
 
@@ -66,13 +114,30 @@ function normaliseApiError(err: unknown): ApiError {
 // Response interceptor: handle auth + return consistent errors
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
+  async (err) => {
     const e = normaliseApiError(err);
+    const original = (err?.config ?? {}) as InternalAxiosRequestConfig & RetryableConfig;
+    const url = original.url ?? "";
 
-    // Global 401 handling: clear token so app doesn’t get stuck
+    const isAuthRoute =
+      url.includes("/auth/login") || url.includes("/auth/refresh") || url.includes("/auth/logout");
+
+    // Attempt one silent refresh for expired access token and then retry original request.
+    if (e.statusCode === 401 && !original._retry && !original.skipAuthRefresh && !isAuthRoute) {
+      original._retry = true;
+      const token = await tryRefreshAccessToken();
+
+      if (token) {
+        original.headers = {
+          ...(original.headers ?? {}),
+          Authorization: `Bearer ${token}`
+        };
+        return api.request(original);
+      }
+    }
+
     if (e.statusCode === 401) {
       logout();
-      // Optional: force redirect to login. Keep it simple for MVP.
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";
       }

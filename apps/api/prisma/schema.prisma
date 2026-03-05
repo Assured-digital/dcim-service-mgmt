@@ -62,6 +62,8 @@ model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
+  refreshTokenHash String?
+  refreshTokenExpiresAt DateTime?
   role         Role
   clientId     String?
   client       Client?  @relation(fields: [clientId], references: [id])
