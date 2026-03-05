@@ -68,6 +68,7 @@ export default function UsersPage() {
   const [isActive, setIsActive] = useState(true);
   const [scopeClientId, setScopeClientId] = useState(currentUser?.clientId ?? "");
   const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
+  const [createNotice, setCreateNotice] = useState<{ tone: "success" | "info"; message: string } | null>(null);
 
   const users = useQuery({
     queryKey: ["users", scopeClientId],
@@ -96,11 +97,26 @@ export default function UsersPage() {
           isActive
         })
       ).data,
-    onSuccess: async () => {
+    onSuccess: async (created) => {
       setEmail("");
       setPassword("");
       setRole(allowedRoles[0]);
       setIsActive(true);
+      if (scopeClientId && created.clientId !== scopeClientId) {
+        const scopedClientName = clientOptions.find((c) => c.id === scopeClientId)?.name ?? scopeClientId;
+        const createdClientName = created.clientId
+          ? (clientOptions.find((c) => c.id === created.clientId)?.name ?? created.clientId)
+          : "No client";
+        setCreateNotice({
+          tone: "info",
+          message: `User created under ${createdClientName}. Current view scope is ${scopedClientName}, so it is hidden from this table.`
+        });
+      } else {
+        setCreateNotice({
+          tone: "success",
+          message: `User created: ${created.email}`
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["users"] });
     }
   });
@@ -195,7 +211,10 @@ export default function UsersPage() {
                 select
                 label="View scope"
                 value={scopeClientId}
-                onChange={(e) => setScopeClientId(e.target.value)}
+                onChange={(e) => {
+                  setScopeClientId(e.target.value);
+                  setCreateNotice(null);
+                }}
                 sx={{ minWidth: 260 }}
               >
                 <MenuItem value="">All clients</MenuItem>
@@ -212,6 +231,11 @@ export default function UsersPage() {
 
           {users.isLoading ? <LoadingState /> : null}
           {users.error ? <ErrorState title="Failed to load users" /> : null}
+          {createNotice ? (
+            <Alert severity={createNotice.tone} sx={{ mb: 2 }} onClose={() => setCreateNotice(null)}>
+              {createNotice.message}
+            </Alert>
+          ) : null}
           {mutationErrorMessage ? (
             <Alert severity="error" sx={{ mb: 2 }}>
               {mutationErrorMessage}
