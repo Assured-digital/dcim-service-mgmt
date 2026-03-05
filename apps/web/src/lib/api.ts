@@ -1,4 +1,5 @@
 import axios, { AxiosError } from "axios";
+import { clearToken, getToken } from "./auth";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
@@ -8,6 +9,17 @@ export type ApiError = {
   error?: string;
   path?: string;
   timestamp?: string;
+};
+
+export type LoginResponse = {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    userId: string;
+    email: string;
+    role: string;
+    clientId: string | null;
+  };
 };
 
 export const api = axios.create({
@@ -21,11 +33,11 @@ export function setAuthToken(token: string | null) {
 }
 
 export function getAuthToken(): string | null {
-  return localStorage.getItem("accessToken");
+  return getToken();
 }
 
 export function logout() {
-  localStorage.removeItem("accessToken");
+  clearToken();
   setAuthToken(null);
 }
 
