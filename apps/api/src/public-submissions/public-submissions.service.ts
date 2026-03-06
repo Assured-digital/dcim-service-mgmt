@@ -70,7 +70,9 @@ export class PublicSubmissionsService {
       where: { id: submission.id },
       data: {
         status: "CONVERTED",
-        convertedServiceRequestId: serviceRequest.id
+        convertedServiceRequestId: serviceRequest.id,
+        convertedEntityType: "SERVICE_REQUEST",
+        convertedEntityId: serviceRequest.id
       }
     });
 

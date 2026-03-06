@@ -12,6 +12,8 @@ import { PublicSubmissionsModule } from "./public-submissions/public-submissions
 import { IncidentsModule } from "./incidents/incidents.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { UsersModule } from "./users/users.module";
+import { RequestIntakesModule } from "./request-intakes/request-intakes.module";
+import { TriageModule } from "./triage/triage.module";
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { UsersModule } from "./users/users.module";
     SurveysModule,
     DocumentsModule,
     PublicSubmissionsModule,
+    RequestIntakesModule,
+    TriageModule,
     IncidentsModule,
     TasksModule,
     UsersModule

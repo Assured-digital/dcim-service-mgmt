@@ -28,6 +28,7 @@ import StorageIcon from "@mui/icons-material/Storage";
 import FactCheckIcon from "@mui/icons-material/FactCheck";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import ApartmentIcon from "@mui/icons-material/Apartment";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import { api, revokeAndLogout } from "../lib/api";
 import { getCurrentUser } from "../lib/auth";
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac";
@@ -37,6 +38,12 @@ const drawerWidth = 280;
 
 const items = [
   { label: "Dashboard", path: "/", icon: <DashboardIcon />, roles: Object.values(ROLES) },
+  {
+    label: "Raise Request",
+    path: "/raise-request",
+    icon: <AddCircleOutlineIcon />,
+    roles: Object.values(ROLES)
+  },
   {
     label: "Triage",
     path: "/triage",

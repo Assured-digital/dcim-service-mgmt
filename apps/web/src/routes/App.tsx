@@ -7,6 +7,7 @@ import LoginPage from "./LoginPage";
 import Shell from "./Shell";
 import DashboardPage from "./DashboardPage";
 import TriagePage from "./TriagePage";
+import RaiseRequestPage from "./RaiseRequestPage";
 import ServiceRequestsPage from "./ServiceRequestsPage";
 import IncidentsPage from "./IncidentsPage";
 import TasksPage from "./TasksPage";
@@ -42,6 +43,10 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route
+          path="raise-request"
+          element={<RaiseRequestPage />}
+        />
         <Route
           path="triage"
           element={

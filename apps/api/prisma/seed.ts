@@ -250,6 +250,27 @@ async function seedClientData(params: {
     ],
     skipDuplicates: true
   });
+
+  const intakeTitle = `${client.name}: Request additional weekend support coverage`;
+  const existingIntake = await prisma.requestIntake.findFirst({
+    where: { clientId: client.id, title: intakeTitle }
+  });
+  if (!existingIntake) {
+    await prisma.requestIntake.create({
+      data: {
+        clientId: client.id,
+        requesterUserId: createdById,
+        requesterName: "Operations Manager",
+        requesterEmail: `ops-manager+${code.toLowerCase()}@example.local`,
+        title: intakeTitle,
+        description: "Need operations coverage for planned maintenance window and follow-up validation.",
+        category: "operational",
+        impact: "medium",
+        urgency: "medium",
+        status: "NEW"
+      }
+    });
+  }
 }
 
 async function main() {

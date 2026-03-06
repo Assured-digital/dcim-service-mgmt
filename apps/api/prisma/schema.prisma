@@ -67,6 +67,13 @@ enum TaskStatus {
   DONE
 }
 
+enum RequestIntakeStatus {
+  NEW
+  UNDER_REVIEW
+  CONVERTED
+  REJECTED
+}
+
 model Client {
   id        String   @id @default(uuid())
   organizationId String?
@@ -84,6 +91,7 @@ model Client {
   tasks     Task[]
   publicSubmissions PublicSubmission[]
   documents DocumentReference[]
+  requestIntakes RequestIntake[]
 }
 
 model Organization {
@@ -115,6 +123,7 @@ model User {
   assignedServiceRequests ServiceRequest[] @relation("AssignedSR")
   assignedIncidents Incident[] @relation("AssignedIncident")
   assignedTasks Task[] @relation("AssignedTask")
+  requestIntakes RequestIntake[] @relation("RequesterIntake")
 }
 
 model PublicSubmission {
@@ -127,6 +136,8 @@ model PublicSubmission {
   description String
   status      String   @default("NEW") // NEW / CONVERTED / REJECTED
   convertedServiceRequestId String?
+  convertedEntityType String?
+  convertedEntityId   String?
   createdAt   DateTime @default(now())
 }
 
@@ -252,4 +263,26 @@ model AuditEvent {
 
   serviceRequestId String?
   serviceRequest   ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+}
+
+model RequestIntake {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  requesterUserId String?
+  requesterUser   User? @relation("RequesterIntake", fields: [requesterUserId], references: [id])
+  requesterName   String
+  requesterEmail  String
+  title       String
+  description String
+  category    String?
+  impact      String?
+  urgency     String?
+  status      RequestIntakeStatus @default(NEW)
+  triageNotes String?
+  convertedEntityType String?
+  convertedEntityId   String?
+  convertedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
