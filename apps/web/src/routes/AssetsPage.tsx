@@ -8,6 +8,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   Table,
@@ -45,6 +49,7 @@ export default function AssetsPage() {
   const [assetType, setAssetType] = useState("");
   const [ownerType, setOwnerType] = useState<"CLIENT" | "INTERNAL">("CLIENT");
   const [location, setLocation] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["assets"],
@@ -159,22 +164,18 @@ export default function AssetsPage() {
                         label={a.ownerType.toLowerCase()}
                       />
                     </TableCell>
-                    <TableCell>{a.location ?? "-"}</TableCell>
-                    {canManage ? (
-                      <TableCell align="right">
-                        <Button
+                  <TableCell>{a.location ?? "-"}</TableCell>
+                  {canManage ? (
+                    <TableCell align="right">
+                      <Button
                           size="small"
-                          color="error"
-                          variant="outlined"
-                          disabled={remove.isPending}
-                          onClick={() => {
-                            if (window.confirm(`Delete asset ${a.assetTag}?`)) {
-                              remove.mutate(a.id);
-                            }
-                          }}
-                        >
-                          Delete
-                        </Button>
+                        color="error"
+                        variant="outlined"
+                        disabled={remove.isPending}
+                        onClick={() => setDeleteTarget(a)}
+                      >
+                        Delete
+                      </Button>
                       </TableCell>
                     ) : null}
                   </TableRow>
@@ -184,7 +185,40 @@ export default function AssetsPage() {
           </TableContainer>
         </CardContent>
       </Card>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ pb: 1 }}>Delete Asset</DialogTitle>
+        <DialogContent sx={{ pt: "8px !important" }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            This will permanently delete the selected asset.
+          </Typography>
+          <Card variant="outlined" sx={{ bgcolor: "#f8fafc" }}>
+            <CardContent sx={{ py: 1.25, "&:last-child": { pb: 1.25 } }}>
+              <Typography variant="subtitle2">{deleteTarget?.assetTag}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {deleteTarget?.name}
+              </Typography>
+            </CardContent>
+          </Card>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteTarget(null)} disabled={remove.isPending}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={!deleteTarget || remove.isPending}
+            onClick={async () => {
+              if (!deleteTarget) return;
+              await remove.mutateAsync(deleteTarget.id);
+              setDeleteTarget(null);
+            }}
+          >
+            {remove.isPending ? "Deleting..." : "Delete Asset"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
-
