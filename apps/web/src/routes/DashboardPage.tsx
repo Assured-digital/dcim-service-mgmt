@@ -22,6 +22,7 @@ import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import InsightsIcon from "@mui/icons-material/Insights";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import { ErrorState, LoadingState } from "../components/PageState";
+import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac";
 
 type Assignee = { id: string; email: string };
 
@@ -110,6 +111,7 @@ function getDateRangeFromPreset(preset: "7d" | "30d" | "90d" | "ytd") {
 }
 
 export default function DashboardPage() {
+  const canViewTriage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]);
   const defaultRange = getDateRangeFromPreset("30d");
   const [dateFrom, setDateFrom] = React.useState(defaultRange.from);
   const [dateTo, setDateTo] = React.useState(defaultRange.to);
@@ -139,6 +141,7 @@ export default function DashboardPage() {
   });
   const triage = useQuery({
     queryKey: ["triage-queue"],
+    enabled: canViewTriage,
     queryFn: async () => (await api.get<TriageItem[]>("/triage/queue")).data
   });
 
@@ -148,8 +151,9 @@ export default function DashboardPage() {
     tasks.isLoading ||
     assets.isLoading ||
     surveys.isLoading ||
-    triage.isLoading;
-  const hasError = srs.error || incidents.error || tasks.error || assets.error || surveys.error || triage.error;
+    (canViewTriage && triage.isLoading);
+  const hasError =
+    srs.error || incidents.error || tasks.error || assets.error || surveys.error || (canViewTriage && triage.error);
 
   const assignees = React.useMemo(() => {
     const byId = new Map<string, Assignee>();
@@ -175,7 +179,7 @@ export default function DashboardPage() {
   const incidentTrend = countOpenedResolved(filteredIncidents, dateFrom, dateTo, ["RESOLVED", "CLOSED"]);
   const taskTrend = countOpenedResolved(filteredTasks, dateFrom, dateTo, ["DONE"]);
 
-  const triageInbox = (triage.data ?? []).filter((x) => x.status === "NEW").length;
+  const triageInbox = canViewTriage ? (triage.data ?? []).filter((x) => x.status === "NEW").length : 0;
   const openTickets = filteredSrs.filter(
     (x) => x.status !== "CLOSED" && inDateRange(x.createdAt, dateFrom, dateTo)
   ).length;
@@ -194,7 +198,9 @@ export default function DashboardPage() {
   ];
 
   const cards = [
-    { label: "Triage Inbox", value: triageInbox, tone: "#f59e0b", description: "Items waiting for triage." },
+    ...(canViewTriage
+      ? [{ label: "Triage Inbox", value: triageInbox, tone: "#f59e0b", description: "Items waiting for triage." }]
+      : []),
     { label: "Open Service Requests", value: openTickets, tone: "#2563eb", description: "Not closed in period." },
     { label: "Open Incidents", value: openIncidents, tone: "#dc2626", description: "Active incident workload." },
     { label: "Open Tasks", value: openTasks, tone: "#0f766e", description: "Tasks still in progress." },
