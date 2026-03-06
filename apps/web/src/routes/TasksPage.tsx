@@ -8,6 +8,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   Table,
@@ -46,6 +50,8 @@ export default function TasksPage() {
   const [dueAt, setDueAt] = useState("");
   const [incidentId, setIncidentId] = useState("");
   const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
+  const [statusDialog, setStatusDialog] = useState<{ id: string; title: string; status: string } | null>(null);
+  const [statusComment, setStatusComment] = useState("");
 
   const tasks = useQuery({
     queryKey: ["tasks"],
@@ -81,9 +87,11 @@ export default function TasksPage() {
   });
 
   const updateStatus = useMutation({
-    mutationFn: async (payload: { id: string; status: string }) =>
-      (await api.post(`/tasks/${payload.id}/status`, { status: payload.status })).data,
+    mutationFn: async (payload: { id: string; status: string; comment?: string }) =>
+      (await api.post(`/tasks/${payload.id}/status`, { status: payload.status, comment: payload.comment })).data,
     onSuccess: async () => {
+      setStatusDialog(null);
+      setStatusComment("");
       await qc.invalidateQueries({ queryKey: ["tasks"] });
     }
   });
@@ -201,7 +209,13 @@ export default function TasksPage() {
                             size="small"
                             variant="outlined"
                             disabled={!canManage || selected === task.status || updateStatus.isPending}
-                            onClick={() => updateStatus.mutate({ id: task.id, status: selected })}
+                            onClick={() =>
+                              setStatusDialog({
+                                id: task.id,
+                                title: task.title,
+                                status: selected
+                              })
+                            }
                           >
                             Save
                           </Button>
@@ -215,6 +229,43 @@ export default function TasksPage() {
           </TableContainer>
         </CardContent>
       </Card>
+
+      <Dialog open={!!statusDialog} onClose={() => setStatusDialog(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Update Task Status</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: 0.5 }}>
+            {`Task "${statusDialog?.title ?? ""}" will move to ${statusDialog?.status?.toLowerCase() ?? ""}.`}
+          </Typography>
+          <TextField
+            label="Comment (optional)"
+            placeholder="Add context for this status change"
+            multiline
+            minRows={3}
+            fullWidth
+            value={statusComment}
+            onChange={(e) => setStatusComment(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStatusDialog(null)} disabled={updateStatus.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!statusDialog || updateStatus.isPending}
+            onClick={() =>
+              statusDialog &&
+              updateStatus.mutate({
+                id: statusDialog.id,
+                status: statusDialog.status,
+                comment: statusComment.trim() || undefined
+              })
+            }
+          >
+            {updateStatus.isPending ? "Saving..." : "Confirm"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -66,6 +66,6 @@ export class IncidentsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.incidents.updateStatusForClient(clientId, id, dto.status);
+    return this.incidents.updateStatusForClient(clientId, id, dto.status, user.userId, dto.comment);
   }
 }

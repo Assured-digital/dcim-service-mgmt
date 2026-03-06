@@ -8,6 +8,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   Table,
@@ -43,6 +47,8 @@ export default function IncidentsPage() {
   const [severity, setSeverity] = useState("MEDIUM");
   const [priority, setPriority] = useState("medium");
   const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
+  const [statusDialog, setStatusDialog] = useState<{ id: string; reference: string; status: string } | null>(null);
+  const [statusComment, setStatusComment] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["incidents"],
@@ -69,9 +75,11 @@ export default function IncidentsPage() {
   });
 
   const updateStatus = useMutation({
-    mutationFn: async (payload: { id: string; status: string }) =>
-      (await api.post(`/incidents/${payload.id}/status`, { status: payload.status })).data,
+    mutationFn: async (payload: { id: string; status: string; comment?: string }) =>
+      (await api.post(`/incidents/${payload.id}/status`, { status: payload.status, comment: payload.comment })).data,
     onSuccess: async () => {
+      setStatusDialog(null);
+      setStatusComment("");
       await qc.invalidateQueries({ queryKey: ["incidents"] });
     }
   });
@@ -186,7 +194,13 @@ export default function IncidentsPage() {
                             size="small"
                             variant="outlined"
                             disabled={!canManage || selected === inc.status || updateStatus.isPending}
-                            onClick={() => updateStatus.mutate({ id: inc.id, status: selected })}
+                            onClick={() =>
+                              setStatusDialog({
+                                id: inc.id,
+                                reference: inc.reference,
+                                status: selected
+                              })
+                            }
                           >
                             Save
                           </Button>
@@ -200,6 +214,43 @@ export default function IncidentsPage() {
           </TableContainer>
         </CardContent>
       </Card>
+
+      <Dialog open={!!statusDialog} onClose={() => setStatusDialog(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Update Incident Status</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1, mt: 0.5 }}>
+            {`Incident ${statusDialog?.reference ?? ""} will move to ${statusDialog?.status?.toLowerCase() ?? ""}.`}
+          </Typography>
+          <TextField
+            label="Comment (optional)"
+            placeholder="Add context for this status change"
+            multiline
+            minRows={3}
+            fullWidth
+            value={statusComment}
+            onChange={(e) => setStatusComment(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStatusDialog(null)} disabled={updateStatus.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!statusDialog || updateStatus.isPending}
+            onClick={() =>
+              statusDialog &&
+              updateStatus.mutate({
+                id: statusDialog.id,
+                status: statusDialog.status,
+                comment: statusComment.trim() || undefined
+              })
+            }
+          >
+            {updateStatus.isPending ? "Saving..." : "Confirm"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

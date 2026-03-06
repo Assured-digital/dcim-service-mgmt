@@ -22,4 +22,9 @@ export class CreateIncidentDto {
 export class UpdateIncidentStatusDto {
   @IsEnum(IncidentStatus)
   status!: IncidentStatus;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  comment?: string;
 }

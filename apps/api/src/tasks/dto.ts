@@ -26,4 +26,9 @@ export class CreateTaskDto {
 export class UpdateTaskStatusDto {
   @IsEnum(TaskStatus)
   status!: TaskStatus;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  comment?: string;
 }

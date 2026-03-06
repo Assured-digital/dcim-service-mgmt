@@ -54,12 +54,35 @@ export class IncidentsService {
     });
   }
 
-  async updateStatusForClient(clientId: string, id: string, status: IncidentStatus) {
+  async updateStatusForClient(
+    clientId: string,
+    id: string,
+    status: IncidentStatus,
+    actorUserId: string,
+    comment?: string
+  ) {
     const incident = await this.getForClient(clientId, id);
-    return this.prisma.incident.update({
+    const updated = await this.prisma.incident.update({
       where: { id: incident.id },
       data: { status }
     });
+
+    await this.prisma.auditEvent.create({
+      data: {
+        entityType: "Incident",
+        entityId: incident.id,
+        action: "STATUS_UPDATED",
+        actorUserId,
+        clientId,
+        data: {
+          from: incident.status,
+          to: status,
+          comment: comment?.trim() || null
+        }
+      }
+    });
+
+    return updated;
   }
 
   private async generateUniqueReference() {

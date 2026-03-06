@@ -65,9 +65,15 @@ export class TasksService {
     });
   }
 
-  async updateStatusForClient(clientId: string, id: string, status: TaskStatus) {
+  async updateStatusForClient(
+    clientId: string,
+    id: string,
+    status: TaskStatus,
+    actorUserId: string,
+    comment?: string
+  ) {
     const task = await this.getForClient(clientId, id);
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id: task.id },
       data: { status },
       include: {
@@ -76,5 +82,22 @@ export class TasksService {
         }
       }
     });
+
+    await this.prisma.auditEvent.create({
+      data: {
+        entityType: "Task",
+        entityId: task.id,
+        action: "STATUS_UPDATED",
+        actorUserId,
+        clientId,
+        data: {
+          from: task.status,
+          to: status,
+          comment: comment?.trim() || null
+        }
+      }
+    });
+
+    return updated;
   }
 }
