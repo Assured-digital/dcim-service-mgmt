@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type ApiError } from "../lib/api";
 import {
@@ -27,8 +27,6 @@ import { priorityChipSx, statusChipSx } from "../lib/ui";
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState";
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac";
 
-type IncidentOption = { id: string; reference: string; title: string };
-
 type Task = {
   id: string;
   title: string;
@@ -44,11 +42,6 @@ const statusOptions = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"];
 export default function TasksPage() {
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]);
   const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState("medium");
-  const [dueAt, setDueAt] = useState("");
-  const [incidentId, setIncidentId] = useState("");
   const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
   const [statusDialog, setStatusDialog] = useState<{ id: string; title: string; status: string } | null>(null);
   const [statusComment, setStatusComment] = useState("");
@@ -56,34 +49,6 @@ export default function TasksPage() {
   const tasks = useQuery({
     queryKey: ["tasks"],
     queryFn: async () => (await api.get<Task[]>("/tasks")).data
-  });
-
-  const incidents = useQuery({
-    queryKey: ["incidents-options"],
-    queryFn: async () => (await api.get<IncidentOption[]>("/incidents")).data
-  });
-
-  const incidentOptions = useMemo(() => incidents.data ?? [], [incidents.data]);
-
-  const create = useMutation({
-    mutationFn: async () =>
-      (
-        await api.post("/tasks", {
-          title,
-          description: description || undefined,
-          priority,
-          dueAt: dueAt || undefined,
-          incidentId: incidentId || undefined
-        })
-      ).data,
-    onSuccess: async () => {
-      setTitle("");
-      setDescription("");
-      setPriority("medium");
-      setDueAt("");
-      setIncidentId("");
-      await qc.invalidateQueries({ queryKey: ["tasks"] });
-    }
   });
 
   const updateStatus = useMutation({
@@ -96,7 +61,7 @@ export default function TasksPage() {
     }
   });
 
-  const mutationError = [create.error, updateStatus.error].find(Boolean) as ApiError | undefined;
+  const mutationError = [updateStatus.error].find(Boolean) as ApiError | undefined;
   const mutationErrorMessage = Array.isArray(mutationError?.message)
     ? mutationError?.message.join(", ")
     : mutationError?.message;
@@ -110,55 +75,13 @@ export default function TasksPage() {
         Actionable work items linked to operations and incident response.
       </Typography>
 
-      {canManage ? (
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
-            <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
-            <TextField
-              label="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              fullWidth
-            />
-            <TextField select label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} sx={{ minWidth: 140 }}>
-              {["low", "medium", "high"].map((p) => (
-                <MenuItem key={p} value={p}>
-                  {p}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              type="date"
-              label="Due"
-              value={dueAt}
-              onChange={(e) => setDueAt(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ minWidth: 170 }}
-            />
-            <TextField select label="Incident" value={incidentId} onChange={(e) => setIncidentId(e.target.value)} sx={{ minWidth: 220 }}>
-              <MenuItem value="">Unlinked</MenuItem>
-              {incidentOptions.map((inc) => (
-                <MenuItem key={inc.id} value={inc.id}>
-                  {inc.reference}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Button variant="contained" onClick={() => create.mutate()} disabled={!title.trim() || create.isPending}>
-              Create
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-      ) : null}
-
       <Card>
         <CardContent>
           {tasks.isLoading ? <LoadingState /> : null}
           {tasks.error ? <ErrorState title="Failed to load tasks" /> : null}
           {mutationErrorMessage ? <Alert severity="error" sx={{ mb: 2 }}>{mutationErrorMessage}</Alert> : null}
           {!tasks.isLoading && !tasks.error && (tasks.data?.length ?? 0) === 0 ? (
-            <EmptyState title="No tasks yet" detail="Create work items to coordinate operations and incident response." />
+            <EmptyState title="No tasks yet" detail="Tasks will appear here when triage items are converted." />
           ) : null}
 
           <TableContainer>

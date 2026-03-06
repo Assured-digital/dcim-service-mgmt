@@ -42,10 +42,6 @@ const statusOptions = ["NEW", "INVESTIGATING", "MITIGATED", "RESOLVED", "CLOSED"
 export default function IncidentsPage() {
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]);
   const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [severity, setSeverity] = useState("MEDIUM");
-  const [priority, setPriority] = useState("medium");
   const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
   const [statusDialog, setStatusDialog] = useState<{ id: string; reference: string; status: string } | null>(null);
   const [statusComment, setStatusComment] = useState("");
@@ -53,25 +49,6 @@ export default function IncidentsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["incidents"],
     queryFn: async () => (await api.get<Incident[]>("/incidents")).data
-  });
-
-  const create = useMutation({
-    mutationFn: async () =>
-      (
-        await api.post("/incidents", {
-          title,
-          description,
-          severity,
-          priority
-        })
-      ).data,
-    onSuccess: async () => {
-      setTitle("");
-      setDescription("");
-      setSeverity("MEDIUM");
-      setPriority("medium");
-      await qc.invalidateQueries({ queryKey: ["incidents"] });
-    }
   });
 
   const updateStatus = useMutation({
@@ -84,7 +61,7 @@ export default function IncidentsPage() {
     }
   });
 
-  const mutationError = [create.error, updateStatus.error].find(Boolean) as ApiError | undefined;
+  const mutationError = [updateStatus.error].find(Boolean) as ApiError | undefined;
   const mutationErrorMessage = Array.isArray(mutationError?.message)
     ? mutationError?.message.join(", ")
     : mutationError?.message;
@@ -98,50 +75,13 @@ export default function IncidentsPage() {
         Major operational issues with controlled lifecycle and severity tracking.
       </Typography>
 
-      {canManage ? (
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
-            <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
-            <TextField
-              label="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              fullWidth
-            />
-            <TextField select label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value)} sx={{ minWidth: 150 }}>
-              {["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((s) => (
-                <MenuItem key={s} value={s}>
-                  {s}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField select label="Priority" value={priority} onChange={(e) => setPriority(e.target.value)} sx={{ minWidth: 140 }}>
-              {["low", "medium", "high"].map((p) => (
-                <MenuItem key={p} value={p}>
-                  {p}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Button
-              variant="contained"
-              onClick={() => create.mutate()}
-              disabled={!title.trim() || description.trim().length < 10 || create.isPending}
-            >
-              Create
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-      ) : null}
-
       <Card>
         <CardContent>
           {isLoading ? <LoadingState /> : null}
           {error ? <ErrorState title="Failed to load incidents" /> : null}
           {mutationErrorMessage ? <Alert severity="error" sx={{ mb: 2 }}>{mutationErrorMessage}</Alert> : null}
           {!isLoading && !error && (data?.length ?? 0) === 0 ? (
-            <EmptyState title="No incidents yet" detail="Create incidents to track active operational disruptions." />
+            <EmptyState title="No incidents yet" detail="Incidents will appear here when triage items are converted." />
           ) : null}
 
           <TableContainer>

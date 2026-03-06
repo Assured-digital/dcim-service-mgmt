@@ -6,7 +6,7 @@ import { getJwtUser, resolveClientScope } from "../auth/request-context";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
-import { CreateTaskDto, UpdateTaskStatusDto } from "./dto";
+import { UpdateTaskStatusDto } from "./dto";
 import { TasksService } from "./tasks.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -42,14 +42,6 @@ export class TasksController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.tasks.getForClient(clientId, id);
-  }
-
-  @Post()
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
-  async create(@Req() req: any, @Body() dto: CreateTaskDto, @Headers("x-client-id") requestedClientId?: string) {
-    const user = getJwtUser(req);
-    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.tasks.createForClient(clientId, user.userId, dto);
   }
 
   @Post(":id/status")
