@@ -8,6 +8,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Stack,
   Table,
   TableBody,
@@ -43,6 +47,7 @@ export default function SurveysPage() {
   const [title, setTitle] = useState("");
   const [surveyType, setSurveyType] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Survey | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["surveys"],
@@ -156,11 +161,7 @@ export default function SurveysPage() {
                             color="error"
                             variant="outlined"
                             disabled={remove.isPending}
-                            onClick={() => {
-                              if (window.confirm(`Delete survey "${s.title}"?`)) {
-                                remove.mutate(s.id);
-                              }
-                            }}
+                            onClick={() => setDeleteTarget(s)}
                           >
                             Delete
                           </Button>
@@ -174,7 +175,40 @@ export default function SurveysPage() {
           </TableContainer>
         </CardContent>
       </Card>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ pb: 1 }}>Delete Survey</DialogTitle>
+        <DialogContent sx={{ pt: "8px !important" }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            This will permanently delete the selected survey and all associated checklist items.
+          </Typography>
+          <Card variant="outlined" sx={{ bgcolor: "#f8fafc" }}>
+            <CardContent sx={{ py: 1.25, "&:last-child": { pb: 1.25 } }}>
+              <Typography variant="subtitle2">{deleteTarget?.title}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {deleteTarget?.surveyType}
+              </Typography>
+            </CardContent>
+          </Card>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteTarget(null)} disabled={remove.isPending}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={!deleteTarget || remove.isPending}
+            onClick={async () => {
+              if (!deleteTarget) return;
+              await remove.mutateAsync(deleteTarget.id);
+              setDeleteTarget(null);
+            }}
+          >
+            {remove.isPending ? "Deleting..." : "Delete Survey"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
-
