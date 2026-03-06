@@ -200,7 +200,6 @@ export default function TriagePage() {
           <Table sx={{ minWidth: 880 }}>
             <TableHead>
               <TableRow>
-                <TableCell>Source</TableCell>
                 <TableCell>Requester</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Title</TableCell>
@@ -216,13 +215,6 @@ export default function TriagePage() {
                 const canReject = row.status === "NEW" || row.status === "UNDER_REVIEW";
                 return (
                   <TableRow key={row.id}>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={row.sourceType === "REQUEST_INTAKE" ? "internal" : "public"}
-                      />
-                    </TableCell>
                     <TableCell>{row.requesterName}</TableCell>
                     <TableCell>{row.requesterEmail}</TableCell>
                     <TableCell>{row.title}</TableCell>
