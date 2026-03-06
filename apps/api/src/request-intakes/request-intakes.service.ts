@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
@@ -23,14 +23,38 @@ export class RequestIntakesService {
       urgency?: string;
     }
   ) {
+    const duplicateWindowStart = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7);
+    const existing = await this.prisma.requestIntake.findFirst({
+      where: {
+        clientId,
+        requesterUserId: requester.userId,
+        title: {
+          equals: dto.title.trim(),
+          mode: "insensitive"
+        },
+        status: {
+          in: ["NEW", "UNDER_REVIEW"]
+        },
+        createdAt: { gte: duplicateWindowStart }
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, createdAt: true, status: true }
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `Similar request already exists (${existing.status.toLowerCase()}). Reuse triage item ${existing.id}.`
+      );
+    }
+
     const created = await this.prisma.requestIntake.create({
       data: {
         clientId,
         requesterUserId: requester.userId,
         requesterName: requester.email,
         requesterEmail: requester.email,
-        title: dto.title,
-        description: dto.description,
+        title: dto.title.trim(),
+        description: dto.description.trim(),
         category: dto.category,
         impact: dto.impact,
         urgency: dto.urgency,
@@ -55,4 +79,3 @@ export class RequestIntakesService {
     return created;
   }
 }
-

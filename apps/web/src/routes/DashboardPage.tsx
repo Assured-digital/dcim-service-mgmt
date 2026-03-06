@@ -9,7 +9,7 @@ type Incident = { id: string; status: string };
 type Task = { id: string; status: string };
 type Asset = { id: string };
 type Survey = { id: string; status: string };
-type Submission = { id: string; status: string };
+type TriageItem = { id: string; status: string };
 
 export default function DashboardPage() {
   const srs = useQuery({ queryKey: ["srs"], queryFn: async () => (await api.get<SR[]>("/service-requests")).data });
@@ -24,8 +24,8 @@ export default function DashboardPage() {
   const assets = useQuery({ queryKey: ["assets"], queryFn: async () => (await api.get<Asset[]>("/assets")).data });
   const surveys = useQuery({ queryKey: ["surveys"], queryFn: async () => (await api.get<Survey[]>("/surveys")).data });
   const triage = useQuery({
-    queryKey: ["triage-submissions"],
-    queryFn: async () => (await api.get<Submission[]>("/public-submissions")).data
+    queryKey: ["triage-queue"],
+    queryFn: async () => (await api.get<TriageItem[]>("/triage/queue")).data
   });
 
   const triageInbox = (triage.data ?? []).filter((x) => x.status === "NEW").length;

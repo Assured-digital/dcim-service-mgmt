@@ -72,6 +72,19 @@ export default function TriagePage() {
           description: description.trim() || undefined
         })
       ).data,
+    onMutate: async (row) => {
+      await qc.cancelQueries({ queryKey: ["triage-queue"] });
+      const previous = qc.getQueryData<TriageItem[]>(["triage-queue"]) ?? [];
+      qc.setQueryData<TriageItem[]>(
+        ["triage-queue"],
+        previous.map((item) =>
+          item.id === row.id && item.sourceType === row.sourceType
+            ? { ...item, status: "CONVERTED" }
+            : item
+        )
+      );
+      return { previous };
+    },
     onSuccess: async () => {
       setSelected(null);
       setTitle("");
@@ -88,6 +101,11 @@ export default function TriagePage() {
         qc.invalidateQueries({ queryKey: ["incidents"] }),
         qc.invalidateQueries({ queryKey: ["tasks"] })
       ]);
+    },
+    onError: (_error, _row, ctx) => {
+      if (ctx?.previous) {
+        qc.setQueryData(["triage-queue"], ctx.previous);
+      }
     }
   });
 
@@ -99,11 +117,29 @@ export default function TriagePage() {
           triageNotes: statusNotes.trim() || undefined
         })
       ).data,
+    onMutate: async (row) => {
+      await qc.cancelQueries({ queryKey: ["triage-queue"] });
+      const previous = qc.getQueryData<TriageItem[]>(["triage-queue"]) ?? [];
+      qc.setQueryData<TriageItem[]>(
+        ["triage-queue"],
+        previous.map((item) =>
+          item.id === row.id && item.sourceType === row.sourceType
+            ? { ...item, status: statusTarget, triageNotes: statusNotes.trim() || item.triageNotes }
+            : item
+        )
+      );
+      return { previous };
+    },
     onSuccess: async () => {
       setStatusRow(null);
       setStatusNotes("");
       setStatusTarget("UNDER_REVIEW");
       await qc.invalidateQueries({ queryKey: ["triage-queue"] });
+    },
+    onError: (_error, _row, ctx) => {
+      if (ctx?.previous) {
+        qc.setQueryData(["triage-queue"], ctx.previous);
+      }
     }
   });
 

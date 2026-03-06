@@ -40,6 +40,22 @@ export default function RaiseRequestPage() {
           urgency
         })
       ).data,
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["request-intakes-mine"] });
+      const previous = qc.getQueryData<RequestIntake[]>(["request-intakes-mine"]) ?? [];
+      const optimistic: RequestIntake = {
+        id: `temp-${Date.now()}`,
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        impact,
+        urgency,
+        status: "NEW",
+        createdAt: new Date().toISOString()
+      };
+      qc.setQueryData<RequestIntake[]>(["request-intakes-mine"], [optimistic, ...previous]);
+      return { previous };
+    },
     onSuccess: async () => {
       setTitle("");
       setDescription("");
@@ -50,11 +66,20 @@ export default function RaiseRequestPage() {
         qc.invalidateQueries({ queryKey: ["request-intakes-mine"] }),
         qc.invalidateQueries({ queryKey: ["triage-queue"] })
       ]);
+    },
+    onError: (_error, _vars, ctx) => {
+      if (ctx?.previous) {
+        qc.setQueryData(["request-intakes-mine"], ctx.previous);
+      }
+    },
+    onSettled: async () => {
+      await qc.invalidateQueries({ queryKey: ["request-intakes-mine"] });
     }
   });
 
   const createError = create.error as ApiError | null;
   const createErrorMessage = Array.isArray(createError?.message) ? createError.message.join(", ") : createError?.message;
+  const isDuplicateHint = createError?.statusCode === 409;
 
   return (
     <Box>
@@ -111,7 +136,7 @@ export default function RaiseRequestPage() {
       <Card>
         <CardContent>
           {createErrorMessage ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity={isDuplicateHint ? "warning" : "error"} sx={{ mb: 2 }}>
               {createErrorMessage}
             </Alert>
           ) : null}
