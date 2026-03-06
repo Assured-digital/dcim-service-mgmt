@@ -157,9 +157,13 @@ export class UsersService {
   async create(actor: JwtUser, dto: CreateUserDto) {
     this.assertCanAssignRole(actor, dto.role);
 
-    const clientId = await this.resolveTargetClientId(actor, dto.clientId ?? null);
+    const roleRequiresClient = this.requiresClientScope(dto.role);
+    if (!roleRequiresClient && dto.clientId) {
+      throw new BadRequestException("clientId must be empty for organization roles.");
+    }
+    const clientId = roleRequiresClient ? await this.resolveTargetClientId(actor, dto.clientId ?? null) : null;
     const organizationId = await this.requireOrganizationScope(actor);
-    if (this.requiresClientScope(dto.role) && !clientId) {
+    if (roleRequiresClient && !clientId) {
       throw new BadRequestException("clientId is required for non-admin roles.");
     }
     if (!organizationId) {
@@ -213,9 +217,18 @@ export class UsersService {
       this.assertCanAssignRole(actor, target.role);
     }
 
-    const nextClientId = await this.resolveTargetClientId(actor, dto.clientId ?? target.clientId ?? null);
     const nextRole = dto.role ?? target.role;
-    if (this.requiresClientScope(nextRole) && !nextClientId) {
+    const roleRequiresClient = this.requiresClientScope(nextRole);
+
+    if (!roleRequiresClient && dto.clientId) {
+      throw new BadRequestException("clientId must be empty for organization roles.");
+    }
+
+    const nextClientId = roleRequiresClient
+      ? await this.resolveTargetClientId(actor, dto.clientId ?? target.clientId ?? null)
+      : null;
+
+    if (roleRequiresClient && !nextClientId) {
       throw new BadRequestException("clientId is required for non-admin roles.");
     }
 
