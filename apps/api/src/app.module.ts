@@ -14,6 +14,7 @@ import { TasksModule } from "./tasks/tasks.module";
 import { UsersModule } from "./users/users.module";
 import { RequestIntakesModule } from "./request-intakes/request-intakes.module";
 import { TriageModule } from "./triage/triage.module";
+import { AuditEventsModule } from "./audit-events/audit-events.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { TriageModule } from "./triage/triage.module";
     PublicSubmissionsModule,
     RequestIntakesModule,
     TriageModule,
+    AuditEventsModule,
     IncidentsModule,
     TasksModule,
     UsersModule

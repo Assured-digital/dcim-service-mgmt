@@ -12,10 +12,12 @@ import {
   TableHead,
   TableRow,
   TableContainer,
+  Button,
   Typography
 } from "@mui/material";
 import { priorityChipSx, statusChipSx } from "../lib/ui";
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState";
+import { EntityHistoryDialog } from "../components/EntityHistoryDialog";
 
 type SR = {
   id: string;
@@ -27,6 +29,7 @@ type SR = {
 };
 
 export default function ServiceRequestsPage() {
+  const [historyTarget, setHistoryTarget] = React.useState<{ id: string; reference: string } | null>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["service-requests"],
     queryFn: async () => (await api.get<SR[]>("/service-requests")).data
@@ -57,6 +60,7 @@ export default function ServiceRequestsPage() {
                 <TableCell>Status</TableCell>
                 <TableCell>Priority</TableCell>
                 <TableCell>Updated</TableCell>
+                <TableCell align="right">Action</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -69,6 +73,11 @@ export default function ServiceRequestsPage() {
                   </TableCell>
                   <TableCell><Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} /></TableCell>
                   <TableCell>{new Date(sr.updatedAt).toLocaleDateString()}</TableCell>
+                  <TableCell align="right">
+                    <Button size="small" variant="outlined" onClick={() => setHistoryTarget({ id: sr.id, reference: sr.reference })}>
+                      History
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -76,6 +85,14 @@ export default function ServiceRequestsPage() {
           </TableContainer>
         </CardContent>
       </Card>
+
+      <EntityHistoryDialog
+        open={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        entityType="ServiceRequest"
+        entityId={historyTarget?.id ?? ""}
+        title={`Service Request History${historyTarget ? `: ${historyTarget.reference}` : ""}`}
+      />
     </Box>
   );
 }

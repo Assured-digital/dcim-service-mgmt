@@ -26,6 +26,7 @@ import {
 import { priorityChipSx, statusChipSx } from "../lib/ui";
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState";
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac";
+import { EntityHistoryDialog } from "../components/EntityHistoryDialog";
 
 type Incident = {
   id: string;
@@ -45,6 +46,7 @@ export default function IncidentsPage() {
   const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
   const [statusDialog, setStatusDialog] = useState<{ id: string; reference: string; status: string } | null>(null);
   const [statusComment, setStatusComment] = useState("");
+  const [historyTarget, setHistoryTarget] = useState<{ id: string; reference: string } | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["incidents"],
@@ -116,6 +118,13 @@ export default function IncidentsPage() {
                       <TableCell>{new Date(inc.updatedAt).toLocaleDateString()}</TableCell>
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setHistoryTarget({ id: inc.id, reference: inc.reference })}
+                          >
+                            History
+                          </Button>
                           <TextField
                             select
                             size="small"
@@ -191,6 +200,14 @@ export default function IncidentsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <EntityHistoryDialog
+        open={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        entityType="Incident"
+        entityId={historyTarget?.id ?? ""}
+        title={`Incident History${historyTarget ? `: ${historyTarget.reference}` : ""}`}
+      />
     </Box>
   );
 }

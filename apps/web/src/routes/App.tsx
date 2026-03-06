@@ -14,6 +14,7 @@ import TasksPage from "./TasksPage";
 import AssetsPage from "./AssetsPage";
 import SurveysPage from "./SurveysPage";
 import SurveyDetailPage from "./SurveyDetailPage";
+import AuditTrailPage from "./AuditTrailPage";
 import UsersPage from "./UsersPage";
 import ClientsPage from "./ClientsPage";
 
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="tasks" element={<TasksPage />} />
         <Route path="assets" element={<AssetsPage />} />
         <Route path="surveys" element={<SurveysPage />} />
+        <Route path="audit" element={<AuditTrailPage />} />
         <Route path="surveys/:id" element={<SurveyDetailPage />} />
         <Route
           path="clients"
