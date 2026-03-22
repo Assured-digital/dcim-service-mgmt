@@ -22,7 +22,6 @@ import { IssuesModule } from "./issues/issues.module"
 import { CommentsModule } from "./comments/comments.module"
 import { WorkPackagesModule } from "./work-packages/work-packages.module"
 import { CabinetsModule } from "./cabinets/cabinets.module"
-import { SitesModule } from "./sites/sites.module"
 
 @Module({
   imports: [
