@@ -1,5 +1,6 @@
 import React from "react"
 import { useQuery } from "@tanstack/react-query"
+import { useNavigate } from "react-router-dom"
 import { api } from "../lib/api"
 import {
   Box, Button, Card, CardContent, Chip, Dialog, DialogContent,
@@ -19,6 +20,7 @@ type Issue = {
 }
 
 export default function IssuesPage() {
+  const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
@@ -70,7 +72,11 @@ export default function IssuesPage() {
               </TableHead>
               <TableBody>
                 {(data ?? []).map((i) => (
-                  <TableRow key={i.id}>
+                  <TableRow
+                    key={i.id}
+                    onClick={() => navigate(`/issues/${i.id}`)}
+                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}
+                  >
                     <TableCell sx={{ fontWeight: 700, fontFamily: "monospace" }}>{i.reference}</TableCell>
                     <TableCell>{i.title}</TableCell>
                     <TableCell><Chip size="small" sx={priorityChipSx(i.priority.toLowerCase())} label={i.priority} /></TableCell>

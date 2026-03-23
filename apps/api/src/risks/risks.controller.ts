@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Headers, Param, Post, Put, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
@@ -46,5 +46,13 @@ export class RisksController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.risks.updateStatusForClient(clientId, id, user.userId, dto)
+  }
+
+  @Put(":id")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  async update(@Req() req: any, @Param("id") id: string, @Body() dto: { mitigationPlan?: string; reviewDate?: string }, @Headers("x-client-id") requestedClientId?: string) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.risks.updateForClient(clientId, id, dto)
   }
 }

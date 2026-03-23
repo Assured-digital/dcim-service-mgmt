@@ -206,24 +206,34 @@ model ServiceRequest {
 }
 
 model Asset {
-  id          String   @id @default(uuid())
-  assetTag    String   @unique
-  name        String
-  assetType   String
-  ownerType   OwnerType
-  clientId    String?
-  client      Client?  @relation(fields: [clientId], references: [id])
-  siteId      String?
-  site        Site?    @relation(fields: [siteId], references: [id])
-  cabinetId   String?
-  cabinet     Cabinet? @relation(fields: [cabinetId], references: [id])
-  locationType String?
-  locationArea String?
-  location    String?
-  status      String   @default("ACTIVE")
+  id               String    @id @default(uuid())
+  assetTag         String    @unique
+  name             String
+  assetType        String
+  ownerType        OwnerType
+  clientId         String?
+  client           Client?   @relation(fields: [clientId], references: [id])
+  siteId           String?
+  site             Site?     @relation(fields: [siteId], references: [id])
+  cabinetId        String?
+  cabinet          Cabinet?  @relation(fields: [cabinetId], references: [id])
+  status           String    @default("ACTIVE")
+  manufacturer     String?
+  modelNumber      String?
+  serialNumber     String?
+  uHeight          Int?
+  uPosition        Int?
+  powerDrawW       Float?
+  ipAddress        String?
+  warrantyExpiry   DateTime?
+  lifecycleStatus  String?
+  notes            String?
+  locationType     String?
+  locationArea     String?
+  location         String?
   lastMaintenanceAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model Survey {

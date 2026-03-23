@@ -8,7 +8,6 @@ import {
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
 import DashboardIcon from "@mui/icons-material/Dashboard"
-import InboxIcon from "@mui/icons-material/Inbox"
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import TaskAltIcon from "@mui/icons-material/TaskAlt"
@@ -16,11 +15,11 @@ import StorageIcon from "@mui/icons-material/Storage"
 import FactCheckIcon from "@mui/icons-material/FactCheck"
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts"
 import ApartmentIcon from "@mui/icons-material/Apartment"
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline"
 import HistoryIcon from "@mui/icons-material/History"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
+import WorkIcon from "@mui/icons-material/Work"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import { api, revokeAndLogout } from "../lib/api"
@@ -52,22 +51,18 @@ const sections: NavSection[] = [
   {
     title: "Service desk",
     items: [
-      { label: "Service requests", path: "/service-requests", icon: <ConfirmationNumberIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon fontSize="small" />, roles: Object.values(ROLES) },
       { label: "Incidents", path: "/incidents", icon: <WarningAmberIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Changes", path: "/changes", icon: <SwapHorizIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Triage", path: "/triage", icon: <InboxIcon fontSize="small" />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
-      { label: "Raise request", path: "/raise-request", icon: <AddCircleOutlineIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Change Management", path: "/changes", icon: <SwapHorizIcon fontSize="small" />, roles: Object.values(ROLES) },
     ]
-  },
+  },  
   {
     title: "Operations",
     items: [
-      { label: "Tasks", path: "/tasks", icon: <TaskAltIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Assets", path: "/assets", icon: <StorageIcon fontSize="small" />, roles: Object.values(ROLES) },
       { label: "Sites", path: "/sites", icon: <LocationOnIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Surveys & audits", path: "/surveys", icon: <FactCheckIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Risks", path: "/risks", icon: <ReportProblemIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Issues", path: "/issues", icon: <WarningAmberIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Surveys & Audits", path: "/surveys", icon: <FactCheckIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Work Packages", path: "/work-packages", icon: <WorkIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Tasks", path: "/tasks", icon: <TaskAltIcon fontSize="small" />, roles: Object.values(ROLES) },
     ]
   },
   {
@@ -75,7 +70,7 @@ const sections: NavSection[] = [
     items: [
       { label: "Clients", path: "/clients", icon: <ApartmentIcon fontSize="small" />, roles: [...ORG_SUPER_ROLES] },
       { label: "Users", path: "/users", icon: <ManageAccountsIcon fontSize="small" />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
-      { label: "Audit trail", path: "/audit", icon: <HistoryIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Audit Trail", path: "/audit", icon: <HistoryIcon fontSize="small" />, roles: Object.values(ROLES) },
     ]
   }
 ]

@@ -23,6 +23,11 @@ import RisksPage from "./RisksPage"
 import IssuesPage from "./IssuesPage"
 import WorkPackagesPage from "./WorkPackagesPage"
 import ServiceRequestDetailPage from "./ServiceRequestDetailPage"
+import ChangeDetailPage from "./ChangeDetailPage"
+import RiskDetailPage from "./RiskDetailPage"
+import IssueDetailPage from "./IssueDetailPage"
+import ServiceDeskPage from "./ServiceDeskPage"
+import SiteDetailPage from "./SiteDetailPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken();
@@ -50,18 +55,8 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route
-          path="raise-request"
-          element={<RaiseRequestPage />}
-        />
-        <Route
-          path="triage"
-          element={
-            <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]}>
-              <TriagePage />
-            </RequireRoles>
-          }
-        />
+        <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />
+        <Route path="triage" element={<Navigate to="/service-desk" replace />} />
         <Route path="service-requests" element={<ServiceRequestsPage />} />
         <Route path="service-requests/:id" element={<ServiceRequestDetailPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
@@ -71,10 +66,15 @@ export default function App() {
         <Route path="audit" element={<AuditTrailPage />} />
         <Route path="surveys/:id" element={<SurveyDetailPage />} />
         <Route path="sites" element={<SitesPage />} />
+        <Route path="sites/:id" element={<SiteDetailPage />} />
         <Route path="changes" element={<ChangesPage />} />
+        <Route path="changes/:id" element={<ChangeDetailPage />} />
         <Route path="risks" element={<RisksPage />} />
         <Route path="issues" element={<IssuesPage />} />
         <Route path="work-packages" element={<WorkPackagesPage />} />
+        <Route path="risks/:id" element={<RiskDetailPage />} />
+        <Route path="issues/:id" element={<IssueDetailPage />} />
+        <Route path="service-desk" element={<ServiceDeskPage />} />
         <Route
           path="clients"
           element={

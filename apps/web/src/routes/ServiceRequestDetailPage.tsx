@@ -359,11 +359,11 @@ export default function ServiceRequestDetailPage() {
     <Box>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate("/service-requests")}
+        onClick={() => navigate("/service-desk")}
         sx={{ mb: 2, color: "text.secondary" }}
         size="small"
       >
-        Back to service requests
+        Back to service desk
       </Button>
 
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>

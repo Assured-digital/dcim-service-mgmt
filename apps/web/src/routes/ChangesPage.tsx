@@ -1,5 +1,6 @@
 import React from "react"
 import { useQuery } from "@tanstack/react-query"
+import { useNavigate } from "react-router-dom"
 import { api } from "../lib/api"
 import {
   Box, Button, Card, CardContent, Chip, Dialog, DialogContent,
@@ -22,6 +23,7 @@ type Change = {
 }
 
 export default function ChangesPage() {
+  const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
@@ -50,7 +52,7 @@ export default function ChangesPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h4">Changes</Typography>
+        <Typography variant="h4">Change Management</Typography>
         <Button variant="contained" onClick={() => setOpen(true)}>Raise change</Button>
       </Stack>
 
@@ -76,7 +78,11 @@ export default function ChangesPage() {
               </TableHead>
               <TableBody>
                 {(data ?? []).map((c) => (
-                  <TableRow key={c.id}>
+                  <TableRow
+                    key={c.id}
+                    onClick={() => navigate(`/changes/${c.id}`)}
+                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}
+                  >
                     <TableCell sx={{ fontWeight: 700, fontFamily: "monospace" }}>{c.reference}</TableCell>
                     <TableCell>{c.title}</TableCell>
                     <TableCell>

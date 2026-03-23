@@ -103,4 +103,18 @@ export class RisksService {
 
     return updated
   }
+
+    async updateForClient(clientId: string, id: string, dto: {
+    mitigationPlan?: string
+    reviewDate?: string
+  }) {
+    const risk = await this.getForClient(clientId, id)
+    return this.prisma.risk.update({
+      where: { id: risk.id },
+      data: {
+        mitigationPlan: dto.mitigationPlan,
+        reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined
+      }
+    })
+  }
 }

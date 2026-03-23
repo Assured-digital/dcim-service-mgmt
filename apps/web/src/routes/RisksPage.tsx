@@ -1,5 +1,6 @@
 import React from "react"
 import { useQuery } from "@tanstack/react-query"
+import { useNavigate } from "react-router-dom"
 import { api } from "../lib/api"
 import {
   Box, Button, Card, CardContent, Chip, Dialog, DialogContent,
@@ -26,6 +27,7 @@ function riskLevelSx(level: string) {
 }
 
 export default function RisksPage() {
+  const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
@@ -79,7 +81,11 @@ export default function RisksPage() {
               </TableHead>
               <TableBody>
                 {(data ?? []).map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    onClick={() => navigate(`/risks/${r.id}`)}
+                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}
+                  >
                     <TableCell sx={{ fontWeight: 700, fontFamily: "monospace" }}>{r.reference}</TableCell>
                     <TableCell>{r.title}</TableCell>
                     <TableCell><Chip size="small" sx={riskLevelSx(r.likelihood)} label={r.likelihood} /></TableCell>

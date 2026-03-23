@@ -62,7 +62,20 @@ export class AssetsService {
         assetType: dto.assetType,
         ownerType: dto.ownerType,
         clientId: dto.ownerType === OwnerType.CLIENT ? targetClientId : null,
-        location: dto.location
+        siteId: dto.siteId ?? null,
+        cabinetId: dto.cabinetId ?? null,
+        status: dto.status ?? "ACTIVE",
+        manufacturer: dto.manufacturer ?? null,
+        modelNumber: dto.modelNumber ?? null,
+        serialNumber: dto.serialNumber ?? null,
+        uHeight: dto.uHeight ?? null,
+        uPosition: dto.uPosition ?? null,
+        powerDrawW: dto.powerDrawW ?? null,
+        ipAddress: dto.ipAddress ?? null,
+        warrantyExpiry: dto.warrantyExpiry ? new Date(dto.warrantyExpiry) : null,
+        lifecycleStatus: dto.lifecycleStatus ?? null,
+        notes: dto.notes ?? null,
+        location: dto.location ?? null
       }
     });
   }
