@@ -200,6 +200,7 @@ model ServiceRequest {
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  comments  Comment[] @relation("ServiceRequestComments")
 
   auditEvents AuditEvent[]
 }
@@ -448,4 +449,6 @@ model Comment {
   entityId   String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  serviceRequestId String?
+  serviceRequest   ServiceRequest? @relation("ServiceRequestComments", fields: [serviceRequestId], references: [id])
 }

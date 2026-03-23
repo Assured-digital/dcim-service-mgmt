@@ -22,6 +22,7 @@ import ChangesPage from "./ChangesPage"
 import RisksPage from "./RisksPage"
 import IssuesPage from "./IssuesPage"
 import WorkPackagesPage from "./WorkPackagesPage"
+import ServiceRequestDetailPage from "./ServiceRequestDetailPage"
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken();
@@ -62,6 +63,7 @@ export default function App() {
           }
         />
         <Route path="service-requests" element={<ServiceRequestsPage />} />
+        <Route path="service-requests/:id" element={<ServiceRequestDetailPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="assets" element={<AssetsPage />} />

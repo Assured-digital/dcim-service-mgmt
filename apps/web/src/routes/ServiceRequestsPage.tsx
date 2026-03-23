@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import {
@@ -13,7 +14,8 @@ import {
   TableRow,
   TableContainer,
   Button,
-  Typography
+  Typography,
+  Stack
 } from "@mui/material";
 import { priorityChipSx, statusChipSx } from "../lib/ui";
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState";
@@ -29,6 +31,7 @@ type SR = {
 };
 
 export default function ServiceRequestsPage() {
+  const navigate = useNavigate();
   const [historyTarget, setHistoryTarget] = React.useState<{ id: string; reference: string } | null>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["service-requests"],
@@ -52,36 +55,68 @@ export default function ServiceRequestsPage() {
           ) : null}
 
           <TableContainer>
-          <Table sx={{ minWidth: 760 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Ticket</TableCell>
-                <TableCell>Subject</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Priority</TableCell>
-                <TableCell>Updated</TableCell>
-                <TableCell align="right">Action</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(data ?? []).map((sr) => (
-                <TableRow key={sr.id}>
-                  <TableCell sx={{ fontWeight: 700 }}>{sr.reference}</TableCell>
-                  <TableCell>{sr.subject}</TableCell>
-                  <TableCell>
-                    <Chip size="small" sx={statusChipSx(sr.status)} label={sr.status.toLowerCase().replaceAll("_"," ")} />
-                  </TableCell>
-                  <TableCell><Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} /></TableCell>
-                  <TableCell>{new Date(sr.updatedAt).toLocaleDateString()}</TableCell>
-                  <TableCell align="right">
-                    <Button size="small" variant="outlined" onClick={() => setHistoryTarget({ id: sr.id, reference: sr.reference })}>
-                      History
-                    </Button>
-                  </TableCell>
+            <Table sx={{ minWidth: 760 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Ticket</TableCell>
+                  <TableCell>Subject</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Priority</TableCell>
+                  <TableCell>Updated</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {(data ?? []).map((sr) => (
+                  <TableRow
+                    key={sr.id}
+                    hover
+                    onClick={() => navigate(`/service-requests/${sr.id}`)}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell sx={{ fontWeight: 700, fontFamily: "monospace" }}>
+                      {sr.reference}
+                    </TableCell>
+                    <TableCell>{sr.subject}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        sx={statusChipSx(sr.status)}
+                        label={sr.status.toLowerCase().replaceAll("_", " ")}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} />
+                    </TableCell>
+                    <TableCell>{new Date(sr.updatedAt).toLocaleDateString("en-GB")}</TableCell>
+                    <TableCell align="right">
+                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHistoryTarget({ id: sr.id, reference: sr.reference });
+                          }}
+                        >
+                          History
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/service-requests/${sr.id}`);
+                          }}
+                        >
+                          View
+                        </Button>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </TableContainer>
         </CardContent>
       </Card>
