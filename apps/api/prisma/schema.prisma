@@ -89,9 +89,49 @@ model Client {
   surveys   Survey[]
   incidents Incident[]
   tasks     Task[]
+  sites     Site[]
+  workPackages   WorkPackage[]
+  changeRequests ChangeRequest[]
+  risks          Risk[]
+  issues         Issue[]
   publicSubmissions PublicSubmission[]
   documents DocumentReference[]
   requestIntakes RequestIntake[]
+}
+
+model Site {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  name      String
+  address   String?
+  city      String?
+  postcode  String?
+  country   String   @default("UK")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cabinets  Cabinet[]
+  assets    Asset[]
+  surveys   Survey[]
+  workPackageSites WorkPackageSite[]
+}
+
+model Cabinet {
+  id        String   @id @default(uuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id])
+  name      String
+  type      String   @default("RACK")
+  totalU    Int?
+  usedU     Int?
+  powerKw   Float?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assets    Asset[]
 }
 
 model Organization {
@@ -124,6 +164,9 @@ model User {
   assignedIncidents Incident[] @relation("AssignedIncident")
   assignedTasks Task[] @relation("AssignedTask")
   requestIntakes RequestIntake[] @relation("RequesterIntake")
+  assignedChanges  ChangeRequest[]  @relation("AssignedChange")
+  changeApprovals  ChangeApproval[] @relation("ChangeApprovals")
+  comments         Comment[]        @relation("UserComments")
 }
 
 model PublicSubmission {
@@ -157,6 +200,7 @@ model ServiceRequest {
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  comments  Comment[] @relation("ServiceRequestComments")
 
   auditEvents AuditEvent[]
 }
@@ -169,6 +213,12 @@ model Asset {
   ownerType   OwnerType
   clientId    String?
   client      Client?  @relation(fields: [clientId], references: [id])
+  siteId      String?
+  site        Site?    @relation(fields: [siteId], references: [id])
+  cabinetId   String?
+  cabinet     Cabinet? @relation(fields: [cabinetId], references: [id])
+  locationType String?
+  locationArea String?
   location    String?
   status      String   @default("ACTIVE")
   lastMaintenanceAt DateTime?
@@ -185,6 +235,8 @@ model Survey {
   status      SurveyStatus @default(DRAFT)
   scheduledAt DateTime?
   assigneeId  String?
+  siteId    String?
+  site      Site?   @relation(fields: [siteId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -286,4 +338,120 @@ model RequestIntake {
   convertedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model WorkPackage {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  reference   String   @unique
+  title       String
+  type        String   @default("MANAGED_SERVICE")
+  status      String   @default("ACTIVE")
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  value       Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sites       WorkPackageSite[]
+}
+
+model WorkPackageSite {
+  id            String      @id @default(uuid())
+  workPackageId String
+  workPackage   WorkPackage @relation(fields: [workPackageId], references: [id])
+  siteId        String
+  site          Site        @relation(fields: [siteId], references: [id])
+}
+
+model ChangeRequest {
+  id                  String   @id @default(uuid())
+  reference           String   @unique
+  clientId            String
+  client              Client   @relation(fields: [clientId], references: [id])
+  assigneeId          String?
+  assignee            User?    @relation("AssignedChange", fields: [assigneeId], references: [id])
+  changeType          String   @default("NORMAL")
+  status              String   @default("DRAFT")
+  priority            String   @default("medium")
+  title               String
+  description         String
+  reason              String?
+  impactAssessment    String?
+  rollbackPlan        String?
+  scheduledStart      DateTime?
+  scheduledEnd        DateTime?
+  actualStart         DateTime?
+  actualEnd           DateTime?
+  implementationNotes String?
+  postImplReview      String?
+  closedAt            DateTime?
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  approvals     ChangeApproval[]
+}
+
+model ChangeApproval {
+  id              String        @id @default(uuid())
+  changeRequestId String
+  changeRequest   ChangeRequest @relation(fields: [changeRequestId], references: [id])
+  approverId      String
+  approver        User          @relation("ChangeApprovals", fields: [approverId], references: [id])
+  decision        String
+  notes           String?
+  decidedAt       DateTime      @default(now())
+}
+
+model Risk {
+  id             String   @id @default(uuid())
+  reference      String   @unique
+  clientId       String?
+  client         Client?  @relation(fields: [clientId], references: [id])
+  title          String
+  description    String
+  likelihood     String   @default("MEDIUM")
+  impact         String   @default("MEDIUM")
+  status         String   @default("OPEN")
+  mitigationPlan String?
+  acceptanceNote String?
+  reviewDate     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Issue {
+  id          String   @id @default(uuid())
+  reference   String   @unique
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  title       String
+  description String
+  priority    String   @default("MEDIUM")
+  status      String   @default("OPEN")
+  resolution  String?
+  closedAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Comment {
+  id                String   @id @default(uuid())
+  authorId          String
+  author            User     @relation("UserComments", fields: [authorId], references: [id])
+  body              String
+  entityType        String
+  entityId          String
+  type              String   @default("WORK_NOTE")
+  visibleToCustomer Boolean  @default(false)
+  fromCustomer      Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  serviceRequestId  String?
+  serviceRequest    ServiceRequest? @relation("ServiceRequestComments", fields: [serviceRequestId], references: [id])
 }

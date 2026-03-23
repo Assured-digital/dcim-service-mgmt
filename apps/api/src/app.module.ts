@@ -1,3 +1,4 @@
+import { SitesModule } from "./sites/sites.module"
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
@@ -15,6 +16,12 @@ import { UsersModule } from "./users/users.module";
 import { RequestIntakesModule } from "./request-intakes/request-intakes.module";
 import { TriageModule } from "./triage/triage.module";
 import { AuditEventsModule } from "./audit-events/audit-events.module";
+import { ChangesModule } from "./changes/changes.module"
+import { RisksModule } from "./risks/risks.module"
+import { IssuesModule } from "./issues/issues.module"
+import { CommentsModule } from "./comments/comments.module"
+import { WorkPackagesModule } from "./work-packages/work-packages.module"
+import { CabinetsModule } from "./cabinets/cabinets.module"
 
 @Module({
   imports: [
@@ -32,6 +39,14 @@ import { AuditEventsModule } from "./audit-events/audit-events.module";
     AuditEventsModule,
     IncidentsModule,
     TasksModule,
+    SitesModule,
+    SitesModule,
+    ChangesModule,
+    RisksModule,
+    IssuesModule,
+    CommentsModule,
+    WorkPackagesModule,
+    CabinetsModule,
     UsersModule
   ],
   controllers: [HealthController]

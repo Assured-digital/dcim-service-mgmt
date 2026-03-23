@@ -84,11 +84,94 @@ export class ServiceRequestsService {
   }
 
   async getForClient(clientId: string, id: string) {
-    this.assertClientScope(clientId);
-    const sr = await this.prisma.serviceRequest.findFirst({ where: { id, clientId } });
-    if (!sr) throw new NotFoundException("Service Request not found");
-    return sr;
+  this.assertClientScope(clientId);
+  const sr = await this.prisma.serviceRequest.findFirst({
+    where: { id, clientId },
+    include: {
+      assignee: { select: { id: true, email: true } },
+      client: { select: { id: true, name: true } },
+      auditEvents: {
+        orderBy: { createdAt: "asc" }
+      }
+    }
+  });
+  if (!sr) throw new NotFoundException("Service Request not found");
+  return sr;
+}
+
+async updateStatusForClient(
+  clientId: string,
+  id: string,
+  actorUserId: string,
+  dto: { status: string; closureSummary?: string }
+) {
+  this.assertClientScope(clientId);
+
+  if (
+    dto.status === ServiceRequestStatus.CLOSED ||
+    dto.status === ServiceRequestStatus.COMPLETED
+  ) {
+    if (!dto.closureSummary || dto.closureSummary.trim().length < 5) {
+      throw new BadRequestException("Closure summary required to close a Service Request.");
+    }
   }
+
+  const sr = await this.getForClient(clientId, id);
+
+  const updated = await this.prisma.serviceRequest.update({
+    where: { id: sr.id },
+    data: {
+      status: dto.status as ServiceRequestStatus,
+      closureSummary: dto.closureSummary
+    }
+  });
+
+  await this.prisma.auditEvent.create({
+    data: {
+      entityType: "ServiceRequest",
+      entityId: sr.id,
+      action: "STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      data: { from: sr.status, to: dto.status },
+      serviceRequestId: sr.id
+    }
+  });
+
+  return updated;
+}
+
+async updateForClient(
+  clientId: string,
+  id: string,
+  actorUserId: string,
+  dto: { assigneeId?: string; priority?: string }
+) {
+  this.assertClientScope(clientId);
+  const sr = await this.getForClient(clientId, id);
+
+  const updated = await this.prisma.serviceRequest.update({
+    where: { id: sr.id },
+    data: {
+      assigneeId: dto.assigneeId,
+      priority: dto.priority
+    }
+  });
+
+  await this.prisma.auditEvent.create({
+    data: {
+      entityType: "ServiceRequest",
+      entityId: sr.id,
+      action: "UPDATED",
+      actorUserId,
+      clientId,
+      data: dto,
+      serviceRequestId: sr.id
+    }
+  });
+
+  return updated;
+}
 
   async closeForClient(clientId: string, id: string, actorUserId: string, closureSummary: string) {
     this.assertClientScope(clientId);

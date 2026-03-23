@@ -17,6 +17,12 @@ import SurveyDetailPage from "./SurveyDetailPage";
 import AuditTrailPage from "./AuditTrailPage";
 import UsersPage from "./UsersPage";
 import ClientsPage from "./ClientsPage";
+import SitesPage from "./SitesPage"
+import ChangesPage from "./ChangesPage"
+import RisksPage from "./RisksPage"
+import IssuesPage from "./IssuesPage"
+import WorkPackagesPage from "./WorkPackagesPage"
+import ServiceRequestDetailPage from "./ServiceRequestDetailPage"
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken();
@@ -57,12 +63,18 @@ export default function App() {
           }
         />
         <Route path="service-requests" element={<ServiceRequestsPage />} />
+        <Route path="service-requests/:id" element={<ServiceRequestDetailPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="assets" element={<AssetsPage />} />
         <Route path="surveys" element={<SurveysPage />} />
         <Route path="audit" element={<AuditTrailPage />} />
         <Route path="surveys/:id" element={<SurveyDetailPage />} />
+        <Route path="sites" element={<SitesPage />} />
+        <Route path="changes" element={<ChangesPage />} />
+        <Route path="risks" element={<RisksPage />} />
+        <Route path="issues" element={<IssuesPage />} />
+        <Route path="work-packages" element={<WorkPackagesPage />} />
         <Route
           path="clients"
           element={

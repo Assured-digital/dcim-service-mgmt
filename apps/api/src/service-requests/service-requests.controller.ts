@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Put, Query, Req, Res } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { ServiceRequestsService } from "./service-requests.service";
 import { CreateServiceRequestDto, CloseServiceRequestDto } from "./dto";
@@ -103,5 +103,30 @@ export class ServiceRequestsController {
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     const userId = user.userId;
     return this.srs.closeForClient(clientId, id, userId, dto.closureSummary);
+  }
+  @Post(":id/status")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  async updateStatus(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: any,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.srs.updateStatusForClient(clientId, id, user.userId, dto);
+  }
+
+  @Put(":id")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST)
+  async update(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: any,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.srs.updateForClient(clientId, id, user.userId, dto);
   }
 }
