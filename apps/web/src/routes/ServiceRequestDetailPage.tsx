@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -11,6 +11,7 @@ import LockIcon from "@mui/icons-material/Lock"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import { statusChipSx, priorityChipSx } from "../lib/ui"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { CreateTaskModal } from "./TasksPage"
 
 type AuditEvent = {
   id: string
@@ -232,6 +233,9 @@ function CommentThread({
 export default function ServiceRequestDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const fromTask = location.state?.fromTask
+  const fromTaskRef = location.state?.fromTaskRef
   const qc = useQueryClient()
 
   const [tab, setTab] = React.useState(0)
@@ -245,6 +249,7 @@ export default function ServiceRequestDetailPage() {
   const [editPriority, setEditPriority] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
+  const [taskOpen, setTaskOpen] = React.useState(false)
 
   const { data: sr, isLoading } = useQuery({
     queryKey: ["sr-detail", id],
@@ -359,11 +364,11 @@ export default function ServiceRequestDetailPage() {
     <Box>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate("/service-desk")}
+        onClick={() => fromTask ? navigate(`/tasks/${fromTask}`) : navigate("/service-requests")}
         sx={{ mb: 2, color: "text.secondary" }}
         size="small"
       >
-        Back to service desk
+        {fromTask ? `Back to task ${fromTaskRef}` : "Back to service requests"}
       </Button>
 
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
@@ -377,7 +382,13 @@ export default function ServiceRequestDetailPage() {
           </Stack>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>{sr.subject}</Typography>
         </Box>
+        <Stack direction="row" spacing={1}>
+      <Button variant="outlined" size="small"
+          onClick={() => setTaskOpen(true)}>
+          Create task
+        </Button>
         <Button variant="outlined" size="small" onClick={openEdit}>Edit</Button>
+      </Stack>
       </Stack>
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
@@ -586,6 +597,13 @@ export default function ServiceRequestDetailPage() {
           </Stack>
         </DialogContent>
       </Dialog>
+      <CreateTaskModal
+        open={taskOpen}
+        onClose={() => setTaskOpen(false)}
+        linkedEntityType="ServiceRequest"
+        linkedEntityId={sr.id}
+        linkedEntityLabel={sr.reference}
+      />
     </Box>
   )
 }

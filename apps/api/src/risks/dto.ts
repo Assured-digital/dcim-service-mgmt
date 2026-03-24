@@ -21,14 +21,36 @@ export class CreateRiskDto {
   @IsOptional()
   @IsString()
   mitigationPlan?: string
+
+  @IsOptional()
+  @IsIn(["MANUAL", "SURVEY", "INCIDENT", "CHANGE", "AUDIT"])
+  source?: string
 }
 
 export class UpdateRiskStatusDto {
   @IsString()
-  @IsIn(["OPEN", "MITIGATING", "ACCEPTED", "CLOSED"])
+  @IsIn(["IDENTIFIED", "ASSESSED", "MITIGATING", "ACCEPTED", "CLOSED"])
   status!: string
 
   @IsOptional()
   @IsString()
   acceptanceNote?: string
+}
+
+export class UpdateRiskDto {
+  @IsOptional()
+  @IsString()
+  mitigationPlan?: string
+
+  @IsOptional()
+  @IsString()
+  reviewDate?: string
+
+  @IsOptional()
+  @IsIn(["LOW", "MEDIUM", "HIGH"])
+  likelihood?: string
+
+  @IsOptional()
+  @IsIn(["LOW", "MEDIUM", "HIGH"])
+  impact?: string
 }

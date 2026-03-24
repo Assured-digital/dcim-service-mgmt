@@ -58,8 +58,8 @@ export default function WorkPackagesPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h4">Work packages</Typography>
-        <Button variant="contained" onClick={() => setOpen(true)}>New work package</Button>
+        <Typography variant="h4">Service Scope</Typography>
+        <Button variant="contained" onClick={() => setOpen(true)}>New service scope</Button>
       </Stack>
 
       <Card>
@@ -101,7 +101,7 @@ export default function WorkPackagesPage() {
       </Card>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>New work package</DialogTitle>
+        <DialogTitle>New service scope</DialogTitle>
         <DialogContent>
           <Stack gap={2} sx={{ mt: 1 }}>
             <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} required fullWidth />

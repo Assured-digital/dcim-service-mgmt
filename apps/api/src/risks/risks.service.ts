@@ -38,9 +38,9 @@ export class RisksService {
     likelihood?: string
     impact?: string
     mitigationPlan?: string
+    source?: string
   }) {
     this.assertClientScope(clientId)
-
     for (let i = 0; i < 10; i++) {
       const reference = makeRef()
       const exists = await this.prisma.risk.findUnique({ where: { reference } })
@@ -54,10 +54,10 @@ export class RisksService {
             likelihood: dto.likelihood ?? "MEDIUM",
             impact: dto.impact ?? "MEDIUM",
             mitigationPlan: dto.mitigationPlan,
-            status: "OPEN"
+            source: dto.source ?? "MANUAL",
+            status: "IDENTIFIED"
           }
         })
-
         await this.prisma.auditEvent.create({
           data: {
             entityType: "Risk",
@@ -68,7 +68,6 @@ export class RisksService {
             data: { reference: risk.reference, title: risk.title }
           }
         })
-
         return risk
       }
     }
@@ -80,7 +79,6 @@ export class RisksService {
     acceptanceNote?: string
   }) {
     const risk = await this.getForClient(clientId, id)
-
     const updated = await this.prisma.risk.update({
       where: { id: risk.id },
       data: {
@@ -89,7 +87,6 @@ export class RisksService {
         closedAt: dto.status === "CLOSED" ? new Date() : undefined
       }
     })
-
     await this.prisma.auditEvent.create({
       data: {
         entityType: "Risk",
@@ -100,21 +97,35 @@ export class RisksService {
         data: { from: risk.status, to: dto.status }
       }
     })
-
     return updated
   }
 
-    async updateForClient(clientId: string, id: string, dto: {
+  async updateForClient(clientId: string, id: string, actorUserId: string, dto: {
     mitigationPlan?: string
     reviewDate?: string
+    likelihood?: string
+    impact?: string
   }) {
     const risk = await this.getForClient(clientId, id)
-    return this.prisma.risk.update({
+    const updated = await this.prisma.risk.update({
       where: { id: risk.id },
       data: {
         mitigationPlan: dto.mitigationPlan,
+        likelihood: dto.likelihood,
+        impact: dto.impact,
         reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined
       }
     })
+    await this.prisma.auditEvent.create({
+      data: {
+        entityType: "Risk",
+        entityId: risk.id,
+        action: "UPDATED",
+        actorUserId,
+        clientId,
+        data: { fields: Object.keys(dto).filter(k => (dto as any)[k] !== undefined) }
+      }
+    })
+    return updated
   }
 }

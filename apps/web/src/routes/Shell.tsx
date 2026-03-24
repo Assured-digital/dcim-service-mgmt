@@ -49,19 +49,19 @@ const sections: NavSection[] = [
     ]
   },
   {
-    title: "Service desk",
+    title: "Service Desk",
     items: [
-      { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Incidents", path: "/incidents", icon: <WarningAmberIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Change Management", path: "/changes", icon: <SwapHorizIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Service desk", path: "/service-desk", icon: <ConfirmationNumberIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Risks", path: "/risks", icon: <ReportProblemIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Issues", path: "/issues", icon: <WarningAmberIcon fontSize="small" />, roles: Object.values(ROLES) },
     ]
-  },  
+  },
   {
     title: "Operations",
     items: [
       { label: "Sites", path: "/sites", icon: <LocationOnIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Surveys & Audits", path: "/surveys", icon: <FactCheckIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Work Packages", path: "/work-packages", icon: <WorkIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Engineering Checks", path: "/surveys", icon: <FactCheckIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Service Scope", path: "/work-packages", icon: <WorkIcon fontSize="small" />, roles: Object.values(ROLES) },
       { label: "Tasks", path: "/tasks", icon: <TaskAltIcon fontSize="small" />, roles: Object.values(ROLES) },
     ]
   },

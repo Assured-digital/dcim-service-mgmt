@@ -11,8 +11,12 @@ export class CreateIssueDto {
   description!: string
 
   @IsOptional()
-  @IsIn(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
-  priority?: string
+  @IsIn(["RED", "AMBER", "GREEN"])
+  severity?: string
+
+  @IsOptional()
+  @IsString()
+  reviewDate?: string
 }
 
 export class UpdateIssueStatusDto {
@@ -23,4 +27,14 @@ export class UpdateIssueStatusDto {
   @IsOptional()
   @IsString()
   resolution?: string
+}
+
+export class UpdateIssueDto {
+  @IsOptional()
+  @IsIn(["RED", "AMBER", "GREEN"])
+  severity?: string
+
+  @IsOptional()
+  @IsString()
+  reviewDate?: string
 }

@@ -86,7 +86,10 @@ export default function SurveysPage() {
   return (
     <Box>
       <Typography variant="h4" sx={{ mb: 2 }}>
-        Surveys & Audits
+        Engineering Checks
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        Completed and planned Engineering Checks.
       </Typography>
 
       {canManage ? (

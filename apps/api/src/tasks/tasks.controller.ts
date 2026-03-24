@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@prisma/client";
 import { Response } from "express";
@@ -88,5 +88,30 @@ export class TasksController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.tasks.updateStatusForClient(clientId, id, dto.status, user.userId, dto.comment);
+  }
+
+  @Post()
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  async create(
+    @Req() req: any,
+    @Body() dto: { title: string; description?: string; priority?: string; dueAt?: string; assigneeId?: string },
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.tasks.createForClient(clientId, user.userId, dto);
+  }
+
+  @Put(":id")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  async update(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: { title?: string; description?: string; priority?: string; dueAt?: string; assigneeId?: string },
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.tasks.updateForClient(clientId, id, dto)
   }
 }

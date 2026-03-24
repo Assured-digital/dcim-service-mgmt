@@ -178,130 +178,140 @@ function ServiceRequestsView() {
 function TriageView() {
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
   const qc = useQueryClient()
-  const [selected, setSelected] = React.useState<TriageItem | null>(null)
-  const [targetType, setTargetType] = React.useState<"SERVICE_REQUEST" | "INCIDENT" | "TASK">("SERVICE_REQUEST")
+
+  const [reviewRow, setReviewRow] = React.useState<TriageItem | null>(null)
+  const [createTask, setCreateTask] = React.useState(false)
+  const [rejectMode, setRejectMode] = React.useState(false)
+
+  // Convert state
+  const [targetType, setTargetType] = React.useState<"SERVICE_REQUEST" | "TASK">("SERVICE_REQUEST")
   const [priority, setPriority] = React.useState("medium")
-  const [incidentSeverity, setIncidentSeverity] = React.useState("MEDIUM")
-  const [taskDueAt, setTaskDueAt] = React.useState("")
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
-  const [statusTarget, setStatusTarget] = React.useState<"UNDER_REVIEW" | "REJECTED">("UNDER_REVIEW")
-  const [statusNotes, setStatusNotes] = React.useState("")
-  const [statusRow, setStatusRow] = React.useState<TriageItem | null>(null)
+  const [taskDueAt, setTaskDueAt] = React.useState("")
 
-  const { data, isLoading, error } = useQuery({
+  // Task state
+  const [taskTitle, setTaskTitle] = React.useState("")
+  const [taskDescription, setTaskDescription] = React.useState("")
+  const [taskPriority, setTaskPriority] = React.useState("medium")
+  const [taskDue, setTaskDue] = React.useState("")
+  const [taskAssignee, setTaskAssignee] = React.useState("")
+
+  // Reject state
+  const [rejectNotes, setRejectNotes] = React.useState("")
+
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState("")
+
+  const { data, isLoading, error: loadError } = useQuery({
     queryKey: ["triage-queue"],
     queryFn: async () => (await api.get<TriageItem[]>("/triage/queue")).data
   })
 
-  const convert = useMutation({
-    mutationFn: async (row: TriageItem) =>
-      (await api.post(`/triage/${row.sourceType}/${row.id}/convert`, {
-        targetType, priority,
-        incidentSeverity: targetType === "INCIDENT" ? incidentSeverity : undefined,
+  const { data: users } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.get<{ id: string; email: string }[]>("/users")).data
+  })
+
+  function openReview(row: TriageItem) {
+    setReviewRow(row)
+    setCreateTask(false)
+    setRejectMode(false)
+    setTargetType("SERVICE_REQUEST")
+    setPriority("medium")
+    setTitle(row.title)
+    setDescription(row.description)
+    setTaskDueAt("")
+    setTaskTitle(row.title)
+    setTaskDescription("")
+    setTaskPriority("medium")
+    setTaskDue("")
+    setTaskAssignee("")
+    setRejectNotes(row.triageNotes ?? "")
+    setError("")
+  }
+
+  function closeReview() {
+    setReviewRow(null)
+    setRejectMode(false)
+    setCreateTask(false)
+    setError("")
+  }
+
+  async function handleConfirm() {
+    if (!reviewRow) return
+    setSubmitting(true)
+    setError("")
+    try {
+      // Convert the triage item
+      await api.post(`/triage/${reviewRow.sourceType}/${reviewRow.id}/convert`, {
+        targetType,
+        priority,
         taskDueAt: targetType === "TASK" ? taskDueAt : undefined,
         title: title.trim() || undefined,
         description: description.trim() || undefined
-      })).data,
-    onMutate: async (row) => {
-      await qc.cancelQueries({ queryKey: ["triage-queue"] })
-      const previous = qc.getQueryData<TriageItem[]>(["triage-queue"]) ?? []
-      qc.setQueryData<TriageItem[]>(["triage-queue"],
-        previous.map((item) =>
-          item.id === row.id && item.sourceType === row.sourceType
-            ? { ...item, status: "CONVERTED" } : item
-        ))
-      return { previous }
-    },
-    onSuccess: async () => {
-      setSelected(null)
-      setTitle(""); setDescription(""); setTaskDueAt("")
-      setTargetType("SERVICE_REQUEST"); setPriority("medium")
+      })
+
+      // If task toggle is on, also create a task
+      if (createTask && taskTitle.trim()) {
+        await api.post("/tasks", {
+          title: taskTitle,
+          description: taskDescription || undefined,
+          priority: taskPriority,
+          dueAt: taskDue || undefined,
+          assigneeId: taskAssignee || undefined
+        })
+      }
+
+      closeReview()
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["triage-queue"] }),
         qc.invalidateQueries({ queryKey: ["service-requests"] }),
-        qc.invalidateQueries({ queryKey: ["incidents"] }),
         qc.invalidateQueries({ queryKey: ["tasks"] })
       ])
-    },
-    onError: (_e, _r, ctx) => {
-      if (ctx?.previous) qc.setQueryData(["triage-queue"], ctx.previous)
+    } catch (e: any) {
+      setError(Array.isArray(e?.message) ? e.message.join(", ") : e?.message ?? "Something went wrong")
+    } finally {
+      setSubmitting(false)
     }
-  })
+  }
 
-  const updateStatus = useMutation({
-    mutationFn: async (row: TriageItem) =>
-      (await api.post(`/triage/${row.sourceType}/${row.id}/status`, {
-        status: statusTarget,
-        triageNotes: statusNotes.trim() || undefined
-      })).data,
-    onMutate: async (row) => {
-      await qc.cancelQueries({ queryKey: ["triage-queue"] })
-      const previous = qc.getQueryData<TriageItem[]>(["triage-queue"]) ?? []
-      qc.setQueryData<TriageItem[]>(["triage-queue"],
-        previous.map((item) =>
-          item.id === row.id && item.sourceType === row.sourceType
-            ? { ...item, status: statusTarget, triageNotes: statusNotes.trim() || item.triageNotes }
-            : item
-        ))
-      return { previous }
-    },
-    onSuccess: async () => {
-      setStatusRow(null); setStatusNotes(""); setStatusTarget("UNDER_REVIEW")
+  async function handleReject() {
+    if (!reviewRow || rejectNotes.trim().length < 5) return
+    setSubmitting(true)
+    setError("")
+    try {
+      await api.post(`/triage/${reviewRow.sourceType}/${reviewRow.id}/status`, {
+        status: "REJECTED",
+        triageNotes: rejectNotes.trim()
+      })
+      closeReview()
       await qc.invalidateQueries({ queryKey: ["triage-queue"] })
-    },
-    onError: (_e, _r, ctx) => {
-      if (ctx?.previous) qc.setQueryData(["triage-queue"], ctx.previous)
+    } catch (e: any) {
+      setError(Array.isArray(e?.message) ? e.message.join(", ") : e?.message ?? "Something went wrong")
+    } finally {
+      setSubmitting(false)
     }
-  })
-
-  const convertError = convert.error as ApiError | null
-  const convertErrorMessage = Array.isArray(convertError?.message)
-    ? convertError?.message.join(", ") : convertError?.message
-  const statusError = updateStatus.error as ApiError | null
-  const statusErrorMessage = Array.isArray(statusError?.message)
-    ? statusError?.message.join(", ") : statusError?.message
-
-  const openConvert = (row: TriageItem) => {
-    setSelected(row); setTargetType("SERVICE_REQUEST"); setPriority("medium")
-    setIncidentSeverity("MEDIUM"); setTaskDueAt("")
-    setTitle(row.title); setDescription(row.description)
   }
 
-  const openStatusDialog = (row: TriageItem, status: "UNDER_REVIEW" | "REJECTED") => {
-    setStatusRow(row); setStatusTarget(status); setStatusNotes(row.triageNotes ?? "")
-  }
-
-  const convertDisabled = !selected || !priority.trim() ||
-    (targetType === "INCIDENT" && !incidentSeverity) ||
-    (targetType === "TASK" && !taskDueAt)
-  const statusDisabled = !statusRow || (statusTarget === "REJECTED" && statusNotes.trim().length < 5)
+  const confirmDisabled = submitting || !title.trim() ||
+    (targetType === "TASK" && !taskDueAt) ||
+    (createTask && !taskTitle.trim())
 
   return (
     <>
       <Card>
         <CardContent>
           {isLoading ? <LoadingState /> : null}
-          {error ? <ErrorState title="Failed to load triage inbox" /> : null}
-          {convertError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {convertErrorMessage ?? "Failed to convert submission"}
-            </Alert>
-          ) : null}
-          {statusError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {statusErrorMessage ?? "Failed to update triage status"}
-            </Alert>
-          ) : null}
-          {!isLoading && !error && (data?.length ?? 0) === 0 ? (
+          {loadError ? <ErrorState title="Failed to load triage inbox" /> : null}
+          {!isLoading && !loadError && (data?.length ?? 0) === 0 ? (
             <EmptyState title="Triage inbox is clear" detail="No pending requests at the moment." />
           ) : null}
           <TableContainer>
-            <Table sx={{ minWidth: 880 }}>
+            <Table sx={{ minWidth: 700 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Requester</TableCell>
-                  <TableCell>Email</TableCell>
                   <TableCell>Title</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Created</TableCell>
@@ -310,37 +320,34 @@ function TriageView() {
               </TableHead>
               <TableBody>
                 {(data ?? []).map((row) => {
-                  const canConvert = row.status === "NEW" || row.status === "UNDER_REVIEW"
-                  const canSetUnderReview = row.status === "NEW"
-                  const canReject = row.status === "NEW" || row.status === "UNDER_REVIEW"
+                  const isActionable = row.status === "NEW" || row.status === "UNDER_REVIEW"
                   return (
-                    <TableRow key={`${row.sourceType}-${row.id}`}>
-                      <TableCell>{row.requesterName}</TableCell>
-                      <TableCell>{row.requesterEmail}</TableCell>
+                    <TableRow key={`${row.sourceType}-${row.id}`} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>
+                          {row.requesterName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {row.requesterEmail}
+                        </Typography>
+                      </TableCell>
                       <TableCell>{row.title}</TableCell>
                       <TableCell>
                         <Chip size="small" sx={statusChipSx(row.status)}
-                          label={row.status.toLowerCase()} />
+                          label={row.status.toLowerCase().replaceAll("_", " ")} />
                       </TableCell>
-                      <TableCell>{new Date(row.createdAt).toLocaleDateString("en-GB")}</TableCell>
+                      <TableCell>
+                        {new Date(row.createdAt).toLocaleDateString("en-GB")}
+                      </TableCell>
                       <TableCell align="right">
-                        <Stack direction="row" spacing={0.8} justifyContent="flex-end">
-                          <Button size="small" variant="outlined"
-                            disabled={!canManage || !canSetUnderReview || updateStatus.isPending}
-                            onClick={() => openStatusDialog(row, "UNDER_REVIEW")}>
-                            Review
-                          </Button>
-                          <Button size="small" color="error" variant="outlined"
-                            disabled={!canManage || !canReject || updateStatus.isPending}
-                            onClick={() => openStatusDialog(row, "REJECTED")}>
-                            Reject
-                          </Button>
-                          <Button size="small" variant="contained"
-                            disabled={!canManage || !canConvert || convert.isPending}
-                            onClick={() => openConvert(row)}>
-                            {canConvert ? "Convert" : "Converted"}
-                          </Button>
-                        </Stack>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={!canManage || !isActionable}
+                          onClick={() => openReview(row)}
+                        >
+                          Review
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )
@@ -351,71 +358,205 @@ function TriageView() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selected} onClose={() => setSelected(null)} fullWidth maxWidth="sm">
-        <DialogTitle>Convert triage item</DialogTitle>
+      <Dialog open={!!reviewRow} onClose={closeReview} fullWidth maxWidth="sm">
+        <DialogTitle>Review request</DialogTitle>
         <DialogContent>
-          <Stack spacing={1.2} sx={{ mt: 0.5 }}>
-            <TextField select label="Convert to" value={targetType}
-              onChange={(e) => setTargetType(e.target.value as any)}>
-              <MenuItem value="SERVICE_REQUEST">Service request</MenuItem>
-              <MenuItem value="INCIDENT">Incident</MenuItem>
-              <MenuItem value="TASK">Task</MenuItem>
-            </TextField>
-            <TextField select label="Priority" value={priority}
-              onChange={(e) => setPriority(e.target.value)}>
-              <MenuItem value="low">Low</MenuItem>
-              <MenuItem value="medium">Medium</MenuItem>
-              <MenuItem value="high">High</MenuItem>
-            </TextField>
-            {targetType === "INCIDENT" ? (
-              <TextField select label="Severity (required)" value={incidentSeverity}
-                onChange={(e) => setIncidentSeverity(e.target.value)}>
-                <MenuItem value="LOW">Low</MenuItem>
-                <MenuItem value="MEDIUM">Medium</MenuItem>
-                <MenuItem value="HIGH">High</MenuItem>
-                <MenuItem value="CRITICAL">Critical</MenuItem>
-              </TextField>
-            ) : null}
-            {targetType === "TASK" ? (
-              <TextField label="Due date (required)" type="date"
-                InputLabelProps={{ shrink: true }} value={taskDueAt}
-                onChange={(e) => setTaskDueAt(e.target.value)} />
-            ) : null}
-            <TextField label="Title" value={title}
-              onChange={(e) => setTitle(e.target.value)} />
-            <TextField label="Description" value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              multiline minRows={3} />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSelected(null)}>Cancel</Button>
-          <Button variant="contained"
-            disabled={convertDisabled || convert.isPending}
-            onClick={() => selected && convert.mutate(selected)}>
-            Convert
-          </Button>
-        </DialogActions>
-      </Dialog>
+          {/* Request summary */}
+          <Box sx={{
+            p: 1.5, mb: 2.5, borderRadius: 1.5,
+            bgcolor: "var(--color-background-secondary)",
+            border: "0.5px solid var(--color-border-tertiary)"
+          }}>
+            <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+              {reviewRow?.title}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {reviewRow?.description}
+            </Typography>
+            <Stack direction="row" spacing={2}>
+              <Typography variant="caption" color="text.secondary">
+                From: <strong>{reviewRow?.requesterName}</strong> ({reviewRow?.requesterEmail})
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {reviewRow?.createdAt
+                  ? new Date(reviewRow.createdAt).toLocaleDateString("en-GB")
+                  : ""}
+              </Typography>
+            </Stack>
+          </Box>
 
-      <Dialog open={!!statusRow} onClose={() => setStatusRow(null)} fullWidth maxWidth="sm">
-        <DialogTitle>
-          {statusTarget === "UNDER_REVIEW" ? "Mark as under review" : "Reject triage item"}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            label={statusTarget === "REJECTED" ? "Rejection notes (required)" : "Triage notes"}
-            multiline minRows={3} fullWidth sx={{ mt: 0.5 }}
-            value={statusNotes} onChange={(e) => setStatusNotes(e.target.value)} />
+          {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+
+          {!rejectMode ? (
+            <Stack spacing={2}>
+              {/* Conversion fields */}
+              <TextField select label="Convert to" value={targetType}
+                onChange={(e) => setTargetType(e.target.value as any)} fullWidth>
+                <MenuItem value="SERVICE_REQUEST">Service request</MenuItem>
+                <MenuItem value="TASK">Task</MenuItem>
+              </TextField>
+              <Stack direction="row" spacing={1.5}>
+                <TextField select label="Priority" value={priority}
+                  onChange={(e) => setPriority(e.target.value)} fullWidth>
+                  <MenuItem value="low">Low</MenuItem>
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="high">High</MenuItem>
+                  <MenuItem value="critical">Critical</MenuItem>
+                </TextField>
+                {targetType === "TASK" ? (
+                  <TextField label="Due date (required)" type="date"
+                    InputLabelProps={{ shrink: true }} value={taskDueAt}
+                    onChange={(e) => setTaskDueAt(e.target.value)} fullWidth />
+                ) : null}
+              </Stack>
+              <TextField label="Title" value={title}
+                onChange={(e) => setTitle(e.target.value)} fullWidth />
+              <TextField label="Description" value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                multiline minRows={2} fullWidth />
+
+              {/* Task toggle */}
+              <Box
+                onClick={() => setCreateTask(!createTask)}
+                sx={{
+                  display: "flex", alignItems: "center", gap: 1.5,
+                  p: 1.5, borderRadius: 1.5, cursor: "pointer",
+                  border: "1px solid",
+                  borderColor: createTask ? "#1d4ed8" : "var(--color-border-tertiary)",
+                  bgcolor: createTask ? "#eff6ff" : "transparent",
+                  transition: "all 0.15s"
+                }}
+              >
+                <Box sx={{
+                  width: 18, height: 18, borderRadius: 0.5, flexShrink: 0,
+                  border: "2px solid",
+                  borderColor: createTask ? "#1d4ed8" : "#94a3b8",
+                  bgcolor: createTask ? "#1d4ed8" : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  {createTask ? (
+                    <Box sx={{ width: 10, height: 10, color: "#fff", fontSize: 10, fontWeight: 700, lineHeight: 1 }}>
+                      ✓
+                    </Box>
+                  ) : null}
+                </Box>
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>
+                    Create a task
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Generate a linked task in the task module alongside this conversion
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Task fields — shown when toggled */}
+              {createTask ? (
+                <Box sx={{
+                  p: 1.5, borderRadius: 1.5,
+                  border: "1px solid #bfdbfe",
+                  bgcolor: "#f0f9ff"
+                }}>
+                  <Typography variant="caption" fontWeight={600}
+                    color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+                    Task details
+                  </Typography>
+                  <Stack spacing={1.5}>
+                    <TextField label="Task title" value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                      fullWidth required size="small" />
+                    <TextField label="Task description" value={taskDescription}
+                      onChange={(e) => setTaskDescription(e.target.value)}
+                      multiline minRows={2} fullWidth size="small" />
+                    <Stack direction="row" spacing={1.5}>
+                      <TextField select label="Priority" value={taskPriority}
+                        onChange={(e) => setTaskPriority(e.target.value)}
+                        fullWidth size="small">
+                        <MenuItem value="low">Low</MenuItem>
+                        <MenuItem value="medium">Medium</MenuItem>
+                        <MenuItem value="high">High</MenuItem>
+                        <MenuItem value="critical">Critical</MenuItem>
+                      </TextField>
+                      <TextField label="Due date" type="date"
+                        InputLabelProps={{ shrink: true }} value={taskDue}
+                        onChange={(e) => setTaskDue(e.target.value)}
+                        fullWidth size="small" />
+                    </Stack>
+                    <TextField select label="Assignee" value={taskAssignee}
+                      onChange={(e) => setTaskAssignee(e.target.value)}
+                      fullWidth size="small">
+                      <MenuItem value="">Unassigned</MenuItem>
+                      {(users ?? []).map((u) => (
+                        <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>
+                      ))}
+                    </TextField>
+                  </Stack>
+                </Box>
+              ) : null}
+            </Stack>
+          ) : (
+            // Reject mode
+            <Stack spacing={1.5}>
+              <Typography variant="body2" color="text.secondary">
+                Provide a reason for rejection. This will be recorded against the request.
+              </Typography>
+              <TextField
+                label="Rejection reason (required)"
+                multiline minRows={3} fullWidth
+                value={rejectNotes}
+                onChange={(e) => setRejectNotes(e.target.value)}
+                placeholder="Explain why this request is being rejected..."
+              />
+            </Stack>
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setStatusRow(null)}>Cancel</Button>
-          <Button variant="contained"
-            color={statusTarget === "REJECTED" ? "error" : "primary"}
-            disabled={statusDisabled || updateStatus.isPending}
-            onClick={() => statusRow && updateStatus.mutate(statusRow)}>
-            Save
-          </Button>
+
+        <DialogActions sx={{ px: 3, pb: 2, justifyContent: "space-between" }}>
+          {/* Reject toggle on left */}
+          {!rejectMode ? (
+            <Button
+              size="small"
+              color="error"
+              onClick={() => setRejectMode(true)}
+              disabled={submitting}
+            >
+              Reject request
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              onClick={() => setRejectMode(false)}
+              disabled={submitting}
+            >
+              Back
+            </Button>
+          )}
+
+          <Stack direction="row" spacing={1}>
+            <Button onClick={closeReview} disabled={submitting}>Cancel</Button>
+            {!rejectMode ? (
+              <Button
+                variant="contained"
+                disabled={confirmDisabled}
+                onClick={handleConfirm}
+              >
+                {submitting
+                  ? "Processing..."
+                  : createTask
+                    ? "Confirm & create task"
+                    : "Confirm request"}
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                color="error"
+                disabled={rejectNotes.trim().length < 5 || submitting}
+                onClick={handleReject}
+              >
+                {submitting ? "Rejecting..." : "Confirm rejection"}
+              </Button>
+            )}
+          </Stack>
         </DialogActions>
       </Dialog>
     </>

@@ -1,26 +1,34 @@
 import React from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Divider,
-  Stack, TextField, Typography
+  MenuItem, Stack, TextField, Typography
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { statusChipSx, priorityChipSx } from "../lib/ui"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { CreateTaskModal } from "./TasksPage"
 
 type Issue = {
   id: string
   reference: string
   title: string
   description: string
-  priority: string
+  severity: string
   status: string
   resolution: string | null
+  reviewDate: string | null
   closedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+function severitySx(severity: string) {
+  if (severity === "RED") return { bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }
+  if (severity === "AMBER") return { bgcolor: "#fef3c7", color: "#b45309", fontWeight: 700 }
+  return { bgcolor: "#dcfce7", color: "#15803d", fontWeight: 700 }
 }
 
 const STATUS_FLOW: Record<string, string[]> = {
@@ -39,10 +47,17 @@ export default function IssueDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const location = useLocation()
+  const fromTask = location.state?.fromTask
+  const fromTaskRef = location.state?.fromTaskRef
 
   const [error, setError] = React.useState("")
   const [savingStatus, setSavingStatus] = React.useState(false)
   const [resolution, setResolution] = React.useState("")
+  const [taskOpen, setTaskOpen] = React.useState(false)
+  const [editSeverity, setEditSeverity] = React.useState("")
+  const [editReviewDate, setEditReviewDate] = React.useState("")
+  const [savingEdit, setSavingEdit] = React.useState(false)
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ["issue-detail", id],
@@ -51,8 +66,25 @@ export default function IssueDetailPage() {
   })
 
   React.useEffect(() => {
-    if (issue) setResolution(issue.resolution ?? "")
+    if (issue) {
+      setResolution(issue.resolution ?? "")
+      setEditSeverity(issue.severity)
+      setEditReviewDate(issue.reviewDate?.slice(0, 10) ?? "")
+    }
   }, [issue])
+
+  async function handleSaveEdit() {
+    setSavingEdit(true)
+    try {
+      await api.put(`/issues/${id}`, {
+        severity: editSeverity,
+        reviewDate: editReviewDate || undefined
+      })
+      qc.invalidateQueries({ queryKey: ["issue-detail", id] })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
 
   async function handleStatusUpdate(status: string) {
     setSavingStatus(true)
@@ -81,11 +113,11 @@ export default function IssueDetailPage() {
     <Box>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate("/issues")}
+        onClick={() => fromTask ? navigate(`/tasks/${fromTask}`) : navigate("/service-requests")}
         sx={{ mb: 2, color: "text.secondary" }}
         size="small"
       >
-        Back to issues
+        {fromTask ? `Back to task ${fromTaskRef}` : "Back to service requests"}
       </Button>
 
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
@@ -94,10 +126,10 @@ export default function IssueDetailPage() {
             <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary" }}>
               {issue.reference}
             </Typography>
-            <Chip size="small" sx={statusChipSx(issue.status)}
-              label={issue.status.toLowerCase()} />
-            <Chip size="small" sx={priorityChipSx(issue.priority.toLowerCase())}
-              label={issue.priority} />
+              <Chip size="small" sx={statusChipSx(issue.status)}
+                label={issue.status.toLowerCase()} />
+              <Chip size="small" sx={severitySx(issue.severity)}
+                label={issue.severity} />
           </Stack>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>{issue.title}</Typography>
         </Box>
@@ -148,12 +180,28 @@ export default function IssueDetailPage() {
               <Typography variant="subtitle2" fontWeight={700} gutterBottom>Details</Typography>
               <Stack spacing={1.5}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">Priority</Typography>
+                  <Typography variant="caption" color="text.secondary">Severity</Typography>
                   <Box sx={{ mt: 0.5 }}>
-                    <Chip size="small" sx={priorityChipSx(issue.priority.toLowerCase())}
-                      label={issue.priority} />
+                    <TextField select size="small" value={editSeverity}
+                      onChange={(e) => setEditSeverity(e.target.value)} fullWidth>
+                      <MenuItem value="GREEN">Green — low</MenuItem>
+                      <MenuItem value="AMBER">Amber — medium</MenuItem>
+                      <MenuItem value="RED">Red — high</MenuItem>
+                    </TextField>
                   </Box>
                 </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Review date</Typography>
+                  <TextField type="date" size="small" fullWidth
+                    InputLabelProps={{ shrink: true }}
+                    value={editReviewDate}
+                    onChange={(e) => setEditReviewDate(e.target.value)}
+                    sx={{ mt: 0.5 }} />
+                </Box>
+                <Button size="small" variant="outlined" onClick={handleSaveEdit}
+                  disabled={savingEdit}>
+                  {savingEdit ? "Saving..." : "Save changes"}
+                </Button>
                 <Box>
                   <Typography variant="caption" color="text.secondary">Status</Typography>
                   <Box sx={{ mt: 0.5 }}>
@@ -209,6 +257,13 @@ export default function IssueDetailPage() {
           ) : null}
         </Stack>
       </Box>
+      <CreateTaskModal
+        open={taskOpen}
+        onClose={() => setTaskOpen(false)}
+        linkedEntityType="Issue"
+        linkedEntityId={issue.id}
+        linkedEntityLabel={issue.reference}
+      />
     </Box>
   )
 }

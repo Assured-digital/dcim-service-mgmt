@@ -1,15 +1,23 @@
-import { IsDateString, IsOptional, IsString } from "class-validator";
+import { IsDateString, IsOptional, IsString } from "class-validator"
 
 export class ListOperationalQueryDto {
   @IsOptional()
   @IsDateString()
-  dateFrom?: string;
+  dateFrom?: string
 
   @IsOptional()
   @IsDateString()
-  dateTo?: string;
+  dateTo?: string
 
   @IsOptional()
   @IsString()
-  assigneeId?: string;
+  assigneeId?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityType?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string
 }

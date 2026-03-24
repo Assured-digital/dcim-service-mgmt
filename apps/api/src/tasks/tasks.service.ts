@@ -2,10 +2,18 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service";
 import { TaskStatus } from "@prisma/client";
 
+function makeRef() {
+  const y = new Date().getFullYear()
+  const n = Math.floor(Math.random() * 9000) + 1000
+  return `TSK-${y}-${n}`
+}
+
 type ListFilters = {
   dateFrom?: string;
   dateTo?: string;
   assigneeId?: string;
+  linkedEntityType?: string;
+  linkedEntityId?: string;
 };
 
 @Injectable()
@@ -23,6 +31,8 @@ export class TasksService {
       where: {
         clientId,
         assigneeId: filters.assigneeId || undefined,
+        linkedEntityType: filters.linkedEntityType || undefined,
+        linkedEntityId: filters.linkedEntityId || undefined,
         createdAt
       },
       orderBy: { updatedAt: "desc" },
@@ -64,33 +74,65 @@ export class TasksService {
   async createForClient(
     clientId: string,
     actorUserId: string,
-    dto: { title: string; description?: string; priority?: string; dueAt?: string; incidentId?: string }
+    dto: {
+      title: string
+      description?: string
+      priority?: string
+      dueAt?: string
+      incidentId?: string
+      assigneeId?: string
+      linkedEntityType?: string
+      linkedEntityId?: string
+    }
   ) {
-    this.assertClientScope(clientId);
+    this.assertClientScope(clientId)
 
     if (dto.incidentId) {
       const incident = await this.prisma.incident.findFirst({
         where: { id: dto.incidentId, clientId }
-      });
-      if (!incident) throw new BadRequestException("Incident is invalid for this client scope.");
+      })
+      if (!incident) throw new BadRequestException("Incident is invalid for this client scope.")
     }
 
-    return this.prisma.task.create({
-      data: {
-        clientId,
-        title: dto.title,
-        description: dto.description,
-        priority: dto.priority ?? "medium",
-        dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
-        incidentId: dto.incidentId,
-        createdById: actorUserId
-      },
-      include: {
-        incident: {
-          select: { id: true, reference: true, title: true }
-        }
+    for (let i = 0; i < 10; i++) {
+      const reference = makeRef()
+      const exists = await this.prisma.task.findUnique({ where: { reference } })
+      if (!exists) {
+        const task = await this.prisma.task.create({
+          data: {
+            reference,
+            clientId,
+            title: dto.title,
+            description: dto.description,
+            priority: dto.priority ?? "medium",
+            dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
+            incidentId: dto.incidentId,
+            assigneeId: dto.assigneeId,
+            linkedEntityType: dto.linkedEntityType,
+            linkedEntityId: dto.linkedEntityId,
+            createdById: actorUserId
+          },
+          include: {
+            assignee: { select: { id: true, email: true } },
+            incident: { select: { id: true, reference: true, title: true } }
+          }
+        })
+
+        await this.prisma.auditEvent.create({
+          data: {
+            entityType: "Task",
+            entityId: task.id,
+            action: "CREATED",
+            actorUserId,
+            clientId,
+            data: { reference: task.reference, title: task.title }
+          }
+        })
+
+        return task
       }
-    });
+    }
+    throw new BadRequestException("Could not generate unique reference")
   }
 
   async updateStatusForClient(
@@ -146,5 +188,29 @@ export class TasksService {
       else date.setUTCHours(23, 59, 59, 999);
     }
     return date;
+  }
+
+    async updateForClient(clientId: string, id: string, dto: {
+    title?: string
+    description?: string
+    priority?: string
+    dueAt?: string
+    assigneeId?: string
+  }) {
+    const task = await this.getForClient(clientId, id)
+    return this.prisma.task.update({
+      where: { id: task.id },
+      data: {
+        title: dto.title,
+        description: dto.description,
+        priority: dto.priority,
+        dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
+        assigneeId: dto.assigneeId ?? null
+      },
+      include: {
+        assignee: { select: { id: true, email: true } },
+        incident: { select: { id: true, reference: true, title: true } }
+      }
+    })
   }
 }

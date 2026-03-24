@@ -224,6 +224,7 @@ async function seedClientData(params: {
     if (!existing) {
       await prisma.task.create({
         data: {
+          reference: `TSK-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`,
           clientId: client.id,
           title: task.title,
           description: task.description,

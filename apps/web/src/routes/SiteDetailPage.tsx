@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -13,6 +13,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { statusChipSx } from "../lib/ui"
+import { CreateTaskModal } from "./TasksPage"
 
 type Cabinet = {
   id: string
@@ -78,6 +79,9 @@ export default function SiteDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const location = useLocation()
+  const fromTask = location.state?.fromTask
+  const fromTaskRef = location.state?.fromTaskRef
 
   const [tab, setTab] = React.useState(0)
   const [error, setError] = React.useState("")
@@ -101,6 +105,7 @@ export default function SiteDetailPage() {
     const [assetWarranty, setAssetWarranty] = React.useState("")
     const [assetNotes, setAssetNotes] = React.useState("")
     const [savingAsset, setSavingAsset] = React.useState(false)
+    const [taskOpen, setTaskOpen] = React.useState(false)
 
   // Cabinet modal state
   const [cabinetOpen, setCabinetOpen] = React.useState(false)
@@ -193,11 +198,11 @@ export default function SiteDetailPage() {
     <Box>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate("/sites")}
+        onClick={() => fromTask ? navigate(`/tasks/${fromTask}`) : navigate("/service-requests")}
         sx={{ mb: 2, color: "text.secondary" }}
         size="small"
       >
-        Back to sites
+        {fromTask ? `Back to task ${fromTaskRef}` : "Back to service requests"}
       </Button>
 
       {/* Header */}
@@ -212,6 +217,13 @@ export default function SiteDetailPage() {
           <Typography variant="h5" sx={{ fontWeight: 700 }}>{site.name}</Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          <Button variant="outlined" size="small"
+            onClick={() => setTaskOpen(true)}>
+            Create task
+          </Button>
+          <Button variant="outlined" size="small" disabled>
+            Create survey
+          </Button>
           {tab === 0 && canManage ? (
             <Button variant="contained" size="small" onClick={() => setAssetOpen(true)}>
               Add asset
@@ -492,6 +504,13 @@ export default function SiteDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
+      <CreateTaskModal
+        open={taskOpen}
+        onClose={() => setTaskOpen(false)}
+        linkedEntityType="Site"
+        linkedEntityId={site.id}
+        linkedEntityLabel={site.name}
+      />
     </Box>
   )
 }

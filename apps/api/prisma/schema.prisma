@@ -285,6 +285,7 @@ model Incident {
 
 model Task {
   id          String   @id @default(uuid())
+  reference   String   @unique
   clientId    String
   client      Client   @relation(fields: [clientId], references: [id])
   title       String
@@ -296,6 +297,8 @@ model Task {
   assignee    User?    @relation("AssignedTask", fields: [assigneeId], references: [id])
   incidentId  String?
   incident    Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  linkedEntityType String?
+  linkedEntityId   String?
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -426,13 +429,14 @@ model Risk {
   description    String
   likelihood     String   @default("MEDIUM")
   impact         String   @default("MEDIUM")
-  status         String   @default("OPEN")
+  status         String   @default("IDENTIFIED")
   mitigationPlan String?
   acceptanceNote String?
   reviewDate     DateTime?
   closedAt       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  source         String?
 }
 
 model Issue {
@@ -442,9 +446,10 @@ model Issue {
   client      Client?  @relation(fields: [clientId], references: [id])
   title       String
   description String
-  priority    String   @default("MEDIUM")
+  severity    String   @default("AMBER")
   status      String   @default("OPEN")
   resolution  String?
+  reviewDate  DateTime?
   closedAt    DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

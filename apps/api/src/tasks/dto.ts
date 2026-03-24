@@ -1,34 +1,46 @@
-import { TaskStatus } from "@prisma/client";
-import { IsDateString, IsEnum, IsOptional, IsString, MinLength } from "class-validator";
+import { TaskStatus } from "@prisma/client"
+import { IsDateString, IsEnum, IsOptional, IsString, MinLength } from "class-validator"
 
 export class CreateTaskDto {
   @IsString()
   @MinLength(3)
-  title!: string;
+  title!: string
 
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string
 
   @IsOptional()
   @IsString()
-  priority?: string;
+  priority?: string
 
   @IsOptional()
   @IsDateString()
-  dueAt?: string;
+  dueAt?: string
 
   @IsOptional()
   @IsString()
-  incidentId?: string;
+  incidentId?: string
+
+  @IsOptional()
+  @IsString()
+  assigneeId?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityType?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string
 }
 
 export class UpdateTaskStatusDto {
   @IsEnum(TaskStatus)
-  status!: TaskStatus;
+  status!: TaskStatus
 
   @IsOptional()
   @IsString()
   @MinLength(3)
-  comment?: string;
+  comment?: string
 }

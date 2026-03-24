@@ -278,8 +278,10 @@ export class TriageService {
       };
     }
 
+    const taskRef = await this.generateUniqueTaskReference(tx)
     const task = await tx.task.create({
       data: {
+        reference: taskRef,
         clientId,
         title,
         description,
@@ -306,10 +308,20 @@ export class TriageService {
 
   private async generateUniqueIncidentReference(tx: Prisma.TransactionClient) {
     for (let i = 0; i < 10; i += 1) {
-      const reference = makeIncidentRef();
-      const exists = await tx.incident.findUnique({ where: { reference } });
-      if (!exists) return reference;
+      const reference = makeIncidentRef()
+      const exists = await tx.incident.findUnique({ where: { reference } })
+      if (!exists) return reference
     }
-    throw new BadRequestException("Could not generate unique incident reference");
+    throw new BadRequestException("Could not generate unique incident reference")
+  }
+
+  private async generateUniqueTaskReference(tx: Prisma.TransactionClient) {
+    const y = new Date().getFullYear()
+    for (let i = 0; i < 10; i += 1) {
+      const reference = `TSK-${y}-${Math.floor(Math.random() * 9000) + 1000}`
+      const exists = await tx.task.findUnique({ where: { reference } })
+      if (!exists) return reference
+    }
+    throw new BadRequestException("Could not generate unique task reference")
   }
 }

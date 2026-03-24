@@ -27,6 +27,7 @@ import ChangeDetailPage from "./ChangeDetailPage"
 import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
 import ServiceDeskPage from "./ServiceDeskPage"
+import TaskDetailPage from "./TaskDetailPage"
 import SiteDetailPage from "./SiteDetailPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="service-requests/:id" element={<ServiceRequestDetailPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="tasks" element={<TasksPage />} />
+        <Route path="tasks/:id" element={<TaskDetailPage />} />
         <Route path="assets" element={<AssetsPage />} />
         <Route path="surveys" element={<SurveysPage />} />
         <Route path="audit" element={<AuditTrailPage />} />

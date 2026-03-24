@@ -35,10 +35,10 @@ export class IssuesService {
   async createForClient(clientId: string, actorUserId: string, dto: {
     title: string
     description: string
-    priority?: string
+    severity?: string
+    reviewDate?: string
   }) {
     this.assertClientScope(clientId)
-
     for (let i = 0; i < 10; i++) {
       const reference = makeRef()
       const exists = await this.prisma.issue.findUnique({ where: { reference } })
@@ -49,11 +49,11 @@ export class IssuesService {
             clientId,
             title: dto.title,
             description: dto.description,
-            priority: dto.priority ?? "MEDIUM",
+            severity: dto.severity ?? "AMBER",
+            reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
             status: "OPEN"
           }
         })
-
         await this.prisma.auditEvent.create({
           data: {
             entityType: "Issue",
@@ -64,11 +64,24 @@ export class IssuesService {
             data: { reference: issue.reference, title: issue.title }
           }
         })
-
         return issue
       }
     }
     throw new BadRequestException("Could not generate unique reference")
+  }
+
+  async updateForClient(clientId: string, id: string, actorUserId: string, dto: {
+    severity?: string
+    reviewDate?: string
+  }) {
+    const issue = await this.getForClient(clientId, id)
+    return this.prisma.issue.update({
+      where: { id: issue.id },
+      data: {
+        severity: dto.severity,
+        reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined
+      }
+    })
   }
 
   async updateStatusForClient(clientId: string, id: string, actorUserId: string, dto: {
@@ -76,7 +89,6 @@ export class IssuesService {
     resolution?: string
   }) {
     const issue = await this.getForClient(clientId, id)
-
     const updated = await this.prisma.issue.update({
       where: { id: issue.id },
       data: {
@@ -85,7 +97,6 @@ export class IssuesService {
         closedAt: dto.status === "CLOSED" ? new Date() : undefined
       }
     })
-
     await this.prisma.auditEvent.create({
       data: {
         entityType: "Issue",
@@ -96,7 +107,6 @@ export class IssuesService {
         data: { from: issue.status, to: dto.status }
       }
     })
-
     return updated
   }
 }
