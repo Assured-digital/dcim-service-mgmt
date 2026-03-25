@@ -347,15 +347,41 @@ export default function RiskDetailPage() {
 
   return (
     <Box>
-      {/* Top bar — back button only, no action buttons */}
-      <Stack direction="row" alignItems="center" sx={{ mb: 1.5 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => fromTask ? navigate(`/tasks/${fromTask}`) : navigate("/risks")}
-          sx={{ color: "text.secondary" }} size="small"
-        >
-          {fromTask ? `Back to task ${fromTaskRef}` : "Back to risks"}
-        </Button>
+      {/* Top bar */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => fromTask ? navigate(`/tasks/${fromTask}`) : navigate("/risks")}
+            sx={{ color: "text.secondary" }} size="small"
+          >
+            {fromTask ? `Back to task ${fromTaskRef}` : "Back to risks"}
+          </Button>
+          <Box sx={{
+            display: "flex", alignItems: "center", gap: 1,
+            px: 1.5, py: 0.75, borderRadius: 2, flexShrink: 0,
+            bgcolor: "var(--color-background-primary)",
+            border: "1px solid var(--color-border-secondary)",
+            boxShadow: "0 1px 3px rgba(15,23,42,0.06)"
+          }}>
+            <Typography sx={{
+              fontFamily: "monospace", fontSize: 12, fontWeight: 700,
+              color: "var(--color-text-secondary)", whiteSpace: "nowrap"
+            }}>
+              {risk.reference}
+            </Typography>
+            <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
+            <Chip size="small" sx={statusChipSx(risk.status)}
+              label={STATUS_LABELS[risk.status] ?? risk.status} />
+            <Chip size="small" sx={ragSx(rag)} label={ragLabel(rag)} />
+          </Box>
+        </Stack>
+        {canManage && nextStatuses.includes("CLOSED") ? (
+          <Button size="small" variant="contained" color="error"
+            onClick={() => setTransitionTarget("CLOSED")}>
+            Close risk
+          </Button>
+        ) : null}
       </Stack>
 
       {/* Unified info container */}
@@ -365,21 +391,6 @@ export default function RiskDetailPage() {
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
         p: 2.5
       }}>
-        {/* Top meta line — reference, status, logged date */}
-        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.25 }}>
-          <Typography sx={{
-            fontFamily: "monospace", fontSize: 12, fontWeight: 600,
-            color: "var(--color-text-tertiary)",
-            bgcolor: "var(--color-background-primary)",
-            px: 0.75, py: 0.25, borderRadius: 1,
-            border: "0.5px solid var(--color-border-tertiary)"
-          }}>
-            {risk.reference}
-          </Typography>
-          <Chip size="small" sx={statusChipSx(risk.status)}
-            label={STATUS_LABELS[risk.status] ?? risk.status} />
-          <Chip size="small" sx={ragSx(rag)} label={ragLabel(rag)} />
-        </Stack>
 
         {/* Dominant title */}
         <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2, mb: 2 }}>

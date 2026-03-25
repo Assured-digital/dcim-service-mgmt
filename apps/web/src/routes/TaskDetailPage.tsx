@@ -156,6 +156,8 @@ export default function TaskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const fromSR = location.state?.fromSR
+  const fromSRRef = location.state?.fromSRRef
   const fromTask = location.state?.fromTask
   const fromTaskRef = location.state?.fromTaskRef
   const qc = useQueryClient()
@@ -293,14 +295,37 @@ export default function TaskDetailPage() {
   return (
     <Box>
       {/* Top bar */}
-      <Stack direction="row" alignItems="center" sx={{ mb: 1.5 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/tasks")}
-          sx={{ color: "text.secondary" }} size="small"
-        >
-          Back to tasks
-        </Button>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => fromSR
+              ? navigate(`/service-requests/${fromSR}`)
+              : navigate("/tasks")
+            }
+            sx={{ color: "text.secondary" }} size="small"
+          >
+            {fromSR ? `Back to ${fromSRRef}` : "Back to tasks"}
+          </Button>
+          <Box sx={{
+            display: "flex", alignItems: "center", gap: 1,
+            px: 1.5, py: 0.75, borderRadius: 2, flexShrink: 0,
+            bgcolor: "var(--color-background-primary)",
+            border: "1px solid var(--color-border-secondary)",
+            boxShadow: "0 1px 3px rgba(15,23,42,0.06)"
+          }}>
+            <Typography sx={{
+              fontFamily: "monospace", fontSize: 12, fontWeight: 700,
+              color: "var(--color-text-secondary)", whiteSpace: "nowrap"
+            }}>
+              {task.reference}
+            </Typography>
+            <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
+            <Chip size="small" sx={statusChipSx(task.status)}
+              label={STATUS_LABELS[task.status] ?? task.status} />
+            <Chip size="small" sx={priorityChipSx(task.priority)} label={task.priority} />
+          </Box>
+        </Stack>
       </Stack>
 
       {/* Unified info container */}
@@ -310,31 +335,6 @@ export default function TaskDetailPage() {
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
         p: 2.5
       }}>
-        {/* Meta line */}
-        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.25 }}>
-          <Typography sx={{
-            fontFamily: "monospace", fontSize: 12, fontWeight: 600,
-            color: "var(--color-text-tertiary)",
-            bgcolor: "var(--color-background-primary)",
-            px: 0.75, py: 0.25, borderRadius: 1,
-            border: "0.5px solid var(--color-border-tertiary)"
-          }}>
-            {task.reference}
-          </Typography>
-          <Chip size="small" sx={statusChipSx(task.status)}
-            label={STATUS_LABELS[task.status] ?? task.status} />
-          <Chip size="small" sx={priorityChipSx(task.priority)} label={task.priority} />
-          {isOverdue ? (
-            <Chip size="small"
-              label="Overdue"
-              sx={{ bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }} />
-          ) : null}
-          {task.dueAt ? (
-            <Typography variant="caption" color={isOverdue ? "error" : "text.secondary"}>
-              Due {new Date(task.dueAt).toLocaleDateString("en-GB")}
-            </Typography>
-          ) : null}
-        </Stack>
 
         {/* Dominant title */}
         <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2, mb: 2 }}>

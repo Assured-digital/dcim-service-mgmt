@@ -232,9 +232,9 @@ export function CreateTaskModal({
       })
       setTitle(""); setDescription(""); setPriority("medium")
       setDueAt(""); setAssigneeId("")
-      await qc.invalidateQueries({ queryKey: ["tasks"] })
       onClose()
       if (onSuccess) onSuccess()
+      qc.invalidateQueries({ queryKey: ["tasks"] })
     } catch (e: any) {
       setError(Array.isArray(e?.message) ? e.message.join(", ") : e?.message ?? "Failed to create task")
     } finally {

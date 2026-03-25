@@ -4,27 +4,102 @@ import {
   OwnerType,
   ServiceRequestStatus,
   SurveyStatus,
-  IncidentSeverity,
-  IncidentStatus,
   TaskStatus
-} from "@prisma/client";
-import * as bcrypt from "bcryptjs";
+} from "@prisma/client"
+import * as bcrypt from "bcryptjs"
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 function clientCode(clientId: string): string {
-  return clientId.replace(/-/g, "").slice(0, 6).toUpperCase();
+  return clientId.replace(/-/g, "").slice(0, 6).toUpperCase()
 }
 
 async function seedClientData(params: {
-  client: { id: string; name: string };
-  assigneeId: string;
-  createdById: string;
+  client: { id: string; name: string }
+  assigneeId: string
+  createdById: string
 }) {
-  const { client, assigneeId, createdById } = params;
-  const code = clientCode(client.id);
-  const isNova = client.name === "Nova Logistics";
+  const { client, assigneeId, createdById } = params
+  const code = clientCode(client.id)
+  const isNova = client.name === "Nova Logistics"
 
+  // ── Sites ──────────────────────────────────────────────────────────
+  const siteAName = isNova ? "Nova London DC" : `${client.name} Primary Site`
+  const siteBName = isNova ? "Nova Manchester DC" : `${client.name} Secondary Site`
+
+  let siteA = await prisma.site.findFirst({
+    where: { clientId: client.id, name: siteAName }
+  })
+  if (!siteA) {
+    siteA = await prisma.site.create({
+      data: {
+        clientId: client.id,
+        name: siteAName,
+        address: isNova ? "12 Docklands Way, London E14" : `1 Industrial Park, ${client.name} HQ`,
+      }
+    })
+  }
+
+  let siteB = await prisma.site.findFirst({
+    where: { clientId: client.id, name: siteBName }
+  })
+  if (!siteB) {
+    siteB = await prisma.site.create({
+      data: {
+        clientId: client.id,
+        name: siteBName,
+        address: isNova ? "44 Spinningfields, Manchester M3" : `2 Business Park, ${client.name} North`,
+      }
+    })
+  }
+
+  // ── Cabinets ───────────────────────────────────────────────────────
+  let cabinetA = await prisma.cabinet.findFirst({
+    where: { siteId: siteA.id, name: "Rack A1" }
+  })
+  if (!cabinetA) {
+    cabinetA = await prisma.cabinet.create({
+      data: {
+        siteId: siteA.id,
+        name: "Rack A1",
+        totalU: 42,
+        notes: "Row A"
+      }
+    })
+  }
+
+  // ── Assets ─────────────────────────────────────────────────────────
+  await prisma.asset.createMany({
+    data: [
+      {
+        assetTag: `CL-${code}-RTR-01`,
+        name: `${client.name} Core Router`,
+        assetType: "ROUTER",
+        ownerType: OwnerType.CLIENT,
+        clientId: client.id,
+        siteId: siteA.id,
+        cabinetId: cabinetA.id,
+        location: "Rack A1",
+        status: "ACTIVE",
+        lifecycleStatus: "PRODUCTION"
+      },
+      {
+        assetTag: `CL-${code}-SWT-01`,
+        name: `${client.name} Core Switch`,
+        assetType: "SWITCH",
+        ownerType: OwnerType.CLIENT,
+        clientId: client.id,
+        siteId: siteA.id,
+        cabinetId: cabinetA.id,
+        location: "Rack A1",
+        status: "ACTIVE",
+        lifecycleStatus: "PRODUCTION"
+      }
+    ],
+    skipDuplicates: true
+  })
+
+  // ── Service Requests ───────────────────────────────────────────────
   const serviceRequests = isNova
     ? [
         {
@@ -57,12 +132,12 @@ async function seedClientData(params: {
           status: ServiceRequestStatus.ASSIGNED,
           priority: "high"
         }
-      ];
+      ]
 
   for (const item of serviceRequests) {
     const existing = await prisma.serviceRequest.findUnique({
       where: { reference: item.reference }
-    });
+    })
     if (!existing) {
       await prisma.serviceRequest.create({
         data: {
@@ -75,36 +150,11 @@ async function seedClientData(params: {
           assigneeId,
           createdById
         }
-      });
+      })
     }
   }
 
-  const surveyTitle = isNova
-    ? "Q1 2026 Facility Walkthrough"
-    : `${client.name} Quarterly Facility Walkthrough`;
-  const existingSurvey = await prisma.survey.findFirst({
-    where: { clientId: client.id, title: surveyTitle }
-  });
-  if (!existingSurvey) {
-    await prisma.survey.create({
-      data: {
-        clientId: client.id,
-        title: surveyTitle,
-        surveyType: "Facility",
-        status: SurveyStatus.IN_PROGRESS,
-        scheduledAt: new Date(),
-        assigneeId,
-        items: {
-          create: [
-            { label: "Fire exits clear and signed" },
-            { label: "UPS alarms checked" },
-            { label: "Cooling operating within range" }
-          ]
-        }
-      }
-    });
-  }
-
+  // ── Triage / Public Submissions ────────────────────────────────────
   const triageSamples = isNova
     ? [
         {
@@ -133,7 +183,7 @@ async function seedClientData(params: {
           subject: `${client.name}: CCTV stream intermittent`,
           description: "Camera feed drops every few minutes in corridor 2."
         }
-      ];
+      ]
 
   for (const sample of triageSamples) {
     const existing = await prisma.publicSubmission.findFirst({
@@ -142,8 +192,7 @@ async function seedClientData(params: {
         requesterEmail: sample.requesterEmail,
         subject: sample.subject
       }
-    });
-
+    })
     if (!existing) {
       await prisma.publicSubmission.create({
         data: {
@@ -154,108 +203,15 @@ async function seedClientData(params: {
           description: sample.description,
           status: "NEW"
         }
-      });
+      })
     }
   }
 
-  const incidentRefs = isNova
-    ? ["IN-2026-0001", "IN-2026-0002"]
-    : [`IN-${code}-0001`, `IN-${code}-0002`];
-
-  let incidentA = await prisma.incident.findUnique({
-    where: { reference: incidentRefs[0] }
-  });
-  if (!incidentA) {
-    incidentA = await prisma.incident.create({
-      data: {
-        reference: incidentRefs[0],
-        clientId: client.id,
-        title: `${client.name}: Core switch packet drops`,
-        description: "Intermittent packet drops detected on core switch uplink ports.",
-        status: IncidentStatus.INVESTIGATING,
-        severity: IncidentSeverity.HIGH,
-        priority: "high",
-        assigneeId,
-        createdById
-      }
-    });
-  }
-
-  const incidentB = await prisma.incident.findUnique({
-    where: { reference: incidentRefs[1] }
-  });
-  if (!incidentB) {
-    await prisma.incident.create({
-      data: {
-        reference: incidentRefs[1],
-        clientId: client.id,
-        title: `${client.name}: Cooling threshold breach`,
-        description: "Temperature breached threshold for 12 minutes in one zone.",
-        status: IncidentStatus.NEW,
-        severity: IncidentSeverity.CRITICAL,
-        priority: "high",
-        assigneeId,
-        createdById
-      }
-    });
-  }
-
-  const taskSamples = [
-    {
-      title: `${client.name}: Validate switch firmware integrity`,
-      description: "Run vendor diagnostics and compare firmware checksums.",
-      status: TaskStatus.IN_PROGRESS,
-      priority: "high",
-      incidentId: incidentA.id
-    },
-    {
-      title: `${client.name}: Capture thermal sensor logs`,
-      description: "Export 24h logs from aisle zone sensors.",
-      status: TaskStatus.OPEN,
-      priority: "medium",
-      incidentId: null as string | null
-    }
-  ];
-
-  for (const task of taskSamples) {
-    const existing = await prisma.task.findFirst({
-      where: { clientId: client.id, title: task.title }
-    });
-    if (!existing) {
-      await prisma.task.create({
-        data: {
-          reference: `TSK-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`,
-          clientId: client.id,
-          title: task.title,
-          description: task.description,
-          status: task.status,
-          priority: task.priority,
-          incidentId: task.incidentId,
-          assigneeId,
-          createdById
-        }
-      });
-    }
-  }
-
-  await prisma.asset.createMany({
-    data: [
-      {
-        assetTag: `CL-${code}-RTR-01`,
-        name: `${client.name} Core Router`,
-        assetType: "ROUTER",
-        ownerType: OwnerType.CLIENT,
-        clientId: client.id,
-        location: "Network Room"
-      }
-    ],
-    skipDuplicates: true
-  });
-
-  const intakeTitle = `${client.name}: Request additional weekend support coverage`;
+  // ── Request Intakes ────────────────────────────────────────────────
+  const intakeTitle = `${client.name}: Request additional weekend support coverage`
   const existingIntake = await prisma.requestIntake.findFirst({
     where: { clientId: client.id, title: intakeTitle }
-  });
+  })
   if (!existingIntake) {
     await prisma.requestIntake.create({
       data: {
@@ -270,13 +226,229 @@ async function seedClientData(params: {
         urgency: "medium",
         status: "NEW"
       }
-    });
+    })
+  }
+
+  // ── Risks ──────────────────────────────────────────────────────────
+  const riskSamples = isNova
+    ? [
+        {
+          reference: "RSK-2026-0001",
+          title: "UPS battery degradation in Zone B",
+          description: "UPS unit 3 battery has shown warning indicators over the past 30 days. Risk of power failure during outage.",
+          likelihood: "HIGH",
+          impact: "HIGH",
+          status: "MITIGATING",
+          source: "SURVEY"
+        },
+        {
+          reference: "RSK-2026-0002",
+          title: "Single cooling path dependency in aisle 4",
+          description: "Aisle 4 relies on a single CRAC unit with no failover. Failure would breach thermal thresholds within 20 minutes.",
+          likelihood: "MEDIUM",
+          impact: "HIGH",
+          status: "ASSESSED",
+          source: "AUDIT"
+        }
+      ]
+    : [
+        {
+          reference: `RSK-${code}-0001`,
+          title: `${client.name}: Ageing network core hardware`,
+          description: "Core switching hardware is approaching end of vendor support. No replacement budget confirmed.",
+          likelihood: "MEDIUM",
+          impact: "MEDIUM",
+          status: "IDENTIFIED",
+          source: "MANUAL"
+        }
+      ]
+
+  for (const risk of riskSamples) {
+    const existing = await prisma.risk.findUnique({
+      where: { reference: risk.reference }
+    })
+    if (!existing) {
+      await prisma.risk.create({
+        data: {
+          reference: risk.reference,
+          clientId: client.id,
+          title: risk.title,
+          description: risk.description,
+          likelihood: risk.likelihood,
+          impact: risk.impact,
+          status: risk.status,
+          source: risk.source,
+          mitigationPlan: risk.status === "MITIGATING"
+            ? "Schedule UPS battery replacement within 30 days. Weekly monitoring until resolved."
+            : null
+        }
+      })
+    }
+  }
+
+  // ── Issues ─────────────────────────────────────────────────────────
+  const issueSamples = isNova
+    ? [
+        {
+          reference: "ISS-2026-0001",
+          title: "Cable management in Rack B2 non-compliant",
+          description: "Rack B2 cabling does not meet labelling and routing standards. Raises audit risk.",
+          severity: "AMBER",
+          status: "OPEN"
+        },
+        {
+          reference: "ISS-2026-0002",
+          title: "Raised floor tile displacement in corridor 3",
+          description: "Two floor tiles in corridor 3 are unseated. Trip hazard and airflow impact.",
+          severity: "RED",
+          status: "IN_PROGRESS"
+        }
+      ]
+    : [
+        {
+          reference: `ISS-${code}-0001`,
+          title: `${client.name}: Missing asset labels on PDU strip`,
+          description: "PDU strip in rack A3 has unlabelled outlets. Makes fault isolation slower.",
+          severity: "GREEN",
+          status: "OPEN"
+        }
+      ]
+
+  for (const issue of issueSamples) {
+    const existing = await prisma.issue.findUnique({
+      where: { reference: issue.reference }
+    })
+    if (!existing) {
+      await prisma.issue.create({
+        data: {
+          reference: issue.reference,
+          clientId: client.id,
+          title: issue.title,
+          description: issue.description,
+          severity: issue.severity,
+          status: issue.status
+        }
+      })
+    }
+  }
+
+  // ── Tasks ──────────────────────────────────────────────────────────
+  const taskSamples = isNova
+    ? [
+        {
+          title: "Replace UPS battery unit 3 — Zone B",
+          description: "Procure and schedule replacement. Coordinate with client for maintenance window.",
+          status: TaskStatus.IN_PROGRESS,
+          priority: "high",
+          linkedEntityType: "Risk",
+          linkedEntityIdRef: "RSK-2026-0001"
+        },
+        {
+          title: "Remediate Rack B2 cable management",
+          description: "Re-route and label all cables in Rack B2 to meet standards.",
+          status: TaskStatus.OPEN,
+          priority: "medium",
+          linkedEntityType: "Issue",
+          linkedEntityIdRef: "ISS-2026-0001"
+        },
+        {
+          title: "Thermal survey — aisle 4 cooling assessment",
+          description: "Conduct point-in-time thermal survey to assess cooling redundancy options.",
+          status: TaskStatus.OPEN,
+          priority: "high",
+          linkedEntityType: null,
+          linkedEntityIdRef: null
+        }
+      ]
+    : [
+        {
+          title: `${client.name}: Validate switch firmware integrity`,
+          description: "Run vendor diagnostics and compare firmware checksums.",
+          status: TaskStatus.IN_PROGRESS,
+          priority: "high",
+          linkedEntityType: null,
+          linkedEntityIdRef: null
+        },
+        {
+          title: `${client.name}: Label PDU outlets in rack A3`,
+          description: "Print and apply asset labels to all PDU outlets.",
+          status: TaskStatus.OPEN,
+          priority: "low",
+          linkedEntityType: "Issue",
+          linkedEntityIdRef: `ISS-${code}-0001`
+        }
+      ]
+
+  for (const task of taskSamples) {
+    const existing = await prisma.task.findFirst({
+      where: { clientId: client.id, title: task.title }
+    })
+    if (!existing) {
+      // Resolve linked entity ID from reference if provided
+      let linkedEntityId: string | null = null
+      if (task.linkedEntityType === "Risk" && task.linkedEntityIdRef) {
+        const risk = await prisma.risk.findUnique({
+          where: { reference: task.linkedEntityIdRef }
+        })
+        linkedEntityId = risk?.id ?? null
+      } else if (task.linkedEntityType === "Issue" && task.linkedEntityIdRef) {
+        const issue = await prisma.issue.findUnique({
+          where: { reference: task.linkedEntityIdRef }
+        })
+        linkedEntityId = issue?.id ?? null
+      }
+
+      await prisma.task.create({
+        data: {
+          reference: `TSK-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`,
+          clientId: client.id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          priority: task.priority,
+          linkedEntityType: task.linkedEntityType,
+          linkedEntityId,
+          assigneeId,
+          createdById
+        }
+      })
+    }
+  }
+
+  // ── Surveys ────────────────────────────────────────────────────────
+  const surveyTitle = isNova
+    ? "Q1 2026 Facility Walkthrough"
+    : `${client.name} Quarterly Facility Walkthrough`
+
+  const existingSurvey = await prisma.survey.findFirst({
+    where: { clientId: client.id, title: surveyTitle }
+  })
+  if (!existingSurvey) {
+    await prisma.survey.create({
+      data: {
+        clientId: client.id,
+        siteId: siteA.id,
+        title: surveyTitle,
+        surveyType: "Facility",
+        status: SurveyStatus.IN_PROGRESS,
+        scheduledAt: new Date(),
+        items: {
+          create: [
+            { label: "Fire exits clear and signed" },
+            { label: "UPS alarms checked" },
+            { label: "Cooling operating within range" },
+            { label: "Cable management compliant" },
+            { label: "Asset labels present and legible" }
+          ]
+        }
+      }
+    })
   }
 }
 
 async function main() {
-  // 1) Organization (stable by name)
-  const orgName = "DCMS Default Organization";
+  // 1) Organisation
+  const orgName = "DCMS Default Organization"
   const organization = await prisma.organization.upsert({
     where: { id: "00000000-0000-0000-0000-000000000001" },
     update: { name: orgName, status: "ACTIVE" },
@@ -285,53 +457,46 @@ async function main() {
       name: orgName,
       status: "ACTIVE"
     }
-  });
+  })
 
-  // Backfill existing clients/users without organization to default org.
   await prisma.client.updateMany({
     where: { organizationId: null },
     data: { organizationId: organization.id }
-  });
+  })
   await prisma.user.updateMany({
     where: { organizationId: null },
     data: { organizationId: organization.id }
-  });
+  })
 
-  // 2) Client (stable by name)
+  // 2) Clients
   const existingClient = await prisma.client.findFirst({
     where: { name: "Nova Logistics" }
-  });
-
-  const clientA =
-    existingClient ??
-    (await prisma.client.create({
-      data: { name: "Nova Logistics", status: "ACTIVE", organizationId: organization.id }
-    }));
+  })
+  const clientA = existingClient ?? (await prisma.client.create({
+    data: { name: "Nova Logistics", status: "ACTIVE", organizationId: organization.id }
+  }))
   if (clientA.organizationId !== organization.id) {
     await prisma.client.update({
       where: { id: clientA.id },
       data: { organizationId: organization.id }
-    });
+    })
   }
 
   const existingClientB = await prisma.client.findFirst({
     where: { name: "Apex Data Centers" }
-  });
-
-  const clientB =
-    existingClientB ??
-    (await prisma.client.create({
-      data: { name: "Apex Data Centers", status: "ACTIVE", organizationId: organization.id }
-    }));
+  })
+  const clientB = existingClientB ?? (await prisma.client.create({
+    data: { name: "Apex Data Centers", status: "ACTIVE", organizationId: organization.id }
+  }))
   if (clientB.organizationId !== organization.id) {
     await prisma.client.update({
       where: { id: clientB.id },
       data: { organizationId: organization.id }
-    });
+    })
   }
 
-  // 3) Admin user (stable by email)
-  const adminEmail = "admin@dcm.local";
+  // 3) Admin user
+  const adminEmail = "admin@dcm.local"
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
@@ -347,9 +512,9 @@ async function main() {
       clientId: clientA.id,
       isActive: true
     }
-  });
+  })
 
-  // 4) Global Assets (internal shared assets)
+  // 4) Global internal assets
   await prisma.asset.createMany({
     data: [
       {
@@ -368,20 +533,21 @@ async function main() {
       }
     ],
     skipDuplicates: true
-  });
+  })
 
+  // 5) Seed all clients
   const orgClients = await prisma.client.findMany({
     where: { organizationId: organization.id },
     orderBy: { name: "asc" },
     select: { id: true, name: true }
-  });
+  })
 
   for (const client of orgClients) {
     await seedClientData({
       client,
       assigneeId: admin.id,
       createdById: admin.id
-    });
+    })
   }
 
   console.log("Seed complete:", {
@@ -389,14 +555,14 @@ async function main() {
     clientsSeeded: orgClients.length,
     admin: admin.email,
     clientNames: orgClients.map((c) => c.name)
-  });
+  })
 }
 
 main()
   .catch((e) => {
-    console.error(e);
-    process.exit(1);
+    console.error(e)
+    process.exit(1)
   })
   .finally(async () => {
-    await prisma.$disconnect();
-  });
+    await prisma.$disconnect()
+  })
