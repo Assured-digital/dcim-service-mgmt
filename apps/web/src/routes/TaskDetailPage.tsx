@@ -5,14 +5,16 @@ import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, Divider, MenuItem, Stack, Tab, Tabs,
-  TextField, Typography
+  TextField, Tooltip, Typography
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import LockIcon from "@mui/icons-material/Lock"
 import CheckIcon from "@mui/icons-material/Check"
-import EditIcon from "@mui/icons-material/Edit"
 import LinkIcon from "@mui/icons-material/Link"
-import { statusChipSx, priorityChipSx } from "../lib/ui"
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
+import {
+  InfoField, Badge, DetailHeader, PropertiesPanel, chipSx
+} from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
@@ -124,34 +126,6 @@ function actionTextColor(action: string): string {
   return "#475569"
 }
 
-function InfoField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Box>
-      <Typography sx={{
-        fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
-        color: "var(--color-text-tertiary)", mb: 0.5
-      }}>
-        {label}
-      </Typography>
-      {children}
-    </Box>
-  )
-}
-
-function Badge({ count }: { count: number }) {
-  return (
-    <Box sx={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      minWidth: 18, height: 18, borderRadius: 9, px: 0.75,
-      bgcolor: "#e2e8f0", ml: 0.75
-    }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 700, color: "#475569", lineHeight: 1 }}>
-        {count}
-      </Typography>
-    </Box>
-  )
-}
-
 export default function TaskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -160,8 +134,6 @@ export default function TaskDetailPage() {
   const fromSRRef = location.state?.fromSRRef
   const fromIssue = location.state?.fromIssue
   const fromIssueRef = location.state?.fromIssueRef
-  const fromTask = location.state?.fromTask
-  const fromTaskRef = location.state?.fromTaskRef
   const fromRisk = location.state?.fromRisk
   const fromRiskRef = location.state?.fromRiskRef
   const qc = useQueryClient()
@@ -171,12 +143,10 @@ export default function TaskDetailPage() {
   const [error, setError] = React.useState("")
   const [activeTab, setActiveTab] = React.useState(0)
 
-  // Transition dialog
   const [transitionTarget, setTransitionTarget] = React.useState<string | null>(null)
   const [transitionComment, setTransitionComment] = React.useState("")
   const [savingTransition, setSavingTransition] = React.useState(false)
 
-  // Properties edit
   const [editingProperties, setEditingProperties] = React.useState(false)
   const [editTitle, setEditTitle] = React.useState("")
   const [editDescription, setEditDescription] = React.useState("")
@@ -185,7 +155,6 @@ export default function TaskDetailPage() {
   const [editDueAt, setEditDueAt] = React.useState("")
   const [savingProperties, setSavingProperties] = React.useState(false)
 
-  // Work note
   const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
 
@@ -318,56 +287,43 @@ export default function TaskDetailPage() {
               : fromRisk ? `Back to ${fromRiskRef}`
               : "Back to tasks"}
           </Button>
-          <Box sx={{
-            display: "flex", alignItems: "center", gap: 1,
-            px: 1.5, py: 0.75, borderRadius: 2, flexShrink: 0,
-            bgcolor: "var(--color-background-primary)",
-            border: "1px solid var(--color-border-secondary)",
-            boxShadow: "0 1px 3px rgba(15,23,42,0.06)"
-          }}>
-            <Typography sx={{
-              fontFamily: "monospace", fontSize: 12, fontWeight: 700,
-              color: "var(--color-text-secondary)", whiteSpace: "nowrap"
-            }}>
-              {task.reference}
-            </Typography>
-            <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
-            <Chip size="small" sx={statusChipSx(task.status)}
-              label={STATUS_LABELS[task.status] ?? task.status} />
-            <Chip size="small" sx={priorityChipSx(task.priority)} label={task.priority} />
-          </Box>
+          <DetailHeader
+            reference={task.reference}
+            status={task.status}
+            statusLabel={STATUS_LABELS[task.status]}
+            priority={task.priority}
+            extras={isOverdue ? (
+              <Chip size="small"
+                label="Overdue"
+                sx={{ bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }} />
+            ) : undefined}
+          />
         </Stack>
       </Stack>
 
-      {/* Unified info container */}
+      {/* Info container */}
       <Box sx={{
         bgcolor: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
         p: 2.5
       }}>
-
-        {/* Dominant title */}
-        <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2, mb: 2 }}>
-          {task.title}
-        </Typography>
-
-        <Divider sx={{ mb: 2 }} />
-
-        {/* Description + linked record in same row */}
+        <InfoField label="TASK">
+          <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+            {task.title}
+          </Typography>
+        </InfoField>
+        <Divider sx={{ my: 1.5 }} />
         <Box sx={{
           display: "grid",
-          gridTemplateColumns: task.linkedEntityType || task.incident
-            ? "1fr auto" : "1fr",
+          gridTemplateColumns: task.linkedEntityType || task.incident ? "1fr auto" : "1fr",
           gap: 3, alignItems: "start"
         }}>
           <InfoField label="DESCRIPTION">
-            <Typography variant="body2" color="text.secondary"
-              sx={{ whiteSpace: "pre-wrap" }}>
+            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
               {task.description ?? "No description provided."}
             </Typography>
           </InfoField>
-
           {task.linkedEntityType || task.incident ? (
             <InfoField label="LINKED TO">
               <Button
@@ -383,6 +339,7 @@ export default function TaskDetailPage() {
             </InfoField>
           ) : null}
         </Box>
+        <Divider sx={{ mt: 1.5 }} />
       </Box>
 
       {/* Workflow strip */}
@@ -391,14 +348,22 @@ export default function TaskDetailPage() {
         borderTop: "none",
         borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
         bgcolor: "var(--color-background-primary)",
-        px: 2.5, py: 2, mb: 3
+        px: 2.5, pt: 1.5, pb: 2, mb: 3
       }}>
-        <Typography sx={{
-          fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-          color: "var(--color-text-tertiary)", display: "block", mb: 1.5
-        }}>
-          STATUS — click a stage to transition
-        </Typography>
+        <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1.5 }}>
+          <Typography sx={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
+            color: "var(--color-text-tertiary)"
+          }}>
+            STATUS
+          </Typography>
+          <Tooltip
+            title="Click an available stage to transition this record. Stages shown in blue are available next steps."
+            placement="right" arrow
+          >
+            <InfoOutlinedIcon sx={{ fontSize: 13, color: "var(--color-text-tertiary)", cursor: "help" }} />
+          </Tooltip>
+        </Stack>
         <Stack direction="row" spacing={0} alignItems="stretch">
           {STATUS_ALL.map((status, idx) => {
             const isCurrent = status === task.status
@@ -406,71 +371,61 @@ export default function TaskDetailPage() {
             const isNext = nextStatuses.includes(status) && canManage
             return (
               <React.Fragment key={status}>
-                <Box
-                  onClick={isNext ? () => setTransitionTarget(status) : undefined}
-                  sx={{
-                    flex: 1, px: 1.5, py: 1.25, borderRadius: 1.5,
-                    cursor: isNext ? "pointer" : "default",
-                    bgcolor: isCurrent
-                      ? status === "BLOCKED" ? "#7f1d1d" : "#0f172a"
-                      : isPast ? "#f1f5f9"
-                      : isNext ? "#eff6ff"
-                      : "transparent",
-                    border: "1px solid",
-                    borderColor: isCurrent
-                      ? status === "BLOCKED" ? "#7f1d1d" : "#0f172a"
-                      : isPast ? "var(--color-border-tertiary)"
-                      : isNext ? "#bfdbfe"
-                      : "transparent",
-                    transition: "all 0.15s",
-                    "&:hover": isNext ? { bgcolor: "#dbeafe", borderColor: "#93c5fd" } : {}
-                  }}
-                >
-                  <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.25 }}>
-                    {isCurrent ? (
-                      <Box sx={{
-                        width: 16, height: 16, borderRadius: "50%", bgcolor: "#fff",
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                <Tooltip title={STATUS_DESCRIPTIONS[status]} placement="bottom" arrow>
+                  <Box
+                    onClick={isNext ? () => setTransitionTarget(status) : undefined}
+                    sx={{
+                      flex: 1, px: 1.5, py: 1.25, borderRadius: 1.5,
+                      cursor: isNext ? "pointer" : "default",
+                      bgcolor: isCurrent
+                        ? status === "BLOCKED" ? "#7f1d1d" : "#0f172a"
+                        : isPast ? "#f1f5f9"
+                        : isNext ? "#eff6ff"
+                        : "transparent",
+                      border: "1px solid",
+                      borderColor: isCurrent
+                        ? status === "BLOCKED" ? "#7f1d1d" : "#0f172a"
+                        : isPast ? "var(--color-border-tertiary)"
+                        : isNext ? "#bfdbfe"
+                        : "transparent",
+                      transition: "all 0.15s",
+                      "&:hover": isNext ? { bgcolor: "#dbeafe", borderColor: "#93c5fd" } : {}
+                    }}
+                  >
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      {isCurrent ? (
+                        <Box sx={{
+                          width: 16, height: 16, borderRadius: "50%", bgcolor: "#fff",
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                        }}>
+                          <CheckIcon sx={{ fontSize: 11, color: "#0f172a" }} />
+                        </Box>
+                      ) : isPast ? (
+                        <Box sx={{
+                          width: 16, height: 16, borderRadius: "50%", bgcolor: "#cbd5e1",
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                        }}>
+                          <CheckIcon sx={{ fontSize: 11, color: "#fff" }} />
+                        </Box>
+                      ) : (
+                        <Box sx={{
+                          width: 16, height: 16, borderRadius: "50%",
+                          border: isNext ? "1.5px solid #3b82f6" : "1.5px solid #e2e8f0",
+                          flexShrink: 0
+                        }} />
+                      )}
+                      <Typography sx={{
+                        fontSize: 12, fontWeight: isCurrent ? 700 : 500,
+                        color: isCurrent ? "#fff"
+                          : isPast ? "#94a3b8"
+                          : isNext ? "#1d4ed8"
+                          : "var(--color-text-tertiary)"
                       }}>
-                        <CheckIcon sx={{ fontSize: 11, color: "#0f172a" }} />
-                      </Box>
-                    ) : isPast ? (
-                      <Box sx={{
-                        width: 16, height: 16, borderRadius: "50%", bgcolor: "#cbd5e1",
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-                      }}>
-                        <CheckIcon sx={{ fontSize: 11, color: "#fff" }} />
-                      </Box>
-                    ) : (
-                      <Box sx={{
-                        width: 16, height: 16, borderRadius: "50%",
-                        border: isNext ? "1.5px solid #3b82f6" : "1.5px solid #e2e8f0",
-                        flexShrink: 0
-                      }} />
-                    )}
-                    <Typography sx={{
-                      fontSize: 12, fontWeight: isCurrent ? 700 : 500,
-                      color: isCurrent ? "#fff"
-                        : isPast ? "#94a3b8"
-                        : isNext ? "#1d4ed8"
-                        : "var(--color-text-tertiary)"
-                    }}>
-                      {STATUS_LABELS[status]}
-                    </Typography>
-                    {isNext ? (
-                      <Typography sx={{ fontSize: 10, color: "#3b82f6", ml: "auto" }}>
-                        click →
+                        {STATUS_LABELS[status]}
                       </Typography>
-                    ) : null}
-                  </Stack>
-                  <Typography sx={{
-                    fontSize: 10,
-                    color: isCurrent ? "rgba(255,255,255,0.6)" : "var(--color-text-tertiary)",
-                    lineHeight: 1.3
-                  }}>
-                    {STATUS_DESCRIPTIONS[status]}
-                  </Typography>
-                </Box>
+                    </Stack>
+                  </Box>
+                </Tooltip>
                 {idx < STATUS_ALL.length - 1 ? (
                   <Box sx={{
                     width: 20, display: "flex", alignItems: "center",
@@ -515,7 +470,6 @@ export default function TaskDetailPage() {
           </Box>
           <CardContent>
 
-            {/* Work notes tab */}
             {activeTab === 0 ? (
               <Stack spacing={2}>
                 <Stack direction="row" spacing={1}>
@@ -532,9 +486,7 @@ export default function TaskDetailPage() {
                 </Stack>
                 <Divider />
                 {(workNotes ?? []).length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    No work notes yet.
-                  </Typography>
+                  <Typography variant="body2" color="text.secondary">No work notes yet.</Typography>
                 ) : (
                   <Stack spacing={0}>
                     {(workNotes ?? []).slice().reverse().map((note, i, arr) => (
@@ -576,7 +528,6 @@ export default function TaskDetailPage() {
               </Stack>
             ) : null}
 
-            {/* History tab */}
             {activeTab === 1 ? (
               <Stack spacing={0}>
                 {(auditEvents ?? []).length === 0 ? (
@@ -635,26 +586,15 @@ export default function TaskDetailPage() {
 
         {/* Right column */}
         <Stack spacing={2} sx={{ alignSelf: "start" }}>
-
-          {/* Properties */}
-          <Card>
-            <CardContent sx={{ pb: "12px !important" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+          {editingProperties ? (
+            <Card>
+              <CardContent sx={{ pb: "12px !important" }}>
                 <Typography sx={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
-                  color: "var(--color-text-tertiary)"
+                  fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
+                  color: "var(--color-text-tertiary)", mb: 1.5
                 }}>
                   PROPERTIES
                 </Typography>
-                {canManage && !editingProperties && task.status !== "DONE" ? (
-                  <Button size="small" startIcon={<EditIcon sx={{ fontSize: 13 }} />}
-                    onClick={() => setEditingProperties(true)}>
-                    Edit
-                  </Button>
-                ) : null}
-              </Stack>
-
-              {editingProperties ? (
                 <Stack spacing={1.5}>
                   <TextField size="small" label="Title" fullWidth
                     value={editTitle}
@@ -697,57 +637,47 @@ export default function TaskDetailPage() {
                     </Button>
                   </Stack>
                 </Stack>
-              ) : (
-                <Stack spacing={0} divider={<Divider />}>
-                  {[
-                    {
-                      label: "Priority",
-                      value: <Chip size="small" sx={priorityChipSx(task.priority)}
-                        label={task.priority} />
-                    },
-                    {
-                      label: "Assignee",
-                      value: <Typography variant="caption">
-                        {task.assignee?.email.split("@")[0] ?? "Unassigned"}
-                      </Typography>
-                    },
-                    task.dueAt ? {
-                      label: "Due date",
-                      value: <Typography variant="caption"
-                        sx={{ color: isOverdue ? "#b91c1c" : "inherit", fontWeight: isOverdue ? 700 : 400 }}>
-                        {new Date(task.dueAt).toLocaleDateString("en-GB")}
-                      </Typography>
-                    } : null,
-                    task.linkedEntityType ? {
-                      label: "Linked to",
-                      value: <Typography variant="caption">
-                        {linkedLabel}
-                      </Typography>
-                    } : null,
-                    {
-                      label: "Created",
-                      value: <Typography variant="caption">
-                        {new Date(task.createdAt).toLocaleDateString("en-GB")}
-                      </Typography>
-                    }
-                  ].filter(Boolean).map((row: any) => (
-                    <Stack key={row.label} direction="row" justifyContent="space-between"
-                      alignItems="center" sx={{ py: 0.75 }}>
-                      <Typography variant="caption" color="text.secondary"
-                        sx={{ flexShrink: 0, mr: 1 }}>
-                        {row.label}
-                      </Typography>
-                      {row.value}
-                    </Stack>
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <PropertiesPanel
+              onEdit={canManage && task.status !== "DONE"
+                ? () => setEditingProperties(true)
+                : undefined}
+              rows={[
+                {
+                  label: "Priority",
+                  value: <Chip size="small" sx={chipSx(task.priority)} label={task.priority} />
+                },
+                {
+                  label: "Assignee",
+                  value: <Typography variant="caption">
+                    {task.assignee?.email.split("@")[0] ?? "Unassigned"}
+                  </Typography>
+                },
+                task.dueAt ? {
+                  label: "Due date",
+                  value: <Typography variant="caption"
+                    sx={{ color: isOverdue ? "#b91c1c" : "inherit", fontWeight: isOverdue ? 700 : 400 }}>
+                    {new Date(task.dueAt).toLocaleDateString("en-GB")}
+                  </Typography>
+                } : null,
+                task.linkedEntityType ? {
+                  label: "Linked to",
+                  value: <Typography variant="caption">{linkedLabel}</Typography>
+                } : null,
+                {
+                  label: "Created",
+                  value: <Typography variant="caption">
+                    {new Date(task.createdAt).toLocaleDateString("en-GB")}
+                  </Typography>
+                }
+              ].filter(Boolean) as any}
+            />
+          )}
         </Stack>
       </Box>
 
-      {/* Transition dialog */}
       <Dialog open={!!transitionTarget} onClose={() => setTransitionTarget(null)}
         maxWidth="xs" fullWidth>
         <DialogTitle>

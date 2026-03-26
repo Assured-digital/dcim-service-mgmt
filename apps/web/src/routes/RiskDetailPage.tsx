@@ -5,14 +5,16 @@ import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, Divider, MenuItem, Stack, Tab, Tabs,
-  TextField, Typography
+  TextField, Tooltip, Typography
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import LockIcon from "@mui/icons-material/Lock"
 import CheckIcon from "@mui/icons-material/Check"
-import AddIcon from "@mui/icons-material/Add"
-import EditIcon from "@mui/icons-material/Edit"
-import { statusChipSx } from "../lib/ui"
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
+import {
+  InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
+  chipSx, type LinkedTask
+} from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { CreateTaskModal } from "./TasksPage"
@@ -32,15 +34,6 @@ type Risk = {
   closedAt: string | null
   createdAt: string
   updatedAt: string
-}
-
-type Task = {
-  id: string
-  reference: string
-  title: string
-  status: string
-  priority: string
-  assignee: { id: string; email: string } | null
 }
 
 type AuditEvent = {
@@ -102,25 +95,10 @@ function deriveRag(likelihood: string, impact: string): "RED" | "AMBER" | "GREEN
   return "GREEN"
 }
 
-function ragSx(level: string) {
-  if (level === "RED" || level === "HIGH")
-    return { bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }
-  if (level === "AMBER" || level === "MEDIUM")
-    return { bgcolor: "#fef3c7", color: "#b45309", fontWeight: 700 }
-  return { bgcolor: "#dcfce7", color: "#15803d", fontWeight: 700 }
-}
-
 function ragLabel(level: "RED" | "AMBER" | "GREEN") {
   if (level === "RED") return "High risk"
   if (level === "AMBER") return "Medium risk"
   return "Low risk"
-}
-
-function priorityDot(priority: string) {
-  const colors: Record<string, string> = {
-    low: "#94a3b8", medium: "#f59e0b", high: "#ef4444", critical: "#7c3aed"
-  }
-  return colors[priority.toLowerCase()] ?? "#94a3b8"
 }
 
 function actionLabel(action: string, data: any): string {
@@ -146,34 +124,6 @@ function actionTextColor(action: string): string {
   return "#475569"
 }
 
-function InfoField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Box>
-      <Typography sx={{
-        fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
-        color: "var(--color-text-tertiary)", mb: 0.5
-      }}>
-        {label}
-      </Typography>
-      {children}
-    </Box>
-  )
-}
-
-function Badge({ count }: { count: number }) {
-  return (
-    <Box sx={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      minWidth: 18, height: 18, borderRadius: 9, px: 0.75,
-      bgcolor: "#e2e8f0", ml: 0.75
-    }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 700, color: "#475569", lineHeight: 1 }}>
-        {count}
-      </Typography>
-    </Box>
-  )
-}
-
 export default function RiskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -188,29 +138,23 @@ export default function RiskDetailPage() {
   const [taskOpen, setTaskOpen] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState(0)
 
-  // Status transition
   const [transitionTarget, setTransitionTarget] = React.useState<string | null>(null)
   const [transitionComment, setTransitionComment] = React.useState("")
   const [acceptanceNote, setAcceptanceNote] = React.useState("")
   const [savingTransition, setSavingTransition] = React.useState(false)
-
-  // ASSESSED transition — likelihood/impact confirmation
   const [transitionLikelihood, setTransitionLikelihood] = React.useState("MEDIUM")
   const [transitionImpact, setTransitionImpact] = React.useState("MEDIUM")
 
-  // Mitigation
   const [editingMitigation, setEditingMitigation] = React.useState(false)
   const [mitigationPlan, setMitigationPlan] = React.useState("")
   const [savingMitigation, setSavingMitigation] = React.useState(false)
 
-  // Properties edit
   const [editingProperties, setEditingProperties] = React.useState(false)
   const [editLikelihood, setEditLikelihood] = React.useState("MEDIUM")
   const [editImpact, setEditImpact] = React.useState("MEDIUM")
   const [editReviewDate, setEditReviewDate] = React.useState("")
   const [savingProperties, setSavingProperties] = React.useState(false)
 
-  // Work note
   const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
 
@@ -223,7 +167,7 @@ export default function RiskDetailPage() {
   const { data: linkedTasks } = useQuery({
     queryKey: ["linked-tasks-risk", id],
     queryFn: async () =>
-      (await api.get<Task[]>("/tasks", {
+      (await api.get<LinkedTask[]>("/tasks", {
         params: { linkedEntityType: "Risk", linkedEntityId: id }
       })).data,
     enabled: !!id
@@ -260,30 +204,22 @@ export default function RiskDetailPage() {
     setSavingTransition(true)
     setError("")
     try {
-      // If moving to ASSESSED, save likelihood/impact first
       if (transitionTarget === "ASSESSED") {
         await api.put(`/risks/${id}`, {
           likelihood: transitionLikelihood,
           impact: transitionImpact
         })
       }
-
       await api.post(`/risks/${id}/status`, {
         status: transitionTarget,
         acceptanceNote: transitionTarget === "ACCEPTED" ? acceptanceNote : undefined
       })
-
       if (transitionComment.trim()) {
         await api.post("/comments/work-note", {
           entityType: "Risk", entityId: id, body: transitionComment.trim()
         })
       }
-
-      // Auto-switch to mitigation tab when moving to MITIGATING
-      if (transitionTarget === "MITIGATING") {
-        setActiveTab(0)
-      }
-
+      if (transitionTarget === "MITIGATING") setActiveTab(0)
       setTransitionTarget(null)
       setTransitionComment("")
       qc.invalidateQueries({ queryKey: ["risk-detail", id] })
@@ -357,24 +293,12 @@ export default function RiskDetailPage() {
           >
             {fromTask ? `Back to task ${fromTaskRef}` : "Back to risks"}
           </Button>
-          <Box sx={{
-            display: "flex", alignItems: "center", gap: 1,
-            px: 1.5, py: 0.75, borderRadius: 2, flexShrink: 0,
-            bgcolor: "var(--color-background-primary)",
-            border: "1px solid var(--color-border-secondary)",
-            boxShadow: "0 1px 3px rgba(15,23,42,0.06)"
-          }}>
-            <Typography sx={{
-              fontFamily: "monospace", fontSize: 12, fontWeight: 700,
-              color: "var(--color-text-secondary)", whiteSpace: "nowrap"
-            }}>
-              {risk.reference}
-            </Typography>
-            <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
-            <Chip size="small" sx={statusChipSx(risk.status)}
-              label={STATUS_LABELS[risk.status] ?? risk.status} />
-            <Chip size="small" sx={ragSx(rag)} label={ragLabel(rag)} />
-          </Box>
+          <DetailHeader
+            reference={risk.reference}
+            status={risk.status}
+            statusLabel={STATUS_LABELS[risk.status]}
+            extras={<Chip size="small" sx={chipSx(rag)} label={ragLabel(rag)} />}
+          />
         </Stack>
         {canManage && nextStatuses.includes("CLOSED") ? (
           <Button size="small" variant="contained" color="error"
@@ -384,43 +308,49 @@ export default function RiskDetailPage() {
         ) : null}
       </Stack>
 
-      {/* Unified info container */}
+      {/* Info container */}
       <Box sx={{
         bgcolor: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
         p: 2.5
       }}>
-
-        {/* Dominant title */}
-        <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2, mb: 2 }}>
-          {risk.title}
-        </Typography>
-
-        <Divider sx={{ mb: 2 }} />
-
-        {/* Description */}
+        <InfoField label="RISK">
+          <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+            {risk.title}
+          </Typography>
+        </InfoField>
+        <Divider sx={{ my: 1.5 }} />
         <InfoField label="DESCRIPTION">
           <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
             {risk.description}
           </Typography>
         </InfoField>
+        <Divider sx={{ mt: 1.5 }} />
       </Box>
 
-      {/* Workflow strip — no Close risk button anywhere else */}
+      {/* Workflow strip */}
       <Box sx={{
         border: "0.5px solid var(--color-border-tertiary)",
         borderTop: "none",
         borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
         bgcolor: "var(--color-background-primary)",
-        px: 2.5, py: 2, mb: 3
+        px: 2.5, pt: 1.5, pb: 2, mb: 3
       }}>
-        <Typography sx={{
-          fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-          color: "var(--color-text-tertiary)", display: "block", mb: 1.5
-        }}>
-          STATUS — click a stage to transition
-        </Typography>
+        <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1.5 }}>
+          <Typography sx={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
+            color: "var(--color-text-tertiary)"
+          }}>
+            STATUS
+          </Typography>
+          <Tooltip
+            title="Click an available stage to transition this record. Stages shown in blue are available next steps."
+            placement="right" arrow
+          >
+            <InfoOutlinedIcon sx={{ fontSize: 13, color: "var(--color-text-tertiary)", cursor: "help" }} />
+          </Tooltip>
+        </Stack>
         <Stack direction="row" spacing={0} alignItems="stretch">
           {STATUS_ALL.map((status, idx) => {
             const isCurrent = status === risk.status
@@ -428,69 +358,59 @@ export default function RiskDetailPage() {
             const isNext = nextStatuses.includes(status) && canManage
             return (
               <React.Fragment key={status}>
-                <Box
-                  onClick={isNext ? () => setTransitionTarget(status) : undefined}
-                  sx={{
-                    flex: 1, px: 1.5, py: 1.25, borderRadius: 1.5,
-                    cursor: isNext ? "pointer" : "default",
-                    bgcolor: isCurrent ? "#0f172a"
-                      : isPast ? "#f1f5f9"
-                      : isNext ? "#eff6ff"
-                      : "transparent",
-                    border: "1px solid",
-                    borderColor: isCurrent ? "#0f172a"
-                      : isPast ? "var(--color-border-tertiary)"
-                      : isNext ? "#bfdbfe"
-                      : "transparent",
-                    transition: "all 0.15s",
-                    "&:hover": isNext ? { bgcolor: "#dbeafe", borderColor: "#93c5fd" } : {}
-                  }}
-                >
-                  <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.25 }}>
-                    {isCurrent ? (
-                      <Box sx={{
-                        width: 16, height: 16, borderRadius: "50%", bgcolor: "#fff",
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                <Tooltip title={STATUS_DESCRIPTIONS[status]} placement="bottom" arrow>
+                  <Box
+                    onClick={isNext ? () => setTransitionTarget(status) : undefined}
+                    sx={{
+                      flex: 1, px: 1.5, py: 1.25, borderRadius: 1.5,
+                      cursor: isNext ? "pointer" : "default",
+                      bgcolor: isCurrent ? "#0f172a"
+                        : isPast ? "#f1f5f9"
+                        : isNext ? "#eff6ff"
+                        : "transparent",
+                      border: "1px solid",
+                      borderColor: isCurrent ? "#0f172a"
+                        : isPast ? "var(--color-border-tertiary)"
+                        : isNext ? "#bfdbfe"
+                        : "transparent",
+                      transition: "all 0.15s",
+                      "&:hover": isNext ? { bgcolor: "#dbeafe", borderColor: "#93c5fd" } : {}
+                    }}
+                  >
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      {isCurrent ? (
+                        <Box sx={{
+                          width: 16, height: 16, borderRadius: "50%", bgcolor: "#fff",
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                        }}>
+                          <CheckIcon sx={{ fontSize: 11, color: "#0f172a" }} />
+                        </Box>
+                      ) : isPast ? (
+                        <Box sx={{
+                          width: 16, height: 16, borderRadius: "50%", bgcolor: "#cbd5e1",
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                        }}>
+                          <CheckIcon sx={{ fontSize: 11, color: "#fff" }} />
+                        </Box>
+                      ) : (
+                        <Box sx={{
+                          width: 16, height: 16, borderRadius: "50%",
+                          border: isNext ? "1.5px solid #3b82f6" : "1.5px solid #e2e8f0",
+                          flexShrink: 0
+                        }} />
+                      )}
+                      <Typography sx={{
+                        fontSize: 12, fontWeight: isCurrent ? 700 : 500,
+                        color: isCurrent ? "#fff"
+                          : isPast ? "#94a3b8"
+                          : isNext ? "#1d4ed8"
+                          : "var(--color-text-tertiary)"
                       }}>
-                        <CheckIcon sx={{ fontSize: 11, color: "#0f172a" }} />
-                      </Box>
-                    ) : isPast ? (
-                      <Box sx={{
-                        width: 16, height: 16, borderRadius: "50%", bgcolor: "#cbd5e1",
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-                      }}>
-                        <CheckIcon sx={{ fontSize: 11, color: "#fff" }} />
-                      </Box>
-                    ) : (
-                      <Box sx={{
-                        width: 16, height: 16, borderRadius: "50%",
-                        border: isNext ? "1.5px solid #3b82f6" : "1.5px solid #e2e8f0",
-                        flexShrink: 0
-                      }} />
-                    )}
-                    <Typography sx={{
-                      fontSize: 12, fontWeight: isCurrent ? 700 : 500,
-                      color: isCurrent ? "#fff"
-                        : isPast ? "#94a3b8"
-                        : isNext ? "#1d4ed8"
-                        : "var(--color-text-tertiary)"
-                    }}>
-                      {STATUS_LABELS[status]}
-                    </Typography>
-                    {isNext ? (
-                      <Typography sx={{ fontSize: 10, color: "#3b82f6", ml: "auto" }}>
-                        click →
+                        {STATUS_LABELS[status]}
                       </Typography>
-                    ) : null}
-                  </Stack>
-                  <Typography sx={{
-                    fontSize: 10,
-                    color: isCurrent ? "rgba(255,255,255,0.6)" : "var(--color-text-tertiary)",
-                    lineHeight: 1.3
-                  }}>
-                    {STATUS_DESCRIPTIONS[status]}
-                  </Typography>
-                </Box>
+                    </Stack>
+                  </Box>
+                </Tooltip>
                 {idx < STATUS_ALL.length - 1 ? (
                   <Box sx={{
                     width: 20, display: "flex", alignItems: "center",
@@ -524,24 +444,14 @@ export default function RiskDetailPage() {
               TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
             >
               <Tab label="Mitigation plan" sx={{ fontSize: 13, minHeight: 44 }} />
-              <Tab
-                label={
-                  <Stack direction="row" alignItems="center">
-                    <span>Work notes</span>
-                    <Badge count={(workNotes ?? []).length} />
-                  </Stack>
-                }
-                sx={{ minHeight: 44 }}
-              />
-              <Tab
-                label={
-                  <Stack direction="row" alignItems="center">
-                    <span>History</span>
-                    <Badge count={(auditEvents ?? []).length} />
-                  </Stack>
-                }
-                sx={{ minHeight: 44 }}
-              />
+              <Tab label="Work notes"
+                icon={<Badge count={(workNotes ?? []).length} />}
+                iconPosition="end"
+                sx={{ fontSize: 13, minHeight: 44 }} />
+              <Tab label="History"
+                icon={<Badge count={(auditEvents ?? []).length} />}
+                iconPosition="end"
+                sx={{ fontSize: 13, minHeight: 44 }} />
               {risk.status === "ACCEPTED" ? (
                 <Tab label="Acceptance note" sx={{ fontSize: 13, minHeight: 44 }} />
               ) : null}
@@ -549,12 +459,11 @@ export default function RiskDetailPage() {
           </Box>
           <CardContent>
 
-            {/* Mitigation plan tab */}
             {activeTab === 0 ? (
               <Stack spacing={1.5}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography sx={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
+                    fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
                     color: "var(--color-text-tertiary)"
                   }}>
                     MITIGATION PLAN
@@ -591,7 +500,6 @@ export default function RiskDetailPage() {
               </Stack>
             ) : null}
 
-            {/* Work notes tab */}
             {activeTab === 1 ? (
               <Stack spacing={2}>
                 <Stack direction="row" spacing={1}>
@@ -650,7 +558,6 @@ export default function RiskDetailPage() {
               </Stack>
             ) : null}
 
-            {/* History tab */}
             {activeTab === 2 ? (
               <Stack spacing={0}>
                 {(auditEvents ?? []).length === 0 ? (
@@ -705,11 +612,10 @@ export default function RiskDetailPage() {
               </Stack>
             ) : null}
 
-            {/* Acceptance note tab */}
             {activeTab === 3 && risk.status === "ACCEPTED" ? (
               <Stack spacing={1.5}>
                 <Typography sx={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
+                  fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
                   color: "var(--color-text-tertiary)"
                 }}>
                   ACCEPTANCE NOTE
@@ -729,26 +635,15 @@ export default function RiskDetailPage() {
 
         {/* Right column */}
         <Stack spacing={2} sx={{ alignSelf: "start" }}>
-
-          {/* Properties — with edit capability */}
-          <Card>
-            <CardContent sx={{ pb: "12px !important" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+          {editingProperties ? (
+            <Card>
+              <CardContent sx={{ pb: "12px !important" }}>
                 <Typography sx={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
-                  color: "var(--color-text-tertiary)"
+                  fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
+                  color: "var(--color-text-tertiary)", mb: 1.5
                 }}>
                   PROPERTIES
                 </Typography>
-                {canManage && !editingProperties && risk.status !== "CLOSED" ? (
-                  <Button size="small" startIcon={<EditIcon sx={{ fontSize: 13 }} />}
-                    onClick={() => setEditingProperties(true)}>
-                    Edit
-                  </Button>
-                ) : null}
-              </Stack>
-
-              {editingProperties ? (
                 <Stack spacing={1.5}>
                   <TextField select size="small" label="Likelihood" fullWidth
                     value={editLikelihood}
@@ -781,131 +676,64 @@ export default function RiskDetailPage() {
                     </Button>
                   </Stack>
                 </Stack>
-              ) : (
-                <Stack spacing={0} divider={<Divider />}>
-                  {[
-                    {
-                      label: "Overall risk",
-                      value: <Chip size="small" sx={ragSx(rag)} label={ragLabel(rag)} />
-                    },
-                    {
-                      label: "Likelihood",
-                      value: <Chip size="small" sx={ragSx(risk.likelihood)} label={risk.likelihood} />
-                    },
-                    {
-                      label: "Impact",
-                      value: <Chip size="small" sx={ragSx(risk.impact)} label={risk.impact} />
-                    },
-                    {
-                      label: "Source",
-                      value: <Typography variant="caption">
-                        {SOURCE_LABELS[risk.source ?? "MANUAL"] ?? risk.source}
-                      </Typography>
-                    },
-                    risk.reviewDate ? {
-                      label: "Review date",
-                      value: <Typography variant="caption">
-                        {new Date(risk.reviewDate).toLocaleDateString("en-GB")}
-                      </Typography>
-                    } : null,
-                    {
-                      label: "Logged",
-                      value: <Typography variant="caption">
-                        {new Date(risk.createdAt).toLocaleDateString("en-GB")}
-                      </Typography>
-                    },
-                    risk.closedAt ? {
-                      label: "Closed",
-                      value: <Typography variant="caption">
-                        {new Date(risk.closedAt).toLocaleDateString("en-GB")}
-                      </Typography>
-                    } : null
-                  ].filter(Boolean).map((row: any) => (
-                    <Stack key={row.label} direction="row" justifyContent="space-between"
-                      alignItems="center" sx={{ py: 0.75 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, mr: 1 }}>
-                        {row.label}
-                      </Typography>
-                      {row.value}
-                    </Stack>
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Linked tasks */}
-          <Card>
-            <CardContent sx={{ pb: "12px !important" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.25 }}>
-                <Typography sx={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
-                  color: "var(--color-text-tertiary)"
-                }}>
-                  LINKED TASKS
-                </Typography>
-                {canManage ? (
-                  <Button size="small" startIcon={<AddIcon />} onClick={() => setTaskOpen(true)}>
-                    Create
-                  </Button>
-                ) : null}
-              </Stack>
-              {(linkedTasks ?? []).length === 0 ? (
-                <Box sx={{
-                  py: 1.5, textAlign: "center",
-                  border: "1px dashed var(--color-border-tertiary)",
-                  borderRadius: 1.5
-                }}>
-                  <Typography variant="caption" color="text.secondary">
-                    No tasks linked yet
+              </CardContent>
+            </Card>
+          ) : (
+            <PropertiesPanel
+              onEdit={canManage && risk.status !== "CLOSED"
+                ? () => setEditingProperties(true)
+                : undefined}
+              rows={[
+                {
+                  label: "Overall risk",
+                  value: <Chip size="small" sx={chipSx(rag)} label={ragLabel(rag)} />
+                },
+                {
+                  label: "Likelihood",
+                  value: <Chip size="small" sx={chipSx(risk.likelihood)} label={risk.likelihood} />
+                },
+                {
+                  label: "Impact",
+                  value: <Chip size="small" sx={chipSx(risk.impact)} label={risk.impact} />
+                },
+                {
+                  label: "Source",
+                  value: <Typography variant="caption">
+                    {SOURCE_LABELS[risk.source ?? "MANUAL"] ?? risk.source}
                   </Typography>
-                </Box>
-              ) : (
-                <Stack spacing={0.75}>
-                  {(linkedTasks ?? []).map((task) => (
-                    <Box key={task.id}
-                      onClick={() => navigate(`/tasks/${task.id}`, {
-                        state: { fromRisk: risk.id, fromRiskRef: risk.reference }
-                      })}
-                      sx={{
-                        p: 1, borderRadius: 1.5, cursor: "pointer",
-                        border: "0.5px solid var(--color-border-tertiary)",
-                        bgcolor: "var(--color-background-secondary)",
-                        "&:hover": { bgcolor: "var(--color-background-primary)" },
-                        transition: "background 0.1s"
-                      }}
-                    >
-                      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.25 }}>
-                        <Box sx={{
-                          width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                          bgcolor: priorityDot(task.priority)
-                        }} />
-                        <Typography variant="caption" fontWeight={600} sx={{
-                          flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
-                        }}>
-                          {task.title}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ ml: 1.75 }}>
-                        <Typography variant="caption" sx={{
-                          fontFamily: "monospace", fontSize: 10, color: "text.secondary"
-                        }}>
-                          {task.reference}
-                        </Typography>
-                        <Chip size="small"
-                          label={task.status.toLowerCase().replace("_", " ")}
-                          sx={{ ...statusChipSx(task.status), height: 16, fontSize: 10 }} />
-                      </Stack>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
+                },
+                risk.reviewDate ? {
+                  label: "Review date",
+                  value: <Typography variant="caption">
+                    {new Date(risk.reviewDate).toLocaleDateString("en-GB")}
+                  </Typography>
+                } : null,
+                {
+                  label: "Logged",
+                  value: <Typography variant="caption">
+                    {new Date(risk.createdAt).toLocaleDateString("en-GB")}
+                  </Typography>
+                },
+                risk.closedAt ? {
+                  label: "Closed",
+                  value: <Typography variant="caption">
+                    {new Date(risk.closedAt).toLocaleDateString("en-GB")}
+                  </Typography>
+                } : null
+              ].filter(Boolean) as any}
+            />
+          )}
+
+          <LinkedEntitiesPanel
+            items={linkedTasks ?? []}
+            onNavigate={(task) => navigate(`/tasks/${task.id}`, {
+              state: { fromRisk: risk.id, fromRiskRef: risk.reference }
+            })}
+            onCreate={canManage ? () => setTaskOpen(true) : undefined}
+          />
         </Stack>
       </Box>
 
-      {/* Transition dialog */}
       <Dialog open={!!transitionTarget} onClose={() => setTransitionTarget(null)}
         maxWidth="xs" fullWidth>
         <DialogTitle>
@@ -917,8 +745,6 @@ export default function RiskDetailPage() {
               This will update the risk status to{" "}
               <strong>{STATUS_LABELS[transitionTarget ?? ""] ?? transitionTarget}</strong>.
             </Typography>
-
-            {/* ASSESSED — prompt to confirm likelihood and impact */}
             {transitionTarget === "ASSESSED" ? (
               <Box sx={{
                 p: 1.5, borderRadius: 1.5,
@@ -946,15 +772,12 @@ export default function RiskDetailPage() {
                 </Stack>
               </Box>
             ) : null}
-
-            {/* ACCEPTED — require acceptance note */}
             {transitionTarget === "ACCEPTED" ? (
               <TextField label="Acceptance note (required)" multiline rows={3} fullWidth
                 value={acceptanceNote}
                 onChange={(e) => setAcceptanceNote(e.target.value)}
                 placeholder="Explain why this risk is being accepted..." />
             ) : null}
-
             <TextField label="Comment (optional)" multiline rows={2} fullWidth
               value={transitionComment}
               onChange={(e) => setTransitionComment(e.target.value)}
