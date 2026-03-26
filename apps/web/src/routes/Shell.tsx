@@ -59,7 +59,7 @@ const sections: NavSection[] = [
     title: "Operations",
     items: [
       { label: "Sites", path: "/sites", icon: <LocationOnIcon fontSize="small" />, roles: Object.values(ROLES) },
-      { label: "Engineering Checks", path: "/surveys", icon: <FactCheckIcon fontSize="small" />, roles: Object.values(ROLES) },
+      { label: "Engineering Checks", path: "/checks", icon: <FactCheckIcon fontSize="small" />, roles: Object.values(ROLES) },
       { label: "Service Scope", path: "/work-packages", icon: <WorkIcon fontSize="small" />, roles: Object.values(ROLES) },
       { label: "Tasks", path: "/tasks", icon: <TaskAltIcon fontSize="small" />, roles: Object.values(ROLES) },
     ]

@@ -5,7 +5,7 @@ import { AuthModule } from "./auth/auth.module";
 import { ClientsModule } from "./clients/clients.module";
 import { ServiceRequestsModule } from "./service-requests/service-requests.module";
 import { AssetsModule } from "./assets/assets.module";
-import { SurveysModule } from "./surveys/surveys.module";
+import { ChecksModule } from "./checks/checks.module"
 import { DocumentsModule } from "./documents/documents.module";
 import { StorageModule } from "./storage/storage.module";
 import { HealthController } from "./health/health.controller";
@@ -31,7 +31,7 @@ import { CabinetsModule } from "./cabinets/cabinets.module"
     ClientsModule,
     ServiceRequestsModule,
     AssetsModule,
-    SurveysModule,
+    ChecksModule,
     DocumentsModule,
     PublicSubmissionsModule,
     RequestIntakesModule,

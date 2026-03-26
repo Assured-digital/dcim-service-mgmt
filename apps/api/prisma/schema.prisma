@@ -33,16 +33,20 @@ enum ServiceRequestStatus {
   CANCELLED
 }
 
-enum SurveyStatus {
+enum CheckStatus {
   DRAFT
+  SCHEDULED
+  ASSIGNED
   IN_PROGRESS
+  PENDING_REVIEW
   COMPLETED
+  CLOSED
+  CANCELLED
 }
 
-enum SurveyItemResponse {
-  PASS
-  FAIL
-  NA
+enum CheckItemResponseType {
+  PASS_FAIL
+  PASS_FAIL_NA
 }
 
 enum IncidentStatus {
@@ -86,7 +90,8 @@ model Client {
   users     User[]
   serviceRequests ServiceRequest[]
   assets    Asset[]
-  surveys   Survey[]
+  checks             Check[]  @relation("ClientChecks")
+  checkTemplates     CheckTemplate[] @relation("ClientCheckTemplates")
   incidents Incident[]
   tasks     Task[]
   sites     Site[]
@@ -114,8 +119,111 @@ model Site {
 
   cabinets  Cabinet[]
   assets    Asset[]
-  surveys   Survey[]
+  checks             Check[]  @relation("SiteChecks")
+  checkTemplates     CheckTemplate[] @relation("SiteCheckTemplates")
   workPackageSites WorkPackageSite[]
+}
+
+model CheckTemplate {
+  id                String   @id @default(uuid())
+  reference         String   @unique
+  name              String
+  checkType         String
+  description       String?
+  clientId          String?
+  client            Client?  @relation("ClientCheckTemplates", fields: [clientId], references: [id])
+  siteId            String?
+  site              Site?    @relation("SiteCheckTemplates", fields: [siteId], references: [id])
+  isActive          Boolean  @default(true)
+  estimatedMinutes  Int?
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  items             CheckTemplateItem[]
+  checks            Check[]
+}
+
+model CheckTemplateItem {
+  id                  String   @id @default(uuid())
+  templateId          String
+  template            CheckTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sortOrder           Int
+  section             String?
+  label               String
+  guidance            String?
+  responseType        CheckItemResponseType @default(PASS_FAIL)
+  isRequired          Boolean  @default(true)
+  isCritical          Boolean  @default(false)
+  createdAt           DateTime @default(now())
+}
+
+model Check {
+  id                 String      @id @default(uuid())
+  reference          String      @unique
+  clientId           String
+  client             Client      @relation("ClientChecks", fields: [clientId], references: [id])
+  siteId             String
+  site               Site        @relation("SiteChecks", fields: [siteId], references: [id])
+  templateId         String
+  template           CheckTemplate @relation(fields: [templateId], references: [id])
+  checkType          String
+  title              String
+  status             CheckStatus @default(DRAFT)
+  priority           String      @default("medium")
+  assigneeId         String?
+  assignee           User?       @relation("AssignedCheck", fields: [assigneeId], references: [id])
+  reviewerId         String?
+  reviewer           User?       @relation("CheckReviewer", fields: [reviewerId], references: [id])
+  scheduledAt        DateTime?
+  startedAt          DateTime?
+  submittedAt        DateTime?
+  completedAt        DateTime?
+  closedAt           DateTime?
+  cancellationReason String?
+  scopeNotes         String?
+  engineerSummary    String?
+  reviewerNotes      String?
+  passRate           Float?
+  createdById        String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  items              CheckItem[]
+}
+
+model CheckItem {
+  id                  String   @id @default(uuid())
+  checkId             String
+  check               Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  templateItemId      String?
+  sortOrder           Int
+  section             String?
+  label               String
+  guidance            String?
+  responseType        CheckItemResponseType @default(PASS_FAIL)
+  isRequired          Boolean  @default(true)
+  isCritical          Boolean  @default(false)
+  isAdHoc             Boolean  @default(false)
+  response            String?
+  notes               String?
+  respondedAt         DateTime?
+  respondedById       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  followOns           CheckItemFollowOn[]
+}
+
+model CheckItemFollowOn {
+  id          String   @id @default(uuid())
+  checkItemId String
+  checkItem   CheckItem @relation(fields: [checkItemId], references: [id], onDelete: Cascade)
+  entityType  String
+  entityId    String
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
 }
 
 model Cabinet {
@@ -167,6 +275,8 @@ model User {
   assignedChanges  ChangeRequest[]  @relation("AssignedChange")
   changeApprovals  ChangeApproval[] @relation("ChangeApprovals")
   comments         Comment[]        @relation("UserComments")
+  assignedChecks     Check[]  @relation("AssignedCheck")
+  reviewingChecks    Check[]  @relation("CheckReviewer")
 }
 
 model PublicSubmission {
@@ -234,34 +344,6 @@ model Asset {
   lastMaintenanceAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-}
-
-model Survey {
-  id          String   @id @default(uuid())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  title       String
-  surveyType  String
-  status      SurveyStatus @default(DRAFT)
-  scheduledAt DateTime?
-  assigneeId  String?
-  siteId    String?
-  site      Site?   @relation(fields: [siteId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  items       SurveyItem[]
-}
-
-model SurveyItem {
-  id          String   @id @default(uuid())
-  surveyId    String
-  survey      Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  label       String
-  response    SurveyItemResponse?
-  notes       String?
-  photoObjectKey String?
-  updatedAt   DateTime @updatedAt
 }
 
 model Incident {

@@ -3,7 +3,6 @@ import {
   Role,
   OwnerType,
   ServiceRequestStatus,
-  SurveyStatus,
   TaskStatus
 } from "@prisma/client"
 import * as bcrypt from "bcryptjs"
@@ -414,35 +413,83 @@ async function seedClientData(params: {
       })
     }
   }
+}
 
-  // ── Surveys ────────────────────────────────────────────────────────
-  const surveyTitle = isNova
-    ? "Q1 2026 Facility Walkthrough"
-    : `${client.name} Quarterly Facility Walkthrough`
+async function seedCheckTemplates() {
+  const templates = [
+    {
+      reference: "TPL-2026-0001",
+      name: "Standard Rack Audit",
+      checkType: "Rack Audit",
+      description: "Standard physical inspection of rack hardware, cabling, and labelling",
+      items: [
+        { sortOrder: 1, section: "Physical", label: "Rack door closes and latches securely", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 2, section: "Physical", label: "All blanking panels present and seated", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 3, section: "Physical", label: "Asset labels present and legible on all equipment", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 4, section: "Cabling", label: "Cable management compliant — no trailing cables", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 5, section: "Cabling", label: "All patch cables labelled at both ends", responseType: "PASS_FAIL_NA", isRequired: true, isCritical: false },
+        { sortOrder: 6, section: "Power", label: "PDU outlets labelled and load within limits", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 7, section: "Power", label: "No power cables running across aisle floor", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 8, section: "Environment", label: "No visible signs of water ingress or corrosion", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+      ]
+    },
+    {
+      reference: "TPL-2026-0002",
+      name: "Site Walkthrough",
+      checkType: "Site Walkthrough",
+      description: "General facility walkthrough covering safety, environment, and access",
+      items: [
+        { sortOrder: 1, section: "Safety", label: "Fire exits clear and properly signed", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 2, section: "Safety", label: "Fire extinguishers present, in date, and unobstructed", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 3, section: "Safety", label: "Emergency lighting functional", responseType: "PASS_FAIL_NA", isRequired: true, isCritical: true },
+        { sortOrder: 4, section: "Environment", label: "UPS alarms checked — no active warnings", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 5, section: "Environment", label: "Cooling operating within normal range", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 6, section: "Environment", label: "Raised floor tiles seated and no trip hazards", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 7, section: "Access", label: "Access control panel operational", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 8, section: "Access", label: "CCTV cameras operational and feeds visible", responseType: "PASS_FAIL_NA", isRequired: false, isCritical: false },
+      ]
+    },
+    {
+      reference: "TPL-2026-0003",
+      name: "UPS Health Check",
+      checkType: "UPS Health Check",
+      description: "Inspection of UPS units, battery health, and power conditioning",
+      items: [
+        { sortOrder: 1, section: "UPS", label: "UPS status panel shows no active alarms", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 2, section: "UPS", label: "Battery test completed within last 6 months", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 3, section: "UPS", label: "Battery warranty expiry date recorded and valid", responseType: "PASS_FAIL_NA", isRequired: true, isCritical: false },
+        { sortOrder: 4, section: "UPS", label: "No visible swelling or corrosion on battery units", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+        { sortOrder: 5, section: "UPS", label: "Bypass switch accessible and labelled", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 6, section: "UPS", label: "Runtime estimate acceptable for load", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
+      ]
+    }
+  ]
 
-  const existingSurvey = await prisma.survey.findFirst({
-    where: { clientId: client.id, title: surveyTitle }
-  })
-  if (!existingSurvey) {
-    await prisma.survey.create({
-      data: {
-        clientId: client.id,
-        siteId: siteA.id,
-        title: surveyTitle,
-        surveyType: "Facility",
-        status: SurveyStatus.IN_PROGRESS,
-        scheduledAt: new Date(),
-        items: {
-          create: [
-            { label: "Fire exits clear and signed" },
-            { label: "UPS alarms checked" },
-            { label: "Cooling operating within range" },
-            { label: "Cable management compliant" },
-            { label: "Asset labels present and legible" }
-          ]
-        }
-      }
+  for (const t of templates) {
+    const existing = await prisma.checkTemplate.findUnique({
+      where: { reference: t.reference }
     })
+    if (!existing) {
+      await prisma.checkTemplate.create({
+        data: {
+          reference: t.reference,
+          name: t.name,
+          checkType: t.checkType,
+          description: t.description,
+          isActive: true,
+          items: {
+            create: t.items.map(item => ({
+              sortOrder: item.sortOrder,
+              section: item.section,
+              label: item.label,
+              responseType: item.responseType as any,
+              isRequired: item.isRequired,
+              isCritical: item.isCritical
+            }))
+          }
+        }
+      })
+    }
   }
 }
 
@@ -556,6 +603,8 @@ async function main() {
     admin: admin.email,
     clientNames: orgClients.map((c) => c.name)
   })
+
+  await seedCheckTemplates()
 }
 
 main()

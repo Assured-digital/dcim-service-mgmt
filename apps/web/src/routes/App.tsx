@@ -15,8 +15,8 @@ import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
 import SitesPage from "./SitesPage"
 import SiteDetailPage from "./SiteDetailPage"
-import SurveysPage from "./SurveysPage"
-import SurveyDetailPage from "./SurveyDetailPage"
+import ChecksPage from "./ChecksPage"
+import CheckDetailPage from "./CheckDetailPage"
 import WorkPackagesPage from "./WorkPackagesPage"
 import AssetsPage from "./AssetsPage"
 import AuditTrailPage from "./AuditTrailPage"
@@ -72,8 +72,8 @@ export default function App() {
         {/* Sites & surveys */}
         <Route path="sites" element={<SitesPage />} />
         <Route path="sites/:id" element={<SiteDetailPage />} />
-        <Route path="surveys" element={<SurveysPage />} />
-        <Route path="surveys/:id" element={<SurveyDetailPage />} />
+        <Route path="checks" element={<ChecksPage />} />
+        <Route path="checks/:id" element={<CheckDetailPage />} />
 
         {/* Operations */}
         <Route path="work-packages" element={<WorkPackagesPage />} />

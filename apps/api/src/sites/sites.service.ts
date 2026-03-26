@@ -16,7 +16,7 @@ export class SitesService {
       orderBy: { name: "asc" },
       include: {
         cabinets: true,
-        _count: { select: { assets: true, surveys: true } }
+        _count: { select: { assets: true, checks: true } }
       }
     })
   }
@@ -28,7 +28,7 @@ export class SitesService {
       include: {
         cabinets: true,
         assets: { orderBy: { name: "asc" } },
-        surveys: { orderBy: { createdAt: "desc" }, take: 10 }
+        checks: { orderBy: { createdAt: "desc" }, take: 10 }
       }
     })
     if (!site) throw new NotFoundException("Site not found")
