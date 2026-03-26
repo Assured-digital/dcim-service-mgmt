@@ -746,7 +746,9 @@ export default function IssueDetailPage() {
                 <Stack spacing={0.75}>
                   {(linkedTasks ?? []).map((task) => (
                     <Box key={task.id}
-                      onClick={() => navigate(`/tasks/${task.id}`)}
+                      onClick={() => navigate(`/tasks/${task.id}`, {
+                        state: { fromIssue: issue.id, fromIssueRef: issue.reference }
+                      })}
                       sx={{
                         p: 1, borderRadius: 1.5, cursor: "pointer",
                         border: "0.5px solid var(--color-border-tertiary)",

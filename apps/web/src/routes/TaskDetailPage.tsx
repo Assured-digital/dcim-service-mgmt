@@ -158,8 +158,12 @@ export default function TaskDetailPage() {
   const location = useLocation()
   const fromSR = location.state?.fromSR
   const fromSRRef = location.state?.fromSRRef
+  const fromIssue = location.state?.fromIssue
+  const fromIssueRef = location.state?.fromIssueRef
   const fromTask = location.state?.fromTask
   const fromTaskRef = location.state?.fromTaskRef
+  const fromRisk = location.state?.fromRisk
+  const fromRiskRef = location.state?.fromRiskRef
   const qc = useQueryClient()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
@@ -301,11 +305,18 @@ export default function TaskDetailPage() {
             startIcon={<ArrowBackIcon />}
             onClick={() => fromSR
               ? navigate(`/service-requests/${fromSR}`)
+              : fromIssue
+              ? navigate(`/issues/${fromIssue}`)
+              : fromRisk
+              ? navigate(`/risks/${fromRisk}`)
               : navigate("/tasks")
             }
             sx={{ color: "text.secondary" }} size="small"
           >
-            {fromSR ? `Back to ${fromSRRef}` : "Back to tasks"}
+            {fromSR ? `Back to ${fromSRRef}`
+              : fromIssue ? `Back to ${fromIssueRef}`
+              : fromRisk ? `Back to ${fromRiskRef}`
+              : "Back to tasks"}
           </Button>
           <Box sx={{
             display: "flex", alignItems: "center", gap: 1,

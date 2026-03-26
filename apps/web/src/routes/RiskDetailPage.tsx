@@ -864,7 +864,9 @@ export default function RiskDetailPage() {
                 <Stack spacing={0.75}>
                   {(linkedTasks ?? []).map((task) => (
                     <Box key={task.id}
-                      onClick={() => navigate(`/tasks/${task.id}`)}
+                      onClick={() => navigate(`/tasks/${task.id}`, {
+                        state: { fromRisk: risk.id, fromRiskRef: risk.reference }
+                      })}
                       sx={{
                         p: 1, borderRadius: 1.5, cursor: "pointer",
                         border: "0.5px solid var(--color-border-tertiary)",
