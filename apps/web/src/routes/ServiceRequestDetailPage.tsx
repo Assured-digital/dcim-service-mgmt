@@ -10,10 +10,10 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import LockIcon from "@mui/icons-material/Lock"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
-import EditIcon from "@mui/icons-material/Edit"
-import AddIcon from "@mui/icons-material/Add"
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
-import { statusChipSx, priorityChipSx } from "../lib/ui"
+import {
+  InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
+  chipSx, type LinkedTask
+} from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { CreateTaskModal } from "./TasksPage"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -51,15 +51,6 @@ type SR = {
   client: { id: string; name: string }
 }
 
-type Task = {
-  id: string
-  reference: string
-  title: string
-  status: string
-  priority: string
-  assignee: { id: string; email: string } | null
-}
-
 type User = { id: string; email: string }
 
 const STATUS_ALL = ["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CUSTOMER", "COMPLETED", "CLOSED"]
@@ -94,13 +85,6 @@ const STATUS_DESCRIPTIONS: Record<string, string> = {
   CANCELLED: "Cancelled"
 }
 
-function priorityDot(priority: string) {
-  const colors: Record<string, string> = {
-    low: "#94a3b8", medium: "#f59e0b", high: "#ef4444", critical: "#7c3aed"
-  }
-  return colors[priority.toLowerCase()] ?? "#94a3b8"
-}
-
 function actionLabel(action: string, data: any): string {
   switch (action) {
     case "CREATED": return "Request created"
@@ -123,34 +107,6 @@ function actionTextColor(action: string): string {
   if (action === "STATUS_UPDATED") return "#1d4ed8"
   if (action === "CLOSED") return "#15803d"
   return "#475569"
-}
-
-function InfoField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Box>
-      <Typography sx={{
-        fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-        color: "var(--color-text-tertiary)", mb: 0.5
-      }}>
-        {label}
-      </Typography>
-      {children}
-    </Box>
-  )
-}
-
-function Badge({ count }: { count: number }) {
-  return (
-    <Box sx={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      minWidth: 18, height: 18, borderRadius: 9, px: 0.75,
-      bgcolor: "#e2e8f0", ml: 0.75
-    }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 700, color: "#475569", lineHeight: 1 }}>
-        {count}
-      </Typography>
-    </Box>
-  )
 }
 
 export default function ServiceRequestDetailPage() {
@@ -192,7 +148,7 @@ export default function ServiceRequestDetailPage() {
   const { data: linkedTasks } = useQuery({
     queryKey: ["linked-tasks-sr", id],
     queryFn: async () =>
-      (await api.get<Task[]>("/tasks", {
+      (await api.get<LinkedTask[]>("/tasks", {
         params: { linkedEntityType: "ServiceRequest", linkedEntityId: id }
       })).data,
     enabled: !!id
@@ -339,24 +295,12 @@ export default function ServiceRequestDetailPage() {
           >
             {fromTask ? `Back to task ${fromTaskRef}` : "Back to service desk"}
           </Button>
-          <Box sx={{
-            display: "flex", alignItems: "center", gap: 1,
-            px: 1.5, py: 0.75, borderRadius: 2, flexShrink: 0,
-            bgcolor: "var(--color-background-primary)",
-            border: "1px solid var(--color-border-secondary)",
-            boxShadow: "0 1px 3px rgba(15,23,42,0.06)"
-          }}>
-            <Typography sx={{
-              fontFamily: "monospace", fontSize: 12, fontWeight: 700,
-              color: "var(--color-text-secondary)", whiteSpace: "nowrap"
-            }}>
-              {sr.reference}
-            </Typography>
-            <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
-            <Chip size="small" sx={statusChipSx(sr.status)}
-              label={STATUS_LABELS[sr.status] ?? sr.status} />
-            <Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} />
-          </Box>
+          <DetailHeader
+            reference={sr.reference}
+            status={sr.status}
+            statusLabel={STATUS_LABELS[sr.status]}
+            priority={sr.priority}
+          />
         </Stack>
         {nextStatuses.includes("CANCELLED") && canManage ? (
           <Button size="small" color="error" variant="outlined"
@@ -366,7 +310,7 @@ export default function ServiceRequestDetailPage() {
         ) : null}
       </Stack>
 
-      {/* Unified info container */}
+      {/* Info container */}
       <Box sx={{
         bgcolor: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",
@@ -404,10 +348,16 @@ export default function ServiceRequestDetailPage() {
           </Typography>
           <Tooltip
             title="Click an available stage to transition this record. Stages shown in blue are available next steps."
-            placement="right"
-            arrow
+            placement="right" arrow
           >
-            <InfoOutlinedIcon sx={{ fontSize: 13, color: "var(--color-text-tertiary)", cursor: "help" }} />
+            <Box component="span" sx={{ display: "flex", alignItems: "center", cursor: "help" }}>
+              <Box component="span" sx={{
+                fontSize: 13, color: "var(--color-text-tertiary)",
+                display: "flex", alignItems: "center"
+              }}>
+                ⓘ
+              </Box>
+            </Box>
           </Tooltip>
         </Stack>
         <Stack direction="row" spacing={0} alignItems="stretch">
@@ -732,25 +682,17 @@ export default function ServiceRequestDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Right column */}
+        {/* Right column — now using shared components */}
         <Stack spacing={2} sx={{ alignSelf: "start" }}>
-          <Card>
-            <CardContent sx={{ pb: "12px !important" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+          {editingProperties ? (
+            <Card>
+              <CardContent sx={{ pb: "12px !important" }}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)"
+                  color: "var(--color-text-tertiary)", mb: 1.5
                 }}>
                   PROPERTIES
                 </Typography>
-                {canManage && !editingProperties && sr.status !== "CLOSED" && sr.status !== "CANCELLED" ? (
-                  <Button size="small" startIcon={<EditIcon sx={{ fontSize: 13 }} />}
-                    onClick={() => setEditingProperties(true)}>
-                    Edit
-                  </Button>
-                ) : null}
-              </Stack>
-              {editingProperties ? (
                 <Stack spacing={1.5}>
                   <TextField select size="small" label="Assignee" fullWidth
                     value={editAssigneeId}
@@ -776,114 +718,51 @@ export default function ServiceRequestDetailPage() {
                     </Button>
                   </Stack>
                 </Stack>
-              ) : (
-                <Stack spacing={0} divider={<Divider />}>
-                  {[
-                    {
-                      label: "Client",
-                      value: <Typography variant="caption" fontWeight={600}>{sr.client.name}</Typography>
-                    },
-                    {
-                      label: "Assignee",
-                      value: <Typography variant="caption">
-                        {sr.assignee?.email.split("@")[0] ?? "Unassigned"}
-                      </Typography>
-                    },
-                    {
-                      label: "Priority",
-                      value: <Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} />
-                    },
-                    {
-                      label: "Raised",
-                      value: <Typography variant="caption">
-                        {new Date(sr.createdAt).toLocaleDateString("en-GB")}
-                      </Typography>
-                    },
-                    {
-                      label: "Updated",
-                      value: <Typography variant="caption">
-                        {new Date(sr.updatedAt).toLocaleDateString("en-GB")}
-                      </Typography>
-                    }
-                  ].map((row) => (
-                    <Stack key={row.label} direction="row" justifyContent="space-between"
-                      alignItems="center" sx={{ py: 0.75 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, mr: 1 }}>
-                        {row.label}
-                      </Typography>
-                      {row.value}
-                    </Stack>
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <PropertiesPanel
+              onEdit={canManage && sr.status !== "CLOSED" && sr.status !== "CANCELLED"
+                ? () => setEditingProperties(true)
+                : undefined}
+              rows={[
+                {
+                  label: "Client",
+                  value: <Typography variant="caption" fontWeight={600}>{sr.client.name}</Typography>
+                },
+                {
+                  label: "Assignee",
+                  value: <Typography variant="caption">
+                    {sr.assignee?.email.split("@")[0] ?? "Unassigned"}
+                  </Typography>
+                },
+                {
+                  label: "Priority",
+                  value: <Chip size="small" sx={chipSx(sr.priority)} label={sr.priority} />
+                },
+                {
+                  label: "Raised",
+                  value: <Typography variant="caption">
+                    {new Date(sr.createdAt).toLocaleDateString("en-GB")}
+                  </Typography>
+                },
+                {
+                  label: "Updated",
+                  value: <Typography variant="caption">
+                    {new Date(sr.updatedAt).toLocaleDateString("en-GB")}
+                  </Typography>
+                }
+              ]}
+            />
+          )}
 
-          <Card>
-            <CardContent sx={{ pb: "12px !important" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.25 }}>
-                <Typography sx={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)"
-                }}>
-                  LINKED TASKS
-                </Typography>
-                {canManage ? (
-                  <Button size="small" startIcon={<AddIcon />} onClick={() => setTaskOpen(true)}>
-                    Create
-                  </Button>
-                ) : null}
-              </Stack>
-              {(linkedTasks ?? []).length === 0 ? (
-                <Box sx={{
-                  py: 1.5, textAlign: "center",
-                  border: "1px dashed var(--color-border-tertiary)",
-                  borderRadius: 1.5
-                }}>
-                  <Typography variant="caption" color="text.secondary">No tasks linked yet</Typography>
-                </Box>
-              ) : (
-                <Stack spacing={0.75}>
-                  {(linkedTasks ?? []).map((task) => (
-                    <Box key={task.id}
-                      onClick={() => navigate(`/tasks/${task.id}`, {
-                        state: { fromSR: sr.id, fromSRRef: sr.reference }
-                      })}
-                      sx={{
-                        p: 1, borderRadius: 1.5, cursor: "pointer",
-                        border: "0.5px solid var(--color-border-tertiary)",
-                        bgcolor: "var(--color-background-secondary)",
-                        "&:hover": { bgcolor: "var(--color-background-primary)" },
-                        transition: "background 0.1s"
-                      }}
-                    >
-                      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.25 }}>
-                        <Box sx={{
-                          width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                          bgcolor: priorityDot(task.priority)
-                        }} />
-                        <Typography variant="caption" fontWeight={600} sx={{
-                          flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
-                        }}>
-                          {task.title}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ ml: 1.75 }}>
-                        <Typography variant="caption" sx={{
-                          fontFamily: "monospace", fontSize: 10, color: "text.secondary"
-                        }}>
-                          {task.reference}
-                        </Typography>
-                        <Chip size="small"
-                          label={task.status.toLowerCase().replace("_", " ")}
-                          sx={{ ...statusChipSx(task.status), height: 16, fontSize: 10 }} />
-                      </Stack>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
+          <LinkedEntitiesPanel
+            items={linkedTasks ?? []}
+            onNavigate={(task) => navigate(`/tasks/${task.id}`, {
+              state: { fromSR: sr.id, fromSRRef: sr.reference }
+            })}
+            onCreate={canManage ? () => setTaskOpen(true) : undefined}
+          />
         </Stack>
       </Box>
 
