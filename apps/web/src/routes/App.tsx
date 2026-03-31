@@ -52,7 +52,8 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<DashboardPage />} />
+        <Route index element={<MyWorkPage />} />
+        <Route path="dashboard" element={<DashboardPage />} />
 
         {/* Redirects for old routes */}
         <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />
