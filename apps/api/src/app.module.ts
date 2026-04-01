@@ -22,6 +22,7 @@ import { IssuesModule } from "./issues/issues.module"
 import { CommentsModule } from "./comments/comments.module"
 import { WorkPackagesModule } from "./work-packages/work-packages.module"
 import { CabinetsModule } from "./cabinets/cabinets.module"
+import { MyWorkModule } from "./my-work/my-work.module"
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { CabinetsModule } from "./cabinets/cabinets.module"
     IssuesModule,
     CommentsModule,
     WorkPackagesModule,
+    MyWorkModule,
     CabinetsModule,
     UsersModule
   ],
