@@ -42,6 +42,23 @@ Seed creates:
 - Email: `admin@dcm.local`
 - Password: `Admin123!`
 
+### Other users
+Role: `Engineer`
+- Email: `engineer@dcm.local`
+- Password: `Admin123!`
+
+Role: `Client Viewer`
+- Email: `viewer@dcm.local`
+- Password: `Admin123!`
+
+Role: `Service Desk Analyst`
+- Email: `analyst@dcm.local`
+- Password: `Admin123!`
+
+Role: `Service Desk Manager`
+- Email: `manager@dcm.local`
+- Password: `Admin123!`
+  
 ---
 
 ## Environment configuration
