@@ -7,7 +7,6 @@ import {
   DialogContent, DialogTitle, Divider, MenuItem, Stack, Tab, Tabs,
   TextField, Typography
 } from "@mui/material"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import LockIcon from "@mui/icons-material/Lock"
 import {
   InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
@@ -15,6 +14,7 @@ import {
   WorkflowStrip, type WorkflowStage
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { CreateTaskModal } from "./TasksPage"
 
@@ -130,6 +130,7 @@ export default function RiskDetailPage() {
   const fromTask = location.state?.fromTask
   const fromTaskRef = location.state?.fromTaskRef
   const qc = useQueryClient()
+  const { setRecordLabel } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
 
@@ -273,6 +274,7 @@ export default function RiskDetailPage() {
     }
   }
 
+  React.useEffect(() => { if (risk) setRecordLabel(risk.reference) }, [risk]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!risk) return <ErrorState title="Risk not found" />
 
@@ -285,13 +287,6 @@ export default function RiskDetailPage() {
       {/* Top bar */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => fromTask ? navigate(`/tasks/${fromTask}`) : navigate("/risks")}
-            sx={{ color: "text.secondary" }} size="small"
-          >
-            {fromTask ? `Back to task ${fromTaskRef}` : "Back to risks"}
-          </Button>
           <DetailHeader
             reference={risk.reference}
             status={risk.status}

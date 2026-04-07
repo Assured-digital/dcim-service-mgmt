@@ -8,7 +8,6 @@ import {
   TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Tooltip, Typography
 } from "@mui/material"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import AddIcon from "@mui/icons-material/Add"
 import EditIcon from "@mui/icons-material/Edit"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
@@ -16,6 +15,7 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import { InfoField, PanelCard, SectionHeader, chipSx } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 type TemplateItem = {
@@ -194,6 +194,7 @@ export default function CheckTemplateDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { setRecordLabel } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
 
@@ -283,6 +284,7 @@ export default function CheckTemplateDetailPage() {
     }
   }
 
+  React.useEffect(() => { if (template) setRecordLabel(template.name) }, [template]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!template) return <ErrorState title="Template not found" />
 
@@ -301,13 +303,6 @@ export default function CheckTemplateDetailPage() {
       {/* Top bar */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate("/check-templates")}
-            sx={{ color: "text.secondary" }} size="small"
-          >
-            Back to templates
-          </Button>
           <Box sx={{
             display: "flex", alignItems: "center", gap: 1,
             px: 1.5, py: 0.75, borderRadius: 2,

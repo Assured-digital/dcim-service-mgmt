@@ -10,7 +10,8 @@ import ServiceDeskPage from "./ServiceDeskPage"
 import ServiceRequestDetailPage from "./ServiceRequestDetailPage"
 import TasksPage from "./TasksPage"
 import TaskDetailPage from "./TaskDetailPage"
-import RisksIssuesPage from "./RisksIssuesPage"
+import RisksPage from "./RisksPage"
+import IssuesPage from "./IssuesPage"
 import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
 import SitesPage from "./SitesPage"
@@ -80,8 +81,8 @@ export default function App() {
         <Route path="tasks/:id" element={<TaskDetailPage />} />
 
         {/* Risks & Issues */}
-        <Route path="risks" element={<RisksIssuesPage />} />
-        <Route path="issues" element={<RisksIssuesPage />} />
+        <Route path="risks" element={<RisksPage />} />
+        <Route path="issues" element={<IssuesPage />} />
         <Route path="risks/:id" element={<RiskDetailPage />} />
         <Route path="issues/:id" element={<IssueDetailPage />} />
 
