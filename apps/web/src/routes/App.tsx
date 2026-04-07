@@ -14,14 +14,13 @@ import RisksPage from "./RisksPage"
 import IssuesPage from "./IssuesPage"
 import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
-import SitesPage from "./SitesPage"
+import InfrastructurePage from "./InfrastructurePage"
 import SiteDetailPage from "./SiteDetailPage"
 import ChecksPage from "./ChecksPage"
 import CheckDetailPage from "./CheckDetailPage"
 import CheckTemplatesPage from "./CheckTemplatesPage"
 import CheckTemplateDetailPage from "./CheckTemplateDetailPage"
 import WorkPackagesPage from "./WorkPackagesPage"
-import AssetsPage from "./AssetsPage"
 import AuditTrailPage from "./AuditTrailPage"
 import UsersPage from "./UsersPage"
 import ClientsPage from "./ClientsPage"
@@ -56,10 +55,14 @@ export default function App() {
         <Route index element={<MyWorkPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
 
-        {/* Redirects for old routes */}
+        {/* Legacy redirects */}
         <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />
         <Route path="triage" element={<Navigate to="/service-desk" replace />} />
         <Route path="service-requests" element={<Navigate to="/service-desk" replace />} />
+        <Route path="sites" element={<Navigate to="/infrastructure" replace />} />
+        <Route path="sites/:id" element={<Navigate to="/infrastructure" replace />} />
+        <Route path="assets" element={<Navigate to="/infrastructure" replace />} />
+        <Route path="assets/:id" element={<Navigate to="/infrastructure" replace />} />
 
         {/* My Work and Overview */}
         <Route path="my-work" element={<MyWorkPage />} />
@@ -80,23 +83,25 @@ export default function App() {
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:id" element={<TaskDetailPage />} />
 
-        {/* Risks & Issues */}
+        {/* Risk & Issue management */}
         <Route path="risks" element={<RisksPage />} />
         <Route path="issues" element={<IssuesPage />} />
         <Route path="risks/:id" element={<RiskDetailPage />} />
         <Route path="issues/:id" element={<IssueDetailPage />} />
 
-        {/* Sites & surveys */}
-        <Route path="sites" element={<SitesPage />} />
-        <Route path="sites/:id" element={<SiteDetailPage />} />
+        {/* Infrastructure (Sites + Rooms + Cabinets + Assets) */}
+        <Route path="infrastructure" element={<InfrastructurePage />} />
+        <Route path="infrastructure/:siteId" element={<SiteDetailPage />} />
+        <Route path="infrastructure/:siteId/rooms/:roomId" element={<SiteDetailPage />} />
+
+        {/* Engineering Checks */}
         <Route path="checks" element={<ChecksPage />} />
         <Route path="checks/:id" element={<CheckDetailPage />} />
         <Route path="check-templates" element={<CheckTemplatesPage />} />
         <Route path="check-templates/:id" element={<CheckTemplateDetailPage />} />
 
-        {/* Operations */}
+        {/* Service Scope */}
         <Route path="work-packages" element={<WorkPackagesPage />} />
-        <Route path="assets" element={<AssetsPage />} />
 
         {/* Admin */}
         <Route path="audit" element={<AuditTrailPage />} />

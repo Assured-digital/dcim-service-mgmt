@@ -65,12 +65,11 @@ const clientSections: NavSection[] = [
   },
   {
     title: "Operations", icon: <EngineeringIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Sites", path: "/sites", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Infrastructure", path: "/infrastructure", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
       { label: "Engineering Checks", path: "/checks", icon: <FactCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Check Templates", path: "/check-templates", icon: <PlaylistAddCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
       { label: "Service Scope", path: "/work-packages", icon: <WorkIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
       { label: "Tasks", path: "/tasks", icon: <TaskAltIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Assets", path: "/assets", icon: <StorageIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] }
     ]
   },
   {
@@ -388,23 +387,24 @@ export default function Shell() {
   const sidebarNav = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", bgcolor: "#0d1526" }}>
 
-      {/* ── Sidebar header: hamburger + logo (Microsoft style) ─────────── */}
+      {/* ── Sidebar header: hamburger left, logo centred ───────────────── */}
       <Box sx={{
         height: HEADER_HEIGHT, flexShrink: 0,
-        display: "flex", alignItems: "center",
+        position: "relative",
+        display: "flex", alignItems: "center", justifyContent: "center",
         borderBottom: "1px solid rgba(255,255,255,0.06)",
-        px: "8px", gap: "4px"
       }}>
+        {/* Hamburger — pinned to the left */}
         <IconButton size="small" onClick={() => setSidebarExpanded(e => !e)} sx={{
+          position: "absolute", left: "8px",
           width: 36, height: 36, flexShrink: 0, color: "#475569", borderRadius: "6px",
           "&:hover": { bgcolor: "rgba(255,255,255,0.08)", color: "#94a3b8" }
         }}>
           <MenuIcon sx={{ fontSize: 20 }} />
         </IconButton>
+        {/* Logo — centred in the full sidebar width */}
         <FadeBox visible={sidebarExpanded} maxW={160}>
-          <Box sx={{ pl: "6px", display: "flex", alignItems: "center" }}>
-            <img src="/ad-logo-white-600x200-lrg.png" alt="Assured Digital" style={{ height: 24, width: "auto", objectFit: "contain", maxWidth: 140, display: "block" }} />
-          </Box>
+          <img src="/ad-logo-white-600x200-lrg.png" alt="Assured Digital" style={{ height: 22, width: "auto", objectFit: "contain", maxWidth: 140, display: "block" }} />
         </FadeBox>
       </Box>
 

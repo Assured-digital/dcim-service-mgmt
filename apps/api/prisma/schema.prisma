@@ -125,11 +125,26 @@ model Site {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  rooms     Room[]
   cabinets  Cabinet[]
   assets    Asset[]
   checks             Check[]  @relation("SiteChecks")
   checkTemplates     CheckTemplate[] @relation("SiteCheckTemplates")
   workPackageSites WorkPackageSite[]
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name      String
+  type      String   @default("DATA_HALL")
+  floor     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  cabinets  Cabinet[]
 }
 
 model CheckTemplate {
@@ -238,6 +253,8 @@ model Cabinet {
   id        String   @id @default(uuid())
   siteId    String
   site      Site     @relation(fields: [siteId], references: [id])
+  roomId    String?
+  room      Room?    @relation(fields: [roomId], references: [id])
   name      String
   type      String   @default("RACK")
   totalU    Int?

@@ -470,7 +470,7 @@ export default function ServiceRequestDetailPage() {
                         </Stack>
                       </Box>
                     ) : (
-                      <Button size="small" variant="outlined" startIcon={<LockIcon sx={{ fontSize: 13 }} />}
+                      <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 13 }} />}
                         onClick={() => setActiveInput("note")}
                         sx={{ alignSelf: "flex-start", fontSize: 12, color: "#475569", borderColor: "#e2e8f0" }}>
                         Add work note
@@ -518,7 +518,7 @@ export default function ServiceRequestDetailPage() {
                         </Stack>
                       </Box>
                     ) : (
-                      <Button size="small" variant="contained" startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 13 }} />}
+                      <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 13 }} />}
                         onClick={() => setActiveInput("customer")}
                         sx={{ alignSelf: "flex-start", fontSize: 12, bgcolor: "#1d4ed8" }}>
                         Send customer update
