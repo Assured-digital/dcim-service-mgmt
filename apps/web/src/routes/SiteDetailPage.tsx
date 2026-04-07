@@ -8,9 +8,9 @@ import {
   TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Typography
 } from "@mui/material"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { chipSx } from "../components/shared"
 import { CreateTaskModal } from "./TasksPage"
@@ -83,6 +83,7 @@ export default function SiteDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { setRecordLabel } = useBreadcrumb()
   const location = useLocation()
   const fromTask = location.state?.fromTask
   const fromTaskRef = location.state?.fromTaskRef
@@ -244,20 +245,12 @@ export default function SiteDetailPage() {
     }
   }
 
+  React.useEffect(() => { if (site) setRecordLabel(site.name) }, [site]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!site) return <ErrorState title="Site not found" />
 
   return (
     <Box>
-      <Button
-        startIcon={<ArrowBackIcon />}
-        onClick={() => fromTask ? navigate(`/tasks/${fromTask}`) : navigate("/sites")}
-        sx={{ mb: 2, color: "text.secondary" }}
-        size="small"
-      >
-        {fromTask ? `Back to task ${fromTaskRef}` : "Back to sites"}
-      </Button>
-
       {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
         <Box>

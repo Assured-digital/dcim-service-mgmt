@@ -15,6 +15,7 @@ import {
   WorkflowStrip, type WorkflowStage
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 type Task = {
@@ -136,6 +137,7 @@ export default function TaskDetailPage() {
   const fromRisk = location.state?.fromRisk
   const fromRiskRef = location.state?.fromRiskRef
   const qc = useQueryClient()
+  const { setRecordLabel } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
@@ -255,6 +257,7 @@ export default function TaskDetailPage() {
     }
   }
 
+  React.useEffect(() => { if (task) setRecordLabel(task.reference) }, [task]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!task) return <ErrorState title="Task not found" />
 
@@ -266,27 +269,8 @@ export default function TaskDetailPage() {
 
   return (
     <Box>
-      {/* Top bar */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => fromSR
-              ? navigate(`/service-requests/${fromSR}`)
-              : fromIssue
-              ? navigate(`/issues/${fromIssue}`)
-              : fromRisk
-              ? navigate(`/risks/${fromRisk}`)
-              : navigate("/tasks")
-            }
-            sx={{ color: "text.secondary" }} size="small"
-          >
-            {fromSR ? `Back to ${fromSRRef}`
-              : fromIssue ? `Back to ${fromIssueRef}`
-              : fromRisk ? `Back to ${fromRiskRef}`
-              : "Back to tasks"}
-          </Button>
-          <DetailHeader
+        <DetailHeader
             reference={task.reference}
             status={task.status}
             statusLabel={STATUS_LABELS[task.status]}
@@ -298,7 +282,6 @@ export default function TaskDetailPage() {
             ) : undefined}
           />
         </Stack>
-      </Stack>
 
       {/* Info container */}
       <Box sx={{

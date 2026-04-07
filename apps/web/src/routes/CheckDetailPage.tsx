@@ -7,7 +7,6 @@ import {
   DialogContent, DialogTitle, Divider, MenuItem, Stack, Tab, Tabs,
   TextField, Typography
 } from "@mui/material"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import AddIcon from "@mui/icons-material/Add"
 import {
@@ -15,6 +14,7 @@ import {
   WorkflowStrip, type WorkflowStage
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 type CheckItem = {
@@ -215,6 +215,7 @@ export default function CheckDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { setRecordLabel } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
   const canExecute = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
@@ -352,6 +353,7 @@ export default function CheckDetailPage() {
     }
   }
 
+  React.useEffect(() => { if (check) setRecordLabel(check.reference) }, [check]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!check) return <ErrorState title="Check not found" />
 
@@ -382,13 +384,6 @@ export default function CheckDetailPage() {
       {/* Top bar */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate("/checks")}
-            sx={{ color: "text.secondary" }} size="small"
-          >
-            Back to engineering checks
-          </Button>
           <DetailHeader
             reference={check.reference}
             status={check.status}

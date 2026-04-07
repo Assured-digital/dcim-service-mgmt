@@ -24,7 +24,6 @@ type Risk = { id: string; status: string; createdAt: string; updatedAt: string }
 type Issue = { id: string; status: string; createdAt: string; updatedAt: string }
 type Check = { id: string; reference: string; title: string; status: string; scheduledAt: string | null; createdAt: string; updatedAt: string; site?: { name: string } | null }
 type Asset = { id: string }
-type TriageItem = { id: string; status: string }
 
 // ── Date helpers ───────────────────────────────────────────────────────────
 function formatDateForInput(d: Date) {
@@ -66,20 +65,17 @@ function buildChartData(
   const to = new Date(`${dateTo}T23:59:59.999Z`)
   const days: { date: string; opened: number; closed: number }[] = []
 
-  // Build day buckets
   const cursor = new Date(from)
   while (cursor <= to) {
     days.push({ date: formatDateShort(cursor.toISOString()), opened: 0, closed: 0 })
     cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
 
-  // If too many days, bucket by week instead
   const bucketByWeek = days.length > 60
 
   const getBucketLabel = (dateStr: string) => {
     const d = new Date(dateStr)
     if (bucketByWeek) {
-      // week of year
       const weekStart = new Date(d)
       weekStart.setUTCDate(d.getUTCDate() - d.getUTCDay())
       return formatDateShort(weekStart.toISOString())
@@ -89,7 +85,6 @@ function buildChartData(
 
   const buckets = new Map<string, { opened: number; closed: number }>()
 
-  // Seed buckets
   const cur = new Date(from)
   while (cur <= to) {
     const label = getBucketLabel(cur.toISOString())
@@ -157,7 +152,6 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
 
   return (
     <Box sx={{ flex: 1, minWidth: 0 }}>
-      {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: "10px" }}>
         <Stack direction="row" alignItems="center" gap="6px">
           <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: tone, flexShrink: 0 }} />
@@ -179,7 +173,6 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
         ) : null}
       </Stack>
 
-      {/* Stats row */}
       <Stack direction="row" gap="20px" sx={{ mb: "10px" }}>
         <Box>
           <Typography sx={{ fontSize: 10, color: "#94a3b8", mb: "1px" }}>Opened</Typography>
@@ -197,7 +190,6 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
         </Box>
       </Stack>
 
-      {/* Sparkline chart */}
       <Box sx={{ height: 80, mx: "-8px" }}>
         <LineChart
           xAxis={[{
@@ -302,7 +294,6 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const canViewTriage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
 
   const defaultRange = getDateRangeFromPreset("30d")
   const [dateFrom, setDateFrom] = React.useState(defaultRange.from)
@@ -318,12 +309,8 @@ export default function DashboardPage() {
   const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<Issue[]>("/issues")).data })
   const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<Check[]>("/checks")).data })
   const assets = useQuery({ queryKey: ["assets"], queryFn: async () => (await api.get<Asset[]>("/assets")).data })
-  const triage = useQuery({
-    queryKey: ["triage-queue"], enabled: canViewTriage,
-    queryFn: async () => (await api.get<TriageItem[]>("/triage/queue")).data
-  })
 
-  const isLoading = srs.isLoading || tasks.isLoading || risks.isLoading || issues.isLoading || checks.isLoading || (canViewTriage && triage.isLoading)
+  const isLoading = srs.isLoading || tasks.isLoading || risks.isLoading || issues.isLoading || checks.isLoading
   const hasError = !!(srs.error || tasks.error || risks.error || issues.error || checks.error)
 
   // ── Assignees ──────────────────────────────────────────────────────────
@@ -343,7 +330,6 @@ export default function DashboardPage() {
   const filteredTasks = applyAssignee(tasks.data ?? [])
 
   // ── KPI metrics ────────────────────────────────────────────────────────
-  const triageCount = canViewTriage ? (triage.data ?? []).filter(x => x.status === "NEW").length : 0
   const openSRs = filteredSrs.filter(x => !["CLOSED", "COMPLETED"].includes(x.status)).length
   const openRisks = (risks.data ?? []).filter(x => !["ACCEPTED", "CLOSED"].includes(x.status)).length
   const openIssues = (issues.data ?? []).filter(x => !["RESOLVED", "CLOSED"].includes(x.status)).length
@@ -481,16 +467,13 @@ export default function DashboardPage() {
                 />
               </Stack>
 
-              {/* Divider + KPI tiles below */}
+              {/* Divider + KPI tiles */}
               <Divider sx={{ my: "20px" }} />
 
               <Box sx={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                {canViewTriage ? (
-                  <StatTile label="Triage Inbox" value={triageCount} tone="#f59e0b" description="Awaiting triage" urgent onClick={() => navigate("/service-desk")} />
-                ) : null}
                 <StatTile label="Open SRs" value={openSRs} tone="#2563eb" description="Not yet closed" onClick={() => navigate("/service-desk")} />
                 <StatTile label="Open Risks" value={openRisks} tone="#f59e0b" description="Active risks" urgent onClick={() => navigate("/risks")} />
-                <StatTile label="Open Issues" value={openIssues} tone="#dc2626" description="Unresolved issues" urgent onClick={() => navigate("/risks")} />
+                <StatTile label="Open Issues" value={openIssues} tone="#dc2626" description="Unresolved issues" urgent onClick={() => navigate("/issues")} />
                 <StatTile label="Open Tasks" value={openTasks} tone="#0f766e" description="Not yet done" onClick={() => navigate("/tasks")} />
                 <StatTile label="Pending Review" value={pendingReviewChecks} tone="#7c3aed" description="Checks awaiting review" urgent onClick={() => navigate("/checks")} />
               </Box>
