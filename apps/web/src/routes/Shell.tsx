@@ -9,7 +9,6 @@ import MenuIcon from "@mui/icons-material/Menu"
 import DashboardIcon from "@mui/icons-material/Dashboard"
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber"
 import TaskAltIcon from "@mui/icons-material/TaskAlt"
-import StorageIcon from "@mui/icons-material/Storage"
 import FactCheckIcon from "@mui/icons-material/FactCheck"
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts"
 import ApartmentIcon from "@mui/icons-material/Apartment"
@@ -36,7 +35,12 @@ import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
 
 // ── Breadcrumb context ─────────────────────────────────────────────────────
 // Detail pages call setRecordLabel(record.reference) to populate the top bar
-const BreadcrumbCtx = React.createContext<{ setRecordLabel: (l: string | null) => void }>({ setRecordLabel: () => {} })
+// For deep hierarchies, call setBreadcrumbs([{label, path?}, ...]) instead
+type Crumb = { label: string; path?: string; onClick?: () => void }
+const BreadcrumbCtx = React.createContext<{
+  setRecordLabel: (l: string | null) => void
+  setBreadcrumbs: (crumbs: Crumb[]) => void
+}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {} })
 export function useBreadcrumb() { return React.useContext(BreadcrumbCtx) }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -290,15 +294,24 @@ export default function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [openSection, setOpenSection] = useState<string | null>(null)
-  const [recordLabel, setRecordLabel] = useState<string | null>(null)
+  const [breadcrumbs, setBreadcrumbsState] = useState<Crumb[]>([])
   const [flyout, setFlyout] = useState<
     | { kind: "section"; title: string; items: NavItem[]; anchor: HTMLElement }
     | { kind: "client"; anchor: HTMLElement }
     | null
   >(null)
 
-  // Auto-reset record label whenever the route changes
-  React.useEffect(() => { setRecordLabel(null) }, [loc.pathname])
+  const recordLabel = breadcrumbs.length > 0 ? breadcrumbs[breadcrumbs.length - 1].label : null
+
+  function setRecordLabel(l: string | null) {
+    setBreadcrumbsState(l ? [{ label: l }] : [])
+  }
+  function setBreadcrumbs(crumbs: Crumb[]) {
+    setBreadcrumbsState(crumbs)
+  }
+
+  // Auto-reset breadcrumbs whenever the route changes
+  React.useEffect(() => { setBreadcrumbsState([]) }, [loc.pathname])
 
   const sidebarWidth = sidebarExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED
 
@@ -361,6 +374,8 @@ export default function Shell() {
   const PATH_PARENT_MAP: Record<string, string> = {
     "/service-requests": "/service-desk",
     "/incidents": "/service-desk",
+    "/sites": "/infrastructure",   // legacy /sites URLs resolve to Infrastructure nav item
+    "/assets": "/infrastructure",  // legacy /assets URLs resolve to Infrastructure nav item
   }
 
   function resolveActivePage(pathname: string) {
@@ -591,7 +606,7 @@ export default function Shell() {
               >
                 <Typography sx={{
                   fontSize: 15,
-                  color: recordLabel ? "#8ba3c0" : "#cbd5e1",
+                  color: breadcrumbs.length > 0 ? "#8ba3c0" : "#cbd5e1",
                   fontWeight: 500,
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                 }}>
@@ -600,15 +615,34 @@ export default function Shell() {
               </Box>
             ) : null}
 
-            {/* Record reference — third segment, non-clickable, brightest */}
-            {recordLabel ? (
-              <>
-                <Typography sx={{ color: "#334155", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
-                <Typography sx={{ fontSize: 15, color: "#e2e8f0", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1 }}>
-                  {recordLabel}
-                </Typography>
-              </>
-            ) : null}
+            {/* Record reference — one or more segments after the nav label */}
+            {breadcrumbs.map((crumb, idx) => {
+              const isLast = idx === breadcrumbs.length - 1
+              const isClickable = !isLast && (crumb.path || crumb.onClick)
+              return (
+                <React.Fragment key={idx}>
+                  <Typography sx={{ color: "#334155", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
+                  {isClickable ? (
+                    <Box
+                      onClick={() => crumb.onClick ? crumb.onClick() : nav(crumb.path!)}
+                      sx={{
+                        px: "8px", py: "5px", borderRadius: "6px",
+                        cursor: "pointer", flexShrink: 1, minWidth: 0,
+                        transition: "background-color 0.12s",
+                        "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
+                      }}>
+                      <Typography sx={{ fontSize: 15, color: "#8ba3c0", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {crumb.label}
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Typography sx={{ fontSize: 15, color: isLast ? "#e2e8f0" : "#8ba3c0", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, px: "4px" }}>
+                      {crumb.label}
+                    </Typography>
+                  )}
+                </React.Fragment>
+              )
+            })}
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
             <IconButton size="small" sx={{ width: 36, height: 36, color: "#475569", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#94a3b8" } }}><HelpOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
@@ -620,7 +654,7 @@ export default function Shell() {
 
         {/* Page content */}
         <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: { xs: "12px", md: "24px" } }}>
-          <BreadcrumbCtx.Provider value={{ setRecordLabel }}>
+          <BreadcrumbCtx.Provider value={{ setRecordLabel, setBreadcrumbs }}>
             <Outlet />
           </BreadcrumbCtx.Provider>
         </Box>

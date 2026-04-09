@@ -18,15 +18,7 @@ export class RoomsService {
       where: { siteId },
       orderBy: { name: "asc" },
       include: {
-        _count: { select: { cabinets: true } },
-        cabinets: {
-          include: { _count: { select: { assets: true } } },
-          select: {
-            id: true, name: true, type: true,
-            totalU: true, usedU: true, powerKw: true,
-            _count: true
-          }
-        }
+        _count: { select: { cabinets: true } }
       }
     })
   }
@@ -40,8 +32,8 @@ export class RoomsService {
         siteId,
         name: dto.name,
         type: dto.type ?? "DATA_HALL",
-        floor: dto.floor,
-        notes: dto.notes
+        floor: dto.floor ?? null,
+        notes: dto.notes ?? null
       }
     })
   }
@@ -54,7 +46,12 @@ export class RoomsService {
     if (!room) throw new NotFoundException("Room not found")
     return this.prisma.room.update({
       where: { id: roomId },
-      data: { name: dto.name ?? room.name, type: dto.type ?? room.type, floor: dto.floor, notes: dto.notes }
+      data: {
+        name: dto.name ?? room.name,
+        type: dto.type ?? room.type,
+        floor: dto.floor ?? room.floor,
+        notes: dto.notes ?? room.notes
+      }
     })
   }
 

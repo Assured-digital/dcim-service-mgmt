@@ -16,6 +16,8 @@ import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
 import InfrastructurePage from "./InfrastructurePage"
 import SiteDetailPage from "./SiteDetailPage"
+import RoomDetailPage from "./RoomDetailPage"
+import RackDetailPage from "./RackDetailPage"
 import ChecksPage from "./ChecksPage"
 import CheckDetailPage from "./CheckDetailPage"
 import CheckTemplatesPage from "./CheckTemplatesPage"
@@ -92,7 +94,8 @@ export default function App() {
         {/* Infrastructure (Sites + Rooms + Cabinets + Assets) */}
         <Route path="infrastructure" element={<InfrastructurePage />} />
         <Route path="infrastructure/:siteId" element={<SiteDetailPage />} />
-        <Route path="infrastructure/:siteId/rooms/:roomId" element={<SiteDetailPage />} />
+        <Route path="infrastructure/:siteId/rooms/:roomId" element={<RoomDetailPage />} />
+        <Route path="infrastructure/:siteId/rooms/:roomId/cabinets/:cabinetId" element={<RackDetailPage />} />
 
         {/* Engineering Checks */}
         <Route path="checks" element={<ChecksPage />} />
