@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -11,7 +11,7 @@ import LockIcon from "@mui/icons-material/Lock"
 import {
   InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
   chipSx, type LinkedTask,
-  WorkflowStrip, type WorkflowStage
+  WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
@@ -40,11 +40,12 @@ type AuditEvent = {
   action: string
   actorUserId: string | null
   actorEmail?: string | null
-  data: any
+  data?: { from?: string; to?: string; fields?: string[] } | null
   createdAt: string
 }
+type RiskPropertyRow = { label: string; value: React.ReactNode }
 
-type Comment = {
+type RiskComment = {
   id: string
   body: string
   type: string
@@ -100,13 +101,21 @@ function ragLabel(level: "RED" | "AMBER" | "GREEN") {
   return "Low risk"
 }
 
-function actionLabel(action: string, data: any): string {
+function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
   switch (action) {
     case "CREATED": return "Risk logged"
     case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
     case "UPDATED": return `Risk updated${data?.fields ? `: ${data.fields.join(", ")}` : ""}`
     default: return action.toLowerCase().replaceAll("_", " ")
   }
+}
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
 }
 
 function actionColor(action: string): string {
@@ -126,9 +135,6 @@ function actionTextColor(action: string): string {
 export default function RiskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
-  const fromTask = location.state?.fromTask
-  const fromTaskRef = location.state?.fromTaskRef
   const qc = useQueryClient()
   const { setRecordLabel } = useBreadcrumb()
 
@@ -183,7 +189,7 @@ export default function RiskDetailPage() {
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-risk", id],
     queryFn: async () =>
-      (await api.get<Comment[]>(`/comments/Risk/${id}/work-notes`)).data,
+      (await api.get<RiskComment[]>(`/comments/Risk/${id}/work-notes`)).data,
     enabled: !!id
   })
 
@@ -226,8 +232,8 @@ export default function RiskDetailPage() {
       qc.invalidateQueries({ queryKey: ["audit-risk", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-risk", id] })
       qc.invalidateQueries({ queryKey: ["risks"] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to update status")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to update status"))
     } finally {
       setSavingTransition(false)
     }
@@ -279,8 +285,50 @@ export default function RiskDetailPage() {
   if (!risk) return <ErrorState title="Risk not found" />
 
   const nextStatuses = STATUS_FLOW[risk.status] ?? []
-  const currentIndex = STATUS_ALL.indexOf(risk.status)
   const rag = deriveRag(risk.likelihood, risk.impact)
+
+  const propertyRows: RiskPropertyRow[] = [
+    {
+      label: "Overall risk",
+      value: <Chip size="small" sx={chipSx(rag)} label={ragLabel(rag)} />
+    },
+    {
+      label: "Likelihood",
+      value: <Chip size="small" sx={chipSx(risk.likelihood)} label={risk.likelihood} />
+    },
+    {
+      label: "Impact",
+      value: <Chip size="small" sx={chipSx(risk.impact)} label={risk.impact} />
+    },
+    {
+      label: "Source",
+      value: <Typography variant="caption">
+        {SOURCE_LABELS[risk.source ?? "MANUAL"] ?? risk.source}
+      </Typography>
+    },
+    {
+      label: "Logged",
+      value: <Typography variant="caption">
+        {new Date(risk.createdAt).toLocaleDateString("en-GB")}
+      </Typography>
+    }
+  ]
+  if (risk.reviewDate) {
+    propertyRows.push({
+      label: "Review date",
+      value: <Typography variant="caption">
+        {new Date(risk.reviewDate).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
+  if (risk.closedAt) {
+    propertyRows.push({
+      label: "Closed",
+      value: <Typography variant="caption">
+        {new Date(risk.closedAt).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
 
   return (
     <Box>
@@ -354,7 +402,7 @@ export default function RiskDetailPage() {
               onChange={(_, v) => setActiveTab(v)}
               sx={{ px: 2, minHeight: 44 }}
               textColor="inherit"
-              TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
+              TabIndicatorProps={{ style: { backgroundColor: "var(--color-text-primary)" } }}
             >
               <Tab label="Mitigation plan" sx={{ fontSize: 13, minHeight: 44 }} />
               <Tab label="Work notes"
@@ -377,7 +425,7 @@ export default function RiskDetailPage() {
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography sx={{
                     fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                    color: "var(--color-text-tertiary)"
+                    color: "var(--color-text-muted)"
                   }}>
                     MITIGATION PLAN
                   </Typography>
@@ -529,7 +577,7 @@ export default function RiskDetailPage() {
               <Stack spacing={1.5}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)"
+                  color: "var(--color-text-muted)"
                 }}>
                   ACCEPTANCE NOTE
                 </Typography>
@@ -596,44 +644,7 @@ export default function RiskDetailPage() {
               onEdit={canManage && risk.status !== "CLOSED"
                 ? () => setEditingProperties(true)
                 : undefined}
-              rows={[
-                {
-                  label: "Overall risk",
-                  value: <Chip size="small" sx={chipSx(rag)} label={ragLabel(rag)} />
-                },
-                {
-                  label: "Likelihood",
-                  value: <Chip size="small" sx={chipSx(risk.likelihood)} label={risk.likelihood} />
-                },
-                {
-                  label: "Impact",
-                  value: <Chip size="small" sx={chipSx(risk.impact)} label={risk.impact} />
-                },
-                {
-                  label: "Source",
-                  value: <Typography variant="caption">
-                    {SOURCE_LABELS[risk.source ?? "MANUAL"] ?? risk.source}
-                  </Typography>
-                },
-                risk.reviewDate ? {
-                  label: "Review date",
-                  value: <Typography variant="caption">
-                    {new Date(risk.reviewDate).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null,
-                {
-                  label: "Logged",
-                  value: <Typography variant="caption">
-                    {new Date(risk.createdAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                },
-                risk.closedAt ? {
-                  label: "Closed",
-                  value: <Typography variant="caption">
-                    {new Date(risk.closedAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null
-              ].filter(Boolean) as any}
+              rows={propertyRows}
             />
           )}
 

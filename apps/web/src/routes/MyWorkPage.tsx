@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
-import { getCurrentUser } from "../lib/auth"
 import { setSelectedClientId } from "../lib/scope"
 import { Box, Chip, Stack, Typography } from "@mui/material"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { chipSx } from "../components/shared"
+import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type Client = { id: string; name: string }
@@ -85,30 +85,6 @@ function formatDue(dateStr: string | null, urgency: UrgencyGroup): string {
     return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
   }
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
-}
-
-// ── Section header ────────────────────────────────────────────────────────
-function SectionHeader({ urgency, count }: { urgency: UrgencyGroup; count: number }) {
-  const colours: Record<UrgencyGroup, { label: string; dot: string; text: string }> = {
-    overdue: { label: "#fef2f2", dot: "#ef4444", text: "#b91c1c" },
-    today: { label: "#fffbeb", dot: "#f59e0b", text: "#b45309" },
-    upcoming: { label: "transparent", dot: "#94a3b8", text: "#64748b" },
-    active: { label: "transparent", dot: "#94a3b8", text: "#64748b" }
-  }
-  const c = colours[urgency]
-  return (
-    <Box sx={{
-      display: "flex", alignItems: "center", gap: "8px",
-      pb: "8px", mb: "8px",
-      borderBottom: "1px solid #e2e8f0"
-    }}>
-      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: c.dot, flexShrink: 0 }} />
-      <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.text }}>
-        {URGENCY_LABELS[urgency]}
-      </Typography>
-      <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>({count})</Typography>
-    </Box>
-  )
 }
 
 // ── Work item card ────────────────────────────────────────────────────────
@@ -257,11 +233,6 @@ function EmptyMyWork() {
 export default function MyWorkPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const currentUser = getCurrentUser()
-
-  const today = new Date().toLocaleDateString("en-GB", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric"
-  })
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["my-work"],
@@ -317,7 +288,12 @@ export default function MyWorkPage() {
             if (items.length === 0) return null
             return (
               <Box key={group} sx={{ mb: "28px" }}>
-                <SectionHeader urgency={group} count={items.length} />
+                <Box sx={{ borderBottom: "1px solid var(--color-border-primary)", pb: "8px", mb: "8px" }}>
+                  <SectionHeader
+                    label={URGENCY_LABELS[group]}
+                    action={<Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>({items.length})</Typography>}
+                  />
+                </Box>
                 {items.map(item => (
                   <WorkItemCard
                     key={`${item.kind}-${item.data.id}`}

@@ -1,6 +1,28 @@
 export type SemanticIntent =
   | "success" | "active" | "warning" | "danger" | "neutral" | "info"
 
+export const uiText = {
+  primary: "#0f172a",
+  secondary: "#475569",
+  muted: "#64748b",
+  subtle: "#94a3b8",
+  inverse: "#e2e8f0",
+} as const
+
+export const uiSurface = {
+  app: "#f8fafc",
+  card: "#ffffff",
+  soft: "#f8fafc",
+  subtle: "#f1f5f9",
+  accentSoft: "#e8f1ff",
+} as const
+
+export const uiBorder = {
+  default: "#e2e8f0",
+  subtle: "#f1f5f9",
+  strong: "#cbd5e1",
+} as const
+
 export const semanticTokens: Record<SemanticIntent, { bg: string; text: string }> = {
   success: { bg: "#dcfce7", text: "#15803d" },
   active:  { bg: "#e8f1ff", text: "#1d4ed8" },

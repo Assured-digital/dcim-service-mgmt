@@ -14,10 +14,9 @@ import RisksPage from "./RisksPage"
 import IssuesPage from "./IssuesPage"
 import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
-import InfrastructurePage from "./InfrastructurePage"
+import AssetManagementPage from "./AssetManagementPage"
 import SiteDetailPage from "./SiteDetailPage"
 import RoomDetailPage from "./RoomDetailPage"
-import RackDetailPage from "./RackDetailPage"
 import ChecksPage from "./ChecksPage"
 import CheckDetailPage from "./CheckDetailPage"
 import CheckTemplatesPage from "./CheckTemplatesPage"
@@ -61,10 +60,6 @@ export default function App() {
         <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />
         <Route path="triage" element={<Navigate to="/service-desk" replace />} />
         <Route path="service-requests" element={<Navigate to="/service-desk" replace />} />
-        <Route path="sites" element={<Navigate to="/infrastructure" replace />} />
-        <Route path="sites/:id" element={<Navigate to="/infrastructure" replace />} />
-        <Route path="assets" element={<Navigate to="/infrastructure" replace />} />
-        <Route path="assets/:id" element={<Navigate to="/infrastructure" replace />} />
 
         {/* My Work and Overview */}
         <Route path="my-work" element={<MyWorkPage />} />
@@ -91,11 +86,10 @@ export default function App() {
         <Route path="risks/:id" element={<RiskDetailPage />} />
         <Route path="issues/:id" element={<IssueDetailPage />} />
 
-        {/* Infrastructure (Sites + Rooms + Cabinets + Assets) */}
-        <Route path="infrastructure" element={<InfrastructurePage />} />
-        <Route path="infrastructure/:siteId" element={<SiteDetailPage />} />
-        <Route path="infrastructure/:siteId/rooms/:roomId" element={<RoomDetailPage />} />
-        <Route path="infrastructure/:siteId/rooms/:roomId/cabinets/:cabinetId" element={<RackDetailPage />} />
+        {/* Asset Management (Sites + Rooms + Cabinets + Assets) */}
+        <Route path="asset-management" element={<AssetManagementPage />} />
+        <Route path="asset-management/:siteId" element={<SiteDetailPage />} />
+        <Route path="asset-management/:siteId/rooms/:roomId" element={<RoomDetailPage />} />
 
         {/* Engineering Checks */}
         <Route path="checks" element={<ChecksPage />} />
@@ -107,7 +101,14 @@ export default function App() {
         <Route path="work-packages" element={<WorkPackagesPage />} />
 
         {/* Admin */}
-        <Route path="audit" element={<AuditTrailPage />} />
+        <Route
+          path="audit"
+          element={
+            <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+              <AuditTrailPage />
+            </RequireRoles>
+          }
+        />
         <Route
           path="clients"
           element={

@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -84,6 +84,15 @@ function formatElapsed(startedAt: string | null): string {
   if (hrs > 0) return `${hrs}h ${mins}m elapsed`
   return `${mins}m elapsed`
 }
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
+}
+type DetailRow = { label: string; value: string }
 
 // ── Follow-on modal ────────────────────────────────────────────────────────
 function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
@@ -116,7 +125,7 @@ function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
         impact: type === "Risk" ? impact : undefined
       })
       onClose(); onSuccess()
-    } catch (e: any) { setError(e?.message ?? "Failed to create") }
+    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to create")) }
     finally { setSaving(false) }
   }
 
@@ -181,7 +190,6 @@ export default function CheckDetailPage() {
   const qc = useQueryClient()
   const { setRecordLabel } = useBreadcrumb()
 
-  const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
   const canExecute = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
   const [error, setError] = React.useState("")
@@ -263,7 +271,7 @@ export default function CheckDetailPage() {
       await api.post(`/checks/${id}/start`)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
-    } catch (e: any) { setError(e?.message ?? "Failed to start") }
+    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to start")) }
     finally { setTransitioning(false) }
   }
 
@@ -274,7 +282,7 @@ export default function CheckDetailPage() {
       setSubmitOpen(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
-    } catch (e: any) { setError(Array.isArray(e?.message) ? e.message.join(", ") : e?.message ?? "Failed") }
+    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed")) }
     finally { setTransitioning(false) }
   }
 
@@ -287,7 +295,7 @@ export default function CheckDetailPage() {
       setReviewOpen(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
-    } catch (e: any) { setError(e?.message ?? "Failed") }
+    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed")) }
     finally { setTransitioning(false) }
   }
 
@@ -308,12 +316,11 @@ export default function CheckDetailPage() {
       await api.post(`/checks/${id}/items`, { label: adHocLabel, section: adHocSection || undefined })
       setAdHocLabel(""); setAdHocSection(""); setAdHocOpen(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
-    } catch (e: any) { setError(e?.message ?? "Failed to add item") }
+    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to add item")) }
   }
 
   function handlePhotoSelect(itemId: string, files: FileList | null) {
     if (!files || files.length === 0) return
-    const newPhotos: string[] = []
     Array.from(files).forEach(file => {
       const reader = new FileReader()
       reader.onload = e => {
@@ -417,9 +424,6 @@ export default function CheckDetailPage() {
   const allRequiredAnswered = check.items.filter(i => i.isRequired).every(i => i.response !== null)
 
   const canStart = ["DRAFT", "SCHEDULED", "ASSIGNED"].includes(check.status) && canExecute
-  const canSubmit = check.status === "IN_PROGRESS" && allRequiredAnswered && canExecute
-  const canReview = check.status === "PENDING_REVIEW" && canManage
-  const canCancel = !["COMPLETED", "CLOSED", "CANCELLED"].includes(check.status) && canManage
   const isExecuting = ["IN_PROGRESS", "PENDING_REVIEW"].includes(check.status)
 
   // Group items by section — already computed above, just re-derive for the check guard
@@ -770,16 +774,16 @@ export default function CheckDetailPage() {
         mx: { xs: "-12px", md: "-24px" },
         mt: { xs: "-12px", md: "-24px" },
         mb: { xs: "-12px", md: "-24px" },
-        height: "calc(100vh - 64px)",
+        height: "calc(100vh - 56px)",
         display: "flex", flexDirection: "column", overflow: "hidden",
-        bgcolor: "#f8fafc"
+        bgcolor: "var(--color-background-tertiary)"
       }}>
         {/* ── Exec header ─────────────────────────────────────────────── */}
-        <Box sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", px: "28px", pt: "16px", pb: "14px", flexShrink: 0 }}>
+        <Box sx={{ bgcolor: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-primary)", px: "28px", pt: "16px", pb: "14px", flexShrink: 0 }}>
           {/* Meta row */}
           <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "10px" }}>
             <Stack direction="row" alignItems="center" spacing={0.5}>
-              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#475569", fontWeight: 600 }}>
+              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 600 }}>
                 {check.reference}
               </Typography>
               <Tooltip title={copied ? "Copied!" : "Copy"}>
@@ -793,7 +797,7 @@ export default function CheckDetailPage() {
             {/* Sync indicator */}
             <Stack direction="row" alignItems="center" spacing={0.75}>
               {isSaving ? (
-                <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>Saving...</Typography>
+                <Typography sx={{ fontSize: 11.5, color: "var(--color-text-secondary)" }}>Saving...</Typography>
               ) : lastSaved ? (
                 <Stack direction="row" alignItems="center" spacing={0.5}>
                   <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#15803d", boxShadow: "0 0 0 3px rgba(21,128,61,0.15)" }} />
@@ -914,7 +918,6 @@ export default function CheckDetailPage() {
             ) : null}
 
             {sectionNames.map(sectionName => {
-              const isActiveSec = activeSection === sectionName || (activeSection === null && sectionNames[0] === sectionName)
               return (
               <Box key={sectionName} ref={el => { sectionRefs.current[sectionName] = el }}
                 sx={{ mb: "8px" }}>
@@ -977,7 +980,7 @@ export default function CheckDetailPage() {
               check.startedAt ? { label: "Elapsed", value: formatElapsed(check.startedAt) } : null,
               check.assignee ? { label: "Engineer", value: check.assignee.email.split("@")[0] } : null,
               check.passRate !== null ? { label: "Pass rate", value: `${check.passRate}%` } : null,
-            ].filter(Boolean).map((row: any) => (
+            ].filter((row): row is DetailRow => row !== null).map((row) => (
               <Box key={row.label} sx={{ display: "flex", justifyContent: "space-between", py: "6px", fontSize: 12, borderBottom: "1px solid #f1f5f9" }}>
                 <Typography sx={{ fontSize: 12, color: "#64748b" }}>{row.label}</Typography>
                 <Typography sx={{ fontSize: 12, color: "#0f172a", fontWeight: 400, textAlign: "right", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.value}</Typography>
@@ -1074,6 +1077,34 @@ export default function CheckDetailPage() {
       </Box>
     )
   }
+
+  const propertiesRows: { label: string; value: React.ReactNode }[] = [
+    { label: "Site", value: <Typography variant="caption" fontWeight={600}>{check.site.name}</Typography> },
+    { label: "Template", value: <Typography variant="caption">{check.template.name}</Typography> },
+    { label: "Assignee", value: <Typography variant="caption">{check.assignee?.email.split("@")[0] ?? "Unassigned"}</Typography> },
+  ]
+  if (check.passRate !== null) {
+    propertiesRows.push({
+      label: "Pass rate",
+      value: <Chip size="small" sx={chipSx(check.passRate >= 80 ? "COMPLETED" : check.passRate >= 60 ? "AMBER" : "FAIL")} label={`${check.passRate}%`} />
+    })
+  }
+  if (failedItems.length > 0) {
+    propertiesRows.push({
+      label: "Failed items",
+      value: <Typography variant="caption" sx={{ color: "#b91c1c", fontWeight: 700 }}>{failedItems.length}</Typography>
+    })
+  }
+  if (check.scheduledAt) {
+    propertiesRows.push({ label: "Scheduled", value: <Typography variant="caption">{new Date(check.scheduledAt).toLocaleDateString("en-GB")}</Typography> })
+  }
+  if (check.startedAt) {
+    propertiesRows.push({ label: "Started", value: <Typography variant="caption">{new Date(check.startedAt).toLocaleDateString("en-GB")}</Typography> })
+  }
+  if (check.completedAt) {
+    propertiesRows.push({ label: "Completed", value: <Typography variant="caption">{new Date(check.completedAt).toLocaleDateString("en-GB")}</Typography> })
+  }
+  propertiesRows.push({ label: "Created", value: <Typography variant="caption">{new Date(check.createdAt).toLocaleDateString("en-GB")}</Typography> })
 
   // ── STANDARD LAYOUT (all other statuses) ──────────────────────────────
   return (
@@ -1252,23 +1283,7 @@ export default function CheckDetailPage() {
         {/* Right column */}
         <Stack spacing={2}>
           <PropertiesPanel
-            rows={[
-              { label: "Site", value: <Typography variant="caption" fontWeight={600}>{check.site.name}</Typography> },
-              { label: "Template", value: <Typography variant="caption">{check.template.name}</Typography> },
-              { label: "Assignee", value: <Typography variant="caption">{check.assignee?.email.split("@")[0] ?? "Unassigned"}</Typography> },
-              check.passRate !== null ? {
-                label: "Pass rate",
-                value: <Chip size="small" sx={chipSx(check.passRate >= 80 ? "COMPLETED" : check.passRate >= 60 ? "AMBER" : "FAIL")} label={`${check.passRate}%`} />
-              } : null,
-              failedItems.length > 0 ? {
-                label: "Failed items",
-                value: <Typography variant="caption" sx={{ color: "#b91c1c", fontWeight: 700 }}>{failedItems.length}</Typography>
-              } : null,
-              check.scheduledAt ? { label: "Scheduled", value: <Typography variant="caption">{new Date(check.scheduledAt).toLocaleDateString("en-GB")}</Typography> } : null,
-              check.startedAt ? { label: "Started", value: <Typography variant="caption">{new Date(check.startedAt).toLocaleDateString("en-GB")}</Typography> } : null,
-              check.completedAt ? { label: "Completed", value: <Typography variant="caption">{new Date(check.completedAt).toLocaleDateString("en-GB")}</Typography> } : null,
-              { label: "Created", value: <Typography variant="caption">{new Date(check.createdAt).toLocaleDateString("en-GB")}</Typography> }
-            ].filter(Boolean) as any}
+            rows={propertiesRows}
           />
 
           {totalItems > 0 ? (

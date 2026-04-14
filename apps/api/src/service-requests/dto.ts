@@ -10,6 +10,14 @@ export class CreateServiceRequestDto {
   @IsOptional()
   @IsString()
   priority?: string;
+
+  @IsOptional()
+  @IsString()
+  linkedEntityType?: string;
+
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string;
 }
 
 export class CloseServiceRequestDto {

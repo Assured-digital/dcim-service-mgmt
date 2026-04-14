@@ -4,10 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import { setSelectedClientId } from "../lib/scope"
 import {
-  Box, Card, CardContent, Chip, Stack, Typography
+  Box, Stack, Typography
 } from "@mui/material"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import { LoadingState, ErrorState } from "../components/PageState"
+import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type ClientStat = {
@@ -64,26 +65,6 @@ function lastActivityLabel(dateStr: string | null): string {
   return `Last activity: ${days} day${days !== 1 ? "s" : ""} ago`
 }
 
-// ── Section header ────────────────────────────────────────────────────────
-function SectionHeader({ label, count }: { label: string; count?: number }) {
-  return (
-    <Box sx={{
-      display: "flex", alignItems: "center", gap: "8px",
-      mb: "12px", pb: "8px", borderBottom: "1px solid #e2e8f0"
-    }}>
-      <Typography sx={{
-        fontSize: 11, fontWeight: 600, letterSpacing: "0.07em",
-        textTransform: "uppercase", color: "#64748b"
-      }}>
-        {label}
-      </Typography>
-      {count !== undefined ? (
-        <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>({count})</Typography>
-      ) : null}
-    </Box>
-  )
-}
-
 // ── Client health card ────────────────────────────────────────────────────
 function ClientHealthCard({
   stat,
@@ -92,9 +73,6 @@ function ClientHealthCard({
   stat: ClientStat
   onClick: () => void
 }) {
-  const hasWarnings = stat.overdueTasks > 0 || stat.pendingReviewChecks > 0
-  const hasCritical = stat.criticalIncidents > 0 || stat.oldPendingChecks > 0
-
   return (
     <Box
       onClick={onClick}
@@ -303,7 +281,9 @@ export default function OverviewPage() {
 
           {/* Client health grid */}
           <Box sx={{ mb: "28px" }}>
-            <SectionHeader label="Client Health" />
+            <Box sx={{ mb: "12px", pb: "8px", borderBottom: "1px solid var(--color-border-primary)" }}>
+              <SectionHeader label="Client Health" />
+            </Box>
             <Box sx={{
               display: "grid",
               gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" },
@@ -322,7 +302,12 @@ export default function OverviewPage() {
           {/* Attention required */}
           {data.attentionItems.length > 0 ? (
             <Box sx={{ mb: "28px" }}>
-              <SectionHeader label="Attention Required" count={data.attentionItems.length} />
+              <Box sx={{ mb: "12px", pb: "8px", borderBottom: "1px solid var(--color-border-primary)" }}>
+                <SectionHeader
+                  label="Attention Required"
+                  action={<Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>({data.attentionItems.length})</Typography>}
+                />
+              </Box>
               {data.attentionItems.map((item, i) => (
                 <AttentionRow
                   key={i}

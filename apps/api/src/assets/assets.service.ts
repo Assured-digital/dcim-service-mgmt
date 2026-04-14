@@ -1,14 +1,22 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service";
-import { OwnerType, Role } from "@prisma/client";
+import { AssetLifecycleState, OwnerType, Role } from "@prisma/client";
 import { isOrgSuperRole } from "../auth/role-scope";
 
 @Injectable()
 export class AssetsService {
   constructor(private prisma: PrismaService) {}
 
-  listForClient(clientId: string, role: Role) {
+  private async backfillRackSide(clientId: string) {
+    await this.prisma.asset.updateMany({
+      where: { clientId, rackSide: null },
+      data: { rackSide: "FRONT" }
+    });
+  }
+
+  async listForClient(clientId: string, role: Role) {
     if (!clientId) throw new ForbiddenException("Missing client scope");
+    await this.backfillRackSide(clientId);
 
     if (!isOrgSuperRole(role)) {
       // Harden tenancy: non-admin users can only access client-owned assets in their scope.
@@ -75,7 +83,8 @@ export class AssetsService {
         warrantyExpiry: dto.warrantyExpiry ? new Date(dto.warrantyExpiry) : null,
         lifecycleState: dto.lifecycleState ?? "ACTIVE",
         notes: dto.notes ?? null,
-        location: dto.location ?? null
+        location: dto.location ?? null,
+        rackSide: dto.rackSide === "REAR" ? "REAR" : "FRONT"
       }
     });
   }
@@ -97,6 +106,84 @@ export class AssetsService {
     }
 
     return this.prisma.asset.delete({ where: { id: asset.id } });
+  }
+
+  async updateForClient(assetId: string, dto: {
+    assetTag?: string
+    name?: string
+    assetType?: string
+    siteId?: string | null
+    cabinetId?: string | null
+    status?: string
+    manufacturer?: string
+    modelNumber?: string
+    serialNumber?: string
+    uHeight?: number | null
+    uPosition?: number | null
+    powerDrawW?: number | null
+    ipAddress?: string
+    lifecycleState?: AssetLifecycleState
+    notes?: string
+    location?: string
+    rackSide?: "FRONT" | "REAR" | null
+  }, requesterClientId: string, requesterRole: Role) {
+    if (!requesterClientId) throw new ForbiddenException("Missing client scope");
+
+    const asset = await this.prisma.asset.findUnique({
+      where: { id: assetId }
+    });
+    if (!asset) throw new BadRequestException("Asset not found.");
+
+    if (!isOrgSuperRole(requesterRole)) {
+      if (asset.ownerType !== OwnerType.CLIENT || asset.clientId !== requesterClientId) {
+        throw new ForbiddenException("Cannot update assets outside your client scope.");
+      }
+    } else if (asset.ownerType === OwnerType.CLIENT && asset.clientId !== requesterClientId) {
+      throw new ForbiddenException("Selected scope does not match this client-owned asset.");
+    }
+
+    const targetSiteId = dto.siteId !== undefined ? dto.siteId : asset.siteId;
+    const targetCabinetId = dto.cabinetId !== undefined ? dto.cabinetId : asset.cabinetId;
+
+    if (targetSiteId) {
+      const site = await this.prisma.site.findFirst({
+        where: { id: targetSiteId, clientId: requesterClientId }
+      });
+      if (!site) throw new BadRequestException("Target site not found for selected client scope.");
+    }
+
+    if (targetCabinetId) {
+      const cabinet = await this.prisma.cabinet.findFirst({
+        where: { id: targetCabinetId, site: { clientId: requesterClientId } }
+      });
+      if (!cabinet) throw new BadRequestException("Target rack not found for selected client scope.");
+      if (targetSiteId && cabinet.siteId !== targetSiteId) {
+        throw new BadRequestException("Selected rack does not belong to selected site.");
+      }
+    }
+
+    return this.prisma.asset.update({
+      where: { id: assetId },
+      data: {
+        assetTag: dto.assetTag ?? asset.assetTag,
+        name: dto.name ?? asset.name,
+        assetType: dto.assetType ?? asset.assetType,
+        siteId: targetSiteId ?? null,
+        cabinetId: targetCabinetId ?? null,
+        status: dto.status ?? asset.status,
+        manufacturer: dto.manufacturer ?? asset.manufacturer,
+        modelNumber: dto.modelNumber ?? asset.modelNumber,
+        serialNumber: dto.serialNumber ?? asset.serialNumber,
+        uHeight: dto.uHeight !== undefined ? dto.uHeight : asset.uHeight,
+        uPosition: dto.uPosition !== undefined ? dto.uPosition : asset.uPosition,
+        powerDrawW: dto.powerDrawW !== undefined ? dto.powerDrawW : asset.powerDrawW,
+        ipAddress: dto.ipAddress ?? asset.ipAddress,
+        lifecycleState: dto.lifecycleState ?? asset.lifecycleState,
+        notes: dto.notes ?? asset.notes,
+        location: dto.location ?? asset.location,
+        rackSide: dto.rackSide === "REAR" ? "REAR" : dto.rackSide === "FRONT" ? "FRONT" : asset.rackSide ?? "FRONT"
+      }
+    });
   }
 
   async importFromCsv(
@@ -173,7 +260,8 @@ export class AssetsService {
               siteId,
               lifecycleState: lifecycleState as any,
               hyperviewAssetId: hyperviewAssetId ?? existing.hyperviewAssetId,
-              lastSyncedAt: new Date()
+              lastSyncedAt: new Date(),
+              rackSide: existing.rackSide ?? "FRONT"
             }
           })
           results.updated++
@@ -194,7 +282,8 @@ export class AssetsService {
               lifecycleState: lifecycleState as any,
               hyperviewAssetId,
               lastSyncedAt: new Date(),
-              status: "ACTIVE"
+              status: "ACTIVE",
+              rackSide: "FRONT"
             }
           })
           results.created++
@@ -256,6 +345,7 @@ export class AssetsService {
 
   async getForSite(clientId: string, siteId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
+    await this.backfillRackSide(clientId)
     return this.prisma.asset.findMany({
       where: { clientId, siteId },
       include: { cabinet: true },

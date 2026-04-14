@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Autocomplete, Box, Button, Card, Chip, Dialog,
+  Alert, Box, Button, Card, Chip, Dialog,
   DialogActions, DialogContent, DialogTitle, IconButton,
   Menu, MenuItem, Popover, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TextField,
@@ -42,13 +42,6 @@ type Task = {
 type User = { id: string; email: string }
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const STATUS_FLOW: Record<string, string[]> = {
-  OPEN: ["IN_PROGRESS", "BLOCKED", "DONE"],
-  IN_PROGRESS: ["OPEN", "BLOCKED", "DONE"],
-  BLOCKED: ["OPEN", "IN_PROGRESS", "DONE"],
-  DONE: ["OPEN"]
-}
-
 const STATUS_LABELS: Record<string, string> = {
   OPEN: "Open", IN_PROGRESS: "In Progress", BLOCKED: "Blocked", DONE: "Done"
 }
@@ -121,7 +114,8 @@ function formatDateTime(iso: string | null) {
 function OptionPopover({ anchorEl, onClose, options, current, onSelect }: {
   anchorEl: HTMLElement | null; onClose: () => void
   options: { value: string; label: string; dot?: string }[]
-  current: string; onSelect: (v: string) => void
+  // eslint-disable-next-line no-unused-vars
+  current: string; onSelect: (value: string) => void
 }) {
   return (
     <Popover
@@ -149,7 +143,8 @@ function OptionPopover({ anchorEl, onClose, options, current, onSelect }: {
 // Assignee popover
 function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect }: {
   anchorEl: HTMLElement | null; onClose: () => void
-  users: User[]; currentId: string | null; onSelect: (id: string | null) => void
+  // eslint-disable-next-line no-unused-vars
+  users: User[]; currentId: string | null; onSelect: (assigneeId: string | null) => void
 }) {
   return (
     <Popover
@@ -181,7 +176,8 @@ function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect }: {
 // Due date popover
 function DueDatePopover({ anchorEl, onClose, current, onSelect }: {
   anchorEl: HTMLElement | null; onClose: () => void
-  current: string | null; onSelect: (v: string | null) => void
+  // eslint-disable-next-line no-unused-vars
+  current: string | null; onSelect: (dueDate: string | null) => void
 }) {
   const [val, setVal] = React.useState(current ? current.slice(0, 10) : "")
   return (
@@ -217,7 +213,8 @@ function DueDatePopover({ anchorEl, onClose, current, onSelect }: {
 
 // ── Inline create row ─────────────────────────────────────────────────────
 function InlineCreateRow({ users, onCreate, onCancel }: {
-  users: User[]; onCreate: (task: Partial<Task>) => void; onCancel: () => void
+  // eslint-disable-next-line no-unused-vars
+  users: User[]; onCreate: (newTask: Partial<Task>) => void; onCancel: () => void
 }) {
   const [title, setTitle] = React.useState("")
   const [status, setStatus] = React.useState("OPEN")
@@ -348,7 +345,11 @@ function InlineCreateRow({ users, onCreate, onCancel }: {
 }
 
 // ── Task card (board view) ─────────────────────────────────────────────────
-function TaskCard({ task, navigate }: { task: Task; navigate: (path: string) => void }) {
+function TaskCard({ task, navigate }: {
+  task: Task
+  // eslint-disable-next-line no-unused-vars
+  navigate: (targetPath: string) => void
+}) {
   const overdue = isOverdue(task.dueAt)
   const col = COLUMNS.find(c => c.status === task.status)
   const linked = linkedLabel(task)
@@ -502,7 +503,7 @@ export default function TasksPage() {
     queryFn: async () => (await api.get<User[]>("/users")).data
   })
 
-  const tasks = data ?? []
+  const tasks = React.useMemo(() => data ?? [], [data])
   const hasAnyFilter = filterStatuses.length > 0 || filterPriorities.length > 0 || filterAssignee || filterMine || filterOverdue
 
   function clearFilters() {
@@ -512,7 +513,7 @@ export default function TasksPage() {
 
   function handleViewChange(v: "list" | "board") {
     setViewMode(v)
-    try { localStorage.setItem("ad-tasks-view", v) } catch {}
+    try { localStorage.setItem("ad-tasks-view", v) } catch { return }
   }
 
   function toggleStatus(s: string) {
@@ -566,7 +567,7 @@ export default function TasksPage() {
 
           {/* Status group */}
           <Box>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", mb: "6px" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", mb: "6px" }}>
               Status
             </Typography>
             <Stack direction="row" spacing={0.75} flexWrap="wrap">
@@ -589,11 +590,11 @@ export default function TasksPage() {
           </Box>
 
           {/* Divider */}
-          <Box sx={{ width: "1px", bgcolor: "#e2e8f0", alignSelf: "stretch", mt: "18px" }} />
+          <Box sx={{ width: "1px", bgcolor: "var(--color-border-primary)", alignSelf: "stretch", mt: "18px" }} />
 
           {/* Priority group */}
           <Box>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", mb: "6px" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", mb: "6px" }}>
               Priority
             </Typography>
             <Stack direction="row" spacing={0.75} flexWrap="wrap">
@@ -621,11 +622,11 @@ export default function TasksPage() {
           </Box>
 
           {/* Divider */}
-          <Box sx={{ width: "1px", bgcolor: "#e2e8f0", alignSelf: "stretch", mt: "18px" }} />
+          <Box sx={{ width: "1px", bgcolor: "var(--color-border-primary)", alignSelf: "stretch", mt: "18px" }} />
 
           {/* Quick filters group */}
           <Box>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", mb: "6px" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", mb: "6px" }}>
               Quick filter
             </Typography>
             <Stack direction="row" spacing={0.75} flexWrap="wrap">
@@ -651,11 +652,11 @@ export default function TasksPage() {
           </Box>
 
           {/* Divider */}
-          <Box sx={{ width: "1px", bgcolor: "#e2e8f0", alignSelf: "stretch", mt: "18px" }} />
+          <Box sx={{ width: "1px", bgcolor: "var(--color-border-primary)", alignSelf: "stretch", mt: "18px" }} />
 
           {/* Assignee group */}
           <Box>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", mb: "6px" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", mb: "6px" }}>
               Assignee
             </Typography>
             <Stack direction="row" spacing={0.75} flexWrap="wrap">
@@ -699,7 +700,7 @@ export default function TasksPage() {
 
           {/* View group — right aligned */}
           <Box>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", mb: "6px" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", mb: "6px" }}>
               View
             </Typography>
             <ToggleButtonGroup value={viewMode} exclusive size="small" onChange={(_, v) => v && handleViewChange(v)}

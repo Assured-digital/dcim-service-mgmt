@@ -11,14 +11,43 @@ function makeRef() {
 export class IssuesService {
   constructor(private prisma: PrismaService) {}
 
+  private getCreatedAtRange(dateFrom?: string, dateTo?: string) {
+    if (!dateFrom && !dateTo) return undefined
+    return {
+      gte: dateFrom ? this.parseDate(dateFrom, "start") : undefined,
+      lte: dateTo ? this.parseDate(dateTo, "end") : undefined
+    }
+  }
+
+  private parseDate(value: string, boundary: "start" | "end") {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return undefined
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      if (boundary === "start") date.setUTCHours(0, 0, 0, 0)
+      else date.setUTCHours(23, 59, 59, 999)
+    }
+    return date
+  }
+
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
   }
 
-  async listForClient(clientId: string) {
+  async listForClient(clientId: string, filters: {
+    dateFrom?: string
+    dateTo?: string
+    linkedEntityType?: string
+    linkedEntityId?: string
+  } = {}) {
     this.assertClientScope(clientId)
+    const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
     return this.prisma.issue.findMany({
-      where: { clientId },
+      where: {
+        clientId,
+        linkedEntityType: filters.linkedEntityType || undefined,
+        linkedEntityId: filters.linkedEntityId || undefined,
+        createdAt
+      },
       orderBy: { createdAt: "desc" }
     })
   }
@@ -37,6 +66,8 @@ export class IssuesService {
     description: string
     severity?: string
     reviewDate?: string
+    linkedEntityType?: string
+    linkedEntityId?: string
   }) {
     this.assertClientScope(clientId)
     for (let i = 0; i < 10; i++) {
@@ -51,6 +82,8 @@ export class IssuesService {
             description: dto.description,
             severity: dto.severity ?? "AMBER",
             reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
+            linkedEntityType: dto.linkedEntityType,
+            linkedEntityId: dto.linkedEntityId,
             status: "OPEN"
           }
         })
@@ -73,13 +106,17 @@ export class IssuesService {
   async updateForClient(clientId: string, id: string, actorUserId: string, dto: {
     severity?: string
     reviewDate?: string
+    linkedEntityType?: string
+    linkedEntityId?: string
   }) {
     const issue = await this.getForClient(clientId, id)
     return this.prisma.issue.update({
       where: { id: issue.id },
       data: {
         severity: dto.severity,
-        reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined
+        reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
+        linkedEntityType: dto.linkedEntityType,
+        linkedEntityId: dto.linkedEntityId
       }
     })
   }

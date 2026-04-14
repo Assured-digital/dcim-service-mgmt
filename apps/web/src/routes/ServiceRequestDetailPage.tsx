@@ -1,20 +1,19 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, IconButton, MenuItem, Stack,
+  DialogContent, DialogTitle, IconButton, MenuItem, Stack,
   Tab, Tabs, TextField, Tooltip, Typography
 } from "@mui/material"
 import LockIcon from "@mui/icons-material/Lock"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import AddIcon from "@mui/icons-material/Add"
-import PersonIcon from "@mui/icons-material/Person"
 import {
-  InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
-  chipSx, type LinkedTask, WorkflowStrip, type WorkflowStage
+  Badge, PropertiesPanel, LinkedEntitiesPanel,
+  chipSx, type LinkedTask, WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { CreateTaskModal } from "./TasksPage"
@@ -24,10 +23,10 @@ import { useBreadcrumb } from "./Shell"
 // ── Types ──────────────────────────────────────────────────────────────────
 type AuditEvent = {
   id: string; action: string; actorEmail?: string | null
-  data: any; createdAt: string
+  data?: { from?: string; to?: string; fields?: string[] } | null; createdAt: string
 }
 
-type Comment = {
+type SRComment = {
   id: string; body: string; type: string
   visibleToCustomer: boolean; fromCustomer: boolean
   createdAt: string; author: { id: string; email: string }
@@ -81,8 +80,16 @@ function priorityChipSx(priority: string) {
   }
   return { ...(m[priority?.toLowerCase()] ?? { bgcolor: "#f1f5f9", color: "#475569" }), fontWeight: 600, fontSize: 11 }
 }
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
+}
 
-function actionLabel(action: string, data: any): string {
+function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
   switch (action) {
     case "CREATED": return "Request created"
     case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
@@ -96,8 +103,8 @@ function actionLabel(action: string, data: any): string {
 // ── Unified timeline item ──────────────────────────────────────────────────
 type TimelineItem =
   | { kind: "audit"; event: AuditEvent }
-  | { kind: "work_note"; comment: Comment }
-  | { kind: "customer_update"; comment: Comment }
+  | { kind: "work_note"; comment: SRComment }
+  | { kind: "customer_update"; comment: SRComment }
 
 function getTimestamp(item: TimelineItem) {
   if (item.kind === "audit") return item.event.createdAt
@@ -226,13 +233,13 @@ export default function ServiceRequestDetailPage() {
 
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-sr", id],
-    queryFn: async () => (await api.get<Comment[]>(`/comments/ServiceRequest/${id}/work-notes`)).data,
+    queryFn: async () => (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/work-notes`)).data,
     enabled: !!id
   })
 
   const { data: customerUpdates } = useQuery({
     queryKey: ["customer-updates-sr", id],
-    queryFn: async () => (await api.get<Comment[]>(`/comments/ServiceRequest/${id}/customer-updates`)).data,
+    queryFn: async () => (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/customer-updates`)).data,
     enabled: !!id
   })
 
@@ -286,8 +293,8 @@ export default function ServiceRequestDetailPage() {
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-sr", id] })
       qc.invalidateQueries({ queryKey: ["service-requests"] })
-    } catch (e: any) {
-      setError(Array.isArray(e?.message) ? e.message.join(", ") : e?.message ?? "Failed")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed"))
     } finally { setSavingTransition(false) }
   }
 
@@ -300,8 +307,8 @@ export default function ServiceRequestDetailPage() {
       setEditingProperties(false)
       qc.invalidateQueries({ queryKey: ["sr-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to save")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to save"))
     } finally { setSavingProperties(false) }
   }
 
@@ -353,11 +360,11 @@ export default function ServiceRequestDetailPage() {
           <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
             {/* Reference + copy */}
             <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: "8px" }}>
-              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
+              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "var(--color-text-muted)", fontWeight: 600 }}>
                 {sr.reference}
               </Typography>
               <Tooltip title={copied ? "Copied!" : "Copy reference"}>
-                <IconButton size="small" onClick={copyRef} sx={{ color: "#94a3b8", width: 20, height: 20 }}>
+                <IconButton size="small" onClick={copyRef} sx={{ color: "var(--color-text-muted)", width: 20, height: 20 }}>
                   <ContentCopyIcon sx={{ fontSize: 12 }} />
                 </IconButton>
               </Tooltip>
@@ -365,7 +372,7 @@ export default function ServiceRequestDetailPage() {
               <Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} />
             </Stack>
             {/* Subject */}
-            <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25 }}>
+            <Typography variant="h5" fontWeight={700} sx={{ color: "var(--color-text-primary)", lineHeight: 1.25 }}>
               {sr.subject}
             </Typography>
           </Box>
@@ -400,7 +407,7 @@ export default function ServiceRequestDetailPage() {
           {/* Description */}
           <Card>
             <CardContent>
-              <Typography sx={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", mb: "8px" }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", mb: "8px" }}>
                 Description
               </Typography>
               <Typography variant="body2" sx={{ color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.7 }}>

@@ -1,4 +1,5 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
+import type { NavigateFunction } from "react-router-dom"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -43,12 +44,193 @@ const BreadcrumbCtx = React.createContext<{
 }>({ setRecordLabel: () => {}, setBreadcrumbs: () => {} })
 export function useBreadcrumb() { return React.useContext(BreadcrumbCtx) }
 
+const RECORD_CRUMB_SEP_SX = { color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none" as const, flexShrink: 0, mx: "2px" }
+
+function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav: NavigateFunction }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+  }, [menuOpen])
+
+  function navigateCrumb(crumb: Crumb) {
+    if (crumb.onClick) crumb.onClick()
+    else if (crumb.path) nav(crumb.path)
+    setMenuOpen(false)
+  }
+
+  const n = breadcrumbs.length
+  if (n === 0) return null
+
+  if (n <= 3) {
+    return (
+      <>
+        {breadcrumbs.map((crumb, idx) => {
+          const isLast = idx === n - 1
+          const isClickable = !isLast && !!(crumb.path || crumb.onClick)
+          return (
+            <React.Fragment key={idx}>
+              <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
+              {isClickable ? (
+                <Box
+                  onClick={() => navigateCrumb(crumb)}
+                  sx={{
+                    px: "8px", py: "5px", borderRadius: "6px",
+                    cursor: "pointer", flexShrink: 1, minWidth: 0,
+                    transition: "background-color 0.12s",
+                    "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
+                  }}
+                >
+                  <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {crumb.label}
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography sx={{
+                  fontSize: 14,
+                  color: isLast ? "#e2e8f0" : "#a3b4c9",
+                  fontWeight: isLast ? 600 : 500,
+                  whiteSpace: "nowrap",
+                  flexShrink: isLast ? 0 : 1,
+                  px: "4px",
+                  ...(!isLast ? { overflow: "hidden", textOverflow: "ellipsis" } : {})
+                }}>
+                  {crumb.label}
+                </Typography>
+              )}
+            </React.Fragment>
+          )
+        })}
+      </>
+    )
+  }
+
+  const first = breadcrumbs[0]
+  const middle = breadcrumbs.slice(1, -2)
+  const penultimate = breadcrumbs[n - 2]
+  const last = breadcrumbs[n - 1]
+  const firstClick = !!(first.path || first.onClick)
+  const penClick = !!(penultimate.path || penultimate.onClick)
+
+  return (
+    <>
+      <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
+      {firstClick ? (
+        <Box
+          onClick={() => navigateCrumb(first)}
+          sx={{
+            px: "8px", py: "5px", borderRadius: "6px",
+            cursor: "pointer", flexShrink: 0,
+            transition: "background-color 0.12s",
+            "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
+          }}
+        >
+          <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap" }}>{first.label}</Typography>
+        </Box>
+      ) : (
+        <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{first.label}</Typography>
+      )}
+
+      <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
+
+      <Box ref={wrapRef} sx={{ position: "relative", flexShrink: 0 }}>
+        <Box
+          component="button"
+          type="button"
+          onClick={() => setMenuOpen(o => !o)}
+          sx={{
+            appearance: "none",
+            WebkitAppearance: "none",
+            border: "none",
+            margin: 0,
+            font: "inherit",
+            px: "10px",
+            py: "5px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            flexShrink: 0,
+            bgcolor: menuOpen ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
+            color: "#a3b4c9",
+            fontSize: 14,
+            fontWeight: 500,
+            lineHeight: 1.2,
+            transition: "background-color 0.12s",
+            "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
+          }}
+        >
+          ···
+        </Box>
+        {menuOpen ? (
+          <Box sx={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            mt: "6px",
+            zIndex: 2000,
+            minWidth: 200,
+            py: "6px",
+            borderRadius: "8px",
+            bgcolor: "#1e293b",
+            border: "1px solid #334155",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.35)"
+          }}>
+            {middle.map((crumb, i) => (
+              <Box
+                key={i}
+                onClick={() => navigateCrumb(crumb)}
+                sx={{
+                  px: "14px",
+                  py: "8px",
+                  cursor: "pointer",
+                  color: "#94a3b8",
+                  fontSize: 13,
+                  lineHeight: 1.35,
+                  wordBreak: "break-word",
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#e2e8f0" }
+                }}
+              >
+                {crumb.label}
+              </Box>
+            ))}
+          </Box>
+        ) : null}
+      </Box>
+
+      <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
+      {penClick ? (
+        <Box
+          onClick={() => navigateCrumb(penultimate)}
+          sx={{
+            px: "8px", py: "5px", borderRadius: "6px",
+            cursor: "pointer", flexShrink: 0,
+            transition: "background-color 0.12s",
+            "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
+          }}
+        >
+          <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap" }}>{penultimate.label}</Typography>
+        </Box>
+      ) : (
+        <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{penultimate.label}</Typography>
+      )}
+
+      <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
+      <Typography sx={{ fontSize: 14, color: "#e2e8f0", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{last.label}</Typography>
+    </>
+  )
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────
-const SIDEBAR_EXPANDED = 248
+const SIDEBAR_EXPANDED = 236
 const SIDEBAR_COLLAPSED = 56
-const HEADER_HEIGHT = 64
+const HEADER_HEIGHT = 56
 const ICON_SIZE = 20
-const SCOPE_INDEPENDENT_PATHS = ["/my-work", "/overview"]
+const SCOPE_INDEPENDENT_PATHS = ["/my-work", "/overview", "/audit", "/clients"]
 
 type NavItem = { label: string; path: string; icon: React.ReactNode; roles: string[] }
 type NavSection = { title: string; icon?: React.ReactNode; items: NavItem[] }
@@ -56,6 +238,15 @@ type NavSection = { title: string; icon?: React.ReactNode; items: NavItem[] }
 const personalItems: NavItem[] = [
   { label: "My Work", path: "/my-work", icon: <AssignmentIndIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
   { label: "Overview", path: "/overview", icon: <WorkspacesIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] }
+]
+
+const scopeIndependentSections: NavSection[] = [
+  {
+    title: "Admin", icon: <AdminPanelSettingsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+      { label: "Audit Trail", path: "/audit", icon: <HistoryIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
+      { label: "Clients", path: "/clients", icon: <ApartmentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
+    ]
+  }
 ]
 
 const clientSections: NavSection[] = [
@@ -69,7 +260,7 @@ const clientSections: NavSection[] = [
   },
   {
     title: "Operations", icon: <EngineeringIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Infrastructure", path: "/infrastructure", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Asset Management", path: "/asset-management", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
       { label: "Engineering Checks", path: "/checks", icon: <FactCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Check Templates", path: "/check-templates", icon: <PlaylistAddCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
       { label: "Service Scope", path: "/work-packages", icon: <WorkIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
@@ -77,10 +268,8 @@ const clientSections: NavSection[] = [
     ]
   },
   {
-    title: "Admin", icon: <AdminPanelSettingsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Clients", path: "/clients", icon: <ApartmentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
+    title: "Client Admin", icon: <AdminPanelSettingsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
       { label: "Users", path: "/users", icon: <ManageAccountsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
-      { label: "Audit Trail", path: "/audit", icon: <HistoryIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] }
     ]
   }
 ]
@@ -190,18 +379,18 @@ function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children
       <Tooltip title={!expanded ? title : ""} placement="right">
         <Box onClick={onToggle} sx={{
           display: "flex", alignItems: "center",
-          mx: "4px", px: "8px", py: "7px", borderRadius: "6px", cursor: "pointer", mb: "1px",
+          mx: "10px", px: "8px", py: "7px", borderRadius: "6px", cursor: "pointer", mb: "1px",
           bgcolor: isOpen ? "rgba(255,255,255,0.06)" : hasActive ? "rgba(59,130,246,0.08)" : "transparent",
           "&:hover": { bgcolor: isOpen ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)" },
           transition: "background-color 0.15s"
         }}>
           {icon ? (
-            <Box sx={{ color: isOpen ? "#7db4f5" : hasActive ? "#7db4f5" : "#475569", display: "flex", flexShrink: 0, width: ICON_SIZE, transition: "color 0.15s" }}>
+            <Box sx={{ color: isOpen ? "#7db4f5" : hasActive ? "#7db4f5" : "#64748b", display: "flex", flexShrink: 0, width: ICON_SIZE, transition: "color 0.15s" }}>
               {icon}
             </Box>
           ) : null}
           <FadeBox visible={expanded} maxW={160}>
-            <Typography sx={{ fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap", ml: "12px", color: isOpen ? "#cbd5e1" : hasActive ? "#7db4f5" : "#64748b", transition: "color 0.15s" }}>
+            <Typography sx={{ fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap", ml: "14px", color: isOpen ? "#cbd5e1" : hasActive ? "#7db4f5" : "#94a3b8", transition: "color 0.15s" }}>
               {title}
             </Typography>
           </FadeBox>
@@ -231,9 +420,9 @@ function NavItem({ item, selected, onClick, expanded }: { item: NavItem; selecte
   return (
     <Tooltip title={!expanded ? item.label : ""} placement="right">
       <ListItemButton selected={selected} onClick={onClick} sx={{
-        borderRadius: "6px", mb: "1px", py: "7px", px: "8px", minHeight: 0,
-        color: "#94a3b8", justifyContent: "flex-start",
-        "& .MuiListItemIcon-root": { color: "#475569", minWidth: 0, mr: expanded ? "12px" : 0, transition: "margin 0.22s cubic-bezier(0.4,0,0.2,1)" },
+        borderRadius: "6px", mb: "1px", py: "7px", px: "10px", minHeight: 0,
+        color: "#a3b4c9", justifyContent: "flex-start",
+        "& .MuiListItemIcon-root": { color: "#64748b", minWidth: 0, mr: expanded ? "12px" : 0, transition: "margin 0.22s cubic-bezier(0.4,0,0.2,1)" },
         "&.Mui-selected": { bgcolor: "rgba(59,130,246,0.15)", color: "#e2e8f0", "& .MuiListItemIcon-root": { color: "#7db4f5" } },
         "&.Mui-selected:hover": { bgcolor: "rgba(59,130,246,0.22)" },
         "&:hover": { bgcolor: "rgba(255,255,255,0.04)", color: "#cbd5e1" }
@@ -253,10 +442,10 @@ function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
   const [open, setOpen] = React.useState(false)
   return (
     <>
-      <Box onClick={() => setOpen(o => !o)} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "8px", py: "4px", borderRadius: "6px", cursor: "pointer", "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
+      <Box onClick={() => setOpen(o => !o)} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "10px", py: "4px", borderRadius: "6px", cursor: "pointer", "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
         <Box sx={{ width: 32, height: 32, borderRadius: "50%", bgcolor: "rgba(59,130,246,0.25)", color: "#7db4f5", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, flexShrink: 0 }}>{initials}</Box>
-        <Typography sx={{ fontSize: 13, color: "#94a3b8" }}>{email.split("@")[0]}</Typography>
-        <Typography sx={{ fontSize: 10, color: "#475569" }}>▾</Typography>
+        <Typography sx={{ fontSize: 12.5, color: "#a3b4c9" }}>{email.split("@")[0]}</Typography>
+        <Typography sx={{ fontSize: 10, color: "#64748b" }}>▾</Typography>
       </Box>
       {open ? (
         <>
@@ -318,7 +507,11 @@ export default function Shell() {
   function toggleSection(title: string) { setOpenSection(prev => prev === title ? null : title) }
 
   React.useEffect(() => {
-    const active = clientSections.find(s => s.title && s.items.some(item => item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)))
+    const sections = [...scopeIndependentSections, ...clientSections]
+    const active = sections.find(s =>
+      s.title &&
+      s.items.some(item => item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path))
+    )
     if (active?.title) setOpenSection(active.title)
   }, []) // eslint-disable-line
 
@@ -348,7 +541,8 @@ export default function Shell() {
 
   React.useEffect(() => {
     if (!openSection) return
-    const section = clientSections.find(s => s.title === openSection)
+    const sections = [...scopeIndependentSections, ...clientSections]
+    const section = sections.find(s => s.title === openSection)
     if (!section) return
     const stillInSection = section.items.some(item => item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path))
     if (!stillInSection) setOpenSection(null)
@@ -367,15 +561,15 @@ export default function Shell() {
 
   const initials = currentUser?.email ? currentUser.email.split("@")[0].slice(0, 2).toUpperCase() : "??"
   const roleLabel = currentUser?.role?.toLowerCase().replace(/_/g, " ") ?? ""
-  const allNavItems = [...personalItems, ...clientSections.flatMap(s => s.items)]
+  const allNavItems = [...personalItems, ...scopeIndependentSections.flatMap(s => s.items), ...clientSections.flatMap(s => s.items)]
 
   // Maps URL prefixes that don't match their nav item path to the correct nav item path
   // e.g. /service-requests/:id belongs to the "Service Desk" nav item at /service-desk
   const PATH_PARENT_MAP: Record<string, string> = {
     "/service-requests": "/service-desk",
     "/incidents": "/service-desk",
-    "/sites": "/infrastructure",   // legacy /sites URLs resolve to Infrastructure nav item
-    "/assets": "/infrastructure",  // legacy /assets URLs resolve to Infrastructure nav item
+    "/sites": "/asset-management",
+    "/assets": "/asset-management",
   }
 
   function resolveActivePage(pathname: string) {
@@ -412,14 +606,14 @@ export default function Shell() {
         {/* Hamburger — pinned to the left */}
         <IconButton size="small" onClick={() => setSidebarExpanded(e => !e)} sx={{
           position: "absolute", left: "8px",
-          width: 36, height: 36, flexShrink: 0, color: "#475569", borderRadius: "6px",
-          "&:hover": { bgcolor: "rgba(255,255,255,0.08)", color: "#94a3b8" }
+          width: 36, height: 36, flexShrink: 0, color: "#64748b", borderRadius: "6px",
+          "&:hover": { bgcolor: "rgba(255,255,255,0.08)", color: "#cbd5e1" }
         }}>
           <MenuIcon sx={{ fontSize: 20 }} />
         </IconButton>
         {/* Logo — centred in the full sidebar width */}
-        <FadeBox visible={sidebarExpanded} maxW={160}>
-          <img src="/ad-logo-white-600x200-lrg.png" alt="Assured Digital" style={{ height: 22, width: "auto", objectFit: "contain", maxWidth: 140, display: "block" }} />
+        <FadeBox visible={sidebarExpanded} maxW={180}>
+          <img src="/ad-logo-white-new.svg" alt="Assured Digital" style={{ height: 28, width: "auto", objectFit: "contain", maxWidth: 160, display: "block" }} />
         </FadeBox>
       </Box>
 
@@ -435,12 +629,63 @@ export default function Shell() {
           </List>
         ) : null}
 
+        {/* Scope-independent sections (org-level) */}
+        {scopeIndependentSections.map(section => {
+          const visible = section.items.filter(i => hasAnyRole(i.roles))
+          if (visible.length === 0) return null
+
+          const isOpen = openSection === section.title
+          const hasActive = sectionHasActive(section)
+
+          return (
+            <CollapsibleSection key={section.title} title={section.title} icon={section.icon}
+              isOpen={isOpen} hasActive={hasActive} expanded={sidebarExpanded}
+              onToggle={(e) => {
+                if (!sidebarExpanded) {
+                  const target = e.currentTarget as HTMLElement
+                  setFlyout(prev => prev?.kind === "section" && prev.title === section.title ? null : { kind: "section", title: section.title, items: visible, anchor: target })
+                  return
+                }
+                toggleSection(section.title)
+              }}
+            >
+              <List
+                dense
+                disablePadding
+                sx={{
+                  px: 1, pt: "2px", pb: "4px",
+                  ...(sidebarExpanded ? {
+                    position: "relative",
+                    pl: "18px",
+                    ml: "8px",
+                    "&::before": {
+                      content: "\"\"",
+                      position: "absolute",
+                      left: "12px",
+                      top: "4px",
+                      bottom: "6px",
+                      width: "1px",
+                      bgcolor: "rgba(148,163,184,0.35)"
+                    }
+                  } : {})
+                }}
+              >
+                {visible.map(item => (
+                  <NavItem key={item.path} item={item}
+                    selected={item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)}
+                    onClick={() => navigateTo(item.path)} expanded={sidebarExpanded} />
+                ))}
+              </List>
+            </CollapsibleSection>
+          )
+        })}
+
         <SbDivider />
 
         {/* Client scope */}
         {canSwitchClients ? (
-          <Box sx={{ mx: "4px", mb: "4px" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: "10px", px: "8px", pb: "6px" }}>
+          <Box sx={{ mx: "6px", mb: "4px" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: "10px", px: "10px", pb: "6px" }}>
               <Tooltip title={!sidebarExpanded ? (selectedClient ? `Client: ${selectedClient.name}` : "Select client") : ""} placement="right">
                 <Box
                   onClick={!sidebarExpanded ? e => { const t = e.currentTarget as HTMLElement; setFlyout(prev => prev?.kind === "client" ? null : { kind: "client", anchor: t }) } : undefined}
@@ -450,14 +695,14 @@ export default function Shell() {
                 </Box>
               </Tooltip>
               <FadeBox visible={sidebarExpanded} maxW={160}>
-                <Typography sx={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.07em", textTransform: "uppercase", color: "#475569", whiteSpace: "nowrap" }}>
+                <Typography sx={{ fontSize: 10.5, fontWeight: 500, letterSpacing: "0.07em", textTransform: "uppercase", color: "#64748b", whiteSpace: "nowrap" }}>
                   Client scope
                 </Typography>
               </FadeBox>
             </Box>
             <Box sx={{ maxHeight: sidebarExpanded ? 56 : 0, opacity: sidebarExpanded ? 1 : 0, overflow: "hidden", transition: "max-height 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease" }}>
               <Select size="small" value={selectedClientId} onChange={e => handleClientChange(e.target.value)} displayEmpty IconComponent={KeyboardArrowDownIcon}
-                sx={{ width: "100%", fontSize: 13, color: selectedClientId ? "#e2e8f0" : "#475569", bgcolor: "rgba(255,255,255,0.04)", borderRadius: "6px", border: selectedClientId ? "1px solid rgba(255,255,255,0.1)" : "1px dashed rgba(255,255,255,0.08)", "& .MuiOutlinedInput-notchedOutline": { border: "none" }, "& .MuiSvgIcon-root": { color: "#475569", fontSize: 16 }, "& .MuiSelect-select": { py: "7px", px: "10px" }, "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
+                sx={{ width: "100%", fontSize: 13, color: selectedClientId ? "#e2e8f0" : "#64748b", bgcolor: "rgba(255,255,255,0.04)", borderRadius: "6px", border: selectedClientId ? "1px solid rgba(255,255,255,0.1)" : "1px dashed rgba(255,255,255,0.08)", "& .MuiOutlinedInput-notchedOutline": { border: "none" }, "& .MuiSvgIcon-root": { color: "#64748b", fontSize: 16 }, "& .MuiSelect-select": { py: "7px", px: "10px" }, "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
                 <MenuItem value="" sx={{ fontSize: 13, color: "#94a3b8" }}>— Select client —</MenuItem>
                 {(clients.data ?? []).map(c => <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>{c.name}</MenuItem>)}
               </Select>
@@ -498,7 +743,27 @@ export default function Shell() {
                     toggleSection(section.title)
                   }}
                 >
-                  <List dense disablePadding sx={{ px: 1, pt: "2px", pb: "4px" }}>
+                  <List
+                    dense
+                    disablePadding
+                    sx={{
+                      px: 1, pt: "2px", pb: "4px",
+                      ...(sidebarExpanded ? {
+                        position: "relative",
+                        pl: "18px",
+                        ml: "8px",
+                        "&::before": {
+                          content: "\"\"",
+                          position: "absolute",
+                          left: "12px",
+                          top: "4px",
+                          bottom: "6px",
+                          width: "1px",
+                          bgcolor: "rgba(148,163,184,0.35)"
+                        }
+                      } : {})
+                    }}
+                  >
                     {visible.map(item => (
                       <NavItem key={item.path} item={item}
                         selected={item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)}
@@ -524,7 +789,7 @@ export default function Shell() {
       <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
         <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: "#080f1e", display: "flex", alignItems: "center", px: 2, gap: 1 }}>
           <IconButton onClick={() => setMobileOpen(true)} sx={{ color: "#94a3b8" }}><MenuIcon /></IconButton>
-          <img src="/ad-logo-white-600x200-lrg.png" alt="Assured Digital" style={{ height: 24, width: "auto", objectFit: "contain" }} />
+          <img src="/ad-logo-white-new.svg" alt="Assured Digital" style={{ height: 28, width: "auto", objectFit: "contain", maxWidth: 200 }} />
         </Box>
         <Drawer variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)}
           sx={{ [`& .MuiDrawer-paper`]: { width: SIDEBAR_EXPANDED, background: "#0d1526", borderRight: "1px solid rgba(255,255,255,0.05)" } }}>
@@ -563,7 +828,7 @@ export default function Shell() {
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Top bar */}
-        <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: "#080f1e", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", px: "20px", gap: "8px" }}>
+        <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: "#080f1e", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", px: "16px", gap: "8px" }}>
           <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
 
             {/* Client badge — clickable, navigates to dashboard */}
@@ -590,7 +855,7 @@ export default function Shell() {
 
             {/* › separator */}
             {activePage && (selectedClient || isScopeIndependent) ? (
-              <Typography sx={{ color: "#334155", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
+              <Typography sx={{ color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
             ) : null}
 
             {/* Page name — clickable, navigates to the list page */}
@@ -605,8 +870,8 @@ export default function Shell() {
                 }}
               >
                 <Typography sx={{
-                  fontSize: 15,
-                  color: breadcrumbs.length > 0 ? "#8ba3c0" : "#cbd5e1",
+                  fontSize: 14,
+                  color: breadcrumbs.length > 0 ? "#a3b4c9" : "#e2e8f0",
                   fontWeight: 500,
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                 }}>
@@ -616,44 +881,18 @@ export default function Shell() {
             ) : null}
 
             {/* Record reference — one or more segments after the nav label */}
-            {breadcrumbs.map((crumb, idx) => {
-              const isLast = idx === breadcrumbs.length - 1
-              const isClickable = !isLast && (crumb.path || crumb.onClick)
-              return (
-                <React.Fragment key={idx}>
-                  <Typography sx={{ color: "#334155", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
-                  {isClickable ? (
-                    <Box
-                      onClick={() => crumb.onClick ? crumb.onClick() : nav(crumb.path!)}
-                      sx={{
-                        px: "8px", py: "5px", borderRadius: "6px",
-                        cursor: "pointer", flexShrink: 1, minWidth: 0,
-                        transition: "background-color 0.12s",
-                        "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
-                      }}>
-                      <Typography sx={{ fontSize: 15, color: "#8ba3c0", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {crumb.label}
-                      </Typography>
-                    </Box>
-                  ) : (
-                    <Typography sx={{ fontSize: 15, color: isLast ? "#e2e8f0" : "#8ba3c0", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, px: "4px" }}>
-                      {crumb.label}
-                    </Typography>
-                  )}
-                </React.Fragment>
-              )
-            })}
+            <RecordBreadcrumbTrail breadcrumbs={breadcrumbs} nav={nav} />
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
-            <IconButton size="small" sx={{ width: 36, height: 36, color: "#475569", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#94a3b8" } }}><HelpOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
-            <IconButton size="small" sx={{ width: 36, height: 36, color: "#475569", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#94a3b8" } }}><NotificationsIcon sx={{ fontSize: 18 }} /></IconButton>
+            <IconButton size="small" sx={{ width: 36, height: 36, color: "#64748b", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" } }}><HelpOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
+            <IconButton size="small" sx={{ width: 36, height: 36, color: "#64748b", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" } }}><NotificationsIcon sx={{ fontSize: 18 }} /></IconButton>
             <Box sx={{ width: 1, height: 22, bgcolor: "rgba(255,255,255,0.1)", mx: "10px" }} />
             <UserMenu initials={initials} email={currentUser?.email ?? ""} roleLabel={roleLabel} loggingOut={loggingOut} onLogout={onLogout} />
           </Box>
         </Box>
 
         {/* Page content */}
-        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: { xs: "12px", md: "24px" } }}>
+        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: { xs: "12px", md: "20px" } }}>
           <BreadcrumbCtx.Provider value={{ setRecordLabel, setBreadcrumbs }}>
             <Outlet />
           </BreadcrumbCtx.Provider>

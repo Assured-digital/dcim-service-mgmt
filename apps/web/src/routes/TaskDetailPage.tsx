@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -7,12 +7,11 @@ import {
   DialogContent, DialogTitle, Divider, MenuItem, Stack, Tab, Tabs,
   TextField, Typography
 } from "@mui/material"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import LockIcon from "@mui/icons-material/Lock"
 import LinkIcon from "@mui/icons-material/Link"
 import {
   InfoField, Badge, DetailHeader, PropertiesPanel, chipSx,
-  WorkflowStrip, type WorkflowStage
+  WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
@@ -42,11 +41,12 @@ type AuditEvent = {
   action: string
   actorUserId: string | null
   actorEmail?: string | null
-  data: any
+  data?: { from?: string; to?: string; fields?: string[] } | null
   createdAt: string
 }
+type TaskPropertyRow = { label: string; value: React.ReactNode }
 
-type Comment = {
+type TaskComment = {
   id: string
   body: string
   type: string
@@ -103,13 +103,21 @@ function entityPath(type: string | null, id: string | null) {
   return paths[type] ?? null
 }
 
-function actionLabel(action: string, data: any): string {
+function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
   switch (action) {
     case "CREATED": return "Task created"
     case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
     case "UPDATED": return `Task updated${data?.fields ? `: ${data.fields.join(", ")}` : ""}`
     default: return action.toLowerCase().replaceAll("_", " ")
   }
+}
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
 }
 
 function actionColor(action: string): string {
@@ -129,13 +137,6 @@ function actionTextColor(action: string): string {
 export default function TaskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
-  const fromSR = location.state?.fromSR
-  const fromSRRef = location.state?.fromSRRef
-  const fromIssue = location.state?.fromIssue
-  const fromIssueRef = location.state?.fromIssueRef
-  const fromRisk = location.state?.fromRisk
-  const fromRiskRef = location.state?.fromRiskRef
   const qc = useQueryClient()
   const { setRecordLabel } = useBreadcrumb()
 
@@ -180,7 +181,7 @@ export default function TaskDetailPage() {
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-task", id],
     queryFn: async () =>
-      (await api.get<Comment[]>(`/comments/Task/${id}/work-notes`)).data,
+      (await api.get<TaskComment[]>(`/comments/Task/${id}/work-notes`)).data,
     enabled: !!id
   })
 
@@ -214,8 +215,8 @@ export default function TaskDetailPage() {
       qc.invalidateQueries({ queryKey: ["audit-task", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-task", id] })
       qc.invalidateQueries({ queryKey: ["tasks"] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to update status")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to update status"))
     } finally {
       setSavingTransition(false)
     }
@@ -236,8 +237,8 @@ export default function TaskDetailPage() {
       qc.invalidateQueries({ queryKey: ["task-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-task", id] })
       qc.invalidateQueries({ queryKey: ["tasks"] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to save")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to save"))
     } finally {
       setSavingProperties(false)
     }
@@ -262,10 +263,43 @@ export default function TaskDetailPage() {
   if (!task) return <ErrorState title="Task not found" />
 
   const nextStatuses = STATUS_FLOW[task.status] ?? []
-  const currentIndex = STATUS_ALL.indexOf(task.status)
   const linkedPath = entityPath(task.linkedEntityType, task.linkedEntityId)
   const linkedLabel = entityLabel(task.linkedEntityType)
   const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== "DONE"
+
+  const propertyRows: TaskPropertyRow[] = [
+    {
+      label: "Priority",
+      value: <Chip size="small" sx={chipSx(task.priority)} label={task.priority} />
+    },
+    {
+      label: "Assignee",
+      value: <Typography variant="caption">
+        {task.assignee?.email.split("@")[0] ?? "Unassigned"}
+      </Typography>
+    },
+  ]
+  if (task.dueAt) {
+    propertyRows.push({
+      label: "Due date",
+      value: <Typography variant="caption"
+        sx={{ color: isOverdue ? "#b91c1c" : "inherit", fontWeight: isOverdue ? 700 : 400 }}>
+        {new Date(task.dueAt).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
+  if (task.linkedEntityType) {
+    propertyRows.push({
+      label: "Linked to",
+      value: <Typography variant="caption">{linkedLabel}</Typography>
+    })
+  }
+  propertyRows.push({
+    label: "Created",
+    value: <Typography variant="caption">
+      {new Date(task.createdAt).toLocaleDateString("en-GB")}
+    </Typography>
+  })
 
   return (
     <Box>
@@ -354,7 +388,7 @@ export default function TaskDetailPage() {
               onChange={(_, v) => setActiveTab(v)}
               sx={{ px: 2, minHeight: 44 }}
               textColor="inherit"
-              TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
+              TabIndicatorProps={{ style: { backgroundColor: "var(--color-text-primary)" } }}
             >
               <Tab label="Work notes"
                 icon={<Badge count={(workNotes ?? []).length} />}
@@ -489,7 +523,7 @@ export default function TaskDetailPage() {
               <CardContent sx={{ pb: "12px !important" }}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)", mb: 1.5
+                  color: "var(--color-text-muted)", mb: 1.5
                 }}>
                   PROPERTIES
                 </Typography>
@@ -542,35 +576,7 @@ export default function TaskDetailPage() {
               onEdit={canManage && task.status !== "DONE"
                 ? () => setEditingProperties(true)
                 : undefined}
-              rows={[
-                {
-                  label: "Priority",
-                  value: <Chip size="small" sx={chipSx(task.priority)} label={task.priority} />
-                },
-                {
-                  label: "Assignee",
-                  value: <Typography variant="caption">
-                    {task.assignee?.email.split("@")[0] ?? "Unassigned"}
-                  </Typography>
-                },
-                task.dueAt ? {
-                  label: "Due date",
-                  value: <Typography variant="caption"
-                    sx={{ color: isOverdue ? "#b91c1c" : "inherit", fontWeight: isOverdue ? 700 : 400 }}>
-                    {new Date(task.dueAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null,
-                task.linkedEntityType ? {
-                  label: "Linked to",
-                  value: <Typography variant="caption">{linkedLabel}</Typography>
-                } : null,
-                {
-                  label: "Created",
-                  value: <Typography variant="caption">
-                    {new Date(task.createdAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                }
-              ].filter(Boolean) as any}
+              rows={propertyRows}
             />
           )}
         </Stack>

@@ -17,7 +17,7 @@ export function Badge({ count, max = 99, variant = "default" }: BadgeProps) {
       ml: 0.75
     }}>
       <Typography sx={{
-        fontSize: 10, fontWeight: 700,
+        fontSize: 10.5, fontWeight: 700,
         color: variant === "active" ? "#fff" : "var(--color-text-secondary, #475569)",
         lineHeight: 1
       }}>

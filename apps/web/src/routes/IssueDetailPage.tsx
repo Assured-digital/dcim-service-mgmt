@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -11,7 +11,7 @@ import LockIcon from "@mui/icons-material/Lock"
 import {
   InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
   chipSx, type LinkedTask,
-  WorkflowStrip, type WorkflowStage
+  WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
@@ -37,11 +37,12 @@ type AuditEvent = {
   action: string
   actorUserId: string | null
   actorEmail?: string | null
-  data: any
+  data?: { from?: string; to?: string; fields?: string[] } | null
   createdAt: string
 }
+type IssuePropertyRow = { label: string; value: React.ReactNode }
 
-type Comment = {
+type IssueComment = {
   id: string
   body: string
   type: string
@@ -78,13 +79,21 @@ function severityLabel(severity: string) {
   return "Low severity"
 }
 
-function actionLabel(action: string, data: any): string {
+function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
   switch (action) {
     case "CREATED": return "Issue logged"
     case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
     case "UPDATED": return `Issue updated${data?.fields ? `: ${data.fields.join(", ")}` : ""}`
     default: return action.toLowerCase().replaceAll("_", " ")
   }
+}
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
 }
 
 function actionColor(action: string): string {
@@ -104,9 +113,6 @@ function actionTextColor(action: string): string {
 export default function IssueDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
-  const fromTask = location.state?.fromTask
-  const fromTaskRef = location.state?.fromTaskRef
   const qc = useQueryClient()
   const { setRecordLabel } = useBreadcrumb()
 
@@ -154,7 +160,7 @@ export default function IssueDetailPage() {
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-issue", id],
     queryFn: async () =>
-      (await api.get<Comment[]>(`/comments/Issue/${id}/work-notes`)).data,
+      (await api.get<IssueComment[]>(`/comments/Issue/${id}/work-notes`)).data,
     enabled: !!id
   })
 
@@ -188,8 +194,8 @@ export default function IssueDetailPage() {
       qc.invalidateQueries({ queryKey: ["audit-issue", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-issue", id] })
       qc.invalidateQueries({ queryKey: ["issues"] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to update status")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to update status"))
     } finally {
       setSavingTransition(false)
     }
@@ -229,7 +235,36 @@ export default function IssueDetailPage() {
   if (!issue) return <ErrorState title="Issue not found" />
 
   const nextStatuses = STATUS_FLOW[issue.status] ?? []
-  const currentIndex = STATUS_ALL.indexOf(issue.status)
+
+  const propertyRows: IssuePropertyRow[] = [
+    {
+      label: "Severity",
+      value: <Chip size="small" sx={chipSx(issue.severity)}
+        label={severityLabel(issue.severity)} />
+    },
+    {
+      label: "Logged",
+      value: <Typography variant="caption">
+        {new Date(issue.createdAt).toLocaleDateString("en-GB")}
+      </Typography>
+    }
+  ]
+  if (issue.reviewDate) {
+    propertyRows.push({
+      label: "Review date",
+      value: <Typography variant="caption">
+        {new Date(issue.reviewDate).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
+  if (issue.closedAt) {
+    propertyRows.push({
+      label: "Closed",
+      value: <Typography variant="caption">
+        {new Date(issue.closedAt).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
 
   return (
     <Box>
@@ -299,7 +334,7 @@ export default function IssueDetailPage() {
               onChange={(_, v) => setActiveTab(v)}
               sx={{ px: 2, minHeight: 44 }}
               textColor="inherit"
-              TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
+              TabIndicatorProps={{ style: { backgroundColor: "var(--color-text-primary)" } }}
             >
               <Tab label="Resolution" sx={{ fontSize: 13, minHeight: 44 }} />
               <Tab label="Work notes"
@@ -318,7 +353,7 @@ export default function IssueDetailPage() {
               <Stack spacing={1.5}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)"
+                  color: "var(--color-text-muted)"
                 }}>
                   RESOLUTION
                 </Typography>
@@ -467,7 +502,7 @@ export default function IssueDetailPage() {
               <CardContent sx={{ pb: "12px !important" }}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)", mb: 1.5
+                  color: "var(--color-text-muted)", mb: 1.5
                 }}>
                   PROPERTIES
                 </Typography>
@@ -502,31 +537,7 @@ export default function IssueDetailPage() {
               onEdit={canManage && issue.status !== "CLOSED"
                 ? () => setEditingProperties(true)
                 : undefined}
-              rows={[
-                {
-                  label: "Severity",
-                  value: <Chip size="small" sx={chipSx(issue.severity)}
-                    label={severityLabel(issue.severity)} />
-                },
-                issue.reviewDate ? {
-                  label: "Review date",
-                  value: <Typography variant="caption">
-                    {new Date(issue.reviewDate).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null,
-                {
-                  label: "Logged",
-                  value: <Typography variant="caption">
-                    {new Date(issue.createdAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                },
-                issue.closedAt ? {
-                  label: "Closed",
-                  value: <Typography variant="caption">
-                    {new Date(issue.closedAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null
-              ].filter(Boolean) as any}
+              rows={propertyRows}
             />
           )}
 

@@ -25,6 +25,14 @@ export class CreateRiskDto {
   @IsOptional()
   @IsIn(["MANUAL", "SURVEY", "INCIDENT", "CHANGE", "AUDIT"])
   source?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityType?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string
 }
 
 export class UpdateRiskStatusDto {
@@ -53,4 +61,12 @@ export class UpdateRiskDto {
   @IsOptional()
   @IsIn(["LOW", "MEDIUM", "HIGH"])
   impact?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityType?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string
 }

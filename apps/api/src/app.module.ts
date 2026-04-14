@@ -42,7 +42,6 @@ import { OverviewModule } from "./overview/overview.module"
     IncidentsModule,
     TasksModule,
     SitesModule,
-    SitesModule,
     ChangesModule,
     RisksModule,
     IssuesModule,

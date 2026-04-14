@@ -5,7 +5,7 @@ import { api } from "../lib/api"
 import {
   Box, Button, ButtonGroup, Card, CardContent,
   Divider, Grid, MenuItem, Stack, TextField,
-  Tooltip, Typography
+  Typography
 } from "@mui/material"
 import { LineChart } from "@mui/x-charts/LineChart"
 import FileDownloadIcon from "@mui/icons-material/FileDownload"
@@ -14,8 +14,8 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { chipSx } from "../components/shared"
-import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { Chip } from "@mui/material"
+import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type SR = { id: string; status: string; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; email: string } | null }
@@ -23,7 +23,6 @@ type Task = { id: string; reference: string; title: string; status: string; prio
 type Risk = { id: string; status: string; createdAt: string; updatedAt: string }
 type Issue = { id: string; status: string; createdAt: string; updatedAt: string }
 type Check = { id: string; reference: string; title: string; status: string; scheduledAt: string | null; createdAt: string; updatedAt: string; site?: { name: string } | null }
-type Asset = { id: string }
 
 // ── Date helpers ───────────────────────────────────────────────────────────
 function formatDateForInput(d: Date) {
@@ -308,8 +307,6 @@ export default function DashboardPage() {
   const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<Risk[]>("/risks")).data })
   const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<Issue[]>("/issues")).data })
   const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<Check[]>("/checks")).data })
-  const assets = useQuery({ queryKey: ["assets"], queryFn: async () => (await api.get<Asset[]>("/assets")).data })
-
   const isLoading = srs.isLoading || tasks.isLoading || risks.isLoading || issues.isLoading || checks.isLoading
   const hasError = !!(srs.error || tasks.error || risks.error || issues.error || checks.error)
 
@@ -408,12 +405,10 @@ export default function DashboardPage() {
 
               {/* Filter bar */}
               <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} gap="12px" sx={{ mb: "20px" }}>
-                <Stack direction="row" alignItems="center" gap="8px">
-                  <TrendingUpIcon sx={{ fontSize: 15, color: "#64748b" }} />
-                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>
-                    Trend Snapshot
-                  </Typography>
-                </Stack>
+                <SectionHeader
+                  label="Trend Snapshot"
+                  action={<TrendingUpIcon sx={{ fontSize: 15, color: "var(--color-text-secondary)" }} />}
+                />
                 <Stack direction="row" alignItems="center" gap="8px" flexWrap="wrap">
                   <TextField
                     select size="small" label="Assignee" value={assigneeId}
@@ -486,15 +481,16 @@ export default function DashboardPage() {
             <Grid item xs={12} md={5}>
               <Card variant="outlined" sx={{ height: "100%" }}>
                 <CardContent>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: "12px" }}>
-                    <Stack direction="row" alignItems="center" gap="6px">
-                      <WarningAmberIcon sx={{ fontSize: 14, color: "#f59e0b" }} />
-                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Needs Attention</Typography>
-                    </Stack>
-                    {overdueTasks.length === 0 && overdueChecks.length === 0 && pendingReviewChecks === 0 ? (
-                      <CheckCircleOutlineIcon sx={{ fontSize: 14, color: "#22c55e" }} />
-                    ) : null}
-                  </Stack>
+                  <Box sx={{ mb: "12px" }}>
+                    <SectionHeader
+                      label="Needs Attention"
+                      action={
+                        overdueTasks.length === 0 && overdueChecks.length === 0 && pendingReviewChecks === 0
+                          ? <CheckCircleOutlineIcon sx={{ fontSize: 14, color: "#22c55e" }} />
+                          : <WarningAmberIcon sx={{ fontSize: 14, color: "#f59e0b" }} />
+                      }
+                    />
+                  </Box>
                   {overdueTasks.length === 0 && overdueChecks.length === 0 && pendingReviewChecks === 0 ? (
                     <Typography variant="body2" color="text.secondary">Nothing needs attention right now.</Typography>
                   ) : null}
@@ -526,10 +522,12 @@ export default function DashboardPage() {
             <Grid item xs={12} md={7}>
               <Card variant="outlined" sx={{ height: "100%" }}>
                 <CardContent>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: "12px" }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Recent Activity</Typography>
-                    <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>Last updated items</Typography>
-                  </Stack>
+                  <Box sx={{ mb: "12px" }}>
+                    <SectionHeader
+                      label="Recent Activity"
+                      action={<Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>Last updated items</Typography>}
+                    />
+                  </Box>
                   {recentItems.length === 0 ? (
                     <Typography variant="body2" color="text.secondary">No recent activity.</Typography>
                   ) : null}

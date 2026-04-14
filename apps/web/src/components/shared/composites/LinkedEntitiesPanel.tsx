@@ -16,7 +16,8 @@ export interface LinkedTask {
 
 interface LinkedEntitiesPanelProps {
   items: LinkedTask[]
-  onNavigate: (item: LinkedTask) => void
+  // eslint-disable-next-line no-unused-vars
+  onNavigate: (task: LinkedTask) => void
   onCreate?: () => void
   title?: string
   emptyMessage?: string
@@ -67,13 +68,13 @@ export function LinkedEntitiesPanel({
                 </Stack>
                 <Stack direction="row" spacing={0.75} alignItems="center" sx={{ ml: 1.75 }}>
                   <Typography variant="caption" sx={{
-                    fontFamily: "monospace", fontSize: 10, color: "text.secondary"
+                    fontFamily: "monospace", fontSize: 11, color: "text.secondary"
                   }}>
                     {task.reference}
                   </Typography>
                   <Chip size="small"
                     label={task.status.toLowerCase().replace("_", " ")}
-                    sx={{ ...chipSx(task.status), height: 16, fontSize: 10 }} />
+                    sx={{ ...chipSx(task.status), height: 18, fontSize: 10.5 }} />
                 </Stack>
               </Box>
             ))}

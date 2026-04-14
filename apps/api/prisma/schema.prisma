@@ -332,6 +332,8 @@ model ServiceRequest {
   closureSummary String?
   assigneeId  String?
   assignee    User?    @relation("AssignedSR", fields: [assigneeId], references: [id])
+  linkedEntityType String?
+  linkedEntityId   String?
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -544,6 +546,8 @@ model Risk {
   acceptanceNote String?
   reviewDate     DateTime?
   closedAt       DateTime?
+  linkedEntityType String?
+  linkedEntityId   String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   source         String?
@@ -561,6 +565,8 @@ model Issue {
   resolution  String?
   reviewDate  DateTime?
   closedAt    DateTime?
+  linkedEntityType String?
+  linkedEntityId   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

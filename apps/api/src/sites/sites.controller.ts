@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
@@ -34,7 +34,7 @@ export class SitesController {
   }
 
   @Post()
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async create(@Req() req: any, @Body() dto: CreateSiteDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
@@ -42,10 +42,18 @@ export class SitesController {
   }
 
   @Put(":id")
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async update(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateSiteDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.sites.updateForClient(clientId, id, user.userId, dto)
+  }
+
+  @Delete(":id")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  async remove(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.sites.removeForClient(clientId, id)
   }
 }

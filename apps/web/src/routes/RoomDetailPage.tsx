@@ -3,15 +3,13 @@ import { useParams, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Box, Button, Chip, MenuItem, Stack,
+  Box, Button, Chip, Stack,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TextField, Tooltip, Typography
+  Typography
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import StorageIcon from "@mui/icons-material/Storage"
-import MemoryIcon from "@mui/icons-material/Memory"
 import SearchIcon from "@mui/icons-material/Search"
-import { chipSx } from "../components/shared"
 import { ErrorState, LoadingState, EmptyState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -127,7 +125,7 @@ export default function RoomDetailPage() {
   React.useEffect(() => {
     if (site && room) {
       setBreadcrumbs([
-        { label: site.name, path: `/infrastructure/${siteId}` },
+        { label: site.name, path: `/asset-management/${siteId}` },
         { label: room.name }
       ])
     }
@@ -139,12 +137,12 @@ export default function RoomDetailPage() {
   const usedU = roomCabinets.reduce((s, c) => s + (c.usedU ?? 0), 0)
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "calc(100vh - 64px)", mx: { xs: "-12px", md: "-24px" }, mt: { xs: "-12px", md: "-24px" }, mb: { xs: "-12px", md: "-24px" }, overflow: "hidden", bgcolor: "#f8fafc" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)", mx: { xs: "-12px", md: "-24px" }, mt: { xs: "-12px", md: "-24px" }, mb: { xs: "-12px", md: "-24px" }, overflow: "hidden", bgcolor: "var(--color-background-tertiary)" }}>
 
       {/* Header */}
-      <Box sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", px: "28px", pt: "14px", pb: 0, flexShrink: 0 }}>
+      <Box sx={{ bgcolor: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-primary)", px: "28px", pt: "14px", pb: 0, flexShrink: 0 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: "14px" }}>
-          <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>
+          <Typography sx={{ fontSize: 12, color: "var(--color-text-muted)" }}>
             {roomCabinets.length} rack{roomCabinets.length !== 1 ? "s" : ""}
             {totalU > 0 ? ` · ${usedU}/${totalU}U used` : ""}
             {" · "}{roomAssets.length} assets
@@ -152,7 +150,7 @@ export default function RoomDetailPage() {
           {canManage ? (
             <Button size="small" variant="contained"
               startIcon={<AddIcon sx={{ fontSize: 13 }} />}
-              onClick={() => navigate(`/infrastructure/${siteId}`)}>
+              onClick={() => navigate(`/asset-management/${siteId}`)}>
               Add rack
             </Button>
           ) : null}
@@ -167,13 +165,13 @@ export default function RoomDetailPage() {
             <Box key={t.key} onClick={() => setTab(t.key as any)}
               sx={{
                 px: "16px", py: "10px", cursor: "pointer", fontSize: 13, fontWeight: 500,
-                color: tab === t.key ? "#1d4ed8" : "#64748b",
+                color: tab === t.key ? "#1d4ed8" : "var(--color-text-secondary)",
                 borderBottom: tab === t.key ? "2px solid #1d4ed8" : "2px solid transparent",
                 display: "flex", alignItems: "center", gap: "6px",
                 transition: "all 0.15s", "&:hover": { color: "#0f172a" }
               }}>
               {t.label}
-              <Box sx={{ px: "5px", py: "1px", borderRadius: "4px", bgcolor: tab === t.key ? "#dbeafe" : "#f1f5f9", fontSize: 11, fontWeight: 600, color: tab === t.key ? "#1d4ed8" : "#64748b" }}>
+                <Box sx={{ px: "5px", py: "1px", borderRadius: "4px", bgcolor: tab === t.key ? "#dbeafe" : "var(--color-background-secondary)", fontSize: 11, fontWeight: 600, color: tab === t.key ? "#1d4ed8" : "var(--color-text-secondary)" }}>
                 {t.count}
               </Box>
             </Box>
@@ -197,10 +195,10 @@ export default function RoomDetailPage() {
                   const fill = uFill(c.usedU, c.totalU)
                   const powerPct = c.powerKw ? Math.min(100, Math.round((c.powerKw / 20) * 100)) : 0
                   return (
-                    <Box key={c.id}
-                      onClick={() => navigate(`/infrastructure/${siteId}/rooms/${roomId}/cabinets/${c.id}`)}
+                      <Box key={c.id}
+                      onClick={() => navigate(`/asset-management/${siteId}?roomId=${roomId}&cabinetId=${c.id}`)}
                       sx={{
-                        bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px",
+                        bgcolor: "var(--color-background-primary)", border: "1px solid var(--color-border-primary)", borderRadius: "10px",
                         p: "16px 18px", cursor: "pointer", transition: "all 0.15s",
                         "&:hover": { borderColor: "#1d4ed8", boxShadow: "0 2px 12px rgba(29,78,216,0.08)" }
                       }}>
@@ -216,8 +214,8 @@ export default function RoomDetailPage() {
                       {c.totalU ? (
                         <Box sx={{ mb: "8px" }}>
                           <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                            <Typography sx={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>U Space</Typography>
-                            <Typography sx={{ fontSize: 10, fontWeight: 600, color: "#64748b" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
+                            <Typography sx={{ fontSize: 10, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>U Space</Typography>
+                            <Typography sx={{ fontSize: 10, fontWeight: 600, color: "var(--color-text-secondary)" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
                           </Stack>
                           <Box sx={{ height: 4, bgcolor: "#f1f5f9", borderRadius: 2, overflow: "hidden" }}>
                             <Box sx={{ height: "100%", width: `${fill}%`, bgcolor: barColor(fill), borderRadius: 2 }} />
@@ -227,8 +225,8 @@ export default function RoomDetailPage() {
                       {c.powerKw ? (
                         <Box>
                           <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                            <Typography sx={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Power</Typography>
-                            <Typography sx={{ fontSize: 10, fontWeight: 600, color: "#64748b" }}>{c.powerKw} kW</Typography>
+                            <Typography sx={{ fontSize: 10, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Power</Typography>
+                            <Typography sx={{ fontSize: 10, fontWeight: 600, color: "var(--color-text-secondary)" }}>{c.powerKw} kW</Typography>
                           </Stack>
                           <Box sx={{ height: 4, bgcolor: "#f1f5f9", borderRadius: 2, overflow: "hidden" }}>
                             <Box sx={{ height: "100%", width: `${powerPct}%`, bgcolor: barColor(powerPct), borderRadius: 2 }} />
@@ -317,7 +315,7 @@ export default function RoomDetailPage() {
                     <TableBody>
                       {filteredAssets.map(a => (
                         <TableRow key={a.id} hover sx={{ cursor: "pointer", "&:hover td": { bgcolor: "#f8fafc" } }}
-                          onClick={() => navigate(`/infrastructure/${siteId}/rooms/${roomId}/cabinets/${a.cabinet?.id}/assets/${a.id}`)}>
+                          onClick={() => navigate(`/asset-management/${siteId}?roomId=${roomId}&cabinetId=${a.cabinet?.id}&assetId=${a.id}`)}>
                           <TableCell>
                             <Stack direction="row" alignItems="center" spacing={1}>
                               <Box sx={{ width: 20, height: 20, borderRadius: "4px", bgcolor: assetTypeColor(a.assetType), flexShrink: 0 }} />

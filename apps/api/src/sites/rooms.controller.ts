@@ -24,7 +24,7 @@ export class RoomsController {
   }
 
   @Post()
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.ENGINEER)
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async create(@Req() req: any, @Param("siteId") siteId: string, @Body() dto: any, @Headers("x-client-id") clientHeader?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, clientHeader, this.prisma)
@@ -40,7 +40,7 @@ export class RoomsController {
   }
 
   @Delete(":roomId")
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async remove(@Req() req: any, @Param("siteId") siteId: string, @Param("roomId") roomId: string, @Headers("x-client-id") clientHeader?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, clientHeader, this.prisma)
