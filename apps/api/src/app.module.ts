@@ -24,6 +24,8 @@ import { WorkPackagesModule } from "./work-packages/work-packages.module"
 import { CabinetsModule } from "./cabinets/cabinets.module"
 import { MyWorkModule } from "./my-work/my-work.module"
 import { OverviewModule } from "./overview/overview.module"
+import { MaintenanceModule } from "./maintenance/maintenance.module"
+import { ConnectionsModule } from "./connections/connections.module"
 
 @Module({
   imports: [
@@ -50,7 +52,9 @@ import { OverviewModule } from "./overview/overview.module"
     MyWorkModule,
     CabinetsModule,
     OverviewModule,
-    UsersModule
+    UsersModule,
+    MaintenanceModule,
+    ConnectionsModule
   ],
   controllers: [HealthController]
 })

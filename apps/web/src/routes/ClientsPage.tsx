@@ -66,13 +66,6 @@ export default function ClientsPage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 0.5 }}>
-        Clients
-      </Typography>
-      <Typography color="text.secondary" sx={{ mb: 2 }}>
-        Onboard and manage tenant clients used for data scope and user assignments.
-      </Typography>
-
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>

@@ -57,12 +57,10 @@ export default function WorkPackagesPage() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h4">Service Scope</Typography>
-        <Button variant="contained" onClick={() => setOpen(true)}>New service scope</Button>
-      </Stack>
-
       <Card>
+        <Box sx={{ borderBottom: "1px solid #e2e8f0", px: 2, py: 1.25, display: "flex", justifyContent: "flex-end" }}>
+          <Button size="small" variant="contained" onClick={() => setOpen(true)}>New service scope</Button>
+        </Box>
         <CardContent>
           {isLoading ? <LoadingState /> : null}
           {error ? <ErrorState title="Failed to load work packages" /> : null}

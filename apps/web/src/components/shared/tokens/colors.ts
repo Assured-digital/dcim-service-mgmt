@@ -68,3 +68,40 @@ export function chipSx(value: string) {
 export function priorityDot(priority: string): string {
   return priorityDots[priority.toLowerCase()] ?? "#94a3b8"
 }
+
+export function statusSelectSx(minWidth = 180) {
+  return {
+    minWidth,
+    "& .MuiInputLabel-root": {
+      display: "none",
+    },
+    "& .MuiOutlinedInput-root": {
+      height: 32,
+      borderRadius: 999,
+      bgcolor: "#ffffff",
+      fontSize: 12,
+      fontWeight: 600,
+      color: "#334155",
+      "& fieldset": {
+        borderColor: "#cbd5e1",
+      },
+      "&:hover fieldset": {
+        borderColor: "#94a3b8",
+      },
+      "&.Mui-focused fieldset": {
+        borderColor: "#64748b",
+      },
+    },
+    "& .MuiSelect-select": {
+      py: "6px !important",
+      pl: "10px !important",
+      pr: "28px !important",
+      display: "flex",
+      alignItems: "center",
+    },
+    "& .MuiSvgIcon-root": {
+      color: "#64748b",
+      fontSize: 18,
+    },
+  }
+}

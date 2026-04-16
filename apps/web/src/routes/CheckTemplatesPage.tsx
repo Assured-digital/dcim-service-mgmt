@@ -85,21 +85,17 @@ export default function CheckTemplatesPage() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
-        <Box>
-          <Typography variant="h4">Check Templates</Typography>
-          <Typography color="text.secondary" variant="body2" sx={{ mt: 0.5 }}>
+      <Card>
+        <Box sx={{ borderBottom: "1px solid #e2e8f0", px: 2, py: 1.25, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Typography color="text.secondary" variant="body2">
             Reusable checklists applied when scheduling engineering checks.
           </Typography>
+          {canManage ? (
+            <Button size="small" variant="contained" onClick={() => setCreateOpen(true)}>
+              New template
+            </Button>
+          ) : null}
         </Box>
-        {canManage ? (
-          <Button variant="contained" onClick={() => setCreateOpen(true)}>
-            New template
-          </Button>
-        ) : null}
-      </Stack>
-
-      <Card>
         {isLoading ? <Box sx={{ p: 2 }}><LoadingState /></Box> : null}
         {isError ? <Box sx={{ p: 2 }}><ErrorState title="Failed to load templates" /></Box> : null}
         {!isLoading && !isError && (data?.length ?? 0) === 0 ? (

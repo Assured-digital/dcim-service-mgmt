@@ -71,6 +71,18 @@ enum TaskStatus {
   DONE
 }
 
+enum MaintenanceWorkType {
+  INSPECTION
+  PSU_REPLACEMENT
+  FIRMWARE_UPGRADE
+  PAT_INSPECTION
+  COOLING_CHECK
+  CABLE_AUDIT
+  REPAIR
+  UPGRADE
+  OTHER
+}
+
 enum RequestIntakeStatus {
   NEW
   UNDER_REVIEW
@@ -83,6 +95,13 @@ enum AssetLifecycleState {
   PROCUREMENT
   STAGING
   ACTIVE
+  RETIRED
+}
+
+enum ConnectionStatus {
+  PLANNED
+  ACTIVE
+  DEGRADED
   RETIRED
 }
 
@@ -110,6 +129,7 @@ model Client {
   publicSubmissions PublicSubmission[]
   documents DocumentReference[]
   requestIntakes RequestIntake[]
+  connections Connection[]
 }
 
 model Site {
@@ -302,6 +322,7 @@ model User {
   comments         Comment[]        @relation("UserComments")
   assignedChecks     Check[]  @relation("AssignedCheck")
   reviewingChecks    Check[]  @relation("CheckReviewer")
+  performedMaintenance MaintenanceLog[] @relation("PerformedMaintenance")
 }
 
 model PublicSubmission {
@@ -374,6 +395,48 @@ model Asset {
   lastMaintenanceAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  installDate       DateTime?
+  maintenanceLogs   MaintenanceLog[]
+  outgoingConnections Connection[] @relation("ConnectionFromAsset")
+  incomingConnections Connection[] @relation("ConnectionToAsset")
+}
+
+model MaintenanceLog {
+  id            String              @id @default(uuid())
+  assetId       String
+  asset         Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  workType      MaintenanceWorkType @default(OTHER)
+  workTypeOther String?
+  performedAt   DateTime
+  performedById String?
+  performedBy   User?               @relation("PerformedMaintenance", fields: [performedById], references: [id])
+  notes         String?
+  nextDueAt     DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model Connection {
+  id              String           @id @default(uuid())
+  clientId        String
+  client          Client           @relation(fields: [clientId], references: [id])
+  fromAssetId     String
+  fromAsset       Asset            @relation("ConnectionFromAsset", fields: [fromAssetId], references: [id], onDelete: Cascade)
+  toAssetId       String
+  toAsset         Asset            @relation("ConnectionToAsset", fields: [toAssetId], references: [id], onDelete: Cascade)
+  connectionType  String
+  status          ConnectionStatus @default(ACTIVE)
+  label           String?
+  notes           String?
+  installedAt     DateTime?
+  lastValidatedAt DateTime?
+  createdById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([clientId, status])
+  @@index([fromAssetId])
+  @@index([toAssetId])
 }
 
 model Incident {
@@ -386,6 +449,8 @@ model Incident {
   status      IncidentStatus @default(NEW)
   severity    IncidentSeverity @default(MEDIUM)
   priority    String   @default("medium")
+  linkedEntityType String?
+  linkedEntityId   String?
   assigneeId  String?
   assignee    User?    @relation("AssignedIncident", fields: [assigneeId], references: [id])
   createdById String?
@@ -502,6 +567,8 @@ model ChangeRequest {
   changeType          String   @default("NORMAL")
   status              String   @default("DRAFT")
   priority            String   @default("medium")
+  linkedEntityType String?
+  linkedEntityId   String?
   title               String
   description         String
   reason              String?

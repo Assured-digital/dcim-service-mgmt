@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@prisma/client";
 import { Response } from "express";
@@ -9,7 +9,7 @@ import { toCsv } from "../common/reporting/csv";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
-import { UpdateIncidentStatusDto } from "./dto";
+import { CreateIncidentDto, UpdateIncidentDto, UpdateIncidentStatusDto } from "./dto";
 import { IncidentsService } from "./incidents.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -75,6 +75,36 @@ export class IncidentsController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.incidents.getForClient(clientId, id);
+  }
+
+  @Post()
+  @Roles(
+    Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN,
+    Role.SERVICE_MANAGER,
+    Role.SERVICE_DESK_ANALYST,
+    Role.ENGINEER
+  )
+  async create(
+    @Req() req: any,
+    @Body() dto: CreateIncidentDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.incidents.createForClient(clientId, user.userId, dto);
+  }
+
+  @Put(":id")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  async update(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: UpdateIncidentDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.incidents.updateForClient(clientId, id, user.userId, dto);
   }
 
   @Post(":id/status")

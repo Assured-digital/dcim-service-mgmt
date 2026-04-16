@@ -117,18 +117,16 @@ function normaliseApiError(err: unknown): ApiError {
 api.interceptors.request.use((config) => {
   const user = getCurrentUser();
   if (isOrgSuperRole(user?.role)) {
+    const headers = axios.AxiosHeaders.from(config.headers ?? {});
     const hasExplicitScopeHeader =
-      !!config.headers &&
-      (Object.prototype.hasOwnProperty.call(config.headers, "x-client-id") ||
-        Object.prototype.hasOwnProperty.call(config.headers, "X-Client-Id"));
+      headers.has("x-client-id") ||
+      headers.has("X-Client-Id");
     if (hasExplicitScopeHeader) return config;
 
     const selectedClientId = getSelectedClientId();
     if (selectedClientId) {
-      config.headers = {
-        ...(config.headers ?? {}),
-        "x-client-id": selectedClientId
-      };
+      headers.set("x-client-id", selectedClientId);
+      config.headers = headers;
     }
   }
   return config;
@@ -150,10 +148,9 @@ api.interceptors.response.use(
       const token = await tryRefreshAccessToken();
 
       if (token) {
-        original.headers = {
-          ...(original.headers ?? {}),
-          Authorization: `Bearer ${token}`
-        };
+        const headers = axios.AxiosHeaders.from(original.headers ?? {});
+        headers.set("Authorization", `Bearer ${token}`);
+        original.headers = headers;
         return api.request(original);
       }
     }

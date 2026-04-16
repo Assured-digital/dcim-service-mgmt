@@ -213,7 +213,7 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
             "& .MuiChartsAxis-root": { display: "none" },
             "& .MuiChartsGrid-root": { "& line": { stroke: "#f1f5f9" } }
           }}
-          slotProps={{ legend: { hidden: true } }}
+          hideLegend
         />
       </Box>
       {chartData.length > 1 ? (
@@ -386,13 +386,6 @@ export default function DashboardPage() {
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <Box>
-      <Box sx={{ mb: "24px" }}>
-        <Typography variant="h4" sx={{ fontWeight: 400, lineHeight: 1.2 }}>Dashboard</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: "4px" }}>
-          Live operational pulse for the selected client
-        </Typography>
-      </Box>
-
       {isLoading ? <LoadingState label="Loading dashboard..." /> : null}
       {hasError ? <ErrorState title="Failed to load dashboard data" /> : null}
 
@@ -467,8 +460,8 @@ export default function DashboardPage() {
 
               <Box sx={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <StatTile label="Open SRs" value={openSRs} tone="#2563eb" description="Not yet closed" onClick={() => navigate("/service-desk")} />
-                <StatTile label="Open Risks" value={openRisks} tone="#f59e0b" description="Active risks" urgent onClick={() => navigate("/risks")} />
-                <StatTile label="Open Issues" value={openIssues} tone="#dc2626" description="Unresolved issues" urgent onClick={() => navigate("/issues")} />
+                <StatTile label="Open Risks" value={openRisks} tone="#f59e0b" description="Active risks" urgent onClick={() => navigate("/risks-issues/risks?view=all")} />
+                <StatTile label="Open Issues" value={openIssues} tone="#dc2626" description="Unresolved issues" urgent onClick={() => navigate("/risks-issues/issues?view=all")} />
                 <StatTile label="Open Tasks" value={openTasks} tone="#0f766e" description="Not yet done" onClick={() => navigate("/tasks")} />
                 <StatTile label="Pending Review" value={pendingReviewChecks} tone="#7c3aed" description="Checks awaiting review" urgent onClick={() => navigate("/checks")} />
               </Box>
@@ -540,7 +533,8 @@ export default function DashboardPage() {
                         if (item.kind === "SR") navigate("/service-desk")
                         else if (item.kind === "TASK") navigate(`/tasks/${item.id}`)
                         else if (item.kind === "CHECK") navigate(`/checks/${item.id}`)
-                        else if (item.kind === "RISK") navigate("/risks")
+                        else if (item.kind === "RISK") navigate("/risks-issues/risks?view=all")
+                        else if (item.kind === "ISSUE") navigate("/risks-issues/issues?view=all")
                       }}
                     />
                   ))}

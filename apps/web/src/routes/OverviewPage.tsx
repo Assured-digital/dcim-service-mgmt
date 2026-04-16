@@ -207,7 +207,8 @@ export default function OverviewPage() {
 
   function handleAttentionNav(item: AttentionItem) {
     if (item.entityType === "incident") {
-      goToClient(item.entityId, `/incidents/${item.entityId}`)
+      const stat = data?.clientStats.find(s => s.client.name === item.clientName)
+      if (stat) goToClient(stat.client.id, `/incidents/${item.entityId}`)
     } else if (item.entityType === "check") {
       // Find the client id from stats
       const stat = data?.clientStats.find(s => s.client.name === item.clientName)
@@ -225,16 +226,6 @@ export default function OverviewPage() {
 
   return (
     <Box>
-      {/* Page header */}
-      <Box sx={{ mb: "24px" }}>
-        <Typography variant="h4" sx={{ fontWeight: 400, lineHeight: 1.2 }}>
-          Operations Overview
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: "4px" }}>
-          Portfolio health across all clients
-        </Typography>
-      </Box>
-
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState title="Failed to load overview" /> : null}
 

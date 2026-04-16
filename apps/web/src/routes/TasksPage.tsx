@@ -7,15 +7,18 @@ import {
   DialogActions, DialogContent, DialogTitle, IconButton,
   Menu, MenuItem, Popover, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TextField,
-  ToggleButton, ToggleButtonGroup, Tooltip, Typography
+  Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import TableRowsIcon from "@mui/icons-material/TableRows"
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban"
+import ViewColumnIcon from "@mui/icons-material/ViewColumn"
 import MoreVertIcon from "@mui/icons-material/MoreVert"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import CheckIcon from "@mui/icons-material/Check"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core"
+import { CSS } from "@dnd-kit/utilities"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { chipSx } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -40,6 +43,26 @@ type Task = {
 }
 
 type User = { id: string; email: string }
+type TaskAuditEvent = {
+  id: string
+  action: string
+  actorEmail?: string | null
+  createdAt: string
+  data?: { from?: string; to?: string; fields?: string[] } | null
+}
+type TaskComment = {
+  id: string
+  body: string
+  createdAt: string
+  author: { id: string; email: string }
+}
+type ListColumnId = "title" | "ref" | "status" | "priority" | "assignee" | "linked" | "due" | "updated"
+type ListColumnConfig = {
+  id: ListColumnId
+  label: string
+  minWidth: number
+  alwaysVisible?: boolean
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const STATUS_LABELS: Record<string, string> = {
@@ -55,6 +78,18 @@ const COLUMNS = [
   { status: "BLOCKED", label: "Blocked", chipBg: "#FEE2E2", chipText: "#DC2626", accent: "#F59E0B" },
   { status: "DONE", label: "Done", chipBg: "#DCFCE7", chipText: "#16A34A", accent: "#22C55E" }
 ]
+const LIST_COLUMNS: ListColumnConfig[] = [
+  { id: "title", label: "Title", minWidth: 260, alwaysVisible: true },
+  { id: "ref", label: "Ref", minWidth: 120, alwaysVisible: true },
+  { id: "status", label: "Status", minWidth: 140 },
+  { id: "priority", label: "Priority", minWidth: 130 },
+  { id: "assignee", label: "Assignee", minWidth: 160 },
+  { id: "linked", label: "Linked to", minWidth: 140 },
+  { id: "due", label: "Due", minWidth: 140 },
+  { id: "updated", label: "Updated", minWidth: 150 }
+]
+const DEFAULT_VISIBLE_COLUMNS: ListColumnId[] = LIST_COLUMNS.map((col) => col.id)
+const TASK_LIST_COLUMNS_STORAGE_KEY = "ad-tasks-list-columns"
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function isOverdue(dueAt: string | null) {
@@ -111,11 +146,12 @@ function formatDateTime(iso: string | null) {
 }
 
 // ── Generic option popover ────────────────────────────────────────────────
-function OptionPopover({ anchorEl, onClose, options, current, onSelect }: {
+function OptionPopover({ anchorEl, onClose, options, current, onSelect, headerLabel }: {
   anchorEl: HTMLElement | null; onClose: () => void
   options: { value: string; label: string; dot?: string }[]
   // eslint-disable-next-line no-unused-vars
   current: string; onSelect: (value: string) => void
+  headerLabel?: string
 }) {
   return (
     <Popover
@@ -125,6 +161,19 @@ function OptionPopover({ anchorEl, onClose, options, current, onSelect }: {
       PaperProps={{ sx: { boxShadow: "0 4px 16px rgba(15,23,42,0.12)", borderRadius: "8px", border: "1px solid #e2e8f0", minWidth: 160 } }}
     >
       <Box sx={{ py: "4px" }}>
+        {headerLabel ? (
+          <Typography sx={{
+            px: "12px",
+            py: "6px",
+            fontSize: 10,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "#94a3b8"
+          }}>
+            {headerLabel}
+          </Typography>
+        ) : null}
         {options.map(opt => (
           <Box key={opt.value} onClick={() => { onSelect(opt.value); onClose() }} sx={{
             display: "flex", alignItems: "center", gap: "8px",
@@ -141,10 +190,11 @@ function OptionPopover({ anchorEl, onClose, options, current, onSelect }: {
 }
 
 // Assignee popover
-function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect }: {
+function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect, headerLabel }: {
   anchorEl: HTMLElement | null; onClose: () => void
   // eslint-disable-next-line no-unused-vars
   users: User[]; currentId: string | null; onSelect: (assigneeId: string | null) => void
+  headerLabel?: string
 }) {
   return (
     <Popover
@@ -154,6 +204,19 @@ function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect }: {
       PaperProps={{ sx: { boxShadow: "0 4px 16px rgba(15,23,42,0.12)", borderRadius: "8px", border: "1px solid #e2e8f0", minWidth: 200 } }}
     >
       <Box sx={{ py: "4px" }}>
+        {headerLabel ? (
+          <Typography sx={{
+            px: "12px",
+            py: "6px",
+            fontSize: 10,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "#94a3b8"
+          }}>
+            {headerLabel}
+          </Typography>
+        ) : null}
         <Box onClick={() => { onSelect(null); onClose() }} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "12px", py: "8px", cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}>
           <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#f1f5f9", flexShrink: 0 }} />
           <Typography sx={{ fontSize: 13, color: "#94a3b8", flex: 1 }}>Unassigned</Typography>
@@ -174,10 +237,11 @@ function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect }: {
 }
 
 // Due date popover
-function DueDatePopover({ anchorEl, onClose, current, onSelect }: {
+function DueDatePopover({ anchorEl, onClose, current, onSelect, headerLabel }: {
   anchorEl: HTMLElement | null; onClose: () => void
   // eslint-disable-next-line no-unused-vars
   current: string | null; onSelect: (dueDate: string | null) => void
+  headerLabel?: string
 }) {
   const [val, setVal] = React.useState(current ? current.slice(0, 10) : "")
   return (
@@ -187,8 +251,8 @@ function DueDatePopover({ anchorEl, onClose, current, onSelect }: {
       transformOrigin={{ vertical: "top", horizontal: "left" }}
       PaperProps={{ sx: { boxShadow: "0 4px 16px rgba(15,23,42,0.12)", borderRadius: "8px", border: "1px solid #e2e8f0", p: "12px", minWidth: 200 } }}
     >
-      <Typography sx={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", mb: "8px" }}>
-        Due date
+      <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", mb: "8px" }}>
+        {headerLabel ?? "Due date"}
       </Typography>
       <TextField
         type="date" size="small" fullWidth
@@ -212,9 +276,10 @@ function DueDatePopover({ anchorEl, onClose, current, onSelect }: {
 }
 
 // ── Inline create row ─────────────────────────────────────────────────────
-function InlineCreateRow({ users, onCreate, onCancel }: {
+function InlineCreateRow({ users, onCreate, onCancel, visibleColumns }: {
   // eslint-disable-next-line no-unused-vars
   users: User[]; onCreate: (newTask: Partial<Task>) => void; onCancel: () => void
+  visibleColumns: ListColumnId[]
 }) {
   const [title, setTitle] = React.useState("")
   const [status, setStatus] = React.useState("OPEN")
@@ -229,6 +294,7 @@ function InlineCreateRow({ users, onCreate, onCancel }: {
   const [dueAnchor, setDueAnchor] = React.useState<HTMLElement | null>(null)
 
   const assignee = users.find(u => u.id === assigneeId)
+  const visibleSet = React.useMemo(() => new Set(visibleColumns), [visibleColumns])
 
   async function handleSave() {
     if (!title.trim()) return
@@ -241,71 +307,81 @@ function InlineCreateRow({ users, onCreate, onCancel }: {
     <>
       <TableRow sx={{ bgcolor: "#f8fafc", "& td": { py: "6px" } }}>
         {/* Title */}
-        <TableCell sx={{ pl: "16px" }}>
-          <TextField
-            autoFocus size="small" placeholder="What needs to be done?" value={title}
-            onChange={e => setTitle(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onCancel() }}
-            sx={{ width: "100%", "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fff" } }}
-          />
-        </TableCell>
+        {visibleSet.has("title") ? (
+          <TableCell sx={{ pl: "16px" }}>
+            <TextField
+              autoFocus size="small" placeholder="What needs to be done?" value={title}
+              onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onCancel() }}
+              sx={{ width: "100%", "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fff" } }}
+            />
+          </TableCell>
+        ) : null}
         {/* Reference placeholder */}
-        <TableCell />
+        {visibleSet.has("ref") ? <TableCell /> : null}
         {/* Status */}
-        <TableCell onClick={e => e.stopPropagation()}>
-          <Chip size="small"
-            sx={{ ...statusChipSx(status), cursor: "pointer" }}
-            label={
-                              <Stack direction="row" alignItems="center" spacing={0.25}>
-                                <span>{STATUS_LABELS[status]}</span>
-                                <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} />
-                              </Stack>
-                            }
-            onClick={e => setStatusAnchor(e.currentTarget)}
-          />
-        </TableCell>
+        {visibleSet.has("status") ? (
+          <TableCell onClick={e => e.stopPropagation()}>
+            <Chip size="small"
+              sx={{ ...statusChipSx(status), cursor: "pointer" }}
+              label={
+                <Stack direction="row" alignItems="center" spacing={0.25}>
+                  <span>{STATUS_LABELS[status]}</span>
+                  <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} />
+                </Stack>
+              }
+              onClick={e => setStatusAnchor(e.currentTarget)}
+            />
+          </TableCell>
+        ) : null}
         {/* Priority */}
-        <TableCell onClick={e => e.stopPropagation()}>
-          <Chip size="small"
-            sx={{ ...priorityChipSx(priority), cursor: "pointer" }}
-            label={
-              <Stack direction="row" alignItems="center" spacing={0.25}>
-                <span>{capitalize(priority)}</span>
-                <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} />
-              </Stack>
-            }
-            onClick={e => setPriorityAnchor(e.currentTarget)}
-          />
-        </TableCell>
+        {visibleSet.has("priority") ? (
+          <TableCell onClick={e => e.stopPropagation()}>
+            <Chip size="small"
+              sx={{ ...priorityChipSx(priority), cursor: "pointer" }}
+              label={
+                <Stack direction="row" alignItems="center" spacing={0.25}>
+                  <span>{capitalize(priority)}</span>
+                  <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} />
+                </Stack>
+              }
+              onClick={e => setPriorityAnchor(e.currentTarget)}
+            />
+          </TableCell>
+        ) : null}
         {/* Assignee */}
-        <TableCell onClick={e => e.stopPropagation()}>
-          <Box
-            onClick={e => setAssigneeAnchor(e.currentTarget)}
-            sx={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", px: "6px", py: "3px", borderRadius: "6px", "&:hover": { bgcolor: "#f1f5f9" } }}
-          >
-            <Box sx={{ width: 22, height: 22, borderRadius: "50%", bgcolor: assignee ? "#e8f1ff" : "#f1f5f9", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              {assignee ? initials(assignee.email) : ""}
+        {visibleSet.has("assignee") ? (
+          <TableCell onClick={e => e.stopPropagation()}>
+            <Box
+              onClick={e => setAssigneeAnchor(e.currentTarget)}
+              sx={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", px: "6px", py: "3px", borderRadius: "6px", "&:hover": { bgcolor: "#f1f5f9" } }}
+            >
+              <Box sx={{ width: 22, height: 22, borderRadius: "50%", bgcolor: assignee ? "#e8f1ff" : "#f1f5f9", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {assignee ? initials(assignee.email) : ""}
+              </Box>
+              <Typography sx={{ fontSize: 12, color: assignee ? "#0f172a" : "#94a3b8" }}>
+                {assignee ? assignee.email.split("@")[0] : "Assign"}
+              </Typography>
             </Box>
-            <Typography sx={{ fontSize: 12, color: assignee ? "#0f172a" : "#94a3b8" }}>
-              {assignee ? assignee.email.split("@")[0] : "Assign"}
-            </Typography>
-          </Box>
-        </TableCell>
+          </TableCell>
+        ) : null}
         {/* Linked */}
-        <TableCell />
+        {visibleSet.has("linked") ? <TableCell /> : null}
         {/* Due */}
-        <TableCell onClick={e => e.stopPropagation()}>
-          <Box
-            onClick={e => setDueAnchor(e.currentTarget)}
-            sx={{ display: "inline-flex", alignItems: "center", gap: "4px", cursor: "pointer", px: "6px", py: "3px", borderRadius: "6px", "&:hover": { bgcolor: "#f1f5f9" } }}
-          >
-            <Typography sx={{ fontSize: 12, color: dueAt ? (isOverdue(dueAt) ? "#b91c1c" : "#0f172a") : "#94a3b8" }}>
-              {dueAt ? formatDate(dueAt) : "Set due"}
-            </Typography>
-          </Box>
-        </TableCell>
+        {visibleSet.has("due") ? (
+          <TableCell onClick={e => e.stopPropagation()}>
+            <Box
+              onClick={e => setDueAnchor(e.currentTarget)}
+              sx={{ display: "inline-flex", alignItems: "center", gap: "4px", cursor: "pointer", px: "6px", py: "3px", borderRadius: "6px", "&:hover": { bgcolor: "#f1f5f9" } }}
+            >
+              <Typography sx={{ fontSize: 12, color: dueAt ? (isOverdue(dueAt) ? "#b91c1c" : "#0f172a") : "#94a3b8" }}>
+                {dueAt ? formatDate(dueAt) : "Set due"}
+              </Typography>
+            </Box>
+          </TableCell>
+        ) : null}
         {/* Updated placeholder */}
-        <TableCell />
+        {visibleSet.has("updated") ? <TableCell /> : null}
         {/* Actions */}
         <TableCell>
           <Stack direction="row" spacing={0.5}>
@@ -325,42 +401,45 @@ function InlineCreateRow({ users, onCreate, onCancel }: {
       <OptionPopover
         anchorEl={statusAnchor} onClose={() => setStatusAnchor(null)}
         current={status} onSelect={setStatus}
+        headerLabel="Status"
         options={ALL_STATUSES.map(s => ({ value: s, label: STATUS_LABELS[s], dot: COLUMNS.find(c => c.status === s)?.chipText }))}
       />
       <OptionPopover
         anchorEl={priorityAnchor} onClose={() => setPriorityAnchor(null)}
         current={priority} onSelect={setPriority}
+        headerLabel="Priority"
         options={ALL_PRIORITIES.map(p => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1), dot: priorityDot(p) }))}
       />
       <AssigneePopover
         anchorEl={assigneeAnchor} onClose={() => setAssigneeAnchor(null)}
-        users={users} currentId={assigneeId} onSelect={setAssigneeId}
+        users={users} currentId={assigneeId} onSelect={setAssigneeId} headerLabel="Assignee"
       />
       <DueDatePopover
         anchorEl={dueAnchor} onClose={() => setDueAnchor(null)}
-        current={dueAt} onSelect={setDueAt}
+        current={dueAt} onSelect={setDueAt} headerLabel="Due date"
       />
     </>
   )
 }
 
 // ── Task card (board view) ─────────────────────────────────────────────────
-function TaskCard({ task, navigate }: {
+function TaskCardBody({ task, isDragging, onClick }: {
   task: Task
-  // eslint-disable-next-line no-unused-vars
-  navigate: (targetPath: string) => void
+  isDragging?: boolean
+  onClick?: () => void
 }) {
   const overdue = isOverdue(task.dueAt)
   const col = COLUMNS.find(c => c.status === task.status)
   const linked = linkedLabel(task)
   return (
-    <Card onClick={() => navigate(`/tasks/${task.id}`)} sx={{
+    <Card onClick={onClick} sx={{
       mb: 1.5, cursor: "pointer", borderRadius: "8px",
       border: "1px solid #e2e8f0",
       borderLeft: col?.accent ? `3px solid ${col.accent}` : "1px solid #e2e8f0",
       boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
       "&:hover": { boxShadow: "0 2px 8px rgba(15,23,42,0.10)", borderColor: col?.accent ?? "#cbd5e1" },
-      transition: "all 0.15s"
+      transition: "all 0.15s",
+      opacity: isDragging ? 0.4 : 1
     }}>
       <Box sx={{ px: "14px", pt: "12px", pb: "12px" }}>
         <Stack direction="row" spacing={0.75} alignItems="flex-start" sx={{ mb: "4px" }}>
@@ -392,10 +471,57 @@ function TaskCard({ task, navigate }: {
   )
 }
 
+function DraggableTaskCard({ task, onOpen }: {
+  task: Task
+  // eslint-disable-next-line no-unused-vars
+  onOpen: (taskId: string) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: task.id,
+    data: { status: task.status, taskId: task.id }
+  })
+
+  return (
+    <Box
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), zIndex: isDragging ? 20 : "auto" }}
+      {...listeners}
+      {...attributes}
+    >
+      <TaskCardBody
+        task={task}
+        isDragging={isDragging}
+        onClick={() => { if (!isDragging) onOpen(task.id) }}
+      />
+    </Box>
+  )
+}
+
+function DroppableBoardColumn({ status, children }: {
+  status: string
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `lane-${status}`, data: { status } })
+  return (
+    <Box
+      ref={setNodeRef}
+      sx={{
+        minHeight: 84,
+        borderRadius: "8px",
+        bgcolor: isOver ? "#eff6ff" : "transparent",
+        transition: "background-color 0.12s"
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
 // ── Export modal (kept for use from other pages) ───────────────────────────
-export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityId, linkedEntityLabel }: {
+export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityId, linkedEntityLabel, onSuccess }: {
   open: boolean; onClose: () => void
   linkedEntityType?: string; linkedEntityId?: string; linkedEntityLabel?: string
+  onSuccess?: () => Promise<void> | void
 }) {
   const qc = useQueryClient()
   const [title, setTitle] = React.useState("")
@@ -426,6 +552,7 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
       onClose()
       setTitle(""); setDescription(""); setPriority("medium"); setDueAt(""); setAssigneeId("")
       qc.invalidateQueries({ queryKey: ["tasks"] })
+      await onSuccess?.()
     } catch (e: any) {
       setError(e?.message ?? "Failed to create task")
     } finally { setSaving(false) }
@@ -466,6 +593,284 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
   )
 }
 
+export function TaskQuickDetailModal({
+  open,
+  taskId,
+  users,
+  canManage,
+  onClose,
+  onOpenFull,
+  onPatchTask,
+  onUpdateStatus
+}: {
+  open: boolean
+  taskId: string | null
+  users: { id: string; email: string }[]
+  canManage: boolean
+  onClose: () => void
+  // eslint-disable-next-line no-unused-vars
+  onOpenFull: (taskId: string) => void
+  // eslint-disable-next-line no-unused-vars
+  onPatchTask: (taskId: string, patch: Record<string, any>) => Promise<void>
+  // eslint-disable-next-line no-unused-vars
+  onUpdateStatus: (taskId: string, status: string) => Promise<void>
+}) {
+  const qc = useQueryClient()
+  const [activeTab, setActiveTab] = React.useState<"details" | "work-notes" | "history">("details")
+  const [error, setError] = React.useState("")
+  const [saving, setSaving] = React.useState(false)
+  const [newNote, setNewNote] = React.useState("")
+  const [savingNote, setSavingNote] = React.useState(false)
+
+  const [title, setTitle] = React.useState("")
+  const [description, setDescription] = React.useState("")
+  const [status, setStatus] = React.useState("")
+  const [priority, setPriority] = React.useState("")
+  const [assigneeId, setAssigneeId] = React.useState("")
+  const [dueAt, setDueAt] = React.useState("")
+
+  const { data: task } = useQuery({
+    queryKey: ["task-detail", taskId],
+    queryFn: async () => (await api.get<Task>(`/tasks/${taskId}`)).data,
+    enabled: open && !!taskId
+  })
+  const { data: auditEvents = [] } = useQuery({
+    queryKey: ["audit-task", taskId],
+    queryFn: async () => (await api.get<TaskAuditEvent[]>(`/audit-events/entity/Task/${taskId}`)).data,
+    enabled: open && !!taskId,
+    refetchOnMount: "always"
+  })
+  const { data: workNotes = [] } = useQuery({
+    queryKey: ["work-notes-task", taskId],
+    queryFn: async () => (await api.get<TaskComment[]>(`/comments/Task/${taskId}/work-notes`)).data,
+    enabled: open && !!taskId
+  })
+
+  React.useEffect(() => {
+    if (!task) return
+    setTitle(task.title)
+    setDescription(task.description ?? "")
+    setStatus(task.status)
+    setPriority(task.priority)
+    setAssigneeId(task.assigneeId ?? "")
+    setDueAt(task.dueAt ? task.dueAt.slice(0, 10) : "")
+    setError("")
+  }, [task])
+
+  async function handleSave() {
+    if (!task || !canManage) return
+    setSaving(true)
+    setError("")
+    try {
+      if (status !== task.status) {
+        await onUpdateStatus(task.id, status)
+      }
+      await onPatchTask(task.id, {
+        title,
+        description: description || undefined,
+        priority,
+        assigneeId: assigneeId || null,
+        dueAt: dueAt || null
+      })
+      await qc.invalidateQueries({ queryKey: ["task-detail", task.id] })
+      await qc.invalidateQueries({ queryKey: ["audit-task", task.id] })
+      await qc.invalidateQueries({ queryKey: ["tasks"] })
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to save task changes")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleAddNote() {
+    if (!taskId || !newNote.trim()) return
+    setSavingNote(true)
+    try {
+      await api.post("/comments/work-note", { entityType: "Task", entityId: taskId, body: newNote.trim() })
+      setNewNote("")
+      await qc.invalidateQueries({ queryKey: ["work-notes-task", taskId] })
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      sx={{
+        "& .MuiDialog-container": {
+          alignItems: "flex-start",
+          pt: { xs: 1.5, md: 3 }
+        }
+      }}
+      PaperProps={{
+        sx: {
+          maxHeight: { xs: "88vh", md: "80vh" },
+          display: "flex",
+          flexDirection: "column"
+        }
+      }}
+    >
+      <DialogTitle sx={{ pb: 1 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#64748b" }}>
+              {task?.reference ?? "Task"}
+            </Typography>
+            {task ? <Chip size="small" sx={statusChipSx(task.status)} label={STATUS_LABELS[task.status] ?? task.status} /> : null}
+            {task ? <Chip size="small" sx={priorityChipSx(task.priority)} label={capitalize(task.priority)} /> : null}
+          </Stack>
+          {taskId ? (
+            <Button size="small" onClick={() => onOpenFull(taskId)}>
+              Open full task
+            </Button>
+          ) : null}
+        </Stack>
+      </DialogTitle>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1, pb: 1.5 }}>
+        <Box>
+          {error ? <Alert severity="error">{error}</Alert> : null}
+          <Tabs value={activeTab} onChange={(_event: React.SyntheticEvent, v: string) => setActiveTab(v as "details" | "work-notes" | "history")} sx={{ minHeight: 38 }}>
+            <Tab value="details" label="Details" sx={{ minHeight: 38 }} />
+            <Tab value="work-notes" label={`Work notes (${workNotes.length})`} sx={{ minHeight: 38 }} />
+            <Tab value="history" label={`History (${auditEvents.length})`} sx={{ minHeight: 38 }} />
+          </Tabs>
+        </Box>
+
+        <Box sx={{ maxHeight: { xs: "48vh", md: "44vh" }, overflowY: "auto", pr: 0.5, pt: 0.5 }}>
+          {activeTab === "details" ? (
+            <Stack spacing={1.5} sx={{ pt: 0.5 }}>
+              <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+              <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} multiline rows={3} fullWidth />
+              <Stack direction="row" spacing={1.5}>
+                <TextField
+                  select
+                  label="Status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  fullWidth
+                  disabled={!canManage}
+                >
+                  {ALL_STATUSES.map((s) => <MenuItem key={s} value={s}>{STATUS_LABELS[s] ?? s}</MenuItem>)}
+                </TextField>
+                <TextField
+                  select
+                  label="Priority"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  fullWidth
+                  disabled={!canManage}
+                >
+                  {ALL_PRIORITIES.map((p) => <MenuItem key={p} value={p}>{capitalize(p)}</MenuItem>)}
+                </TextField>
+              </Stack>
+              <Stack direction="row" spacing={1.5}>
+                <TextField
+                  select
+                  label="Assignee"
+                  value={assigneeId}
+                  onChange={(e) => setAssigneeId(e.target.value)}
+                  fullWidth
+                  disabled={!canManage}
+                >
+                  <MenuItem value="">Unassigned</MenuItem>
+                  {users.map((u) => <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>)}
+                </TextField>
+                <TextField
+                  type="date"
+                  label="Due date"
+                  value={dueAt}
+                  onChange={(e) => setDueAt(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                  disabled={!canManage}
+                />
+              </Stack>
+              {task?.linkedEntityType ? (
+                <Typography variant="caption" color="text.secondary">
+                  Linked to: {linkedLabel(task)}
+                </Typography>
+              ) : null}
+            </Stack>
+          ) : null}
+
+          {activeTab === "work-notes" ? (
+            <Stack spacing={1.5}>
+              {canManage ? (
+                <Stack spacing={1}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    multiline
+                    rows={2}
+                    placeholder="Add work note..."
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                  />
+                  <Stack direction="row" justifyContent="flex-end">
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={handleAddNote}
+                      disabled={savingNote || !newNote.trim()}
+                    >
+                      Add note
+                    </Button>
+                  </Stack>
+                </Stack>
+              ) : null}
+              {(workNotes ?? []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No work notes yet.</Typography>
+              ) : (
+                (workNotes ?? []).slice().reverse().map(note => (
+                  <Box key={note.id} sx={{ border: "1px solid #e2e8f0", borderRadius: 1.5, p: 1.25 }}>
+                    <Typography variant="caption" sx={{ color: "#64748b" }}>
+                      {note.author.email} · {new Date(note.createdAt).toLocaleString("en-GB")}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}>{note.body}</Typography>
+                  </Box>
+                ))
+              )}
+            </Stack>
+          ) : null}
+
+          {activeTab === "history" ? (
+            <Stack spacing={1}>
+              {(auditEvents ?? []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No history yet.</Typography>
+              ) : (
+                (auditEvents ?? []).map(event => (
+                  <Box key={event.id} sx={{ border: "1px solid #e2e8f0", borderRadius: 1.5, p: 1.25 }}>
+                    <Typography variant="caption" sx={{ color: "#64748b" }}>
+                      {event.action.toLowerCase().replaceAll("_", " ")} · {event.actorEmail ?? "system"} · {new Date(event.createdAt).toLocaleString("en-GB")}
+                    </Typography>
+                    {event.data ? (
+                      <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: "#475569" }}>
+                        {JSON.stringify(event.data)}
+                      </Typography>
+                    ) : null}
+                  </Box>
+                ))
+              )}
+            </Stack>
+          ) : null}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ pt: 1, pb: 1.5 }}>
+        <Button onClick={onClose}>Close</Button>
+        {canManage ? (
+          <Button variant="contained" onClick={handleSave} disabled={saving || !task}>
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
+        ) : null}
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
@@ -476,6 +881,22 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = React.useState<"list" | "board">(() => {
     try { return (localStorage.getItem("ad-tasks-view") as "list" | "board") ?? "list" } catch { return "list" }
   })
+  const [visibleColumns, setVisibleColumns] = React.useState<ListColumnId[]>(() => {
+    try {
+      const raw = localStorage.getItem(TASK_LIST_COLUMNS_STORAGE_KEY)
+      if (!raw) return DEFAULT_VISIBLE_COLUMNS
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return DEFAULT_VISIBLE_COLUMNS
+      const allowed = new Set<ListColumnId>(LIST_COLUMNS.map((c) => c.id))
+      const cleaned = parsed.filter((id): id is ListColumnId => typeof id === "string" && allowed.has(id as ListColumnId))
+      const always = LIST_COLUMNS.filter((c) => c.alwaysVisible).map((c) => c.id)
+      const merged = Array.from(new Set<ListColumnId>([...always, ...cleaned]))
+      return merged.length > 0 ? merged : DEFAULT_VISIBLE_COLUMNS
+    } catch {
+      return DEFAULT_VISIBLE_COLUMNS
+    }
+  })
+  const [columnsAnchor, setColumnsAnchor] = React.useState<HTMLElement | null>(null)
 
   // Active filter chips — Jira style multi-select
   const [filterStatuses, setFilterStatuses] = React.useState<string[]>([])
@@ -493,6 +914,9 @@ export default function TasksPage() {
   const [assigneeAnchor, setAssigneeAnchor] = React.useState<{ el: HTMLElement; task: Task } | null>(null)
   const [dueAnchor, setDueAnchor] = React.useState<{ el: HTMLElement; task: Task } | null>(null)
   const [menuAnchor, setMenuAnchor] = React.useState<{ el: HTMLElement; task: Task } | null>(null)
+  const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
+  const [boardError, setBoardError] = React.useState("")
+  const [activeDragTaskId, setActiveDragTaskId] = React.useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["tasks"],
@@ -504,7 +928,22 @@ export default function TasksPage() {
   })
 
   const tasks = React.useMemo(() => data ?? [], [data])
+  const tasksById = React.useMemo(() => {
+    const m = new Map<string, Task>()
+    tasks.forEach((t) => m.set(t.id, t))
+    return m
+  }, [tasks])
   const hasAnyFilter = filterStatuses.length > 0 || filterPriorities.length > 0 || filterAssignee || filterMine || filterOverdue
+  const visibleSet = React.useMemo(() => new Set(visibleColumns), [visibleColumns])
+  const visibleColumnDefs = React.useMemo(
+    () => LIST_COLUMNS.filter((column) => visibleSet.has(column.id)),
+    [visibleSet]
+  )
+  const tableMinWidth = React.useMemo(
+    () => visibleColumnDefs.reduce((sum, col) => sum + col.minWidth, 0) + 70,
+    [visibleColumnDefs]
+  )
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
   function clearFilters() {
     setFilterStatuses([]); setFilterPriorities([]); setFilterAssignee(null)
@@ -514,6 +953,16 @@ export default function TasksPage() {
   function handleViewChange(v: "list" | "board") {
     setViewMode(v)
     try { localStorage.setItem("ad-tasks-view", v) } catch { return }
+  }
+
+  function toggleListColumn(columnId: ListColumnId) {
+    const column = LIST_COLUMNS.find((c) => c.id === columnId)
+    if (!column || column.alwaysVisible) return
+    setVisibleColumns((prev) => {
+      const next = prev.includes(columnId) ? prev.filter((id) => id !== columnId) : [...prev, columnId]
+      try { localStorage.setItem(TASK_LIST_COLUMNS_STORAGE_KEY, JSON.stringify(next)) } catch { return next }
+      return next
+    })
   }
 
   function toggleStatus(s: string) {
@@ -528,9 +977,9 @@ export default function TasksPage() {
     qc.invalidateQueries({ queryKey: ["tasks"] })
   }
 
-  async function updateStatus(taskId: string, status: string) {
+  async function updateStatus(taskId: string, status: string, invalidate = true) {
     await api.post(`/tasks/${taskId}/status`, { status })
-    qc.invalidateQueries({ queryKey: ["tasks"] })
+    if (invalidate) qc.invalidateQueries({ queryKey: ["tasks"] })
   }
 
   async function createInline(partial: Partial<Task>) {
@@ -554,6 +1003,39 @@ export default function TasksPage() {
     if (filterOverdue) result = result.filter(t => isOverdue(t.dueAt) && t.status !== "DONE")
     return result
   }, [tasks, filterStatuses, filterPriorities, filterMine, filterAssignee, filterOverdue, currentUser])
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveDragTaskId(String(event.active.id))
+    setBoardError("")
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const sourceId = String(event.active.id)
+    setActiveDragTaskId(null)
+    if (!canManage || !event.over) return
+
+    const sourceTask = tasksById.get(sourceId)
+    if (!sourceTask) return
+
+    const overData = event.over.data.current as { status?: string } | undefined
+    const targetStatusFromLane = overData?.status
+    const overId = String(event.over.id)
+    const targetStatusFromTask = tasksById.get(overId)?.status
+    const targetStatus = targetStatusFromLane ?? targetStatusFromTask
+    if (!targetStatus || targetStatus === sourceTask.status) return
+
+    const snapshot = tasks
+    qc.setQueryData<Task[]>(["tasks"], (prev = []) =>
+      prev.map((t) => t.id === sourceTask.id ? { ...t, status: targetStatus } : t)
+    )
+    try {
+      await updateStatus(sourceTask.id, targetStatus, false)
+      qc.invalidateQueries({ queryKey: ["tasks"] })
+    } catch (e: any) {
+      qc.setQueryData(["tasks"], snapshot)
+      setBoardError(e?.message ?? "Failed to update task status")
+    }
+  }
 
   if (isLoading) return <LoadingState />
   if (error) return <ErrorState title="Failed to load tasks" />
@@ -698,6 +1180,34 @@ export default function TasksPage() {
           {/* Spacer pushes View to the right */}
           <Box sx={{ flex: 1 }} />
 
+          {/* Columns group */}
+          <Box>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", mb: "6px" }}>
+              Columns
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ViewColumnIcon sx={{ fontSize: 13 }} />}
+              onClick={(e) => setColumnsAnchor(e.currentTarget)}
+              sx={{
+                height: 26,
+                fontSize: 11,
+                fontWeight: 500,
+                color: "#475569",
+                borderColor: "#e2e8f0",
+                px: "10px",
+                minWidth: 0,
+                "&:hover": { borderColor: "#cbd5e1", bgcolor: "#f8fafc" }
+              }}
+            >
+              Manage
+            </Button>
+          </Box>
+
+          {/* Divider */}
+          <Box sx={{ width: "1px", bgcolor: "var(--color-border-primary)", alignSelf: "stretch", mt: "18px" }} />
+
           {/* View group — right aligned */}
           <Box>
             <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", mb: "6px" }}>
@@ -722,29 +1232,43 @@ export default function TasksPage() {
       {tasks.length === 0 && !creatingInline ? (
         <EmptyState title="No tasks yet" detail="Tasks are created from triage, service requests, risks, issues and sites." />
       ) : null}
+      {boardError ? <Alert severity="error" sx={{ mb: 2 }}>{boardError}</Alert> : null}
 
       {/* ── BOARD VIEW ─────────────────────────────────────────────────── */}
       {viewMode === "board" && (tasks.length > 0 || creatingInline) ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 2, alignItems: "start" }}>
-          {COLUMNS.map(col => {
-            const colTasks = filtered.filter(t => t.status === col.status)
-            return (
-              <Box key={col.status}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                  <Box sx={{ px: 1.25, py: "3px", borderRadius: 10, bgcolor: col.chipBg }}>
-                    <Typography sx={{ fontSize: 12, fontWeight: 700, color: col.chipText, lineHeight: 1.6 }}>{col.label}</Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>{colTasks.length}</Typography>
-                </Stack>
-                {colTasks.length === 0 ? (
-                  <Box sx={{ minHeight: 80, border: "2px dashed #e2e8f0", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Typography variant="caption" color="text.secondary">No {col.label.toLowerCase()}</Typography>
-                  </Box>
-                ) : colTasks.map(task => <TaskCard key={task.id} task={task} navigate={navigate} />)}
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 2, alignItems: "start" }}>
+            {COLUMNS.map(col => {
+              const colTasks = filtered.filter(t => t.status === col.status)
+              return (
+                <Box key={col.status}>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                    <Box sx={{ px: 1.25, py: "3px", borderRadius: 10, bgcolor: col.chipBg }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 700, color: col.chipText, lineHeight: 1.6 }}>{col.label}</Typography>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600}>{colTasks.length}</Typography>
+                  </Stack>
+                  <DroppableBoardColumn status={col.status}>
+                    {colTasks.length === 0 ? (
+                      <Box sx={{ minHeight: 80, border: "2px dashed #e2e8f0", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Typography variant="caption" color="text.secondary">No {col.label.toLowerCase()}</Typography>
+                      </Box>
+                    ) : colTasks.map(task => (
+                      <DraggableTaskCard key={task.id} task={task} onOpen={setQuickTaskId} />
+                    ))}
+                  </DroppableBoardColumn>
+                </Box>
+              )
+            })}
+          </Box>
+          <DragOverlay>
+            {activeDragTaskId && tasksById.get(activeDragTaskId) ? (
+              <Box sx={{ width: 280 }}>
+                <TaskCardBody task={tasksById.get(activeDragTaskId)!} />
               </Box>
-            )
-          })}
-        </Box>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       ) : null}
 
       {/* ── LIST VIEW ──────────────────────────────────────────────────── */}
@@ -758,19 +1282,19 @@ export default function TasksPage() {
           ) : null}
 
           {(filtered.length > 0 || creatingInline) ? (
-            <TableContainer>
-              <Table sx={{ minWidth: 800 }}>
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table sx={{ minWidth: tableMinWidth, tableLayout: "auto" }}>
                 <TableHead>
-                  <TableRow sx={{ "& th": { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", bgcolor: "#f8fafc" } }}>
-                    <TableCell sx={{ pl: "16px" }}>Title</TableCell>
-                    <TableCell>Ref</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Priority</TableCell>
-                    <TableCell>Assignee</TableCell>
-                    <TableCell>Linked to</TableCell>
-                    <TableCell>Due</TableCell>
-                    <TableCell>Updated</TableCell>
-                    <TableCell />
+                  <TableRow sx={{ "& th": { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", bgcolor: "#f8fafc", whiteSpace: "nowrap" } }}>
+                    {visibleSet.has("title") ? <TableCell sx={{ pl: "16px", minWidth: LIST_COLUMNS.find(c => c.id === "title")?.minWidth }}>Title</TableCell> : null}
+                    {visibleSet.has("ref") ? <TableCell sx={{ minWidth: LIST_COLUMNS.find(c => c.id === "ref")?.minWidth }}>Ref</TableCell> : null}
+                    {visibleSet.has("status") ? <TableCell sx={{ minWidth: LIST_COLUMNS.find(c => c.id === "status")?.minWidth }}>Status</TableCell> : null}
+                    {visibleSet.has("priority") ? <TableCell sx={{ minWidth: LIST_COLUMNS.find(c => c.id === "priority")?.minWidth }}>Priority</TableCell> : null}
+                    {visibleSet.has("assignee") ? <TableCell sx={{ minWidth: LIST_COLUMNS.find(c => c.id === "assignee")?.minWidth }}>Assignee</TableCell> : null}
+                    {visibleSet.has("linked") ? <TableCell sx={{ minWidth: LIST_COLUMNS.find(c => c.id === "linked")?.minWidth }}>Linked to</TableCell> : null}
+                    {visibleSet.has("due") ? <TableCell sx={{ minWidth: LIST_COLUMNS.find(c => c.id === "due")?.minWidth }}>Due</TableCell> : null}
+                    {visibleSet.has("updated") ? <TableCell sx={{ minWidth: LIST_COLUMNS.find(c => c.id === "updated")?.minWidth }}>Updated</TableCell> : null}
+                    <TableCell sx={{ minWidth: 70 }} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -780,7 +1304,7 @@ export default function TasksPage() {
                     return (
                       <TableRow
                         key={task.id} hover
-                        onClick={() => navigate(`/tasks/${task.id}`)}
+                        onClick={() => setQuickTaskId(task.id)}
                         sx={{
                           cursor: "pointer",
                           borderLeft: overdue && task.status !== "DONE" ? "3px solid #ef4444" : "3px solid transparent",
@@ -789,92 +1313,108 @@ export default function TasksPage() {
                         }}
                       >
                         {/* Title */}
-                        <TableCell sx={{ pl: "14px", maxWidth: 280 }}>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, bgcolor: priorityDot(task.priority) }} />
-                            <Typography variant="body2" fontWeight={600} sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {task.title}
-                            </Typography>
-                          </Stack>
-                        </TableCell>
+                        {visibleSet.has("title") ? (
+                          <TableCell sx={{ pl: "14px", maxWidth: 280 }}>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, bgcolor: priorityDot(task.priority) }} />
+                              <Typography variant="body2" fontWeight={600} sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {task.title}
+                              </Typography>
+                            </Stack>
+                          </TableCell>
+                        ) : null}
 
                         {/* Reference */}
-                        <TableCell sx={{ fontFamily: "monospace", fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap" }}>
-                          {task.reference}
-                        </TableCell>
+                        {visibleSet.has("ref") ? (
+                          <TableCell sx={{ fontFamily: "monospace", fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap" }}>
+                            {task.reference}
+                          </TableCell>
+                        ) : null}
 
                         {/* Status — click to change */}
-                        <TableCell onClick={e => e.stopPropagation()}>
-                          <Chip size="small"
-                            sx={{ ...statusChipSx(task.status), cursor: canManage ? "pointer" : "default" }}
-                            label={
-                              <Stack direction="row" alignItems="center" spacing={0.25}>
-                                <span>{STATUS_LABELS[task.status] ?? task.status}</span>
-                                {canManage ? <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} /> : null}
-                              </Stack>
-                            }
-                            onClick={canManage ? e => { e.stopPropagation(); setStatusAnchor({ el: e.currentTarget, task }) } : undefined}
-                          />
-                        </TableCell>
+                        {visibleSet.has("status") ? (
+                          <TableCell onClick={e => e.stopPropagation()}>
+                            <Chip size="small"
+                              sx={{ ...statusChipSx(task.status), cursor: canManage ? "pointer" : "default" }}
+                              label={
+                                <Stack direction="row" alignItems="center" spacing={0.25}>
+                                  <span>{STATUS_LABELS[task.status] ?? task.status}</span>
+                                  {canManage ? <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} /> : null}
+                                </Stack>
+                              }
+                              onClick={canManage ? e => { e.stopPropagation(); setStatusAnchor({ el: e.currentTarget, task }) } : undefined}
+                            />
+                          </TableCell>
+                        ) : null}
 
                         {/* Priority — click to change */}
-                        <TableCell onClick={e => e.stopPropagation()}>
-                          <Chip size="small"
-                            sx={{ ...priorityChipSx(task.priority), cursor: canManage ? "pointer" : "default" }}
-                            label={
-                              <Stack direction="row" alignItems="center" spacing={0.25}>
-                                <span>{capitalize(task.priority)}</span>
-                                {canManage ? <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} /> : null}
-                              </Stack>
-                            }
-                            onClick={canManage ? e => { e.stopPropagation(); setPriorityAnchor({ el: e.currentTarget, task }) } : undefined}
-                          />
-                        </TableCell>
+                        {visibleSet.has("priority") ? (
+                          <TableCell onClick={e => e.stopPropagation()}>
+                            <Chip size="small"
+                              sx={{ ...priorityChipSx(task.priority), cursor: canManage ? "pointer" : "default" }}
+                              label={
+                                <Stack direction="row" alignItems="center" spacing={0.25}>
+                                  <span>{capitalize(task.priority)}</span>
+                                  {canManage ? <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} /> : null}
+                                </Stack>
+                              }
+                              onClick={canManage ? e => { e.stopPropagation(); setPriorityAnchor({ el: e.currentTarget, task }) } : undefined}
+                            />
+                          </TableCell>
+                        ) : null}
 
                         {/* Assignee — click to change */}
-                        <TableCell onClick={e => e.stopPropagation()}>
-                          <Box
-                            className="editable-cell"
-                            onClick={canManage ? e => { e.stopPropagation(); setAssigneeAnchor({ el: e.currentTarget, task }) } : undefined}
-                            sx={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: canManage ? "pointer" : "default", px: "4px", py: "2px" }}
-                          >
-                            {task.assignee ? (
-                              <>
-                                <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                  {initials(task.assignee.email)}
-                                </Box>
-                                <Typography sx={{ fontSize: 12, color: "#475569" }}>
-                                  {task.assignee.email.split("@")[0]}
-                                </Typography>
-                              </>
-                            ) : (
-                              <Typography sx={{ fontSize: 12, color: "#cbd5e1" }}>—</Typography>
-                            )}
-                          </Box>
-                        </TableCell>
+                        {visibleSet.has("assignee") ? (
+                          <TableCell onClick={e => e.stopPropagation()}>
+                            <Box
+                              className="editable-cell"
+                              onClick={canManage ? e => { e.stopPropagation(); setAssigneeAnchor({ el: e.currentTarget, task }) } : undefined}
+                              sx={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: canManage ? "pointer" : "default", px: "4px", py: "2px" }}
+                            >
+                              {task.assignee ? (
+                                <>
+                                  <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    {initials(task.assignee.email)}
+                                  </Box>
+                                  <Typography sx={{ fontSize: 12, color: "#475569" }}>
+                                    {task.assignee.email.split("@")[0]}
+                                  </Typography>
+                                </>
+                              ) : (
+                                <Typography sx={{ fontSize: 12, color: "#cbd5e1" }}>—</Typography>
+                              )}
+                            </Box>
+                          </TableCell>
+                        ) : null}
 
                         {/* Linked */}
-                        <TableCell>
-                          {linked ? <Chip size="small" label={linked} sx={{ height: 20, fontSize: 10, bgcolor: "#f1f5f9", color: "#475569" }} /> : <Typography sx={{ color: "#e2e8f0" }}>—</Typography>}
-                        </TableCell>
+                        {visibleSet.has("linked") ? (
+                          <TableCell>
+                            {linked ? <Chip size="small" label={linked} sx={{ height: 20, fontSize: 10, bgcolor: "#f1f5f9", color: "#475569" }} /> : <Typography sx={{ color: "#e2e8f0" }}>—</Typography>}
+                          </TableCell>
+                        ) : null}
 
                         {/* Due — click to change */}
-                        <TableCell onClick={e => e.stopPropagation()}>
-                          <Box
-                            className="editable-cell"
-                            onClick={canManage ? e => { e.stopPropagation(); setDueAnchor({ el: e.currentTarget, task }) } : undefined}
-                            sx={{ display: "inline-flex", alignItems: "center", cursor: canManage ? "pointer" : "default", px: "4px", py: "2px" }}
-                          >
-                            <Typography sx={{ fontSize: 12, color: overdue && task.status !== "DONE" ? "#b91c1c" : (task.dueAt ? "#475569" : "#cbd5e1"), fontWeight: overdue && task.status !== "DONE" ? 700 : 400 }}>
-                              {task.dueAt ? formatDateTime(task.dueAt) : "—"}
-                            </Typography>
-                          </Box>
-                        </TableCell>
+                        {visibleSet.has("due") ? (
+                          <TableCell onClick={e => e.stopPropagation()}>
+                            <Box
+                              className="editable-cell"
+                              onClick={canManage ? e => { e.stopPropagation(); setDueAnchor({ el: e.currentTarget, task }) } : undefined}
+                              sx={{ display: "inline-flex", alignItems: "center", cursor: canManage ? "pointer" : "default", px: "4px", py: "2px" }}
+                            >
+                              <Typography sx={{ fontSize: 12, color: overdue && task.status !== "DONE" ? "#b91c1c" : (task.dueAt ? "#475569" : "#cbd5e1"), fontWeight: overdue && task.status !== "DONE" ? 700 : 400 }}>
+                                {task.dueAt ? formatDateTime(task.dueAt) : "—"}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                        ) : null}
 
                         {/* Updated */}
-                        <TableCell sx={{ fontSize: 12, color: "#94a3b8", whiteSpace: "nowrap" }}>
-                          {formatDateTime(task.updatedAt)}
-                        </TableCell>
+                        {visibleSet.has("updated") ? (
+                          <TableCell sx={{ fontSize: 12, color: "#94a3b8", whiteSpace: "nowrap" }}>
+                            {formatDateTime(task.updatedAt)}
+                          </TableCell>
+                        ) : null}
 
                         {/* Row hover actions */}
                         <TableCell className="row-actions" onClick={e => e.stopPropagation()}
@@ -895,18 +1435,23 @@ export default function TasksPage() {
                 <tfoot>
                   {/* Inline create row — sits just below last task */}
                   {creatingInline ? (
-                    <InlineCreateRow users={users} onCreate={createInline} onCancel={() => setCreatingInline(false)} />
+                    <InlineCreateRow
+                      users={users}
+                      onCreate={createInline}
+                      onCancel={() => setCreatingInline(false)}
+                      visibleColumns={visibleColumnDefs.map((col) => col.id)}
+                    />
                   ) : null}
 
                   {/* Footer row: count left, Add task right */}
                   <TableRow sx={{ bgcolor: "#f8fafc", "& td": { borderBottom: "none", py: "8px" } }}>
-                    <TableCell colSpan={4} sx={{ pl: "16px" }}>
+                    <TableCell colSpan={Math.max(1, visibleColumnDefs.length)} sx={{ pl: "16px" }}>
                       <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>
                         {filtered.length} task{filtered.length !== 1 ? "s" : ""}
                         {hasAnyFilter ? ` (filtered from ${tasks.length})` : ""}
                       </Typography>
                     </TableCell>
-                    <TableCell colSpan={5} sx={{ textAlign: "right", pr: "12px" }}>
+                    <TableCell colSpan={1} sx={{ textAlign: "right", pr: "12px" }}>
                       {canManage && !creatingInline ? (
                         <Button
                           size="small" variant="text"
@@ -927,6 +1472,66 @@ export default function TasksPage() {
       ) : null}
 
       {/* ── Popovers ───────────────────────────────────────────────────── */}
+      <Popover
+        open={Boolean(columnsAnchor)}
+        anchorEl={columnsAnchor}
+        onClose={() => setColumnsAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            boxShadow: "0 4px 16px rgba(15,23,42,0.12)",
+            borderRadius: "8px",
+            border: "1px solid #e2e8f0",
+            minWidth: 220
+          }
+        }}
+      >
+        <Box sx={{ py: "6px" }}>
+          <Typography sx={{
+            px: "12px",
+            py: "6px",
+            fontSize: 10,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "#94a3b8"
+          }}>
+            Visible columns
+          </Typography>
+          {LIST_COLUMNS.map((column) => {
+            const selected = visibleSet.has(column.id)
+            return (
+              <Box
+                key={column.id}
+                onClick={() => toggleListColumn(column.id)}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  px: "12px",
+                  py: "8px",
+                  cursor: column.alwaysVisible ? "default" : "pointer",
+                  opacity: column.alwaysVisible ? 0.65 : 1,
+                  "&:hover": column.alwaysVisible ? {} : { bgcolor: "#f8fafc" }
+                }}
+              >
+                <Box sx={{ width: 14, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+                  {selected ? <CheckIcon sx={{ fontSize: 13, color: "#1d4ed8" }} /> : null}
+                </Box>
+                <Typography sx={{ fontSize: 12.5, color: "#0f172a", flex: 1 }}>
+                  {column.label}
+                </Typography>
+                {column.alwaysVisible ? (
+                  <Typography sx={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Core
+                  </Typography>
+                ) : null}
+              </Box>
+            )
+          })}
+        </Box>
+      </Popover>
 
       {/* Status */}
       {statusAnchor ? (
@@ -935,6 +1540,7 @@ export default function TasksPage() {
           onClose={() => setStatusAnchor(null)}
           current={statusAnchor.task.status}
           onSelect={s => updateStatus(statusAnchor.task.id, s)}
+          headerLabel="Status"
           options={ALL_STATUSES.map(s => ({ value: s, label: STATUS_LABELS[s], dot: COLUMNS.find(c => c.status === s)?.chipText }))}
         />
       ) : null}
@@ -946,6 +1552,7 @@ export default function TasksPage() {
           onClose={() => setPriorityAnchor(null)}
           current={priorityAnchor.task.priority?.toLowerCase()}
           onSelect={p => patchTask(priorityAnchor.task.id, { priority: p })}
+          headerLabel="Priority"
           options={ALL_PRIORITIES.map(p => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1), dot: priorityDot(p) }))}
         />
       ) : null}
@@ -957,6 +1564,7 @@ export default function TasksPage() {
           onClose={() => setAssigneeAnchor(null)}
           users={users}
           currentId={assigneeAnchor.task.assigneeId}
+          headerLabel="Assignee"
           onSelect={id => patchTask(assigneeAnchor.task.id, { assigneeId: id })}
         />
       ) : null}
@@ -967,6 +1575,7 @@ export default function TasksPage() {
           anchorEl={dueAnchor.el}
           onClose={() => setDueAnchor(null)}
           current={dueAnchor.task.dueAt}
+          headerLabel="Due date"
           onSelect={d => patchTask(dueAnchor.task.id, { dueAt: d })}
         />
       ) : null}
@@ -980,6 +1589,17 @@ export default function TasksPage() {
         <MenuItem dense onClick={() => { menuAnchor && navigate(`/tasks/${menuAnchor.task.id}`); setMenuAnchor(null) }}>Open task</MenuItem>
         <MenuItem dense onClick={() => { if (menuAnchor) navigator.clipboard.writeText(menuAnchor.task.reference); setMenuAnchor(null) }}>Copy reference</MenuItem>
       </Menu>
+
+      <TaskQuickDetailModal
+        open={Boolean(quickTaskId)}
+        taskId={quickTaskId}
+        users={users}
+        canManage={canManage}
+        onClose={() => setQuickTaskId(null)}
+        onOpenFull={(id) => { setQuickTaskId(null); navigate(`/tasks/${id}`) }}
+        onPatchTask={patchTask}
+        onUpdateStatus={(id, status) => updateStatus(id, status)}
+      />
     </Box>
   )
 }

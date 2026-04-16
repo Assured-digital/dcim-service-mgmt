@@ -16,11 +16,12 @@ import ApartmentIcon from "@mui/icons-material/Apartment"
 import HistoryIcon from "@mui/icons-material/History"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
-import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import WorkIcon from "@mui/icons-material/Work"
 import PlaylistAddCheckIcon from "@mui/icons-material/PlaylistAddCheck"
 import AssignmentIndIcon from "@mui/icons-material/AssignmentInd"
 import WorkspacesIcon from "@mui/icons-material/Workspaces"
+import AutorenewIcon from "@mui/icons-material/Autorenew"
+import NotificationImportantIcon from "@mui/icons-material/NotificationImportant"
 import NotificationsIcon from "@mui/icons-material/Notifications"
 import LogoutIcon from "@mui/icons-material/Logout"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
@@ -29,6 +30,9 @@ import SupportAgentIcon from "@mui/icons-material/SupportAgent"
 import EngineeringIcon from "@mui/icons-material/Engineering"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import BusinessIcon from "@mui/icons-material/Business"
+import DnsIcon from "@mui/icons-material/Dns"
+import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
+import HubIcon from "@mui/icons-material/Hub"
 import { api, revokeAndLogout } from "../lib/api"
 import { getCurrentUser } from "../lib/auth"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -252,23 +256,31 @@ const scopeIndependentSections: NavSection[] = [
 const clientSections: NavSection[] = [
   { title: "", items: [{ label: "Dashboard", path: "/dashboard", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) }] },
   {
-    title: "Service Desk", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+    title: "Service Management", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, items: [
       { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
-      { label: "Risk Management", path: "/risks", icon: <ReportProblemIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-      { label: "Issue Management", path: "/issues", icon: <WarningAmberIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] }
+      { label: "Risks & Issues", path: "/risks-issues", icon: <ReportProblemIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Changes", path: "/changes", icon: <AutorenewIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Incidents", path: "/incidents", icon: <NotificationImportantIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+    ]
+  },
+  {
+    title: "DCIM", icon: <DnsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+      { label: "Overview", path: "/dcim/overview", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) },
+      { label: "Assets", path: "/asset-management", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
     ]
   },
   {
     title: "Operations", icon: <EngineeringIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Asset Management", path: "/asset-management", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-      { label: "Engineering Checks", path: "/checks", icon: <FactCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Check Templates", path: "/check-templates", icon: <PlaylistAddCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
-      { label: "Service Scope", path: "/work-packages", icon: <WorkIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
+      { label: "Field Work", path: "/checks", icon: <FactCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
+      { label: "Templates", path: "/check-templates", icon: <PlaylistAddCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
       { label: "Tasks", path: "/tasks", icon: <TaskAltIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
     ]
   },
   {
     title: "Client Admin", icon: <AdminPanelSettingsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+      { label: "Service Scope", path: "/work-packages", icon: <WorkIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
       { label: "Users", path: "/users", icon: <ManageAccountsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
     ]
   }
@@ -567,7 +579,8 @@ export default function Shell() {
   // e.g. /service-requests/:id belongs to the "Service Desk" nav item at /service-desk
   const PATH_PARENT_MAP: Record<string, string> = {
     "/service-requests": "/service-desk",
-    "/incidents": "/service-desk",
+    "/incidents": "/incidents",
+    "/changes": "/changes",
     "/sites": "/asset-management",
     "/assets": "/asset-management",
   }

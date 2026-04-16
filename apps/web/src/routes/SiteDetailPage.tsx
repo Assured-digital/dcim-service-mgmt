@@ -19,6 +19,7 @@ import { chipSx } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { TaskQuickDetailModal } from "./TasksPage"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Asset = {
@@ -47,6 +48,7 @@ type LinkedTask = { id: string; reference: string; title: string; status: string
 type LinkedServiceRequest = { id: string; reference: string; subject: string; status: string; priority: string }
 type LinkedRisk = { id: string; reference: string; title: string; status: string; likelihood: string; impact: string }
 type LinkedIssue = { id: string; reference: string; title: string; status: string; severity: string }
+type UserOption = { id: string; email: string }
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ROOM_TYPE_LABELS: Record<string, string> = {
@@ -227,6 +229,7 @@ export default function SiteDetailPage() {
   const [rackTab, setRackTab] = React.useState<RackTab>("dashboard")
   const [elevationSide, setElevationSide] = React.useState<ElevationSide>("FRONT")
   const [assetDrawerMode, setAssetDrawerMode] = React.useState<"lite" | "full">("lite")
+  const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
 
   // ── Error ───────────────────────────────────────────────────────────
   const [error, setError] = React.useState("")
@@ -326,6 +329,10 @@ export default function SiteDetailPage() {
     queryKey: ["linked-issues-cabinet", selectedCabinetId],
     queryFn: async () => (await api.get<LinkedIssue[]>("/issues", { params: { linkedEntityType: "Cabinet", linkedEntityId: selectedCabinetId } })).data,
     enabled: !!selectedCabinetId && rackTab === "linked"
+  })
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.get<UserOption[]>("/users")).data
   })
 
   const isLoading = siteLoading || roomsLoading || cabinetsLoading
@@ -686,6 +693,18 @@ export default function SiteDetailPage() {
 
   if (siteLoading) return <LoadingState />
   if (!site) return <ErrorState title="Site not found" />
+
+  async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
+    await api.put(`/tasks/${taskId}`, patch)
+    qc.invalidateQueries({ queryKey: ["linked-tasks-cabinet", selectedCabinetId] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
+  async function updateLinkedTaskStatus(taskId: string, status: string) {
+    await api.post(`/tasks/${taskId}/status`, { status })
+    qc.invalidateQueries({ queryKey: ["linked-tasks-cabinet", selectedCabinetId] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -1289,9 +1308,9 @@ export default function SiteDetailPage() {
                   <Box sx={{ display: "grid", gap: "12px", gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" } }}>
                     {[
                       { title: "Service requests", items: linkedServiceRequests, onClick: (id: string) => navigate(`/service-requests/${id}`), subtitle: (item: LinkedServiceRequest) => item.subject },
-                      { title: "Risks", items: linkedRisks, onClick: (id: string) => navigate(`/risks/${id}`), subtitle: (item: LinkedRisk) => `${item.likelihood} / ${item.impact}` },
-                      { title: "Issues", items: linkedIssues, onClick: (id: string) => navigate(`/issues/${id}`), subtitle: (item: LinkedIssue) => item.severity },
-                      { title: "Tasks", items: linkedTasks, onClick: (id: string) => navigate(`/tasks/${id}`), subtitle: (item: LinkedTask) => item.title },
+                      { title: "Risks", items: linkedRisks, onClick: (id: string) => navigate(`/risks-issues/risks/${id}`), subtitle: (item: LinkedRisk) => `${item.likelihood} / ${item.impact}` },
+                      { title: "Issues", items: linkedIssues, onClick: (id: string) => navigate(`/risks-issues/issues/${id}`), subtitle: (item: LinkedIssue) => item.severity },
+                      { title: "Tasks", items: linkedTasks, onClick: (id: string) => setQuickTaskId(id), subtitle: (item: LinkedTask) => item.title },
                     ].map(section => (
                       <Box key={section.title} sx={{ bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
                         <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid #f1f5f9", bgcolor: "#f8fafc" }}>
@@ -1683,6 +1702,17 @@ export default function SiteDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <TaskQuickDetailModal
+        open={Boolean(quickTaskId)}
+        taskId={quickTaskId}
+        users={users}
+        canManage={canManage}
+        onClose={() => setQuickTaskId(null)}
+        onOpenFull={(taskId) => navigate(`/tasks/${taskId}`)}
+        onPatchTask={patchLinkedTask}
+        onUpdateStatus={updateLinkedTaskStatus}
+      />
 
       {/* Confirm delete */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>

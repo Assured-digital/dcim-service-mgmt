@@ -11,6 +11,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed": "prisma db seed",
+    "seed:demo:estate": "ts-node prisma/scripts/seed-demo-estate.ts",
+    "seed:demo:governance": "ts-node prisma/scripts/seed-demo-governance.ts",
+    "seed:demo": "npm run seed:demo:estate && npm run seed:demo:governance",
     "test:triage:smoke": "sh scripts/triage-smoke.sh"
   },
   "dependencies": {

@@ -9,14 +9,14 @@ import {
 } from "@mui/material"
 import LockIcon from "@mui/icons-material/Lock"
 import {
-  InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
-  chipSx, type LinkedTask,
+  InfoField, Badge, PropertiesPanel, LinkedEntitiesPanel,
+  chipSx, statusSelectSx, type LinkedTask,
   WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
-import { CreateTaskModal } from "./TasksPage"
+import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 
 type Issue = {
   id: string
@@ -134,6 +134,7 @@ export default function IssueDetailPage() {
 
   const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
+  const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ["issue-detail", id],
@@ -148,6 +149,10 @@ export default function IssueDetailPage() {
         params: { linkedEntityType: "Issue", linkedEntityId: id }
       })).data,
     enabled: !!id
+  })
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.get<{ id: string; email: string }[]>("/users")).data
   })
 
   const { data: auditEvents } = useQuery({
@@ -230,6 +235,18 @@ export default function IssueDetailPage() {
     }
   }
 
+  async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
+    await api.put(`/tasks/${taskId}`, patch)
+    qc.invalidateQueries({ queryKey: ["linked-tasks-issue", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
+  async function updateLinkedTaskStatus(taskId: string, status: string) {
+    await api.post(`/tasks/${taskId}/status`, { status })
+    qc.invalidateQueries({ queryKey: ["linked-tasks-issue", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
   React.useEffect(() => { if (issue) setRecordLabel(issue.reference) }, [issue]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!issue) return <ErrorState title="Issue not found" />
@@ -268,30 +285,15 @@ export default function IssueDetailPage() {
 
   return (
     <Box>
-      {/* Top bar */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <DetailHeader
-            reference={issue.reference}
-            status={issue.status}
-            statusLabel={STATUS_LABELS[issue.status]}
-            extras={
-              <Chip size="small" sx={chipSx(issue.severity)}
-                label={severityLabel(issue.severity)} />
-            }
-          />
-        </Stack>
-      </Stack>
-
       {/* Info container */}
       <Box sx={{
         bgcolor: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
-        p: 2.5
+        px: 2.5, pt: 1.25, pb: 2
       }}>
         <InfoField label="ISSUE">
-          <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+          <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2 }}>
             {issue.title}
           </Typography>
         </InfoField>
@@ -304,19 +306,48 @@ export default function IssueDetailPage() {
         <Divider sx={{ mt: 1.5 }} />
       </Box>
 
-      {/* Workflow strip */}
-      <WorkflowStrip
-        stages={STATUS_ALL.map(s => ({
-          id: s,
-          label: STATUS_LABELS[s],
-          description: STATUS_DESCRIPTIONS[s]
-        }))}
-        currentStage={issue.status}
-        nextStages={nextStatuses}
-        onTransition={setTransitionTarget}
-        canTransition={canManage}
-        specialStageColors={{ RESOLVED: "#14532d", CLOSED: "#14532d" }}
-      />
+      <Box sx={{
+        border: "0.5px solid var(--color-border-tertiary)",
+        borderTop: "none",
+        borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
+        bgcolor: "var(--color-background-primary)",
+        p: 1.5,
+        mb: 3,
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
+        gap: 1.25,
+        alignItems: "center"
+      }}>
+        <WorkflowStrip
+          stages={STATUS_ALL.map(s => ({
+            id: s,
+            label: STATUS_LABELS[s],
+            description: STATUS_DESCRIPTIONS[s]
+          }))}
+          currentStage={issue.status}
+          mb={0}
+          specialStageColors={{ RESOLVED: "#14532d", CLOSED: "#14532d" }}
+        />
+        {canManage ? (
+          <TextField
+            select
+            size="small"
+            label="Change status"
+            value={transitionTarget ?? ""}
+            onChange={(e) => setTransitionTarget(e.target.value)}
+            sx={statusSelectSx(190)}
+          >
+            <MenuItem value="" disabled>
+              No status selected
+            </MenuItem>
+            {nextStatuses.map((status) => (
+              <MenuItem key={status} value={status}>
+                {STATUS_LABELS[status] ?? status}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+      </Box>
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
@@ -543,9 +574,7 @@ export default function IssueDetailPage() {
 
           <LinkedEntitiesPanel
             items={linkedTasks ?? []}
-            onNavigate={(task) => navigate(`/tasks/${task.id}`, {
-              state: { fromIssue: issue.id, fromIssueRef: issue.reference }
-            })}
+            onNavigate={(task) => setQuickTaskId(task.id)}
             onCreate={canManage ? () => setTaskOpen(true) : undefined}
           />
         </Stack>
@@ -597,6 +626,19 @@ export default function IssueDetailPage() {
         linkedEntityId={issue.id}
         linkedEntityLabel={issue.reference}
         onSuccess={() => qc.invalidateQueries({ queryKey: ["linked-tasks-issue", id] })}
+      />
+
+      <TaskQuickDetailModal
+        open={Boolean(quickTaskId)}
+        taskId={quickTaskId}
+        users={users}
+        canManage={canManage}
+        onClose={() => setQuickTaskId(null)}
+        onOpenFull={(taskId) => navigate(`/tasks/${taskId}`, {
+          state: { fromIssue: issue.id, fromIssueRef: issue.reference }
+        })}
+        onPatchTask={patchLinkedTask}
+        onUpdateStatus={updateLinkedTaskStatus}
       />
     </Box>
   )

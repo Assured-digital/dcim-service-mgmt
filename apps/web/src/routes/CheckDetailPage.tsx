@@ -728,7 +728,7 @@ export default function CheckDetailPage() {
             ) : null}
 
             {/* Follow-on prompt for failed items */}
-            {isFail && check.status === "IN_PROGRESS" && canExecute ? (
+            {isFail && check?.status === "IN_PROGRESS" && canExecute ? (
               <Box sx={{ mt: "10px", p: "10px 12px", bgcolor: "#fef9e7", border: "1px solid #fcd34d", borderRadius: "6px" }}>
                 {item.followOns.length > 0 ? (
                   <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
@@ -919,7 +919,7 @@ export default function CheckDetailPage() {
 
             {sectionNames.map(sectionName => {
               return (
-              <Box key={sectionName} ref={el => { sectionRefs.current[sectionName] = el }}
+              <Box key={sectionName} ref={(el: HTMLDivElement | null) => { sectionRefs.current[sectionName] = el }}
                 sx={{ mb: "8px" }}>
                 {sectionNames.length > 1 ? (
                   <Box sx={{ px: "4px", py: "6px", mb: "8px" }}>

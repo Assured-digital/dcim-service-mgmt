@@ -57,7 +57,12 @@ export class IncidentsService {
   async getForClient(clientId: string, id: string) {
     this.assertClientScope(clientId);
     const incident = await this.prisma.incident.findFirst({
-      where: { id, clientId }
+      where: { id, clientId },
+      include: {
+        assignee: {
+          select: { id: true, email: true }
+        }
+      }
     });
     if (!incident) throw new NotFoundException("Incident not found");
     return incident;
@@ -71,7 +76,7 @@ export class IncidentsService {
     this.assertClientScope(clientId);
     const reference = await this.generateUniqueReference();
 
-    return this.prisma.incident.create({
+    const created = await this.prisma.incident.create({
       data: {
         reference,
         clientId,
@@ -80,8 +85,74 @@ export class IncidentsService {
         severity: dto.severity ?? IncidentSeverity.MEDIUM,
         priority: dto.priority ?? "medium",
         createdById: actorUserId
+      },
+      include: {
+        assignee: {
+          select: { id: true, email: true }
+        }
       }
     });
+
+    await this.prisma.auditEvent.create({
+      data: {
+        entityType: "Incident",
+        entityId: created.id,
+        action: "CREATED",
+        actorUserId,
+        clientId,
+        data: {
+          reference: created.reference,
+          title: created.title
+        }
+      }
+    });
+
+    return created;
+  }
+
+  async updateForClient(
+    clientId: string,
+    id: string,
+    actorUserId: string,
+    dto: {
+      title?: string;
+      description?: string;
+      severity?: IncidentSeverity;
+      priority?: string;
+      assigneeId?: string;
+    }
+  ) {
+    const incident = await this.getForClient(clientId, id);
+    const updated = await this.prisma.incident.update({
+      where: { id: incident.id },
+      data: {
+        title: dto.title,
+        description: dto.description,
+        severity: dto.severity,
+        priority: dto.priority,
+        assigneeId: dto.assigneeId === "" ? null : dto.assigneeId ?? undefined
+      },
+      include: {
+        assignee: {
+          select: { id: true, email: true }
+        }
+      }
+    });
+
+    await this.prisma.auditEvent.create({
+      data: {
+        entityType: "Incident",
+        entityId: incident.id,
+        action: "UPDATED",
+        actorUserId,
+        clientId,
+        data: {
+          fields: Object.keys(dto).filter((field) => (dto as Record<string, unknown>)[field] !== undefined)
+        }
+      }
+    });
+
+    return updated;
   }
 
   async updateStatusForClient(

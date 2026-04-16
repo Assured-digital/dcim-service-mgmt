@@ -96,13 +96,6 @@ export default function AuditTrailPage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 0.5 }}>
-        Audit Trail
-      </Typography>
-      <Typography color="text.secondary" sx={{ mb: 2 }}>
-        Readable activity feed with filters by user, action, entity, and date range.
-      </Typography>
-
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>

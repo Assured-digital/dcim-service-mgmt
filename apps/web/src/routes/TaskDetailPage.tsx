@@ -10,7 +10,7 @@ import {
 import LockIcon from "@mui/icons-material/Lock"
 import LinkIcon from "@mui/icons-material/Link"
 import {
-  InfoField, Badge, DetailHeader, PropertiesPanel, chipSx,
+  InfoField, Badge, PropertiesPanel, chipSx, statusSelectSx,
   WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
@@ -81,6 +81,7 @@ function entityLabel(type: string | null) {
   if (!type) return null
   const labels: Record<string, string> = {
     ServiceRequest: "Service request",
+    ChangeRequest: "Change request",
     Risk: "Risk",
     Issue: "Issue",
     Site: "Site",
@@ -94,8 +95,9 @@ function entityPath(type: string | null, id: string | null) {
   if (!type || !id) return null
   const paths: Record<string, string> = {
     ServiceRequest: `/service-requests/${id}`,
-    Risk: `/risks/${id}`,
-    Issue: `/issues/${id}`,
+    ChangeRequest: `/changes/${id}`,
+    Risk: `/risks-issues/risks/${id}`,
+    Issue: `/risks-issues/issues/${id}`,
     Site: `/sites/${id}`,
     Survey: `/surveys/${id}`,
     Incident: `/incidents/${id}`
@@ -303,29 +305,15 @@ export default function TaskDetailPage() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-        <DetailHeader
-            reference={task.reference}
-            status={task.status}
-            statusLabel={STATUS_LABELS[task.status]}
-            priority={task.priority}
-            extras={isOverdue ? (
-              <Chip size="small"
-                label="Overdue"
-                sx={{ bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }} />
-            ) : undefined}
-          />
-        </Stack>
-
       {/* Info container */}
       <Box sx={{
         bgcolor: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
-        p: 2.5
+        px: 2.5, pt: 1.25, pb: 2
       }}>
         <InfoField label="TASK">
-          <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+          <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2 }}>
             {task.title}
           </Typography>
         </InfoField>
@@ -358,19 +346,48 @@ export default function TaskDetailPage() {
         <Divider sx={{ mt: 1.5 }} />
       </Box>
 
-      {/* Workflow strip */}
-      <WorkflowStrip
-        stages={STATUS_ALL.map(s => ({
-          id: s,
-          label: STATUS_LABELS[s],
-          description: STATUS_DESCRIPTIONS[s]
-        }))}
-        currentStage={task.status}
-        nextStages={nextStatuses}
-        onTransition={setTransitionTarget}
-        canTransition={canManage}
-        specialStageColors={{ BLOCKED: "#7f1d1d", DONE: "#14532d" }}
-      />
+      <Box sx={{
+        border: "0.5px solid var(--color-border-tertiary)",
+        borderTop: "none",
+        borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
+        bgcolor: "var(--color-background-primary)",
+        p: 1.5,
+        mb: 3,
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
+        gap: 1.25,
+        alignItems: "center"
+      }}>
+        <WorkflowStrip
+          stages={STATUS_ALL.map(s => ({
+            id: s,
+            label: STATUS_LABELS[s],
+            description: STATUS_DESCRIPTIONS[s]
+          }))}
+          currentStage={task.status}
+          mb={0}
+          specialStageColors={{ BLOCKED: "#7f1d1d", DONE: "#14532d" }}
+        />
+        {canManage ? (
+          <TextField
+            select
+            size="small"
+            label="Change status"
+            value={transitionTarget ?? ""}
+            onChange={(e) => setTransitionTarget(e.target.value)}
+            sx={statusSelectSx(190)}
+          >
+            <MenuItem value="" disabled>
+              No status selected
+            </MenuItem>
+            {nextStatuses.map((status) => (
+              <MenuItem key={status} value={status}>
+                {STATUS_LABELS[status] ?? status}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+      </Box>
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 

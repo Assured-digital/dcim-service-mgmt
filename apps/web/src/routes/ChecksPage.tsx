@@ -130,23 +130,14 @@ export default function ChecksPage() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
-        <Typography variant="h4">Engineering Checks</Typography>
-        {canManage ? (
-          <Button variant="contained" onClick={() => setCreateOpen(true)}>
-            Schedule check
-          </Button>
-        ) : null}
-      </Stack>
-
       <Card>
-        <Box sx={{ borderBottom: "1px solid #e2e8f0", px: 2 }}>
+        <Box sx={{ borderBottom: "1px solid #e2e8f0", px: 2, display: "flex", alignItems: "center" }}>
           <Tabs
             value={filterStatus}
             onChange={(_, v) => setFilterStatus(v)}
             variant="scrollable"
             scrollButtons="auto"
-            sx={{ minHeight: 44 }}
+            sx={{ minHeight: 44, flex: 1 }}
             textColor="inherit"
             TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
           >
@@ -176,6 +167,11 @@ export default function ChecksPage() {
               )
             })}
           </Tabs>
+          {canManage ? (
+            <Button size="small" variant="contained" onClick={() => setCreateOpen(true)} sx={{ ml: 2, flexShrink: 0, fontSize: 12 }}>
+              Schedule check
+            </Button>
+          ) : null}
         </Box>
 
         {isLoading ? <Box sx={{ p: 2 }}><LoadingState /></Box> : null}

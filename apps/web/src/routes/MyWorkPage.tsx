@@ -269,13 +269,6 @@ export default function MyWorkPage() {
 
   return (
     <Box>
-      {/* Page header */}
-      <Box sx={{ mb: "28px" }}>
-        <Typography variant="h4">
-          My Work
-        </Typography>
-      </Box>
-
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState title="Failed to load your work" /> : null}
 
