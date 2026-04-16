@@ -140,13 +140,6 @@ export default function UsersPage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 0.5 }}>
-        Users
-      </Typography>
-      <Typography color="text.secondary" sx={{ mb: 2 }}>
-        Manage user access, role assignments, and account activation per tenant scope.
-      </Typography>
-
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
@@ -168,7 +161,13 @@ export default function UsersPage() {
               InputLabelProps={{ shrink: true }}
               autoComplete="new-password"
             />
-            <TextField select label="Role" value={role} onChange={(e) => setRole(e.target.value)} sx={{ minWidth: 220 }}>
+            <TextField
+              select
+              label="Role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as (typeof allowedRoles)[number])}
+              sx={{ minWidth: 220 }}
+            >
               {allowedRoles.map((r) => (
                 <MenuItem key={r} value={r}>
                   {r}

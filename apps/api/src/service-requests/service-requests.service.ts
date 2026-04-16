@@ -6,6 +6,8 @@ type ListFilters = {
   dateFrom?: string;
   dateTo?: string;
   assigneeId?: string;
+  linkedEntityType?: string;
+  linkedEntityId?: string;
 };
 
 function makeRef() {
@@ -30,6 +32,8 @@ export class ServiceRequestsService {
       where: {
         clientId,
         assigneeId: filters.assigneeId || undefined,
+        linkedEntityType: filters.linkedEntityType || undefined,
+        linkedEntityId: filters.linkedEntityId || undefined,
         createdAt
       },
       orderBy: { updatedAt: "desc" },
@@ -64,6 +68,8 @@ export class ServiceRequestsService {
         subject: dto.subject,
         description: dto.description,
         priority: dto.priority ?? "medium",
+        linkedEntityType: dto.linkedEntityType,
+        linkedEntityId: dto.linkedEntityId,
         createdById
       }
     });
@@ -145,7 +151,7 @@ async updateForClient(
   clientId: string,
   id: string,
   actorUserId: string,
-  dto: { assigneeId?: string; priority?: string }
+  dto: { assigneeId?: string; priority?: string; linkedEntityType?: string; linkedEntityId?: string }
 ) {
   this.assertClientScope(clientId);
   const sr = await this.getForClient(clientId, id);
@@ -154,7 +160,9 @@ async updateForClient(
     where: { id: sr.id },
     data: {
       assigneeId: dto.assigneeId,
-      priority: dto.priority
+      priority: dto.priority,
+      linkedEntityType: dto.linkedEntityType,
+      linkedEntityId: dto.linkedEntityId
     }
   });
 

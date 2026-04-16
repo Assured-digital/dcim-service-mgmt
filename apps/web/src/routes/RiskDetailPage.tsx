@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -9,14 +9,14 @@ import {
 } from "@mui/material"
 import LockIcon from "@mui/icons-material/Lock"
 import {
-  InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
-  chipSx, type LinkedTask,
-  WorkflowStrip, type WorkflowStage
+  InfoField, Badge, PropertiesPanel, LinkedEntitiesPanel, SectionHeader,
+  chipSx, statusSelectSx, type LinkedTask,
+  WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
-import { CreateTaskModal } from "./TasksPage"
+import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 
 type Risk = {
   id: string
@@ -40,11 +40,12 @@ type AuditEvent = {
   action: string
   actorUserId: string | null
   actorEmail?: string | null
-  data: any
+  data?: { from?: string; to?: string; fields?: string[] } | null
   createdAt: string
 }
+type RiskPropertyRow = { label: string; value: React.ReactNode }
 
-type Comment = {
+type RiskComment = {
   id: string
   body: string
   type: string
@@ -100,13 +101,21 @@ function ragLabel(level: "RED" | "AMBER" | "GREEN") {
   return "Low risk"
 }
 
-function actionLabel(action: string, data: any): string {
+function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
   switch (action) {
     case "CREATED": return "Risk logged"
     case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
     case "UPDATED": return `Risk updated${data?.fields ? `: ${data.fields.join(", ")}` : ""}`
     default: return action.toLowerCase().replaceAll("_", " ")
   }
+}
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
 }
 
 function actionColor(action: string): string {
@@ -126,9 +135,6 @@ function actionTextColor(action: string): string {
 export default function RiskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
-  const fromTask = location.state?.fromTask
-  const fromTaskRef = location.state?.fromTaskRef
   const qc = useQueryClient()
   const { setRecordLabel } = useBreadcrumb()
 
@@ -157,6 +163,7 @@ export default function RiskDetailPage() {
 
   const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
+  const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
 
   const { data: risk, isLoading } = useQuery({
     queryKey: ["risk-detail", id],
@@ -172,6 +179,10 @@ export default function RiskDetailPage() {
       })).data,
     enabled: !!id
   })
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.get<{ id: string; email: string }[]>("/users")).data
+  })
 
   const { data: auditEvents } = useQuery({
     queryKey: ["audit-risk", id],
@@ -183,7 +194,7 @@ export default function RiskDetailPage() {
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-risk", id],
     queryFn: async () =>
-      (await api.get<Comment[]>(`/comments/Risk/${id}/work-notes`)).data,
+      (await api.get<RiskComment[]>(`/comments/Risk/${id}/work-notes`)).data,
     enabled: !!id
   })
 
@@ -226,8 +237,8 @@ export default function RiskDetailPage() {
       qc.invalidateQueries({ queryKey: ["audit-risk", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-risk", id] })
       qc.invalidateQueries({ queryKey: ["risks"] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to update status")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to update status"))
     } finally {
       setSavingTransition(false)
     }
@@ -274,46 +285,89 @@ export default function RiskDetailPage() {
     }
   }
 
+  async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
+    await api.put(`/tasks/${taskId}`, patch)
+    qc.invalidateQueries({ queryKey: ["linked-tasks-risk", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
+  async function updateLinkedTaskStatus(taskId: string, status: string) {
+    await api.post(`/tasks/${taskId}/status`, { status })
+    qc.invalidateQueries({ queryKey: ["linked-tasks-risk", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
   React.useEffect(() => { if (risk) setRecordLabel(risk.reference) }, [risk]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!risk) return <ErrorState title="Risk not found" />
 
   const nextStatuses = STATUS_FLOW[risk.status] ?? []
-  const currentIndex = STATUS_ALL.indexOf(risk.status)
   const rag = deriveRag(risk.likelihood, risk.impact)
+
+  const propertyRows: RiskPropertyRow[] = [
+    {
+      label: "Overall risk",
+      value: <Chip size="small" sx={chipSx(rag)} label={ragLabel(rag)} />
+    },
+    {
+      label: "Likelihood",
+      value: <Chip size="small" sx={chipSx(risk.likelihood)} label={risk.likelihood} />
+    },
+    {
+      label: "Impact",
+      value: <Chip size="small" sx={chipSx(risk.impact)} label={risk.impact} />
+    },
+    {
+      label: "Source",
+      value: <Typography variant="caption">
+        {SOURCE_LABELS[risk.source ?? "MANUAL"] ?? risk.source}
+      </Typography>
+    },
+    {
+      label: "Logged",
+      value: <Typography variant="caption">
+        {new Date(risk.createdAt).toLocaleDateString("en-GB")}
+      </Typography>
+    }
+  ]
+  if (risk.reviewDate) {
+    propertyRows.push({
+      label: "Review date",
+      value: <Typography variant="caption">
+        {new Date(risk.reviewDate).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
+  if (risk.closedAt) {
+    propertyRows.push({
+      label: "Closed",
+      value: <Typography variant="caption">
+        {new Date(risk.closedAt).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
 
   return (
     <Box>
-      {/* Top bar */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <DetailHeader
-            reference={risk.reference}
-            status={risk.status}
-            statusLabel={STATUS_LABELS[risk.status]}
-            extras={<Chip size="small" sx={chipSx(rag)} label={ragLabel(rag)} />}
-          />
-        </Stack>
-        {canManage && nextStatuses.includes("CLOSED") ? (
-          <Button size="small" variant="contained" color="error"
-            onClick={() => setTransitionTarget("CLOSED")}>
-            Close risk
-          </Button>
-        ) : null}
-      </Stack>
-
       {/* Info container */}
       <Box sx={{
         bgcolor: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
-        p: 2.5
+        px: 2.5, pt: 1.25, pb: 2
       }}>
-        <InfoField label="RISK">
-          <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-            {risk.title}
-          </Typography>
-        </InfoField>
+        <SectionHeader
+          label="RISK"
+          action={canManage && nextStatuses.includes("CLOSED") ? (
+            <Button size="small" variant="contained" color="error"
+              onClick={() => setTransitionTarget("CLOSED")}>
+              Close risk
+            </Button>
+          ) : undefined}
+        />
+        <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+          {risk.title}
+        </Typography>
         <Divider sx={{ my: 1.5 }} />
         <InfoField label="DESCRIPTION">
           <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
@@ -323,20 +377,50 @@ export default function RiskDetailPage() {
         <Divider sx={{ mt: 1.5 }} />
       </Box>
 
-      {/* Workflow strip */}
-      
-      <WorkflowStrip
-        stages={STATUS_ALL.map(s => ({
-          id: s,
-          label: STATUS_LABELS[s],
-          description: STATUS_DESCRIPTIONS[s]
-        }))}
-        currentStage={risk.status}
-        nextStages={nextStatuses}
-        onTransition={setTransitionTarget}
-        canTransition={canManage}
-        specialStageColors={{ CLOSED: "#14532d" }}
-      />
+      <Box sx={{
+        border: "0.5px solid var(--color-border-tertiary)",
+        borderTop: "none",
+        borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
+        bgcolor: "var(--color-background-primary)",
+        p: 1.5,
+        mb: 3,
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
+        gap: 1.25,
+        alignItems: "center"
+      }}>
+        <WorkflowStrip
+          stages={STATUS_ALL.map(s => ({
+            id: s,
+            label: STATUS_LABELS[s],
+            description: STATUS_DESCRIPTIONS[s]
+          }))}
+          currentStage={risk.status}
+          mb={0}
+          specialStageColors={{ CLOSED: "#14532d" }}
+        />
+        {canManage ? (
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField
+              select
+              size="small"
+              label="Change status"
+              value={transitionTarget ?? ""}
+              onChange={(e) => setTransitionTarget(e.target.value)}
+              sx={statusSelectSx(190)}
+            >
+              <MenuItem value="" disabled>
+                No status selected
+              </MenuItem>
+              {nextStatuses.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {STATUS_LABELS[status] ?? status}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        ) : null}
+      </Box>
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
@@ -354,7 +438,7 @@ export default function RiskDetailPage() {
               onChange={(_, v) => setActiveTab(v)}
               sx={{ px: 2, minHeight: 44 }}
               textColor="inherit"
-              TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
+              TabIndicatorProps={{ style: { backgroundColor: "var(--color-text-primary)" } }}
             >
               <Tab label="Mitigation plan" sx={{ fontSize: 13, minHeight: 44 }} />
               <Tab label="Work notes"
@@ -377,7 +461,7 @@ export default function RiskDetailPage() {
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography sx={{
                     fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                    color: "var(--color-text-tertiary)"
+                    color: "var(--color-text-muted)"
                   }}>
                     MITIGATION PLAN
                   </Typography>
@@ -529,7 +613,7 @@ export default function RiskDetailPage() {
               <Stack spacing={1.5}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)"
+                  color: "var(--color-text-muted)"
                 }}>
                   ACCEPTANCE NOTE
                 </Typography>
@@ -596,52 +680,13 @@ export default function RiskDetailPage() {
               onEdit={canManage && risk.status !== "CLOSED"
                 ? () => setEditingProperties(true)
                 : undefined}
-              rows={[
-                {
-                  label: "Overall risk",
-                  value: <Chip size="small" sx={chipSx(rag)} label={ragLabel(rag)} />
-                },
-                {
-                  label: "Likelihood",
-                  value: <Chip size="small" sx={chipSx(risk.likelihood)} label={risk.likelihood} />
-                },
-                {
-                  label: "Impact",
-                  value: <Chip size="small" sx={chipSx(risk.impact)} label={risk.impact} />
-                },
-                {
-                  label: "Source",
-                  value: <Typography variant="caption">
-                    {SOURCE_LABELS[risk.source ?? "MANUAL"] ?? risk.source}
-                  </Typography>
-                },
-                risk.reviewDate ? {
-                  label: "Review date",
-                  value: <Typography variant="caption">
-                    {new Date(risk.reviewDate).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null,
-                {
-                  label: "Logged",
-                  value: <Typography variant="caption">
-                    {new Date(risk.createdAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                },
-                risk.closedAt ? {
-                  label: "Closed",
-                  value: <Typography variant="caption">
-                    {new Date(risk.closedAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null
-              ].filter(Boolean) as any}
+              rows={propertyRows}
             />
           )}
 
           <LinkedEntitiesPanel
             items={linkedTasks ?? []}
-            onNavigate={(task) => navigate(`/tasks/${task.id}`, {
-              state: { fromRisk: risk.id, fromRiskRef: risk.reference }
-            })}
+            onNavigate={(task) => setQuickTaskId(task.id)}
             onCreate={canManage ? () => setTaskOpen(true) : undefined}
           />
         </Stack>
@@ -718,6 +763,19 @@ export default function RiskDetailPage() {
         linkedEntityId={risk.id}
         linkedEntityLabel={risk.reference}
         onSuccess={() => qc.invalidateQueries({ queryKey: ["linked-tasks-risk", id] })}
+      />
+
+      <TaskQuickDetailModal
+        open={Boolean(quickTaskId)}
+        taskId={quickTaskId}
+        users={users}
+        canManage={canManage}
+        onClose={() => setQuickTaskId(null)}
+        onOpenFull={(taskId) => navigate(`/tasks/${taskId}`, {
+          state: { fromRisk: risk.id, fromRiskRef: risk.reference }
+        })}
+        onPatchTask={patchLinkedTask}
+        onUpdateStatus={updateLinkedTaskStatus}
       />
     </Box>
   )

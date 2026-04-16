@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Headers, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
@@ -8,6 +8,7 @@ import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { PrismaService } from "../prisma/prisma.service"
 import { RisksService } from "./risks.service"
 import { CreateRiskDto, UpdateRiskStatusDto, UpdateRiskDto } from "./dto"
+import { ListOperationalQueryDto } from "../common/dto/list-operational.dto"
 
 const ALL_INTERNAL = [
   Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN,
@@ -23,10 +24,14 @@ export class RisksController {
 
   @Get()
   @Roles(...ALL_INTERNAL, Role.CLIENT_VIEWER)
-  async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
+  async list(
+    @Req() req: any,
+    @Query() query: ListOperationalQueryDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.risks.listForClient(clientId)
+    return this.risks.listForClient(clientId, query)
   }
 
   @Get(":id")

@@ -1,6 +1,16 @@
 :root {
   --app-bg: linear-gradient(180deg, #f4f7fb 0%, #eef3f9 100%);
   --panel-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-tertiary: #94a3b8;
+  --color-text-inverse: #e2e8f0;
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f8fafc;
+  --color-background-tertiary: #f1f5f9;
+  --color-border-primary: #e2e8f0;
+  --color-border-tertiary: #f1f5f9;
 }
 
 * {

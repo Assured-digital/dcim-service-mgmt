@@ -1,0 +1,362 @@
+Type,Manufacturer,Model,Asset Location,Status
+In Row Cooling,Airedale,LOR6042U-C028-0,University of Testing / Main Data Centre / Hall A,Normal
+Network Device,Dell,S3048-ON,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Network Device,Dell,S3048-ON,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Network Device,Cisco,Nexus 5548UP,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Cisco,Nexus 5548UP,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Network Device,Cisco,DS-C914AT-K9,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Network Device,Cisco,DS-C914AT-K9,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Network Device,Cisco,Nexus 2232TM-E,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,Nexus 2232TM-E,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,Nexus 2248TP-E,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,C9200-48P,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Cisco,Nexus N9K-C9332C,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Network Device,Cisco,Nexus N9K-C9332C,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Alcatel Lucent,OAW-4750XM,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Cisco,Catalyst 2960S,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Cisco,2900 Series,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,2900 Series,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,4300 Series,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,4300 Series,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Device,Cisco,C9300X-48HX,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+KVM Switch,Cyclades,ACS32 Console Server,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Dell,PowerEdge R730xd,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Dell,PowerEdge R7525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R7525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R7525,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R7525,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,Mellanox,SB7890,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Network Device,QLogic,12200 InfiniBand Switch,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Network Device,QLogic,12200 InfiniBand Switch,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,QLogic,12200 InfiniBand Switch,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Network Device,Mellanox,SB7890,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Network Storage,Dell,ML3 Tape Library,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R420,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Network Device,ECI,BG-20C_AC,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Ciena,CMD44,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Supermicro,813-4,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Supermicro,813-4,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Supermicro,813-4,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Supermicro,813-4,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Dell,PowerEdge R340,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Dell,PowerEdge R610,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Network Device,Dell,PowerConnect 2848,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,Dell,PowerConnect 2848,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Network Device,Dell,PowerConnect 2848,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Network Device,Dell,PowerConnect 2848,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Network Storage,Dell,PowerVault ME4024,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Network Device,Cisco,Nexus 5548UP,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Cisco,Nexus 5548UP,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Storage,Avid,NEXIS Pro+,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Network Storage,Avid,NEXIS Pro+,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Network Device,Cisco,C9300-NM-8X,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Cisco,C9300-NM-8X,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R6515,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R6515,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Server,IBM,8335,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Network Storage,Dell,Isilon A200,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Dell,S4112E-ON,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Storage,Dell,Isilon A300,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Cisco,DNA Center Appliance,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Network Device,Cisco,Nexus 93108TC-FX3P,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Server,Dell,B08S002,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,B08S002,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,B08S002,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,B08S002,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,Dell,PowerConnect 6248,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,Dell,PowerConnect 2848,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,Dell,PowerConnect 2848,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,Dell,PowerConnect 6248,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R7525,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R7525,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R7525,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Network Storage,Dell,PowerVault ME5012,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R6525,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Network Storage,Synology,DS1823xs+,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,B08S,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Network Device,QLogic,12200 InfiniBand Switch,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Network Device,Alcatel Lucent,OS6250-8M,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Storage,Dell,Isilon H400,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Dell,S4112F-ON,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Alcatel Lucent,OS6250-8M,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Blade Enclosure,Cisco,BE7000H,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Supermicro,813-4,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Server,Supermicro,813-4,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Network Device,Cisco,APIC-M3,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,FAS8200,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DS212C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,FAS8200,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Network Storage,NetApp,DE224C,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Server,Dell,PowerEdge R6515,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Network Storage,Dell,ML3 Tape Library,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Server,Dell,PowerEdge R430,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Network Storage,Dell,PowerVault ME4084,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Network Storage,Dell,PowerVault ME4084,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Rack PDU,Raritan,PX-4917A2,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-35,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Rack PDU,Raritan,PX-4917,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Network Device,Dell,PowerConnect 5548,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Network Device,Dell,PowerConnect 5548,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Network Device,Dell,PowerConnect 5548,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Rack,Dataracks,Patching Rack,University of Testing / Main Data Centre / Hall B,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall A,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall B,Normal
+Rack,Dataracks,Patching Rack,University of Testing / Main Data Centre / Hall B,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall A,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall A,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall A,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall A,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall A,Normal
+Rack,Dataracks,Patching Rack,University of Testing / Main Data Centre / Hall B,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall A,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall B,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall B,Normal
+Rack,Dataracks,Server rack,University of Testing / Main Data Centre / Hall B,Normal
+Network Device,Cisco,C1111-8P,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Cisco,C1111-8PLTWE,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Network Device,Cisco,C1111-8P,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 12F Port 1U,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,24-Fiber LC Duplex to MTP Module (HO),University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-01,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-13,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-15,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-16,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-25,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-29,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-33,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall A / Rack-04,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Patch Panel,Generic,Patch Panel - 24F Port,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Patch Panel,Generic,Patch Panel - 24C Port,University of Testing / Main Data Centre / Hall B / Rack-08,Normal
+Server,Dell,PowerEdge R730xd,University of Testing / Main Data Centre / Hall B / Rack-31,Normal
+Network Device,Dell,N1548,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Network Device,Dell,N1548,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge R630,University of Testing / Main Data Centre / Hall A / Rack-19,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Server,Dell,PowerEdge C6400,University of Testing / Main Data Centre / Hall A / Rack-22,Normal
+Network Device,Dell,N2048,University of Testing / Main Data Centre / Hall A / Rack-21,Normal
+Network Device,Ciena,3926M,University of Testing / Main Data Centre / Hall B / Rack-31,Normal

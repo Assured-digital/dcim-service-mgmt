@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 
 @Injectable()
@@ -104,5 +104,23 @@ export class SitesService {
     })
 
     return updated
+  }
+
+  async removeForClient(clientId: string, id: string) {
+    this.assertClientScope(clientId)
+    const site = await this.getForClient(clientId, id)
+
+    const [roomCount, cabinetCount, assetCount, checkCount] = await Promise.all([
+      this.prisma.room.count({ where: { siteId: site.id } }),
+      this.prisma.cabinet.count({ where: { siteId: site.id } }),
+      this.prisma.asset.count({ where: { siteId: site.id } }),
+      this.prisma.check.count({ where: { siteId: site.id } })
+    ])
+
+    if (roomCount > 0 || cabinetCount > 0 || assetCount > 0 || checkCount > 0) {
+      throw new BadRequestException("Cannot delete site while rooms, racks, assets, or checks exist")
+    }
+
+    return this.prisma.site.delete({ where: { id: site.id } })
   }
 }

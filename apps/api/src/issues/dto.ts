@@ -17,6 +17,14 @@ export class CreateIssueDto {
   @IsOptional()
   @IsString()
   reviewDate?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityType?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string
 }
 
 export class UpdateIssueStatusDto {
@@ -37,4 +45,12 @@ export class UpdateIssueDto {
   @IsOptional()
   @IsString()
   reviewDate?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityType?: string
+
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string
 }

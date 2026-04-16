@@ -28,3 +28,27 @@ export class UpdateIncidentStatusDto {
   @MinLength(3)
   comment?: string;
 }
+
+export class UpdateIncidentDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(10)
+  description?: string;
+
+  @IsOptional()
+  @IsEnum(IncidentSeverity)
+  severity?: IncidentSeverity;
+
+  @IsOptional()
+  @IsString()
+  priority?: string;
+
+  @IsOptional()
+  @IsString()
+  assigneeId?: string;
+}

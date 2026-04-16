@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -9,14 +9,14 @@ import {
 } from "@mui/material"
 import LockIcon from "@mui/icons-material/Lock"
 import {
-  InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
-  chipSx, type LinkedTask,
-  WorkflowStrip, type WorkflowStage
+  InfoField, Badge, PropertiesPanel, LinkedEntitiesPanel,
+  chipSx, statusSelectSx, type LinkedTask,
+  WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
-import { CreateTaskModal } from "./TasksPage"
+import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 
 type Issue = {
   id: string
@@ -37,11 +37,12 @@ type AuditEvent = {
   action: string
   actorUserId: string | null
   actorEmail?: string | null
-  data: any
+  data?: { from?: string; to?: string; fields?: string[] } | null
   createdAt: string
 }
+type IssuePropertyRow = { label: string; value: React.ReactNode }
 
-type Comment = {
+type IssueComment = {
   id: string
   body: string
   type: string
@@ -78,13 +79,21 @@ function severityLabel(severity: string) {
   return "Low severity"
 }
 
-function actionLabel(action: string, data: any): string {
+function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
   switch (action) {
     case "CREATED": return "Issue logged"
     case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
     case "UPDATED": return `Issue updated${data?.fields ? `: ${data.fields.join(", ")}` : ""}`
     default: return action.toLowerCase().replaceAll("_", " ")
   }
+}
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
 }
 
 function actionColor(action: string): string {
@@ -104,9 +113,6 @@ function actionTextColor(action: string): string {
 export default function IssueDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
-  const fromTask = location.state?.fromTask
-  const fromTaskRef = location.state?.fromTaskRef
   const qc = useQueryClient()
   const { setRecordLabel } = useBreadcrumb()
 
@@ -128,6 +134,7 @@ export default function IssueDetailPage() {
 
   const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
+  const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ["issue-detail", id],
@@ -143,6 +150,10 @@ export default function IssueDetailPage() {
       })).data,
     enabled: !!id
   })
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.get<{ id: string; email: string }[]>("/users")).data
+  })
 
   const { data: auditEvents } = useQuery({
     queryKey: ["audit-issue", id],
@@ -154,7 +165,7 @@ export default function IssueDetailPage() {
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-issue", id],
     queryFn: async () =>
-      (await api.get<Comment[]>(`/comments/Issue/${id}/work-notes`)).data,
+      (await api.get<IssueComment[]>(`/comments/Issue/${id}/work-notes`)).data,
     enabled: !!id
   })
 
@@ -188,8 +199,8 @@ export default function IssueDetailPage() {
       qc.invalidateQueries({ queryKey: ["audit-issue", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-issue", id] })
       qc.invalidateQueries({ queryKey: ["issues"] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to update status")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to update status"))
     } finally {
       setSavingTransition(false)
     }
@@ -224,39 +235,65 @@ export default function IssueDetailPage() {
     }
   }
 
+  async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
+    await api.put(`/tasks/${taskId}`, patch)
+    qc.invalidateQueries({ queryKey: ["linked-tasks-issue", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
+  async function updateLinkedTaskStatus(taskId: string, status: string) {
+    await api.post(`/tasks/${taskId}/status`, { status })
+    qc.invalidateQueries({ queryKey: ["linked-tasks-issue", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
   React.useEffect(() => { if (issue) setRecordLabel(issue.reference) }, [issue]) // eslint-disable-line
   if (isLoading) return <LoadingState />
   if (!issue) return <ErrorState title="Issue not found" />
 
   const nextStatuses = STATUS_FLOW[issue.status] ?? []
-  const currentIndex = STATUS_ALL.indexOf(issue.status)
+
+  const propertyRows: IssuePropertyRow[] = [
+    {
+      label: "Severity",
+      value: <Chip size="small" sx={chipSx(issue.severity)}
+        label={severityLabel(issue.severity)} />
+    },
+    {
+      label: "Logged",
+      value: <Typography variant="caption">
+        {new Date(issue.createdAt).toLocaleDateString("en-GB")}
+      </Typography>
+    }
+  ]
+  if (issue.reviewDate) {
+    propertyRows.push({
+      label: "Review date",
+      value: <Typography variant="caption">
+        {new Date(issue.reviewDate).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
+  if (issue.closedAt) {
+    propertyRows.push({
+      label: "Closed",
+      value: <Typography variant="caption">
+        {new Date(issue.closedAt).toLocaleDateString("en-GB")}
+      </Typography>
+    })
+  }
 
   return (
     <Box>
-      {/* Top bar */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <DetailHeader
-            reference={issue.reference}
-            status={issue.status}
-            statusLabel={STATUS_LABELS[issue.status]}
-            extras={
-              <Chip size="small" sx={chipSx(issue.severity)}
-                label={severityLabel(issue.severity)} />
-            }
-          />
-        </Stack>
-      </Stack>
-
       {/* Info container */}
       <Box sx={{
         bgcolor: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",
         borderTopLeftRadius: 8, borderTopRightRadius: 8,
-        p: 2.5
+        px: 2.5, pt: 1.25, pb: 2
       }}>
         <InfoField label="ISSUE">
-          <Typography variant="h4" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+          <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2 }}>
             {issue.title}
           </Typography>
         </InfoField>
@@ -269,19 +306,48 @@ export default function IssueDetailPage() {
         <Divider sx={{ mt: 1.5 }} />
       </Box>
 
-      {/* Workflow strip */}
-      <WorkflowStrip
-        stages={STATUS_ALL.map(s => ({
-          id: s,
-          label: STATUS_LABELS[s],
-          description: STATUS_DESCRIPTIONS[s]
-        }))}
-        currentStage={issue.status}
-        nextStages={nextStatuses}
-        onTransition={setTransitionTarget}
-        canTransition={canManage}
-        specialStageColors={{ RESOLVED: "#14532d", CLOSED: "#14532d" }}
-      />
+      <Box sx={{
+        border: "0.5px solid var(--color-border-tertiary)",
+        borderTop: "none",
+        borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
+        bgcolor: "var(--color-background-primary)",
+        p: 1.5,
+        mb: 3,
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
+        gap: 1.25,
+        alignItems: "center"
+      }}>
+        <WorkflowStrip
+          stages={STATUS_ALL.map(s => ({
+            id: s,
+            label: STATUS_LABELS[s],
+            description: STATUS_DESCRIPTIONS[s]
+          }))}
+          currentStage={issue.status}
+          mb={0}
+          specialStageColors={{ RESOLVED: "#14532d", CLOSED: "#14532d" }}
+        />
+        {canManage ? (
+          <TextField
+            select
+            size="small"
+            label="Change status"
+            value={transitionTarget ?? ""}
+            onChange={(e) => setTransitionTarget(e.target.value)}
+            sx={statusSelectSx(190)}
+          >
+            <MenuItem value="" disabled>
+              No status selected
+            </MenuItem>
+            {nextStatuses.map((status) => (
+              <MenuItem key={status} value={status}>
+                {STATUS_LABELS[status] ?? status}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+      </Box>
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
@@ -299,7 +365,7 @@ export default function IssueDetailPage() {
               onChange={(_, v) => setActiveTab(v)}
               sx={{ px: 2, minHeight: 44 }}
               textColor="inherit"
-              TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
+              TabIndicatorProps={{ style: { backgroundColor: "var(--color-text-primary)" } }}
             >
               <Tab label="Resolution" sx={{ fontSize: 13, minHeight: 44 }} />
               <Tab label="Work notes"
@@ -318,7 +384,7 @@ export default function IssueDetailPage() {
               <Stack spacing={1.5}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)"
+                  color: "var(--color-text-muted)"
                 }}>
                   RESOLUTION
                 </Typography>
@@ -467,7 +533,7 @@ export default function IssueDetailPage() {
               <CardContent sx={{ pb: "12px !important" }}>
                 <Typography sx={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                  color: "var(--color-text-tertiary)", mb: 1.5
+                  color: "var(--color-text-muted)", mb: 1.5
                 }}>
                   PROPERTIES
                 </Typography>
@@ -502,39 +568,13 @@ export default function IssueDetailPage() {
               onEdit={canManage && issue.status !== "CLOSED"
                 ? () => setEditingProperties(true)
                 : undefined}
-              rows={[
-                {
-                  label: "Severity",
-                  value: <Chip size="small" sx={chipSx(issue.severity)}
-                    label={severityLabel(issue.severity)} />
-                },
-                issue.reviewDate ? {
-                  label: "Review date",
-                  value: <Typography variant="caption">
-                    {new Date(issue.reviewDate).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null,
-                {
-                  label: "Logged",
-                  value: <Typography variant="caption">
-                    {new Date(issue.createdAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                },
-                issue.closedAt ? {
-                  label: "Closed",
-                  value: <Typography variant="caption">
-                    {new Date(issue.closedAt).toLocaleDateString("en-GB")}
-                  </Typography>
-                } : null
-              ].filter(Boolean) as any}
+              rows={propertyRows}
             />
           )}
 
           <LinkedEntitiesPanel
             items={linkedTasks ?? []}
-            onNavigate={(task) => navigate(`/tasks/${task.id}`, {
-              state: { fromIssue: issue.id, fromIssueRef: issue.reference }
-            })}
+            onNavigate={(task) => setQuickTaskId(task.id)}
             onCreate={canManage ? () => setTaskOpen(true) : undefined}
           />
         </Stack>
@@ -586,6 +626,19 @@ export default function IssueDetailPage() {
         linkedEntityId={issue.id}
         linkedEntityLabel={issue.reference}
         onSuccess={() => qc.invalidateQueries({ queryKey: ["linked-tasks-issue", id] })}
+      />
+
+      <TaskQuickDetailModal
+        open={Boolean(quickTaskId)}
+        taskId={quickTaskId}
+        users={users}
+        canManage={canManage}
+        onClose={() => setQuickTaskId(null)}
+        onOpenFull={(taskId) => navigate(`/tasks/${taskId}`, {
+          state: { fromIssue: issue.id, fromIssueRef: issue.reference }
+        })}
+        onPatchTask={patchLinkedTask}
+        onUpdateStatus={updateLinkedTaskStatus}
       />
     </Box>
   )

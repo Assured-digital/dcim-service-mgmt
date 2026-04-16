@@ -1,6 +1,28 @@
 export type SemanticIntent =
   | "success" | "active" | "warning" | "danger" | "neutral" | "info"
 
+export const uiText = {
+  primary: "#0f172a",
+  secondary: "#475569",
+  muted: "#64748b",
+  subtle: "#94a3b8",
+  inverse: "#e2e8f0",
+} as const
+
+export const uiSurface = {
+  app: "#f8fafc",
+  card: "#ffffff",
+  soft: "#f8fafc",
+  subtle: "#f1f5f9",
+  accentSoft: "#e8f1ff",
+} as const
+
+export const uiBorder = {
+  default: "#e2e8f0",
+  subtle: "#f1f5f9",
+  strong: "#cbd5e1",
+} as const
+
 export const semanticTokens: Record<SemanticIntent, { bg: string; text: string }> = {
   success: { bg: "#dcfce7", text: "#15803d" },
   active:  { bg: "#e8f1ff", text: "#1d4ed8" },
@@ -45,4 +67,41 @@ export function chipSx(value: string) {
 
 export function priorityDot(priority: string): string {
   return priorityDots[priority.toLowerCase()] ?? "#94a3b8"
+}
+
+export function statusSelectSx(minWidth = 180) {
+  return {
+    minWidth,
+    "& .MuiInputLabel-root": {
+      display: "none",
+    },
+    "& .MuiOutlinedInput-root": {
+      height: 32,
+      borderRadius: 999,
+      bgcolor: "#ffffff",
+      fontSize: 12,
+      fontWeight: 600,
+      color: "#334155",
+      "& fieldset": {
+        borderColor: "#cbd5e1",
+      },
+      "&:hover fieldset": {
+        borderColor: "#94a3b8",
+      },
+      "&.Mui-focused fieldset": {
+        borderColor: "#64748b",
+      },
+    },
+    "& .MuiSelect-select": {
+      py: "6px !important",
+      pl: "10px !important",
+      pr: "28px !important",
+      display: "flex",
+      alignItems: "center",
+    },
+    "& .MuiSvgIcon-root": {
+      color: "#64748b",
+      fontSize: 18,
+    },
+  }
 }

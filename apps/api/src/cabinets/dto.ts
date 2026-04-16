@@ -7,7 +7,7 @@ export class CreateCabinetDto {
   name!: string
 
   @IsOptional()
-  @IsIn(["RACK", "CABINET", "CAGE", "COLOCATION"])
+  @IsIn(["RACK", "CABINET", "CAGE", "COLOCATION", "WALL_MOUNT", "OPEN_FRAME"])
   type?: string
 
   @IsOptional()
@@ -21,4 +21,36 @@ export class CreateCabinetDto {
   @IsOptional()
   @IsString()
   notes?: string
+
+  @IsOptional()
+  @IsString()
+  roomId?: string
+}
+
+export class UpdateCabinetDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name?: string
+
+  @IsOptional()
+  @IsIn(["RACK", "CABINET", "CAGE", "COLOCATION", "WALL_MOUNT", "OPEN_FRAME"])
+  type?: string
+
+  @IsOptional()
+  @IsNumber()
+  totalU?: number
+
+  @IsOptional()
+  @IsNumber()
+  powerKw?: number
+
+  @IsOptional()
+  @IsString()
+  notes?: string
+
+  @IsOptional()
+  @IsString()
+  roomId?: string | null
 }

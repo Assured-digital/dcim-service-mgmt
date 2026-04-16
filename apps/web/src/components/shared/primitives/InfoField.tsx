@@ -10,8 +10,8 @@ export function InfoField({ label, children }: InfoFieldProps) {
   return (
     <Box>
       <Typography sx={{
-        fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-        color: "var(--color-text-tertiary)", mb: 0.5
+        fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+        color: "var(--color-text-muted)", mb: 0.5
       }}>
         {label}
       </Typography>

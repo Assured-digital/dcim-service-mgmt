@@ -1,33 +1,31 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, IconButton, MenuItem, Stack,
-  Tab, Tabs, TextField, Tooltip, Typography
+  DialogContent, DialogTitle, Divider, MenuItem, Stack,
+  Tab, Tabs, TextField, Typography
 } from "@mui/material"
 import LockIcon from "@mui/icons-material/Lock"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
-import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import AddIcon from "@mui/icons-material/Add"
-import PersonIcon from "@mui/icons-material/Person"
 import {
-  InfoField, Badge, DetailHeader, PropertiesPanel, LinkedEntitiesPanel,
-  chipSx, type LinkedTask, WorkflowStrip, type WorkflowStage
+  Badge, PropertiesPanel, LinkedEntitiesPanel, SectionHeader,
+  chipSx, statusSelectSx, type LinkedTask, WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
-import { CreateTaskModal } from "./TasksPage"
+import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useBreadcrumb } from "./Shell"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type AuditEvent = {
   id: string; action: string; actorEmail?: string | null
-  data: any; createdAt: string
+  data?: { from?: string; to?: string; fields?: string[] } | null; createdAt: string
 }
 
-type Comment = {
+type SRComment = {
   id: string; body: string; type: string
   visibleToCustomer: boolean; fromCustomer: boolean
   createdAt: string; author: { id: string; email: string }
@@ -81,8 +79,16 @@ function priorityChipSx(priority: string) {
   }
   return { ...(m[priority?.toLowerCase()] ?? { bgcolor: "#f1f5f9", color: "#475569" }), fontWeight: 600, fontSize: 11 }
 }
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
+    if (Array.isArray(message)) return message.join(", ")
+  }
+  return fallback
+}
 
-function actionLabel(action: string, data: any): string {
+function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
   switch (action) {
     case "CREATED": return "Request created"
     case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
@@ -96,8 +102,8 @@ function actionLabel(action: string, data: any): string {
 // ── Unified timeline item ──────────────────────────────────────────────────
 type TimelineItem =
   | { kind: "audit"; event: AuditEvent }
-  | { kind: "work_note"; comment: Comment }
-  | { kind: "customer_update"; comment: Comment }
+  | { kind: "work_note"; comment: SRComment }
+  | { kind: "customer_update"; comment: SRComment }
 
 function getTimestamp(item: TimelineItem) {
   if (item.kind === "audit") return item.event.createdAt
@@ -190,7 +196,7 @@ export default function ServiceRequestDetailPage() {
   const [activeTab, setActiveTab] = React.useState(0)
   const [error, setError] = React.useState("")
   const [taskOpen, setTaskOpen] = React.useState(false)
-  const [copied, setCopied] = React.useState(false)
+  const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
 
   // Transition
   const [transitionTarget, setTransitionTarget] = React.useState<string | null>(null)
@@ -226,13 +232,13 @@ export default function ServiceRequestDetailPage() {
 
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-sr", id],
-    queryFn: async () => (await api.get<Comment[]>(`/comments/ServiceRequest/${id}/work-notes`)).data,
+    queryFn: async () => (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/work-notes`)).data,
     enabled: !!id
   })
 
   const { data: customerUpdates } = useQuery({
     queryKey: ["customer-updates-sr", id],
-    queryFn: async () => (await api.get<Comment[]>(`/comments/ServiceRequest/${id}/customer-updates`)).data,
+    queryFn: async () => (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/customer-updates`)).data,
     enabled: !!id
   })
 
@@ -286,8 +292,8 @@ export default function ServiceRequestDetailPage() {
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-sr", id] })
       qc.invalidateQueries({ queryKey: ["service-requests"] })
-    } catch (e: any) {
-      setError(Array.isArray(e?.message) ? e.message.join(", ") : e?.message ?? "Failed")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed"))
     } finally { setSavingTransition(false) }
   }
 
@@ -300,8 +306,8 @@ export default function ServiceRequestDetailPage() {
       setEditingProperties(false)
       qc.invalidateQueries({ queryKey: ["sr-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to save")
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to save"))
     } finally { setSavingProperties(false) }
   }
 
@@ -331,13 +337,6 @@ export default function ServiceRequestDetailPage() {
     } finally { setSavingCustomer(false) }
   }
 
-  function copyRef() {
-    if (!sr) return
-    navigator.clipboard.writeText(sr.reference)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
   if (isLoading) return <LoadingState />
   if (!sr) return <ErrorState title="Service request not found" />
 
@@ -345,50 +344,93 @@ export default function ServiceRequestDetailPage() {
   const needsClosure = transitionTarget === "COMPLETED" || transitionTarget === "CLOSED"
   const closureRequired = needsClosure && !closureSummary.trim()
 
+  async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
+    await api.put(`/tasks/${taskId}`, patch)
+    qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
+  async function updateLinkedTaskStatus(taskId: string, status: string) {
+    await api.post(`/tasks/${taskId}/status`, { status })
+    qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })
+    qc.invalidateQueries({ queryKey: ["tasks"] })
+  }
+
   return (
     <Box>
-      {/* ── Record header ────────────────────────────────────────────────── */}
-      <Box sx={{ mb: "16px" }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-          <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
-            {/* Reference + copy */}
-            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: "8px" }}>
-              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
-                {sr.reference}
-              </Typography>
-              <Tooltip title={copied ? "Copied!" : "Copy reference"}>
-                <IconButton size="small" onClick={copyRef} sx={{ color: "#94a3b8", width: 20, height: 20 }}>
-                  <ContentCopyIcon sx={{ fontSize: 12 }} />
-                </IconButton>
-              </Tooltip>
-              <Chip size="small" sx={chipSx(sr.status)} label={STATUS_LABELS[sr.status]} />
-              <Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} />
-            </Stack>
-            {/* Subject */}
-            <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25 }}>
-              {sr.subject}
-            </Typography>
-          </Box>
-          {/* Cancel button */}
-          {nextStatuses.includes("CANCELLED") && canManage ? (
+      <Box sx={{
+        bgcolor: "var(--color-background-secondary)",
+        border: "0.5px solid var(--color-border-tertiary)",
+        borderTopLeftRadius: 8, borderTopRightRadius: 8,
+        px: 2.5, pt: 1.25, pb: 2
+      }}>
+        <SectionHeader
+          label="SERVICE REQUEST"
+          action={canManage && nextStatuses.includes("CANCELLED") ? (
             <Button size="small" color="error" variant="outlined"
-              onClick={() => setTransitionTarget("CANCELLED")} sx={{ flexShrink: 0 }}>
+              onClick={() => setTransitionTarget("CANCELLED")}>
               Cancel request
             </Button>
-          ) : null}
-        </Stack>
+          ) : undefined}
+        />
+        <Typography variant="h5" fontWeight={700} sx={{ color: "var(--color-text-primary)", lineHeight: 1.2 }}>
+          {sr.subject}
+        </Typography>
+        <Divider sx={{ my: 1.5 }} />
+        <Typography sx={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: "#94a3b8",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          mb: 0.5
+        }}>
+          DESCRIPTION
+        </Typography>
+        <Typography variant="body2" sx={{ color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
+          {sr.description}
+        </Typography>
+        <Divider sx={{ mt: 1.5 }} />
       </Box>
 
-      {/* ── Workflow strip ───────────────────────────────────────────────── */}
-      <WorkflowStrip
-        stages={STATUS_ALL.map(s => ({ id: s, label: STATUS_LABELS[s], description: STATUS_DESCRIPTIONS[s] }))}
-        currentStage={sr.status}
-        nextStages={nextStatuses}
-        onTransition={setTransitionTarget}
-        canTransition={canManage}
-        mb={2}
-        specialStageColors={{ COMPLETED: "#14532d", CLOSED: "#14532d" }}
-      />
+      <Box sx={{
+        border: "0.5px solid var(--color-border-tertiary)",
+        borderTop: "none",
+        borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
+        bgcolor: "var(--color-background-primary)",
+        p: 1.5,
+        mb: 2,
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
+        gap: 1.25,
+        alignItems: "center"
+      }}>
+        <WorkflowStrip
+          stages={STATUS_ALL.map(s => ({ id: s, label: STATUS_LABELS[s], description: STATUS_DESCRIPTIONS[s] }))}
+          currentStage={sr.status}
+          mb={0}
+          specialStageColors={{ COMPLETED: "#14532d", CLOSED: "#14532d" }}
+        />
+        {canManage ? (
+          <TextField
+            select
+            size="small"
+            label="Change status"
+            value={transitionTarget ?? ""}
+            onChange={(e) => setTransitionTarget(e.target.value)}
+            sx={statusSelectSx(190)}
+          >
+            <MenuItem value="" disabled>
+              No status selected
+            </MenuItem>
+            {nextStatuses.map((status) => (
+              <MenuItem key={status} value={status}>
+                {STATUS_LABELS[status] ?? status}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+      </Box>
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
@@ -397,18 +439,6 @@ export default function ServiceRequestDetailPage() {
 
         {/* ── Left column ─────────────────────────────────────────────────── */}
         <Stack spacing={2}>
-          {/* Description */}
-          <Card>
-            <CardContent>
-              <Typography sx={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", mb: "8px" }}>
-                Description
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
-                {sr.description}
-              </Typography>
-            </CardContent>
-          </Card>
-
           {/* Activity */}
           <Card>
             <Box sx={{ borderBottom: "1px solid #e2e8f0" }}>
@@ -470,7 +500,7 @@ export default function ServiceRequestDetailPage() {
                         </Stack>
                       </Box>
                     ) : (
-                      <Button size="small" variant="outlined" startIcon={<LockIcon sx={{ fontSize: 13 }} />}
+                      <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 13 }} />}
                         onClick={() => setActiveInput("note")}
                         sx={{ alignSelf: "flex-start", fontSize: 12, color: "#475569", borderColor: "#e2e8f0" }}>
                         Add work note
@@ -518,7 +548,7 @@ export default function ServiceRequestDetailPage() {
                         </Stack>
                       </Box>
                     ) : (
-                      <Button size="small" variant="contained" startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 13 }} />}
+                      <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 13 }} />}
                         onClick={() => setActiveInput("customer")}
                         sx={{ alignSelf: "flex-start", fontSize: 12, bgcolor: "#1d4ed8" }}>
                         Send customer update
@@ -564,6 +594,10 @@ export default function ServiceRequestDetailPage() {
             <PropertiesPanel
               onEdit={canManage && !["CLOSED", "CANCELLED"].includes(sr.status) ? () => setEditingProperties(true) : undefined}
               rows={[
+                {
+                  label: "Reference",
+                  value: <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{sr.reference}</Typography>
+                },
                 { label: "Client", value: <Typography variant="caption" fontWeight={600}>{sr.client.name}</Typography> },
                 {
                   label: "Assignee",
@@ -619,7 +653,7 @@ export default function ServiceRequestDetailPage() {
           {/* Linked tasks */}
           <LinkedEntitiesPanel
             items={linkedTasks ?? []}
-            onNavigate={task => navigate(`/tasks/${task.id}`, { state: { fromSR: sr.id, fromSRRef: sr.reference } })}
+            onNavigate={task => setQuickTaskId(task.id)}
             onCreate={canManage ? () => setTaskOpen(true) : undefined}
           />
         </Stack>
@@ -672,6 +706,18 @@ export default function ServiceRequestDetailPage() {
         open={taskOpen} onClose={() => setTaskOpen(false)}
         linkedEntityType="ServiceRequest" linkedEntityId={sr.id}
         linkedEntityLabel={sr.reference}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })}
+      />
+
+      <TaskQuickDetailModal
+        open={Boolean(quickTaskId)}
+        taskId={quickTaskId}
+        users={users ?? []}
+        canManage={canManage}
+        onClose={() => setQuickTaskId(null)}
+        onOpenFull={(taskId) => navigate(`/tasks/${taskId}`, { state: { fromSR: sr.id, fromSRRef: sr.reference } })}
+        onPatchTask={patchLinkedTask}
+        onUpdateStatus={updateLinkedTaskStatus}
       />
     </Box>
   )

@@ -22,7 +22,7 @@ export function DetailHeader({
       boxShadow: "0 1px 3px rgba(15,23,42,0.06)"
     }}>
       <Typography sx={{
-        fontFamily: "monospace", fontSize: 12, fontWeight: 700,
+        fontFamily: "monospace", fontSize: 12.5, fontWeight: 700,
         color: "var(--color-text-secondary)", whiteSpace: "nowrap"
       }}>
         {reference}

@@ -1,5 +1,5 @@
 import React from "react"
-import { Button, Divider, Stack, Typography } from "@mui/material"
+import { Box, Button, Divider, Stack, Typography } from "@mui/material"
 import EditIcon from "@mui/icons-material/Edit"
 import { PanelCard } from "../primitives/PanelCard"
 import { SectionHeader } from "../primitives/SectionHeader"
@@ -38,7 +38,9 @@ export function PropertiesPanel({
               sx={{ flexShrink: 0, mr: 1 }}>
               {row.label}
             </Typography>
-            {row.value}
+            <Box sx={{ fontSize: "0.8125rem", color: "var(--color-text-primary)", textAlign: "right", lineHeight: 1.45 }}>
+              {row.value}
+            </Box>
           </Stack>
         ))}
       </Stack>

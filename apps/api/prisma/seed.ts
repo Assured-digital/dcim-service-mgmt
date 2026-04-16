@@ -462,7 +462,52 @@ async function seedCheckTemplates() {
         { sortOrder: 5, section: "UPS", label: "Bypass switch accessible and labelled", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
         { sortOrder: 6, section: "UPS", label: "Runtime estimate acceptable for load", responseType: "PASS_FAIL", isRequired: true, isCritical: true },
       ]
-    }
+    },
+    {
+      reference: "TPL-2026-0004",
+      name: "New Engineer Checklist - Imported",
+      checkType: "Site Walkthrough",
+      description: "Standard visit checklist covering build room, WC, key box, data centre hall and per-rack inspection",
+      items: [
+        // ── 1. Build Room / Support Area ──────────────────────────────────────
+        { sortOrder: 1,  section: "Build Room / Support Area", label: "Desks are clear and ready for use",                                      responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 2,  section: "Build Room / Support Area", label: "Floor space is clear of obstructions",                                    responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 3,  section: "Build Room / Support Area", label: "Bin is empty",                                                            responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 4,  section: "Build Room / Support Area", label: "No rubbish present (cardboard, packaging, loose materials)",              responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 5,  section: "Build Room / Support Area", label: "Floor is generally clean and does not require vacuuming",                 responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 6,  section: "Build Room / Support Area", label: "Access routes are clear and unobstructed",                                responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+
+        // ── 2. WC ─────────────────────────────────────────────────────────────
+        { sortOrder: 7,  section: "WC",                        label: "Bin is empty",                                                            responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 8,  section: "WC",                        label: "WC and sink areas are clean",                                             responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+
+        // ── 3. Key Box Inspection ─────────────────────────────────────────────
+        { sortOrder: 9,  section: "Key Box Inspection",        label: "Key sign-out book is being correctly used",                               responseType: "PASS_FAIL", isRequired: true, isCritical: false, guidance: "Include a photo of the most recent entry" },
+        { sortOrder: 10, section: "Key Box Inspection",        label: "All rack keys are present within the key box",                            responseType: "PASS_FAIL", isRequired: true, isCritical: true  },
+        { sortOrder: 11, section: "Key Box Inspection",        label: "Missing keys are recorded with name and date signed out",                 responseType: "PASS_FAIL", isRequired: true, isCritical: false, guidance: "Record who signed out missing keys and when" },
+        { sortOrder: 12, section: "Key Box Inspection",        label: "Keys are stored in a correct, secure, and tidy manner",                  responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+
+        // ── 4. Data Centre Hall ───────────────────────────────────────────────
+        { sortOrder: 13, section: "Data Centre Hall",          label: "All floor areas are clear of debris, rubbish, materials, or unauthorised furniture", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 14, section: "Data Centre Hall",          label: "Floor is clean with no visible rubbish or loose materials",               responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 15, section: "Data Centre Hall",          label: "All rack doors are closed and locked",                                    responseType: "PASS_FAIL", isRequired: true, isCritical: true  },
+        { sortOrder: 16, section: "Data Centre Hall",          label: "Storage bins are being used correctly (not mixed, no rubbish inside)",    responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 17, section: "Data Centre Hall",          label: "Fire suppression key is correctly set to Auto / Manual",                  responseType: "PASS_FAIL", isRequired: true, isCritical: true  },
+        { sortOrder: 18, section: "Data Centre Hall",          label: "Space is free from cardboard and packaging materials",                    responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 19, section: "Data Centre Hall",          label: "All cables are installed correctly in overhead basket tray and containment", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 20, section: "Data Centre Hall",          label: "No cabling presents a potential health and safety risk",                  responseType: "PASS_FAIL", isRequired: true, isCritical: true  },
+        { sortOrder: 21, section: "Data Centre Hall",          label: "No audible alarms are sounding (other than normal IT and cooling noise)", responseType: "PASS_FAIL", isRequired: true, isCritical: true  },
+        { sortOrder: 22, section: "Data Centre Hall",          label: "Crash trolley and server lifter are present and stored in their designated locations", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+
+        // ── 5. Per-Rack Inspection ────────────────────────────────────────────
+        { sortOrder: 23, section: "Per-Rack Inspection",       label: "Blanking panels installed in all unused rack spaces",                    responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 24, section: "Per-Rack Inspection",       label: "All racks are free from rubbish, cardboard, plastic, dust caps, or loose materials", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 25, section: "Per-Rack Inspection",       label: "Racks are not being used as general storage",                            responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 26, section: "Per-Rack Inspection",       label: "Temporary labels, handwritten notes, or tape are not present on any racks or equipment", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 27, section: "Per-Rack Inspection",       label: "All patch leads (copper and fibre) are connected to a device or patch panel", responseType: "PASS_FAIL", isRequired: true, isCritical: false },
+        { sortOrder: 28, section: "Per-Rack Inspection",       label: "Equipment placement matches Hyperview / DCIM rack elevations",           responseType: "PASS_FAIL", isRequired: true, isCritical: false, guidance: "Cross-reference against Hyperview before marking pass" },
+      ]
+    },
   ]
 
   for (const t of templates) {

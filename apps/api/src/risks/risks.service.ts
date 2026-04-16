@@ -11,14 +11,43 @@ function makeRef() {
 export class RisksService {
   constructor(private prisma: PrismaService) {}
 
+  private getCreatedAtRange(dateFrom?: string, dateTo?: string) {
+    if (!dateFrom && !dateTo) return undefined
+    return {
+      gte: dateFrom ? this.parseDate(dateFrom, "start") : undefined,
+      lte: dateTo ? this.parseDate(dateTo, "end") : undefined
+    }
+  }
+
+  private parseDate(value: string, boundary: "start" | "end") {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return undefined
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      if (boundary === "start") date.setUTCHours(0, 0, 0, 0)
+      else date.setUTCHours(23, 59, 59, 999)
+    }
+    return date
+  }
+
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
   }
 
-  async listForClient(clientId: string) {
+  async listForClient(clientId: string, filters: {
+    dateFrom?: string
+    dateTo?: string
+    linkedEntityType?: string
+    linkedEntityId?: string
+  } = {}) {
     this.assertClientScope(clientId)
+    const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
     return this.prisma.risk.findMany({
-      where: { clientId },
+      where: {
+        clientId,
+        linkedEntityType: filters.linkedEntityType || undefined,
+        linkedEntityId: filters.linkedEntityId || undefined,
+        createdAt
+      },
       orderBy: { createdAt: "desc" }
     })
   }
@@ -39,6 +68,8 @@ export class RisksService {
     impact?: string
     mitigationPlan?: string
     source?: string
+    linkedEntityType?: string
+    linkedEntityId?: string
   }) {
     this.assertClientScope(clientId)
     for (let i = 0; i < 10; i++) {
@@ -55,6 +86,8 @@ export class RisksService {
             impact: dto.impact ?? "MEDIUM",
             mitigationPlan: dto.mitigationPlan,
             source: dto.source ?? "MANUAL",
+            linkedEntityType: dto.linkedEntityType,
+            linkedEntityId: dto.linkedEntityId,
             status: "IDENTIFIED"
           }
         })
@@ -105,6 +138,8 @@ export class RisksService {
     reviewDate?: string
     likelihood?: string
     impact?: string
+    linkedEntityType?: string
+    linkedEntityId?: string
   }) {
     const risk = await this.getForClient(clientId, id)
     const updated = await this.prisma.risk.update({
@@ -113,7 +148,9 @@ export class RisksService {
         mitigationPlan: dto.mitigationPlan,
         likelihood: dto.likelihood,
         impact: dto.impact,
-        reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined
+        reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
+        linkedEntityType: dto.linkedEntityType,
+        linkedEntityId: dto.linkedEntityId
       }
     })
     await this.prisma.auditEvent.create({

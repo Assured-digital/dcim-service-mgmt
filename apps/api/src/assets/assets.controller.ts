@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, Res } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Req, Res } from "@nestjs/common"
 import type { Response } from "express"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { AssetsService } from "./assets.service";
-import { CreateAssetDto } from "./dto";
+import { CreateAssetDto, UpdateAssetDto } from "./dto";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
 import { UseGuards } from "@nestjs/common";
@@ -54,6 +54,19 @@ export class AssetsController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.assets.removeForClient(id, clientId, user.role);
+  }
+
+  @Put(":id")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  async update(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: UpdateAssetDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.assets.updateForClient(id, dto, clientId, user.role);
   }
 
   @Get("site/:siteId")
