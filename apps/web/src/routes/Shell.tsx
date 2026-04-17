@@ -45,19 +45,21 @@ type Crumb = { label: string; path?: string; onClick?: () => void }
 const BreadcrumbCtx = React.createContext<{
   setRecordLabel: (l: string | null) => void
   setBreadcrumbs: (crumbs: Crumb[]) => void
-}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {} })
+  setHideModuleLabel: (hide: boolean) => void
+}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {}, setHideModuleLabel: () => {} })
 export function useBreadcrumb() { return React.useContext(BreadcrumbCtx) }
 
 const RECORD_CRUMB_SEP_SX = { color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none" as const, flexShrink: 0, mx: "2px" }
 
 function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav: NavigateFunction }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!menuOpen) return
     const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
     }
     document.addEventListener("mousedown", onDown)
     return () => document.removeEventListener("mousedown", onDown)
@@ -70,11 +72,18 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
   }
 
   const n = breadcrumbs.length
+  // Condense when the trail has more than 4 crumbs (5+). Simple count rule.
+  const isCondensed = n > 4
+
+  useEffect(() => {
+    if (!isCondensed) setMenuOpen(false)
+  }, [isCondensed])
+
   if (n === 0) return null
 
-  if (n <= 3) {
+  if (!isCondensed) {
     return (
-      <>
+      <Box ref={viewportRef} sx={{ position: "relative", minWidth: 0, flexShrink: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
         {breadcrumbs.map((crumb, idx) => {
           const isLast = idx === n - 1
           const isClickable = !isLast && !!(crumb.path || crumb.onClick)
@@ -111,39 +120,37 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
             </React.Fragment>
           )
         })}
-      </>
+      </Box>
     )
   }
 
   const first = breadcrumbs[0]
-  const middle = breadcrumbs.slice(1, -2)
-  const penultimate = breadcrumbs[n - 2]
+  const middle = breadcrumbs.slice(1, -1)
   const last = breadcrumbs[n - 1]
   const firstClick = !!(first.path || first.onClick)
-  const penClick = !!(penultimate.path || penultimate.onClick)
 
   return (
-    <>
+    <Box ref={viewportRef} sx={{ position: "relative", minWidth: 0, flexShrink: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
       <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
       {firstClick ? (
         <Box
           onClick={() => navigateCrumb(first)}
           sx={{
             px: "8px", py: "5px", borderRadius: "6px",
-            cursor: "pointer", flexShrink: 0,
+            cursor: "pointer", flexShrink: 1, minWidth: 0,
             transition: "background-color 0.12s",
             "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
           }}
         >
-          <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap" }}>{first.label}</Typography>
+          <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{first.label}</Typography>
         </Box>
       ) : (
-        <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{first.label}</Typography>
+        <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 1, minWidth: 0, px: "4px", overflow: "hidden", textOverflow: "ellipsis" }}>{first.label}</Typography>
       )}
 
       <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
 
-      <Box ref={wrapRef} sx={{ position: "relative", flexShrink: 0 }}>
+      <Box ref={menuRef} sx={{ position: "relative", flexShrink: 0 }}>
         <Box
           component="button"
           type="button"
@@ -168,7 +175,7 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
             "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
           }}
         >
-          ···
+          …
         </Box>
         {menuOpen ? (
           <Box sx={{
@@ -207,25 +214,8 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
       </Box>
 
       <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
-      {penClick ? (
-        <Box
-          onClick={() => navigateCrumb(penultimate)}
-          sx={{
-            px: "8px", py: "5px", borderRadius: "6px",
-            cursor: "pointer", flexShrink: 0,
-            transition: "background-color 0.12s",
-            "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
-          }}
-        >
-          <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap" }}>{penultimate.label}</Typography>
-        </Box>
-      ) : (
-        <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{penultimate.label}</Typography>
-      )}
-
-      <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
       <Typography sx={{ fontSize: 14, color: "#e2e8f0", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{last.label}</Typography>
-    </>
+    </Box>
   )
 }
 
@@ -496,6 +486,7 @@ export default function Shell() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [openSection, setOpenSection] = useState<string | null>(null)
   const [breadcrumbs, setBreadcrumbsState] = useState<Crumb[]>([])
+  const [hideModuleLabel, setHideModuleLabelState] = useState(false)
   const [flyout, setFlyout] = useState<
     | { kind: "section"; title: string; items: NavItem[]; anchor: HTMLElement }
     | { kind: "client"; anchor: HTMLElement }
@@ -510,9 +501,15 @@ export default function Shell() {
   function setBreadcrumbs(crumbs: Crumb[]) {
     setBreadcrumbsState(crumbs)
   }
+  function setHideModuleLabel(hide: boolean) {
+    setHideModuleLabelState(hide)
+  }
 
-  // Auto-reset breadcrumbs whenever the route changes
-  React.useEffect(() => { setBreadcrumbsState([]) }, [loc.pathname])
+  // Auto-reset breadcrumbs and module-label hide whenever the route changes
+  React.useEffect(() => {
+    setBreadcrumbsState([])
+    setHideModuleLabelState(false)
+  }, [loc.pathname])
 
   const sidebarWidth = sidebarExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED
 
@@ -867,12 +864,14 @@ export default function Shell() {
             ) : null}
 
             {/* › separator */}
-            {activePage && (selectedClient || isScopeIndependent) ? (
+            {activePage && !hideModuleLabel && (selectedClient || isScopeIndependent) ? (
               <Typography sx={{ color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
             ) : null}
 
-            {/* Page name — clickable, navigates to the list page */}
-            {activePage ? (
+            {/* Page name — clickable, navigates to the list page.
+                Pages can hide this segment via setHideModuleLabel(true) when the
+                breadcrumb trail already identifies the module (e.g. Asset Hierarchy / Register). */}
+            {activePage && !hideModuleLabel ? (
               <Box
                 onClick={() => nav(activePage.path)}
                 sx={{
@@ -906,7 +905,7 @@ export default function Shell() {
 
         {/* Page content */}
         <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: { xs: "12px", md: "20px" } }}>
-          <BreadcrumbCtx.Provider value={{ setRecordLabel, setBreadcrumbs }}>
+          <BreadcrumbCtx.Provider value={{ setRecordLabel, setBreadcrumbs, setHideModuleLabel }}>
             <Outlet />
           </BreadcrumbCtx.Provider>
         </Box>

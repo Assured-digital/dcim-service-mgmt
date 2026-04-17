@@ -121,6 +121,25 @@ export class MaintenanceService {
     })
 
     await this.refreshLastMaintenance(created.assetId)
+
+    if (actorUserId) {
+      await this.prisma.auditEvent.create({
+        data: {
+          entityType: "Asset",
+          entityId: created.assetId,
+          action: "MAINTENANCE_LOGGED",
+          actorUserId,
+          clientId,
+          data: {
+            workType: created.workType,
+            workTypeOther: created.workTypeOther ?? undefined,
+            performedAt: created.performedAt.toISOString(),
+            nextDueAt: created.nextDueAt ? created.nextDueAt.toISOString() : undefined
+          }
+        }
+      })
+    }
+
     return created
   }
 

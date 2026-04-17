@@ -1307,7 +1307,7 @@ export default function SiteDetailPage() {
                 <Box sx={{ flex: 1, overflowY: "auto", p: "16px 20px" }}>
                   <Box sx={{ display: "grid", gap: "12px", gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" } }}>
                     {[
-                      { title: "Service requests", items: linkedServiceRequests, onClick: (id: string) => navigate(`/service-requests/${id}`), subtitle: (item: LinkedServiceRequest) => item.subject },
+                      { title: "Service requests", items: linkedServiceRequests, onClick: (id: string) => navigate(`/service-desk/${id}`), subtitle: (item: LinkedServiceRequest) => item.subject },
                       { title: "Risks", items: linkedRisks, onClick: (id: string) => navigate(`/risks-issues/risks/${id}`), subtitle: (item: LinkedRisk) => `${item.likelihood} / ${item.impact}` },
                       { title: "Issues", items: linkedIssues, onClick: (id: string) => navigate(`/risks-issues/issues/${id}`), subtitle: (item: LinkedIssue) => item.severity },
                       { title: "Tasks", items: linkedTasks, onClick: (id: string) => setQuickTaskId(id), subtitle: (item: LinkedTask) => item.title },

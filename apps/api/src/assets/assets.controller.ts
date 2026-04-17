@@ -32,6 +32,25 @@ export class AssetsController {
     return this.assets.listForClient(clientId, user.role);
   }
 
+  // IMPORTANT: this must be BEFORE "site/:siteId" — NestJS matches top-down
+  @Get(":id")
+  @Roles(
+    Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN,
+    Role.SERVICE_MANAGER,
+    Role.SERVICE_DESK_ANALYST,
+    Role.ENGINEER,
+    Role.CLIENT_VIEWER
+  )
+  async getById(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.assets.getByIdForClient(id, clientId, user.role);
+  }
+
   @Post()
   @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async create(
@@ -41,7 +60,7 @@ export class AssetsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.assets.create(dto, clientId, user.role);
+    return this.assets.create(dto, clientId, user.role, user.userId);
   }
 
   @Delete(":id")
@@ -53,7 +72,7 @@ export class AssetsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.assets.removeForClient(id, clientId, user.role);
+    return this.assets.removeForClient(id, clientId, user.role, user.userId);
   }
 
   @Put(":id")
@@ -66,7 +85,7 @@ export class AssetsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.assets.updateForClient(id, dto, clientId, user.role);
+    return this.assets.updateForClient(id, dto, clientId, user.role, user.userId);
   }
 
   @Get("site/:siteId")

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Box, Button, Card, Chip, Dialog, DialogActions,
+  Box, Button, Card, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, MenuItem, Stack, Tab, Tabs, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Typography
@@ -11,6 +11,7 @@ import {
 import AddIcon from "@mui/icons-material/Add"
 import { statusChipSx, priorityChipSx } from "../lib/ui"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -35,31 +36,45 @@ const SR_STATUSES = [
   { value: "ALL", label: "All" },
 ]
 
-// ── Raise Request Modal ────────────────────────────────────────────────────
-// Creates a ServiceRequest directly — no triage step
-function RaiseRequestModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+// ── Create Service Request Modal ──────────────────────────────────────────
+// Creates a ServiceRequest directly — no triage step. Exported so detail
+// pages can raise a request pre-linked to the record being viewed.
+export function CreateServiceRequestModal({
+  open, onClose, linkedEntityType, linkedEntityId, linkedEntityLabel, onSuccess, navigateAfterCreate = true
+}: {
+  open: boolean
+  onClose: () => void
+  linkedEntityType?: string
+  linkedEntityId?: string
+  linkedEntityLabel?: string
+  onSuccess?: () => Promise<void> | void
+  navigateAfterCreate?: boolean
+}) {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const { notify } = useNotification()
   const [subject, setSubject] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [priority, setPriority] = React.useState("medium")
-  const [error, setError] = React.useState("")
 
   async function handleSubmit() {
     if (!subject.trim() || description.trim().length < 5) return
-    setError("")
     try {
       const res = await api.post<{ id: string }>("/service-requests", {
         subject: subject.trim(),
         description: description.trim(),
-        priority
+        priority,
+        linkedEntityType: linkedEntityType || undefined,
+        linkedEntityId: linkedEntityId || undefined
       })
       setSubject(""); setDescription(""); setPriority("medium")
       onClose()
       qc.invalidateQueries({ queryKey: ["service-requests"] })
-      navigate(`/service-requests/${res.data.id}`)
+      await onSuccess?.()
+      if (navigateAfterCreate) navigate(`/service-desk/${res.data.id}`)
+      notify.success("Service request created")
     } catch (e: any) {
-      setError(e?.message ?? "Failed to create request")
+      notify.error(e?.message ?? "Failed to create request")
     }
   }
 
@@ -68,7 +83,11 @@ function RaiseRequestModal({ open, onClose }: { open: boolean; onClose: () => vo
       <DialogTitle>Raise service request</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          {error ? <Alert severity="error">{error}</Alert> : null}
+          {linkedEntityLabel ? (
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#f0f9ff", border: "1px solid #bae6fd" }}>
+              <Typography variant="caption" color="#0369a1">Linked to: <strong>{linkedEntityLabel}</strong></Typography>
+            </Box>
+          ) : null}
           <TextField
             label="Subject" value={subject} onChange={e => setSubject(e.target.value)}
             fullWidth required placeholder="Brief description of the request"
@@ -202,7 +221,7 @@ export default function ServiceDeskPage() {
                 {filtered.map(sr => (
                   <TableRow
                     key={sr.id} hover
-                    onClick={() => navigate(`/service-requests/${sr.id}`)}
+                    onClick={() => navigate(`/service-desk/${sr.id}`)}
                     sx={{ cursor: "pointer" }}
                   >
                     <TableCell sx={{ fontWeight: 700, fontFamily: "monospace", fontSize: 12, color: "#475569" }}>
@@ -234,7 +253,7 @@ export default function ServiceDeskPage() {
         ) : null}
       </Card>
 
-      <RaiseRequestModal open={raiseOpen} onClose={() => setRaiseOpen(false)} />
+      <CreateServiceRequestModal open={raiseOpen} onClose={() => setRaiseOpen(false)} />
     </Box>
   )
 }
