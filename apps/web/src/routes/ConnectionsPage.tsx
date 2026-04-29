@@ -6,24 +6,22 @@ import {
   Box,
   Button,
   Card,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography
 } from "@mui/material"
+import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid"
 import HubIcon from "@mui/icons-material/Hub"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { chipSx } from "../components/shared"
 
 type Connection = {
   id: string
@@ -48,6 +46,48 @@ type Connection = {
 type AssetOption = { id: string; assetTag: string; name: string }
 
 const STATUS_OPTIONS = ["PLANNED", "ACTIVE", "DEGRADED", "RETIRED"] as const
+
+const ConnectionsToolbar = makeGridToolbar("connections")
+
+const connectionColumns: GridColDef<Connection>[] = [
+  {
+    field: "fromAsset", headerName: "From asset", flex: 1, minWidth: 200,
+    valueGetter: (_v, row) => `${row.fromAsset.assetTag} ${row.fromAsset.name}`,
+    renderCell: (p: GridRenderCellParams<Connection>) => (
+      <Stack sx={{ py: 0.5, lineHeight: 1.2 }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>{p.row.fromAsset.assetTag}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>{p.row.fromAsset.name}</Typography>
+      </Stack>
+    ),
+  },
+  {
+    field: "toAsset", headerName: "To asset", flex: 1, minWidth: 200,
+    valueGetter: (_v, row) => `${row.toAsset.assetTag} ${row.toAsset.name}`,
+    renderCell: (p) => (
+      <Stack sx={{ py: 0.5, lineHeight: 1.2 }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>{p.row.toAsset.assetTag}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>{p.row.toAsset.name}</Typography>
+      </Stack>
+    ),
+  },
+  {
+    field: "connectionType", headerName: "Type", width: 140,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5 }}>{p.value as string}</Typography>,
+  },
+  {
+    field: "status", headerName: "Status", width: 120,
+    renderCell: (p) => <Chip size="small" label={(p.value as string).toLowerCase()} sx={chipSx(p.value as string)} />,
+  },
+  {
+    field: "label", headerName: "Label", width: 160,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: p.value ? "#0f172a" : "#94a3b8" }}>{(p.value as string) ?? "—"}</Typography>,
+  },
+  {
+    field: "updatedAt", headerName: "Updated", width: 120,
+    valueGetter: (v) => v ? new Date(v as string) : null,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>{p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}</Typography>,
+  },
+]
 
 export default function ConnectionsPage() {
   const navigate = useNavigate()
@@ -156,51 +196,19 @@ export default function ConnectionsPage() {
         ) : null}
 
         {(connections.data?.length ?? 0) > 0 ? (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>From asset</TableCell>
-                  <TableCell>To asset</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Label</TableCell>
-                  <TableCell>Updated</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(connections.data ?? []).map((connection) => (
-                  <TableRow
-                    key={connection.id}
-                    hover
-                    onClick={() => navigate(`/connections/${connection.id}`)}
-                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}
-                  >
-                    <TableCell>
-                      <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>
-                        {connection.fromAsset.assetTag}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {connection.fromAsset.name}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>
-                        {connection.toAsset.assetTag}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {connection.toAsset.name}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{connection.connectionType}</TableCell>
-                    <TableCell>{connection.status}</TableCell>
-                    <TableCell>{connection.label ?? "—"}</TableCell>
-                    <TableCell>{new Date(connection.updatedAt).toLocaleDateString("en-GB")}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Box sx={{ height: 620 }}>
+            <DataGrid
+              rows={connections.data ?? []}
+              columns={connectionColumns}
+              density="compact"
+              initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+              pageSizeOptions={[25, 50, 100]}
+              disableRowSelectionOnClick
+              onRowClick={(params) => navigate(`/connections/${(params.row as Connection).id}`)}
+              slots={{ toolbar: ConnectionsToolbar }}
+              sx={dataGridSx(true)}
+            />
+          </Box>
         ) : null}
       </Card>
 

@@ -8,6 +8,8 @@ import { Box, Chip, Stack, Typography } from "@mui/material"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { chipSx } from "../components/shared"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
+import { PersonalBriefing } from "../components/PersonalBriefing"
+import { useTickets } from "../lib/tickets"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type Client = { id: string; name: string }
@@ -239,6 +241,10 @@ export default function MyWorkPage() {
     queryFn: async () => (await api.get<{ checks: WorkCheck[]; tasks: WorkTask[] }>("/my-work")).data
   })
 
+  // Tickets feed the user-specific briefing. Filtering down to the current
+  // user happens inside PersonalBriefing.
+  const { data: tickets } = useTickets()
+
   // Build flat list of work items
   const allItems: WorkItem[] = [
     ...(data?.checks ?? []).map(c => ({ kind: "check" as const, data: c })),
@@ -269,6 +275,10 @@ export default function MyWorkPage() {
 
   return (
     <Box>
+      <Box sx={{ maxWidth: 720 }}>
+        <PersonalBriefing tickets={tickets} />
+      </Box>
+
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState title="Failed to load your work" /> : null}
 
@@ -276,6 +286,9 @@ export default function MyWorkPage() {
 
       {!isLoading && !error && hasWork ? (
         <Box sx={{ maxWidth: 720 }}>
+          <Box sx={{ borderBottom: "1px solid var(--color-border-primary)", pb: "8px", mb: "12px" }}>
+            <SectionHeader label="Your checks & tasks" />
+          </Box>
           {URGENCY_ORDER.map(group => {
             const items = grouped[group]
             if (items.length === 0) return null

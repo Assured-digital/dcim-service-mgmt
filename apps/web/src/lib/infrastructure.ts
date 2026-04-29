@@ -45,6 +45,9 @@ export type Site = {
   city: string | null
   postcode: string | null
   country: string
+  latitude: number | null
+  longitude: number | null
+  geocodedAt: string | null
   notes: string | null
   checks?: Check[]
 }

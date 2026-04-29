@@ -19,6 +19,7 @@ export interface SiteHierarchyTreeProps {
   openRoomId: string | null
   openCabinetId: string | null
   isLoading: boolean
+  search?: string
   onSelectSite: (siteId: string) => void
   onToggleSite: (siteId: string) => void
   onSelectRoom: (roomId: string | "unassigned") => void
@@ -32,19 +33,33 @@ const SiteHierarchyTree = React.memo(function SiteHierarchyTree(props: SiteHiera
   const {
     sites, rooms, cabinets, selectedSiteId, selectedRoomId, selectedCabinetId,
     selectedAssetId, openSiteIds, openRoomId, openCabinetId, isLoading,
+    search,
     onSelectSite, onToggleSite, onSelectRoom, onToggleRoom,
     onSelectCabinet, onToggleCabinet, onSelectAsset,
   } = props
+
+  const q = (search ?? "").trim().toLowerCase()
 
   const unassignedCabinets = React.useMemo(
     () => cabinets.filter(c => !c.roomId),
     [cabinets]
   )
 
+  const filteredSites = React.useMemo(() => {
+    if (!q) return sites
+    return sites.filter(s => {
+      if (s.name.toLowerCase().includes(q)) return true
+      if (selectedSiteId !== s.id) return false
+      if (rooms.some(r => r.name.toLowerCase().includes(q))) return true
+      if (cabinets.some(c => c.name.toLowerCase().includes(q))) return true
+      return cabinets.some(c => c.assets.some(a => a.name.toLowerCase().includes(q)))
+    })
+  }, [sites, rooms, cabinets, q, selectedSiteId])
+
   return (
     <Box sx={{ flex: 1, overflowY: "auto", py: "6px" }}>
-      {sites.map(siteItem => {
-        const isSiteOpen = openSiteIds.has(siteItem.id)
+      {filteredSites.map(siteItem => {
+        const isSiteOpen = openSiteIds.has(siteItem.id) || (!!q && selectedSiteId === siteItem.id)
         const isSiteActive = selectedSiteId === siteItem.id && !selectedRoomId && !selectedCabinetId
         const siteRooms = selectedSiteId === siteItem.id ? rooms : []
         const siteCabinets = selectedSiteId === siteItem.id ? cabinets : []
@@ -56,6 +71,7 @@ const SiteHierarchyTree = React.memo(function SiteHierarchyTree(props: SiteHiera
             selectedRoomId={selectedRoomId} selectedCabinetId={selectedCabinetId}
             selectedAssetId={selectedAssetId} openRoomId={openRoomId}
             openCabinetId={openCabinetId} isLoading={isLoading && selectedSiteId === siteItem.id}
+            search={q}
             onSelectSite={onSelectSite} onToggleSite={onToggleSite}
             onSelectRoom={onSelectRoom} onToggleRoom={onToggleRoom}
             onSelectCabinet={onSelectCabinet} onToggleCabinet={onToggleCabinet}
@@ -82,6 +98,7 @@ interface SiteNodeProps {
   openRoomId: string | null
   openCabinetId: string | null
   isLoading: boolean
+  search: string
   onSelectSite: (id: string) => void
   onToggleSite: (id: string) => void
   onSelectRoom: (id: string | "unassigned") => void
@@ -95,10 +112,23 @@ const SiteNode = React.memo(function SiteNode(props: SiteNodeProps) {
   const {
     site, isSiteOpen, isSiteActive, rooms, cabinets, unassignedCabinets,
     selectedRoomId, selectedCabinetId, selectedAssetId,
-    openRoomId, openCabinetId, isLoading,
+    openRoomId, openCabinetId, isLoading, search,
     onSelectSite, onToggleSite, onSelectRoom, onToggleRoom,
     onSelectCabinet, onToggleCabinet, onSelectAsset,
   } = props
+
+  const siteMatches = !search || site.name.toLowerCase().includes(search)
+  const visibleRooms = React.useMemo(() => {
+    if (!search || siteMatches) return rooms
+    return rooms.filter(r =>
+      r.name.toLowerCase().includes(search) ||
+      cabinets.some(c => c.roomId === r.id && (c.name.toLowerCase().includes(search) || c.assets.some(a => a.name.toLowerCase().includes(search))))
+    )
+  }, [rooms, cabinets, search, siteMatches])
+  const visibleUnassignedCabs = React.useMemo(() => {
+    if (!search || siteMatches) return unassignedCabinets
+    return unassignedCabinets.filter(c => c.name.toLowerCase().includes(search) || c.assets.some(a => a.name.toLowerCase().includes(search)))
+  }, [unassignedCabinets, search, siteMatches])
 
   return (
     <Box>
@@ -115,9 +145,13 @@ const SiteNode = React.memo(function SiteNode(props: SiteNodeProps) {
         <>
           {isLoading ? <Box sx={{ px: 2, py: 1 }}><Typography sx={{ fontSize: 11, color: "#94a3b8" }}>Loading...</Typography></Box> : null}
 
-          {rooms.map(room => {
+          {visibleRooms.map(room => {
             const roomCabinets = cabinets.filter(c => c.roomId === room.id)
-            const isExpanded = openRoomId === room.id
+            const roomMatches = !search || room.name.toLowerCase().includes(search) || siteMatches
+            const visibleCabs = !search || roomMatches
+              ? roomCabinets
+              : roomCabinets.filter(c => c.name.toLowerCase().includes(search) || c.assets.some(a => a.name.toLowerCase().includes(search)))
+            const isExpanded = (openRoomId === room.id) || (!!search && !roomMatches && visibleCabs.length > 0)
             const isRoomActive = selectedRoomId === room.id && !selectedCabinetId
             const hasActiveCabinet = roomCabinets.some(c => c.id === selectedCabinetId)
             return (
@@ -132,12 +166,13 @@ const SiteNode = React.memo(function SiteNode(props: SiteNodeProps) {
                   <Typography sx={{ fontSize: 10, color: "#94a3b8", ml: "4px" }}>{roomCabinets.length}</Typography>
                 </Stack>
 
-                {isExpanded ? roomCabinets.map(cab => (
+                {isExpanded ? visibleCabs.map(cab => (
                   <CabinetNode key={cab.id}
                     cabinet={cab} roomId={room.id}
                     isActive={selectedCabinetId === cab.id}
-                    isExpanded={openCabinetId === cab.id}
+                    isExpanded={(openCabinetId === cab.id) || (!!search && !cab.name.toLowerCase().includes(search) && !roomMatches)}
                     selectedAssetId={selectedAssetId}
+                    search={search}
                     onSelectCabinet={onSelectCabinet}
                     onToggleCabinet={onToggleCabinet}
                     onSelectAsset={onSelectAsset}
@@ -147,13 +182,13 @@ const SiteNode = React.memo(function SiteNode(props: SiteNodeProps) {
             )
           })}
 
-          {unassignedCabinets.length > 0 ? (
+          {visibleUnassignedCabs.length > 0 ? (
             <Stack direction="row" alignItems="center" onClick={() => onSelectRoom("unassigned")}
               sx={{ pl: "20px", pr: "8px", py: "7px", cursor: "pointer", bgcolor: selectedRoomId === "unassigned" && !selectedCabinetId ? "rgba(29,78,216,0.07)" : "transparent", borderLeft: selectedRoomId === "unassigned" && !selectedCabinetId ? "2px solid #1d4ed8" : "2px solid transparent", "&:hover": { bgcolor: "rgba(0,0,0,0.03)" } }}>
               <ChevronRightIcon sx={{ fontSize: 14, color: "#94a3b8", mr: "2px" }} />
               <StorageIcon sx={{ fontSize: 12, color: "#94a3b8", mr: "7px" }} />
               <Typography sx={{ flex: 1, fontSize: 12.5, color: "#475569" }}>Unassigned</Typography>
-              <Typography sx={{ fontSize: 10, color: "#94a3b8" }}>{unassignedCabinets.length}</Typography>
+              <Typography sx={{ fontSize: 10, color: "#94a3b8" }}>{visibleUnassignedCabs.length}</Typography>
             </Stack>
           ) : null}
         </>
@@ -170,20 +205,23 @@ interface CabinetNodeProps {
   isActive: boolean
   isExpanded: boolean
   selectedAssetId: string | null
+  search: string
   onSelectCabinet: (id: string, roomId: string | null) => void
   onToggleCabinet: (id: string) => void
   onSelectAsset: (assetId: string, cabinetId: string, roomId: string | null) => void
 }
 
 const CabinetNode = React.memo(function CabinetNode({
-  cabinet: cab, roomId, isActive, isExpanded, selectedAssetId,
+  cabinet: cab, roomId, isActive, isExpanded, selectedAssetId, search,
   onSelectCabinet, onToggleCabinet, onSelectAsset
 }: CabinetNodeProps) {
 
-  const sortedAssets = React.useMemo(
-    () => cab.assets.slice().sort((a, b) => (b.uPosition ?? 0) - (a.uPosition ?? 0)),
-    [cab.assets]
-  )
+  const cabMatches = !search || cab.name.toLowerCase().includes(search)
+  const sortedAssets = React.useMemo(() => {
+    const all = cab.assets.slice().sort((a, b) => (b.uPosition ?? 0) - (a.uPosition ?? 0))
+    if (!search || cabMatches) return all
+    return all.filter(a => a.name.toLowerCase().includes(search))
+  }, [cab.assets, search, cabMatches])
 
   return (
     <Box>

@@ -2,21 +2,20 @@ import React from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Box, Button, ButtonGroup, Chip, Divider, IconButton, Menu, MenuItem,
+  Box, Button, Chip, MenuItem,
   Stack, TextField, Typography
 } from "@mui/material"
 import type { SxProps, Theme } from "@mui/material"
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { api } from "../lib/api"
+import { EditActionsButton } from "../components/EditActionsButton"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { chipSx } from "../components/shared"
 import { useBreadcrumb } from "./Shell"
 import {
   Asset, AuditEvent, Cabinet, LinkedIssue, LinkedRisk, LinkedServiceRequest, LinkedTask, UserOption,
-  ASSET_LIFECYCLE_OPTIONS, assetBg, lifecycleSx, getApiErrorMessage
+  ASSET_LIFECYCLE_OPTIONS, HEADER_HEIGHT, lifecycleSx, getApiErrorMessage
 } from "../lib/infrastructure"
 import {
   ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog
@@ -177,7 +176,7 @@ export default function AssetDetailPage({
   const assetId = assetIdProp ?? routeAssetId
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { setRecordLabel, setBreadcrumbs, setHideModuleLabel } = useBreadcrumb()
+  const { setBreadcrumbs } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
@@ -185,7 +184,6 @@ export default function AssetDetailPage({
   const [editMode, setEditMode] = React.useState(false)
   const [editDraft, setEditDraft] = React.useState<any>(null)
   const [savingEdit, setSavingEdit] = React.useState(false)
-  const [menuAnchor, setMenuAnchor] = React.useState<HTMLElement | null>(null)
   const { notify } = useNotification()
   const [activeDialog, setActiveDialog] = React.useState<ActionDialog>(null)
   const [createModal, setCreateModal] = React.useState<CreateModal>(null)
@@ -200,35 +198,28 @@ export default function AssetDetailPage({
 
   const siteId = asset?.siteId ?? routeSiteId ?? null
 
-  // ── Module-label + breadcrumb (only when this page owns the shell) ────
-  React.useEffect(() => {
-    if (!manageBreadcrumb) return
-    setHideModuleLabel(true)
-    return () => setHideModuleLabel(false)
-  }, [manageBreadcrumb, setHideModuleLabel])
-
+  // ── Breadcrumb (only when this page owns the shell) ───────────────────
   React.useEffect(() => {
     if (!manageBreadcrumb || !asset) return
-    setRecordLabel("Asset Hierarchy")
     const crumbs: { label: string; onClick?: () => void }[] = []
     if (asset.site && asset.siteId) {
-      crumbs.push({ label: asset.site.name, onClick: () => navigate(`/asset-management/${asset.siteId}`) })
+      crumbs.push({ label: asset.site.name, onClick: () => navigate(`/asset-hierarchy/${asset.siteId}`) })
     }
     if (asset.cabinet?.room && asset.cabinet.roomId && asset.siteId) {
       crumbs.push({
         label: asset.cabinet.room.name,
-        onClick: () => navigate(`/asset-management/${asset.siteId}/rooms/${asset.cabinet!.roomId}`)
+        onClick: () => navigate(`/asset-hierarchy/${asset.siteId}/rooms/${asset.cabinet!.roomId}`)
       })
     }
     if (asset.cabinet && asset.cabinetId && asset.siteId) {
       crumbs.push({
         label: asset.cabinet.name,
-        onClick: () => navigate(`/asset-management/${asset.siteId}/cabinets/${asset.cabinetId}`)
+        onClick: () => navigate(`/asset-hierarchy/${asset.siteId}/cabinets/${asset.cabinetId}`)
       })
     }
     crumbs.push({ label: asset.name })
     setBreadcrumbs(crumbs)
-  }, [manageBreadcrumb, asset, navigate, setBreadcrumbs, setRecordLabel])
+  }, [manageBreadcrumb, asset, navigate, setBreadcrumbs])
 
   // ── Tab-scoped queries ────────────────────────────────────────────────
   const { data: history = [] } = useQuery({
@@ -243,7 +234,7 @@ export default function AssetDetailPage({
     enabled: !!assetId && tab === "maintenance"
   })
 
-  const linkedEnabled = !!assetId && (tab === "linked" || tab === "overview")
+  const linkedEnabled = !!assetId
 
   const { data: linkedTasks = [] } = useQuery({
     queryKey: ["linked-tasks-asset", assetId],
@@ -280,7 +271,7 @@ export default function AssetDetailPage({
 
   // ── Derived ───────────────────────────────────────────────────────────
   const linkedTotal = linkedTasks.length + linkedServiceRequests.length + linkedRisks.length + linkedIssues.length
-  const linkedBadge = tab === "linked" || tab === "overview" ? linkedTotal : null
+  const linkedBadge = linkedTotal
 
   const recentLinked = React.useMemo(() => {
     const merged = [
@@ -347,7 +338,7 @@ export default function AssetDetailPage({
       await api.delete(`/assets/${asset.id}`)
       qc.invalidateQueries({ queryKey: ["assets"] })
       if (siteId) qc.invalidateQueries({ queryKey: ["site-cabinets", siteId] })
-      navigate(siteId ? `/asset-management/${siteId}` : "/asset-management")
+      navigate(siteId ? `/asset-hierarchy/${siteId}` : "/asset-hierarchy")
       notify.success("Asset deleted")
     } catch (e) { notify.error(getApiErrorMessage(e, "Failed to delete asset")); throw e }
   }, [asset, qc, siteId, navigate, notify])
@@ -429,43 +420,35 @@ export default function AssetDetailPage({
       ) : null}
 
       {/* ── Header ───────────────────────────────────────────────────── */}
-      <Box sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", px: "24px", py: "14px", flexShrink: 0 }}>
-        <Stack direction="row" alignItems="center" spacing={2}>
-          <Box sx={{ width: 40, height: 40, borderRadius: "10px", bgcolor: assetBg(asset.assetType), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Box sx={{ width: 16, height: 16, borderRadius: "3px", bgcolor: "rgba(0,0,0,0.12)" }} />
-          </Box>
+      <Box sx={{ height: HEADER_HEIGHT, bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
+        <Stack direction="row" alignItems="baseline" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {asset.name}
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: "#94a3b8", flexShrink: 0 }}>
+            {asset.assetType}
+          </Typography>
+        </Stack>
 
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: 18, fontWeight: 500, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {asset.name}
-            </Typography>
-            <Typography sx={{ fontSize: 13, color: "#64748b", mt: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {asset.assetType}
-            </Typography>
-          </Box>
-
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
             {canManage ? (editMode ? (
               <Stack direction="row" spacing={1} sx={{ ml: 1 }}>
                 <Button size="small" variant="outlined" onClick={cancelEdit} disabled={savingEdit} sx={{ textTransform: "none", fontSize: 12 }}>Cancel</Button>
                 <Button size="small" variant="contained" onClick={handleSaveEdit} disabled={savingEdit} sx={{ textTransform: "none", fontSize: 12 }}>{savingEdit ? "Saving..." : "Save changes"}</Button>
               </Stack>
             ) : (
-              <ButtonGroup size="small" variant="outlined" sx={{ ml: 1 }}>
-                <Button onClick={enterEdit} startIcon={<EditOutlinedIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: "none", fontSize: 12, borderColor: "#e2e8f0", color: "#475569" }}>Edit</Button>
-                <IconButton size="small" onClick={e => setMenuAnchor(e.currentTarget)} sx={{ border: "1px solid #e2e8f0", borderLeft: "none", borderRadius: "0 4px 4px 0", px: "4px" }}>
-                  <ArrowDropDownIcon fontSize="small" />
-                </IconButton>
-              </ButtonGroup>
+              <Box sx={{ ml: 1 }}>
+                <EditActionsButton
+                  onEdit={enterEdit}
+                  actions={[
+                    { label: "Change status", onClick: () => setActiveDialog("status") },
+                    { label: "Move asset", onClick: () => setActiveDialog("move") },
+                    { divider: true },
+                    { label: "Delete asset", danger: true, onClick: () => setActiveDialog("delete") },
+                  ]}
+                />
+              </Box>
             )) : null}
-
-            <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
-              <MenuItem onClick={() => { setMenuAnchor(null); setActiveDialog("status") }} sx={{ fontSize: 13 }}>Change status</MenuItem>
-              <MenuItem onClick={() => { setMenuAnchor(null); setActiveDialog("move") }} sx={{ fontSize: 13 }}>Move asset</MenuItem>
-              <Divider />
-              <MenuItem onClick={() => { setMenuAnchor(null); setActiveDialog("delete") }} sx={{ fontSize: 13, color: "#dc2626" }}>Delete asset</MenuItem>
-            </Menu>
-          </Stack>
         </Stack>
       </Box>
 
@@ -658,7 +641,7 @@ const OverviewTab = React.memo(function OverviewTab({
           <PropertyRow label="Site">
             {asset.site && asset.siteId ? (
               <Typography
-                onClick={() => navigate(`/asset-management/${asset.siteId}`)}
+                onClick={() => navigate(`/asset-hierarchy/${asset.siteId}`)}
                 sx={{ ...valueSx, cursor: "pointer", color: "#1d4ed8", "&:hover": { textDecoration: "underline" } }}>
                 {asset.site.name}
               </Typography>
@@ -667,7 +650,7 @@ const OverviewTab = React.memo(function OverviewTab({
           <PropertyRow label="Room">
             {asset.cabinet?.room && asset.cabinet.roomId && asset.siteId ? (
               <Typography
-                onClick={() => navigate(`/asset-management/${asset.siteId}/rooms/${asset.cabinet!.roomId}`)}
+                onClick={() => navigate(`/asset-hierarchy/${asset.siteId}/rooms/${asset.cabinet!.roomId}`)}
                 sx={{ ...valueSx, cursor: "pointer", color: "#1d4ed8", "&:hover": { textDecoration: "underline" } }}>
                 {asset.cabinet.room.name}
               </Typography>
@@ -681,7 +664,7 @@ const OverviewTab = React.memo(function OverviewTab({
               </TextField>
             ) : asset.cabinet && asset.cabinetId && asset.siteId ? (
               <Typography
-                onClick={() => navigate(`/asset-management/${asset.siteId}/cabinets/${asset.cabinetId}`)}
+                onClick={() => navigate(`/asset-hierarchy/${asset.siteId}/cabinets/${asset.cabinetId}`)}
                 sx={{ ...valueSx, cursor: "pointer", color: "#1d4ed8", "&:hover": { textDecoration: "underline" } }}>
                 {asset.cabinet.name}
               </Typography>

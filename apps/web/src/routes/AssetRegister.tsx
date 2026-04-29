@@ -2,7 +2,7 @@ import React from "react"
 import { Box, Stack, Typography } from "@mui/material"
 import {
   DataGrid, GridColDef, GridRenderCellParams,
-  GridToolbarContainer, GridToolbarDensitySelector,
+  GridToolbarContainer,
   GridToolbarColumnsButton, GridToolbarExport
 } from "@mui/x-data-grid"
 import { Asset } from "../lib/infrastructure"
@@ -57,7 +57,6 @@ function formatLocation(a: Asset): string {
 function GridInnerToolbar() {
   return (
     <GridToolbarContainer sx={{ px: 1, py: 0.5, gap: 1, borderBottom: "1px solid #e2e8f0" }}>
-      <GridToolbarDensitySelector slotProps={{ button: { sx: { fontSize: 12 } } }} />
       <GridToolbarColumnsButton slotProps={{ button: { sx: { fontSize: 12 } } }} />
       <GridToolbarExport
         csvOptions={{ fileName: `assets-register-${new Date().toISOString().split("T")[0]}`, utf8WithBom: true }}

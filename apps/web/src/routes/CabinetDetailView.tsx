@@ -189,7 +189,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
     if (selectedRackAsset?.siteId) {
       const viewParam = searchParams.get("view")
       const suffix = viewParam ? `?view=${viewParam}` : ""
-      navigate(`/asset-management/${selectedRackAsset.siteId}/assets/${selectedRackAsset.id}${suffix}`)
+      navigate(`/asset-hierarchy/${selectedRackAsset.siteId}/assets/${selectedRackAsset.id}${suffix}`)
     }
   }, [navigate, searchParams, selectedRackAsset])
 

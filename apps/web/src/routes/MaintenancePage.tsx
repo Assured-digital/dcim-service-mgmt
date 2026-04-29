@@ -12,18 +12,14 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography
 } from "@mui/material"
+import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid"
 import BuildCircleIcon from "@mui/icons-material/BuildCircle"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
 
 type MaintenanceRecord = {
   id: string
@@ -54,6 +50,46 @@ const WORK_TYPES = [
   "REPAIR",
   "UPGRADE",
   "OTHER"
+]
+
+const MaintenanceToolbar = makeGridToolbar("maintenance")
+
+const maintenanceColumns: GridColDef<MaintenanceRecord>[] = [
+  {
+    field: "asset", headerName: "Asset", flex: 1, minWidth: 200,
+    valueGetter: (_v, row) => `${row.asset.assetTag} ${row.asset.name}`,
+    renderCell: (p: GridRenderCellParams<MaintenanceRecord>) => (
+      <Stack sx={{ py: 0.5, lineHeight: 1.2 }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>{p.row.asset.assetTag}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>{p.row.asset.name}</Typography>
+      </Stack>
+    ),
+  },
+  {
+    field: "workType", headerName: "Work type", width: 180,
+    valueGetter: (_v, row) => row.workType === "OTHER" && row.workTypeOther ? row.workTypeOther : row.workType.replaceAll("_", " "),
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5 }}>{p.value as string}</Typography>,
+  },
+  {
+    field: "performedAt", headerName: "Performed", width: 120,
+    valueGetter: (v) => v ? new Date(v as string) : null,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5 }}>{p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}</Typography>,
+  },
+  {
+    field: "nextDueAt", headerName: "Next due", width: 120,
+    valueGetter: (v) => v ? new Date(v as string) : null,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: p.value ? "#0f172a" : "#94a3b8" }}>{p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}</Typography>,
+  },
+  {
+    field: "performedBy", headerName: "By", width: 150,
+    valueGetter: (_v, row) => row.performedBy?.email.split("@")[0] ?? "—",
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>{p.value as string}</Typography>,
+  },
+  {
+    field: "site", headerName: "Site", width: 160,
+    valueGetter: (_v, row) => row.asset.site?.name ?? "—",
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5 }}>{p.value as string}</Typography>,
+  },
 ]
 
 export default function MaintenancePage() {
@@ -167,48 +203,19 @@ export default function MaintenancePage() {
         ) : null}
 
         {(records.data?.length ?? 0) > 0 ? (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Asset</TableCell>
-                  <TableCell>Work type</TableCell>
-                  <TableCell>Performed</TableCell>
-                  <TableCell>Next due</TableCell>
-                  <TableCell>By</TableCell>
-                  <TableCell>Site</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(records.data ?? []).map((record) => (
-                  <TableRow
-                    key={record.id}
-                    hover
-                    onClick={() => navigate(`/maintenance/${record.id}`)}
-                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}
-                  >
-                    <TableCell>
-                      <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>
-                        {record.asset.assetTag}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {record.asset.name}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      {record.workType === "OTHER" && record.workTypeOther
-                        ? record.workTypeOther
-                        : record.workType.replaceAll("_", " ")}
-                    </TableCell>
-                    <TableCell>{new Date(record.performedAt).toLocaleDateString("en-GB")}</TableCell>
-                    <TableCell>{record.nextDueAt ? new Date(record.nextDueAt).toLocaleDateString("en-GB") : "—"}</TableCell>
-                    <TableCell>{record.performedBy?.email.split("@")[0] ?? "—"}</TableCell>
-                    <TableCell>{record.asset.site?.name ?? "—"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Box sx={{ height: 620 }}>
+            <DataGrid
+              rows={records.data ?? []}
+              columns={maintenanceColumns}
+              density="compact"
+              initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+              pageSizeOptions={[25, 50, 100]}
+              disableRowSelectionOnClick
+              onRowClick={(params) => navigate(`/maintenance/${(params.row as MaintenanceRecord).id}`)}
+              slots={{ toolbar: MaintenanceToolbar }}
+              sx={dataGridSx(true)}
+            />
+          </Box>
         ) : null}
       </Card>
 

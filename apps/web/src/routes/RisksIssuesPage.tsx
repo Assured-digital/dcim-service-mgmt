@@ -8,7 +8,7 @@ import {
 } from "@mui/material"
 import {
   DataGrid, GridColDef, GridRenderCellParams,
-  GridToolbarContainer, GridToolbarDensitySelector,
+  GridToolbarContainer,
   GridToolbarColumnsButton, GridToolbarExport
 } from "@mui/x-data-grid"
 import AddIcon from "@mui/icons-material/Add"
@@ -126,7 +126,6 @@ function countActiveFilters(f: RiskFilterState | IssueFilterState): number {
 function GridInnerToolbar() {
   return (
     <GridToolbarContainer sx={{ px: 1, py: 0.5, gap: 1, borderBottom: "1px solid #e2e8f0" }}>
-      <GridToolbarDensitySelector slotProps={{ button: { sx: { fontSize: 12 } } }} />
       <GridToolbarColumnsButton slotProps={{ button: { sx: { fontSize: 12 } } }} />
       <GridToolbarExport csvOptions={{ utf8WithBom: true }} printOptions={{ disableToolbarButton: true }} slotProps={{ button: { sx: { fontSize: 12 } } }} />
     </GridToolbarContainer>
@@ -146,61 +145,19 @@ function FilterSection({ label, items, selected, onToggle }: {
   label: string; items: { key: string; label: string; count: number; chipSx?: Record<string, any> }[]; selected: Set<string>; onToggle: (key: string) => void
 }) {
   return (
-    <Box sx={{ mb: "14px" }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", px: "12px", mb: "4px" }}>{label}</Typography>
+    <Box sx={{ mb: "6px" }}>
+      <Typography sx={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", px: "12px", mb: "2px" }}>{label}</Typography>
       {items.map(item => {
         const isActive = selected.has(item.key)
         return (
           <Stack key={item.key} direction="row" alignItems="center" onClick={() => onToggle(item.key)}
-            sx={{ px: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
-            <Checkbox checked={isActive} size="small" sx={{ p: 0, mr: "8px", "& .MuiSvgIcon-root": { fontSize: 15 } }} />
-            {item.chipSx ? <Chip size="small" label={item.label} sx={{ ...item.chipSx, height: 20 }} /> : <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "#1d4ed8" : "#475569", fontWeight: isActive ? 500 : 400 }}>{item.label}</Typography>}
+            sx={{ px: "12px", py: "1px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
+            <Checkbox checked={isActive} size="small" sx={{ p: 0, mr: "8px", "& .MuiSvgIcon-root": { fontSize: 14 } }} />
+            {item.chipSx ? <Chip size="small" label={item.label} sx={{ ...item.chipSx, height: 18 }} /> : <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "#1d4ed8" : "#475569", fontWeight: isActive ? 500 : 400 }}>{item.label}</Typography>}
             <Typography sx={{ fontSize: 10, color: "#94a3b8", ml: "auto" }}>{item.count}</Typography>
           </Stack>
         )
       })}
-    </Box>
-  )
-}
-
-// ─── Risk matrix ────────────────────────────────────────────────────────────
-
-const MATRIX_CELLS: { row: number; col: number; lk: string; imp: string }[] = [
-  { row: 0, col: 0, lk: "HIGH", imp: "LOW" }, { row: 0, col: 1, lk: "HIGH", imp: "MEDIUM" }, { row: 0, col: 2, lk: "HIGH", imp: "HIGH" },
-  { row: 1, col: 0, lk: "MEDIUM", imp: "LOW" }, { row: 1, col: 1, lk: "MEDIUM", imp: "MEDIUM" }, { row: 1, col: 2, lk: "MEDIUM", imp: "HIGH" },
-  { row: 2, col: 0, lk: "LOW", imp: "LOW" }, { row: 2, col: 1, lk: "LOW", imp: "MEDIUM" }, { row: 2, col: 2, lk: "LOW", imp: "HIGH" },
-]
-
-function RiskMatrix({ risks, onCellClick }: { risks: Risk[]; onCellClick: (lk: string, imp: string) => void }) {
-  const counts = React.useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const r of risks) { if (r.status === "CLOSED") continue; map[`${r.likelihood}-${r.impact}`] = (map[`${r.likelihood}-${r.impact}`] ?? 0) + 1 }
-    return map
-  }, [risks])
-
-  function cellBg(lk: string, imp: string) { const rag = deriveRag(lk, imp); return rag === "RED" ? "#fee2e2" : rag === "AMBER" ? "#fef3c7" : "#dcfce7" }
-  function cellFg(lk: string, imp: string) { const rag = deriveRag(lk, imp); return rag === "RED" ? "#791F1F" : rag === "AMBER" ? "#633806" : "#27500A" }
-
-  return (
-    <Box sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px", p: "14px 16px" }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 500, color: "#64748b", mb: "10px" }}>Risk matrix</Typography>
-      <Box sx={{ display: "grid", gridTemplateColumns: "18px repeat(3, 1fr)", gridTemplateRows: "repeat(3, 44px) 18px", gap: "3px" }}>
-        <Box sx={{ gridRow: "1 / 4", gridColumn: "1", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Typography sx={{ fontSize: 8, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em", writingMode: "vertical-rl", transform: "rotate(180deg)" }}>Likelihood</Typography>
-        </Box>
-        {MATRIX_CELLS.map(({ lk, imp, row, col }) => {
-          const count = counts[`${lk}-${imp}`] ?? 0
-          return (
-            <Box key={`${lk}-${imp}`} onClick={() => onCellClick(lk, imp)}
-              sx={{ gridRow: row + 1, gridColumn: col + 2, bgcolor: cellBg(lk, imp), borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 500, color: count > 0 ? cellFg(lk, imp) : "transparent", cursor: "pointer", "&:hover": { opacity: 0.8 } }}>
-              {count > 0 ? count : ""}
-            </Box>
-          )
-        })}
-        <Box sx={{ gridRow: 4, gridColumn: 1 }} />
-        {["Low", "Med", "High"].map((l, i) => <Box key={l} sx={{ gridRow: 4, gridColumn: i + 2, display: "flex", alignItems: "center", justifyContent: "center" }}><Typography sx={{ fontSize: 8, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em" }}>{l}</Typography></Box>)}
-      </Box>
-      <Typography sx={{ textAlign: "center", fontSize: 8, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em", mt: "4px" }}>Impact</Typography>
     </Box>
   )
 }
@@ -267,11 +224,6 @@ export default function RisksIssuesPage() {
   function toggleIssueFilter(kind: keyof IssueFilterState, value: string) { setIssueFilters(prev => { const set = new Set(prev[kind]); if (set.has(value)) set.delete(value); else set.add(value); return { ...prev, [kind]: set } }) }
   function selectQuickView(e: EntityType, v: QuickView) { setEntity(e); setQuickView(v); if (e === "risks") setRiskFilters(INITIAL_RISK_FILTERS); else setIssueFilters(INITIAL_ISSUE_FILTERS) }
 
-  function handleMatrixCellClick(_lk: string, _imp: string) {
-    const rag = deriveRag(_lk, _imp)
-    setRiskFilters(prev => { const next = new Set(prev.rags); if (next.has(rag) && next.size === 1) next.clear(); else { next.clear(); next.add(rag) } return { ...prev, rags: next } })
-  }
-
   const riskColumns: GridColDef<Risk>[] = React.useMemo(() => [
     { field: "reference", headerName: "Ref", width: 100, renderCell: (p: GridRenderCellParams<Risk>) => <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#475569", fontWeight: 700 }}>{p.value}</Typography> },
     { field: "title", headerName: "Title", flex: 1, minWidth: 200 },
@@ -292,7 +244,6 @@ export default function RisksIssuesPage() {
     { field: "createdAt", headerName: "Logged", width: 90, renderCell: (p) => <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>{new Date(p.value as string).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Typography> },
   ], [])
 
-  const isLoading = entity === "risks" ? risksLoading : issuesLoading
   const kpis = entity === "risks" ? riskKpis : issueKpis
   const filterCount = entity === "risks" ? countActiveFilters(riskFilters) : countActiveFilters(issueFilters)
 
@@ -318,20 +269,20 @@ export default function RisksIssuesPage() {
           </Tabs>
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: "auto", py: "8px" }}>
-          <Typography sx={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", px: "12px", mb: "4px" }}>Quick views</Typography>
+        <Box sx={{ flex: 1, minHeight: 0, py: "4px" }}>
+          <Typography sx={{ fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", px: "12px", mb: "2px" }}>Quick views</Typography>
           {QUICK_VIEWS.map(v => {
             const isActive = quickView === v.key
             return (
               <Stack key={v.key} direction="row" alignItems="center" onClick={() => selectQuickView(entity, v.key)}
-                sx={{ px: "12px", py: "6px", cursor: "pointer", borderLeft: isActive ? "2px solid #1d4ed8" : "2px solid transparent", bgcolor: isActive ? "rgba(29,78,216,0.07)" : "transparent", "&:hover": { bgcolor: isActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
+                sx={{ px: "12px", py: "3px", cursor: "pointer", borderLeft: isActive ? "2px solid #1d4ed8" : "2px solid transparent", bgcolor: isActive ? "rgba(29,78,216,0.07)" : "transparent", "&:hover": { bgcolor: isActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
                 <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "#1d4ed8" : "#475569", fontWeight: isActive ? 600 : 400 }}>{v.label}</Typography>
                 <Typography sx={{ fontSize: 10, color: "#94a3b8" }}>{quickCounts[v.key] ?? 0}</Typography>
               </Stack>
             )
           })}
 
-          <Box sx={{ height: 1, bgcolor: "#f1f5f9", mx: "12px", my: "10px" }} />
+          <Box sx={{ height: 1, bgcolor: "#f1f5f9", mx: "12px", my: "6px" }} />
 
           {entity === "risks" ? (
             <>
@@ -383,36 +334,32 @@ export default function RisksIssuesPage() {
           {canManage ? <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 13 }} />} onClick={() => entity === "risks" ? setRiskLogOpen(true) : setIssueLogOpen(true)} sx={{ fontSize: 12 }}>Log {entity === "risks" ? "risk" : "issue"}</Button> : null}
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: "auto", p: "16px 20px" }}>
-          {isLoading ? <LoadingState /> : (
-            <>
-              <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: "10px", mb: "16px" }}>
-                <KpiCard label={`Open ${entity}`} value={kpis.open} />
-                <KpiCard label="High severity" value={kpis.high} color={kpis.high > 0 ? "#b91c1c" : undefined} />
-                <KpiCard label="Review overdue" value={kpis.overdue} color={kpis.overdue > 0 ? "#b45309" : undefined} />
-                <KpiCard label="Avg age (days)" value={kpis.avgAge} />
-              </Box>
+        <Box sx={{ flex: 1, minHeight: 0, p: "16px 20px", display: "flex", flexDirection: "column" }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: "10px", mb: "16px", flexShrink: 0 }}>
+            <KpiCard label={`Open ${entity}`} value={kpis.open} />
+            <KpiCard label="High severity" value={kpis.high} color={kpis.high > 0 ? "#b91c1c" : undefined} />
+            <KpiCard label="Review overdue" value={kpis.overdue} color={kpis.overdue > 0 ? "#b45309" : undefined} />
+            <KpiCard label="Avg age (days)" value={kpis.avgAge} />
+          </Box>
 
-              <Box sx={{ display: "flex", gap: "16px", height: "calc(100% - 100px)", minHeight: 400 }}>
-                {entity === "risks" ? <Box sx={{ width: 220, flexShrink: 0 }}><RiskMatrix risks={risksRaw} onCellClick={handleMatrixCellClick} /></Box> : null}
-                <Box sx={{ flex: 1, minWidth: 0, bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                  <Box sx={{ px: "14px", py: "6px", borderBottom: "1px solid #e2e8f0", fontSize: 11.5, color: "#64748b", display: "flex", alignItems: "center", flexShrink: 0 }}>
-                    <Box component="span" sx={{ color: "#0f172a", fontWeight: 500 }}>{entity === "risks" ? filteredRisks.length : filteredIssues.length}</Box>
-                    {" of "}
-                    <Box component="span" sx={{ color: "#0f172a", fontWeight: 500, mx: "3px" }}>{entity === "risks" ? risksRaw.length : issuesRaw.length}</Box>
-                    {entity}{filterCount > 0 ? ` · ${filterCount} filter${filterCount !== 1 ? "s" : ""} active` : ""}
-                  </Box>
-                  <Box sx={{ flex: 1, minHeight: 0 }}>
-                    {entity === "risks" ? (
-                      <DataGrid rows={filteredRisks} columns={riskColumns} density="compact" initialState={{ pagination: { paginationModel: { pageSize: 25 } } }} pageSizeOptions={[25, 50, 100]} disableRowSelectionOnClick onRowClick={params => navigate(`/risks-issues/risks/${params.row.id}`)} slots={{ toolbar: GridInnerToolbar }} sx={gridSx} />
-                    ) : (
-                      <DataGrid rows={filteredIssues} columns={issueColumns} density="compact" initialState={{ pagination: { paginationModel: { pageSize: 25 } } }} pageSizeOptions={[25, 50, 100]} disableRowSelectionOnClick onRowClick={params => navigate(`/risks-issues/issues/${params.row.id}`)} slots={{ toolbar: GridInnerToolbar }} sx={gridSx} />
-                    )}
-                  </Box>
+          <Box sx={{ flex: 1, minHeight: 400 }}>
+            <Box sx={{ height: "100%", minWidth: 0, bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+              <Box sx={{ px: "14px", py: "6px", borderBottom: "1px solid #e2e8f0", fontSize: 11.5, color: "#64748b", display: "flex", alignItems: "center", flexShrink: 0 }}>
+                <Box component="span" sx={{ color: "#0f172a", fontWeight: 500 }}>{entity === "risks" ? filteredRisks.length : filteredIssues.length}</Box>
+                {" of "}
+                <Box component="span" sx={{ color: "#0f172a", fontWeight: 500, mx: "3px" }}>{entity === "risks" ? risksRaw.length : issuesRaw.length}</Box>
+                {entity}{filterCount > 0 ? ` · ${filterCount} filter${filterCount !== 1 ? "s" : ""} active` : ""}
+              </Box>
+              <Box sx={{ flex: 1, minHeight: 0 }}>
+                <Box sx={{ display: entity === "risks" ? "flex" : "none", flexDirection: "column", height: "100%" }}>
+                  {risksLoading ? <LoadingState /> : <DataGrid rows={filteredRisks} columns={riskColumns} density="compact" initialState={{ pagination: { paginationModel: { pageSize: 25 } } }} pageSizeOptions={[25, 50, 100]} disableRowSelectionOnClick onRowClick={params => navigate(`/risks-issues/risks/${params.row.id}`)} slots={{ toolbar: GridInnerToolbar }} sx={gridSx} />}
+                </Box>
+                <Box sx={{ display: entity === "issues" ? "flex" : "none", flexDirection: "column", height: "100%" }}>
+                  {issuesLoading ? <LoadingState /> : <DataGrid rows={filteredIssues} columns={issueColumns} density="compact" initialState={{ pagination: { paginationModel: { pageSize: 25 } } }} pageSizeOptions={[25, 50, 100]} disableRowSelectionOnClick onRowClick={params => navigate(`/risks-issues/issues/${params.row.id}`)} slots={{ toolbar: GridInnerToolbar }} sx={gridSx} />}
                 </Box>
               </Box>
-            </>
-          )}
+            </Box>
+          </Box>
         </Box>
       </Box>
 

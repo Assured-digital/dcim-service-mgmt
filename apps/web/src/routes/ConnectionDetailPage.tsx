@@ -50,8 +50,8 @@ type AssetOption = { id: string; assetTag: string; name: string; siteId: string 
 const STATUS_OPTIONS = ["PLANNED", "ACTIVE", "DEGRADED", "RETIRED"] as const
 
 function assetPath(asset: { id: string; site: { id: string } | null }) {
-  if (!asset.site?.id) return "/asset-management"
-  return `/asset-management/${asset.site.id}?assetId=${asset.id}`
+  if (!asset.site?.id) return "/asset-hierarchy"
+  return `/asset-hierarchy/${asset.site.id}?assetId=${asset.id}`
 }
 
 export default function ConnectionDetailPage() {

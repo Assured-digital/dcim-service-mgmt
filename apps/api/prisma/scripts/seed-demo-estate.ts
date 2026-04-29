@@ -10,7 +10,7 @@
  * deterministic asset tag, cabinet name+room, etc.).
  */
 
-import { PrismaClient, OwnerType } from "@prisma/client"
+import { PrismaClient, OwnerType, AssetLifecycleState } from "@prisma/client"
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 
@@ -21,7 +21,9 @@ const prisma = new PrismaClient()
 const ORG_ID = "00000000-0000-0000-0000-000000000001" // matches base seed.ts
 const CLIENT_NAME = "University of Testing"
 const SITE_NAME = "Main Data Centre"
+const SITE_ADDRESS = "Temple Quay"
 const SITE_CITY = "Bristol"
+const SITE_POSTCODE = "BS1 6EG"
 const SITE_COUNTRY = "UK"
 
 const CSV_PATH = join(__dirname, "..", "fixtures", "demo-estate.csv")
@@ -174,14 +176,30 @@ async function main() {
       data: {
         name: SITE_NAME,
         clientId: client.id,
+        address: SITE_ADDRESS,
         city: SITE_CITY,
+        postcode: SITE_POSTCODE,
         country: SITE_COUNTRY,
         notes: "Demo site populated from sanitised real-world export"
       }
     })
     console.log(`   ✓ Created site: ${SITE_NAME}`)
   } else {
-    console.log(`   ↺ Found existing site: ${SITE_NAME}`)
+    // Backfill address fields so existing dev DBs light up on the map without a reset
+    const needsAddressBackfill = !site.address || !site.postcode
+    if (needsAddressBackfill) {
+      site = await prisma.site.update({
+        where: { id: site.id },
+        data: {
+          address: site.address ?? SITE_ADDRESS,
+          city: site.city ?? SITE_CITY,
+          postcode: site.postcode ?? SITE_POSTCODE
+        }
+      })
+      console.log(`   ✎ Backfilled address on existing site: ${SITE_NAME}`)
+    } else {
+      console.log(`   ↺ Found existing site: ${SITE_NAME}`)
+    }
   }
 
   // Discover rooms from CSV
@@ -327,9 +345,341 @@ async function main() {
   }
   console.log(`   ✓ Cabinet usedU updated\n`)
 
+  // ─── 6. Additional UK sites (multi-site estate) ─────────────────────
+
+  console.log("── Seeding additional UK sites ──")
+  const additionalTotals = { sites: 0, assets: 0, skipped: 0 }
+  for (const spec of ADDITIONAL_SITES) {
+    const result = await seedAdditionalSite(client.id, spec)
+    additionalTotals.sites += result.siteCreated ? 1 : 0
+    additionalTotals.assets += result.assetsCreated
+    additionalTotals.skipped += result.assetsSkipped
+  }
+  console.log(`   ✓ Additional sites: ${additionalTotals.sites} new, ${additionalTotals.assets} assets created, ${additionalTotals.skipped} skipped\n`)
+
+  const totalSites = await prisma.site.count({ where: { clientId: client.id } })
+  const totalAssets = await prisma.asset.count({ where: { clientId: client.id } })
+
   console.log("✅ Demo estate seed complete")
   console.log(`   Client: ${client.name}`)
-  console.log(`   Site: ${site.name} (${roomMap.size} rooms, ${cabinetMap.size} cabinets)`)
+  console.log(`   Sites: ${totalSites}`)
+  console.log(`   Assets across estate: ${totalAssets}`)
+}
+
+// ─── Additional-site estate ─────────────────────────────────────────
+
+type CabinetProfile = "compute-dense" | "compute-mix" | "network-core" | "storage" | "edge"
+
+type CabinetAssetSpec = { type: string; manufacturer: string; model: string; count: number }
+
+const CABINET_ASSETS: Record<CabinetProfile, CabinetAssetSpec[]> = {
+  "compute-dense": [
+    { type: "Network Device", manufacturer: "Cisco", model: "Nexus 9300", count: 1 },
+    { type: "Patch Panel",    manufacturer: "Panduit", model: "DP24",      count: 1 },
+    { type: "Rack PDU",       manufacturer: "APC",     model: "AP8681",    count: 2 },
+    { type: "Server",         manufacturer: "Dell",    model: "PowerEdge R650", count: 10 }
+  ],
+  "compute-mix": [
+    { type: "Network Device", manufacturer: "Cisco",   model: "Catalyst 2960", count: 1 },
+    { type: "Patch Panel",    manufacturer: "Panduit", model: "DP24",          count: 1 },
+    { type: "Rack PDU",       manufacturer: "APC",     model: "AP8681",        count: 2 },
+    { type: "Server",         manufacturer: "HPE",     model: "DL380 Gen10",   count: 6 },
+    { type: "Server",         manufacturer: "Dell",    model: "PowerEdge R740", count: 2 }
+  ],
+  "network-core": [
+    { type: "Network Device", manufacturer: "Cisco",   model: "Nexus 9504",    count: 2 },
+    { type: "Network Device", manufacturer: "Cisco",   model: "Nexus 5596",    count: 2 },
+    { type: "Network Device", manufacturer: "Cisco",   model: "Catalyst 2960", count: 4 },
+    { type: "Patch Panel",    manufacturer: "Panduit", model: "DP48",          count: 2 },
+    { type: "Rack PDU",       manufacturer: "APC",     model: "AP8681",        count: 2 },
+    { type: "KVM Switch",     manufacturer: "Raritan", model: "DSX2-16",       count: 1 }
+  ],
+  "storage": [
+    { type: "Network Device",  manufacturer: "Cisco",   model: "Nexus 93180",    count: 1 },
+    { type: "Patch Panel",     manufacturer: "Panduit", model: "DP24",           count: 1 },
+    { type: "Rack PDU",        manufacturer: "APC",     model: "AP8681",         count: 2 },
+    { type: "Network Storage", manufacturer: "HPE",     model: "Alletra 9060",   count: 3 },
+    { type: "Network Storage", manufacturer: "NetApp",  model: "AFF A400",       count: 2 }
+  ],
+  "edge": [
+    { type: "Network Device", manufacturer: "Cisco",   model: "Catalyst 2960",  count: 2 },
+    { type: "Patch Panel",    manufacturer: "Panduit", model: "DP24",           count: 1 },
+    { type: "Rack PDU",       manufacturer: "APC",     model: "AP8681",         count: 1 },
+    { type: "Server",         manufacturer: "Dell",    model: "PowerEdge R650", count: 4 }
+  ]
+}
+
+type AdditionalSiteSpec = {
+  code: string
+  name: string
+  address: string
+  city: string
+  postcode: string
+  country: string
+  notes?: string
+  rooms: Array<{
+    name: string
+    type?: string
+    cabinets: Array<{ name: string; profile: CabinetProfile; totalU?: number; powerKw?: number }>
+  }>
+}
+
+const ADDITIONAL_SITES: AdditionalSiteSpec[] = [
+  {
+    code: "LDN",
+    name: "London Docklands DC",
+    address: "1 Dock Road",
+    city: "London",
+    postcode: "E14 5AB",
+    country: "UK",
+    notes: "Primary UK production facility — Tier III",
+    rooms: [
+      {
+        name: "Hall A",
+        cabinets: [
+          { name: "A-01", profile: "compute-dense" },
+          { name: "A-02", profile: "compute-dense" },
+          { name: "A-03", profile: "compute-mix" },
+          { name: "A-04", profile: "storage" }
+        ]
+      },
+      {
+        name: "Hall B",
+        cabinets: [
+          { name: "B-01", profile: "network-core", powerKw: 14 },
+          { name: "B-02", profile: "compute-mix" },
+          { name: "B-03", profile: "compute-mix" }
+        ]
+      }
+    ]
+  },
+  {
+    code: "MAN",
+    name: "Manchester North DC",
+    address: "Great Northern Tower",
+    city: "Manchester",
+    postcode: "M3 4EN",
+    country: "UK",
+    notes: "Regional DR facility",
+    rooms: [
+      {
+        name: "Data Hall 1",
+        cabinets: [
+          { name: "MAN-01", profile: "compute-dense" },
+          { name: "MAN-02", profile: "compute-mix" },
+          { name: "MAN-03", profile: "storage" }
+        ]
+      },
+      {
+        name: "Comms Room",
+        type: "COMMS_ROOM",
+        cabinets: [
+          { name: "COMMS-01", profile: "network-core", powerKw: 12 },
+          { name: "COMMS-02", profile: "edge" }
+        ]
+      }
+    ]
+  },
+  {
+    code: "EDI",
+    name: "Edinburgh Tech Park",
+    address: "3 Lochside Avenue",
+    city: "Edinburgh",
+    postcode: "EH12 9DJ",
+    country: "UK",
+    notes: "Research & analytics workloads",
+    rooms: [
+      {
+        name: "Primary Hall",
+        cabinets: [
+          { name: "EDI-01", profile: "compute-mix" },
+          { name: "EDI-02", profile: "compute-mix" },
+          { name: "EDI-03", profile: "storage" },
+          { name: "EDI-04", profile: "edge" }
+        ]
+      }
+    ]
+  },
+  {
+    code: "LDS",
+    name: "Leeds Campus",
+    address: "Wellington Place",
+    city: "Leeds",
+    postcode: "LS1 4AP",
+    country: "UK",
+    notes: "Edge site — back-office and retail workloads",
+    rooms: [
+      {
+        name: "Server Room",
+        cabinets: [
+          { name: "LDS-01", profile: "edge" },
+          { name: "LDS-02", profile: "edge" },
+          { name: "LDS-03", profile: "compute-mix" }
+        ]
+      }
+    ]
+  },
+  {
+    code: "SLW",
+    name: "Slough West DC",
+    address: "Buckingham Avenue",
+    city: "Slough",
+    postcode: "SL1 4QP",
+    country: "UK",
+    notes: "High-density colocation — Thames Valley cluster",
+    rooms: [
+      {
+        name: "DC East",
+        cabinets: [
+          { name: "SLW-E01", profile: "compute-dense" },
+          { name: "SLW-E02", profile: "compute-dense" },
+          { name: "SLW-E03", profile: "compute-dense" },
+          { name: "SLW-E04", profile: "storage" }
+        ]
+      },
+      {
+        name: "DC West",
+        cabinets: [
+          { name: "SLW-W01", profile: "network-core", powerKw: 14 },
+          { name: "SLW-W02", profile: "compute-mix" }
+        ]
+      }
+    ]
+  }
+]
+
+function pickLifecycle(): AssetLifecycleState {
+  const r = nextRand()
+  if (r < 0.78) return AssetLifecycleState.ACTIVE
+  if (r < 0.88) return AssetLifecycleState.PLANNED
+  if (r < 0.94) return AssetLifecycleState.STAGING
+  if (r < 0.98) return AssetLifecycleState.PROCUREMENT
+  return AssetLifecycleState.RETIRED
+}
+
+function randomPastDate(minYearsAgo: number, maxYearsAgo: number): Date {
+  const years = minYearsAgo + nextRand() * (maxYearsAgo - minYearsAgo)
+  return new Date(Date.now() - years * 365 * 24 * 60 * 60 * 1000)
+}
+
+async function seedAdditionalSite(clientId: string, spec: AdditionalSiteSpec) {
+  let dbSite = await prisma.site.findFirst({ where: { name: spec.name, clientId } })
+  let siteCreated = false
+  if (!dbSite) {
+    dbSite = await prisma.site.create({
+      data: {
+        clientId,
+        name: spec.name,
+        address: spec.address,
+        city: spec.city,
+        postcode: spec.postcode,
+        country: spec.country,
+        notes: spec.notes
+      }
+    })
+    siteCreated = true
+    console.log(`   ✓ Created site: ${spec.name}`)
+  } else {
+    console.log(`   ↺ Site exists: ${spec.name}`)
+  }
+
+  const tagCounter: Record<string, number> = {}
+  let assetsCreated = 0
+  let assetsSkipped = 0
+
+  for (const roomSpec of spec.rooms) {
+    let room = await prisma.room.findFirst({ where: { name: roomSpec.name, siteId: dbSite.id } })
+    if (!room) {
+      room = await prisma.room.create({
+        data: { name: roomSpec.name, siteId: dbSite.id, type: roomSpec.type ?? "DATA_HALL" }
+      })
+    }
+
+    for (const cabSpec of roomSpec.cabinets) {
+      let cabinet = await prisma.cabinet.findFirst({
+        where: { name: cabSpec.name, siteId: dbSite.id, roomId: room.id }
+      })
+      if (!cabinet) {
+        cabinet = await prisma.cabinet.create({
+          data: {
+            siteId: dbSite.id,
+            roomId: room.id,
+            name: cabSpec.name,
+            type: "RACK",
+            totalU: cabSpec.totalU ?? 42,
+            powerKw: cabSpec.powerKw ?? 10
+          }
+        })
+      }
+
+      let uCursor = 1
+      const cabTotalU = cabinet.totalU ?? 42
+
+      for (const assetSpec of CABINET_ASSETS[cabSpec.profile]) {
+        const prefix = TAG_PREFIX[assetSpec.type] ?? "AST"
+        const keyspace = `${spec.code}-${prefix}`
+        const uHeight = DEFAULT_U_HEIGHT[assetSpec.type] ?? 1
+
+        for (let i = 0; i < assetSpec.count; i++) {
+          tagCounter[keyspace] = (tagCounter[keyspace] ?? 0) + 1
+          const assetTag = `${keyspace}-${tagCounter[keyspace].toString().padStart(4, "0")}`
+
+          const existing = await prisma.asset.findUnique({ where: { assetTag } })
+          if (existing) { assetsSkipped++; continue }
+
+          let uPosition: number | null = null
+          if (uHeight > 0 && uCursor + uHeight - 1 <= cabTotalU) {
+            uPosition = uCursor
+            uCursor += uHeight
+          }
+
+          const powerDrawW = estimatePowerDrawW(assetSpec.type, assetSpec.model)
+          const serial = syntheticSerial(`${assetTag}|${assetSpec.manufacturer}|${assetSpec.model}`)
+          const lifecycleState = pickLifecycle()
+          const installDate = randomPastDate(0.5, 5)
+          const warrantyYears = randInt(1, 5)
+          const warrantyExpiry = new Date(installDate.getTime() + warrantyYears * 365 * 24 * 60 * 60 * 1000)
+
+          await prisma.asset.create({
+            data: {
+              assetTag,
+              name: assetTag,
+              assetType: assetSpec.type,
+              ownerType: OwnerType.CLIENT,
+              clientId,
+              siteId: dbSite.id,
+              cabinetId: cabinet.id,
+              manufacturer: assetSpec.manufacturer,
+              modelNumber: assetSpec.model,
+              serialNumber: serial,
+              uHeight: uHeight > 0 ? uHeight : null,
+              uPosition,
+              powerDrawW: powerDrawW > 0 ? powerDrawW : null,
+              status: "ACTIVE",
+              lifecycleState,
+              rackSide: "FRONT",
+              installDate,
+              warrantyExpiry
+            }
+          })
+          assetsCreated++
+        }
+      }
+    }
+  }
+
+  // Update usedU for this site's cabinets
+  const siteCabinets = await prisma.cabinet.findMany({ where: { siteId: dbSite.id } })
+  for (const cab of siteCabinets) {
+    const racked = await prisma.asset.findMany({
+      where: { cabinetId: cab.id, uPosition: { not: null } }
+    })
+    const usedU = racked.reduce((s, a) => s + (a.uHeight ?? 1), 0)
+    await prisma.cabinet.update({ where: { id: cab.id }, data: { usedU } })
+  }
+
+  console.log(`     • ${spec.code}: ${assetsCreated} assets created, ${assetsSkipped} skipped`)
+  return { siteCreated, assetsCreated, assetsSkipped }
 }
 
 main()

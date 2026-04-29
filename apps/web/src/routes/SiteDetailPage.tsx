@@ -658,7 +658,7 @@ export default function SiteDetailPage() {
       if (deleteTarget.type === "site") {
         await api.delete(`/sites/${deleteTarget.id}`)
         setDeleteTarget(null)
-        navigate("/asset-management")
+        navigate("/asset-hierarchy")
         return
       }
       if (deleteTarget.type === "room") {

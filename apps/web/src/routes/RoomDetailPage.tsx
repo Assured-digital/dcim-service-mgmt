@@ -125,7 +125,7 @@ export default function RoomDetailPage() {
   React.useEffect(() => {
     if (site && room) {
       setBreadcrumbs([
-        { label: site.name, path: `/asset-management/${siteId}` },
+        { label: site.name, path: `/asset-hierarchy/${siteId}` },
         { label: room.name }
       ])
     }
@@ -150,7 +150,7 @@ export default function RoomDetailPage() {
           {canManage ? (
             <Button size="small" variant="contained"
               startIcon={<AddIcon sx={{ fontSize: 13 }} />}
-              onClick={() => navigate(`/asset-management/${siteId}`)}>
+              onClick={() => navigate(`/asset-hierarchy/${siteId}`)}>
               Add rack
             </Button>
           ) : null}
@@ -196,7 +196,7 @@ export default function RoomDetailPage() {
                   const powerPct = c.powerKw ? Math.min(100, Math.round((c.powerKw / 20) * 100)) : 0
                   return (
                       <Box key={c.id}
-                      onClick={() => navigate(`/asset-management/${siteId}?roomId=${roomId}&cabinetId=${c.id}`)}
+                      onClick={() => navigate(`/asset-hierarchy/${siteId}?roomId=${roomId}&cabinetId=${c.id}`)}
                       sx={{
                         bgcolor: "var(--color-background-primary)", border: "1px solid var(--color-border-primary)", borderRadius: "10px",
                         p: "16px 18px", cursor: "pointer", transition: "all 0.15s",
@@ -315,7 +315,7 @@ export default function RoomDetailPage() {
                     <TableBody>
                       {filteredAssets.map(a => (
                         <TableRow key={a.id} hover sx={{ cursor: "pointer", "&:hover td": { bgcolor: "#f8fafc" } }}
-                          onClick={() => navigate(`/asset-management/${siteId}?roomId=${roomId}&cabinetId=${a.cabinet?.id}&assetId=${a.id}`)}>
+                          onClick={() => navigate(`/asset-hierarchy/${siteId}?roomId=${roomId}&cabinetId=${a.cabinet?.id}&assetId=${a.id}`)}>
                           <TableCell>
                             <Stack direction="row" alignItems="center" spacing={1}>
                               <Box sx={{ width: 20, height: 20, borderRadius: "4px", bgcolor: assetTypeColor(a.assetType), flexShrink: 0 }} />

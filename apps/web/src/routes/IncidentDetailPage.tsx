@@ -4,13 +4,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent,
-  DialogTitle, Divider, MenuItem, Stack, Tab, Tabs, TextField, Typography
+  DialogTitle, Divider, IconButton, Menu, MenuItem, Stack, Tab, Tabs, TextField, Typography
 } from "@mui/material"
 import LockIcon from "@mui/icons-material/Lock"
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
 import {
   Badge, InfoField, LinkedEntitiesPanel, PropertiesPanel, SectionHeader, WorkflowStrip,
   chipSx, statusSelectSx, type LinkedTask
 } from "../components/shared"
+import { TicketHeaderCard, primaryTransition } from "../components/ticket-detail/TicketHeaderCard"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -131,6 +133,7 @@ export default function IncidentDetailPage() {
   const [taskOpen, setTaskOpen] = React.useState(false)
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
   const [activeTab, setActiveTab] = React.useState(0)
+  const [moreAnchor, setMoreAnchor] = React.useState<null | HTMLElement>(null)
 
   const [transitionTarget, setTransitionTarget] = React.useState<string | null>(null)
   const [transitionComment, setTransitionComment] = React.useState("")
@@ -214,7 +217,7 @@ export default function IncidentDetailPage() {
       qc.invalidateQueries({ queryKey: ["incident-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-incident", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-incident", id] })
-      qc.invalidateQueries({ queryKey: ["incidents"] })
+      qc.invalidateQueries({ queryKey: ["tickets"] })
     } catch (e: unknown) {
       setError(getApiErrorMessage(e, "Failed to update status"))
     } finally {
@@ -236,7 +239,7 @@ export default function IncidentDetailPage() {
       setEditingProperties(false)
       qc.invalidateQueries({ queryKey: ["incident-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-incident", id] })
-      qc.invalidateQueries({ queryKey: ["incidents"] })
+      qc.invalidateQueries({ queryKey: ["tickets"] })
     } catch (e: unknown) {
       setError(getApiErrorMessage(e, "Failed to save incident properties"))
     } finally {
@@ -282,74 +285,74 @@ export default function IncidentDetailPage() {
     { label: "Updated", value: <Typography variant="caption">{new Date(incident.updatedAt).toLocaleDateString("en-GB")}</Typography> }
   ]
 
-  return (
-    <Box>
-      <Box sx={{
-        bgcolor: "var(--color-background-secondary)",
-        border: "0.5px solid var(--color-border-tertiary)",
-        borderTopLeftRadius: 8, borderTopRightRadius: 8,
-        px: 2.5, pt: 1.25, pb: 2
-      }}>
-        <SectionHeader
-          label="INCIDENT"
-          action={canManage && nextStatuses.includes("CLOSED") ? (
-            <Button size="small" variant="contained" color="error" onClick={() => setTransitionTarget("CLOSED")}>
-              Close incident
-            </Button>
-          ) : undefined}
-        />
-        <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-          {incident.title}
-        </Typography>
-        <Divider sx={{ my: 1.5 }} />
-        <InfoField label="DESCRIPTION">
-          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
-            {incident.description}
-          </Typography>
-        </InfoField>
-        <Divider sx={{ mt: 1.5 }} />
-      </Box>
+  const primary = primaryTransition("INC", incident.status)
+  const secondaryTransitions = nextStatuses.filter(s => s !== primary?.target)
 
-      <Box sx={{
-        border: "0.5px solid var(--color-border-tertiary)",
-        borderTop: "none",
-        borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
-        bgcolor: "var(--color-background-primary)",
-        p: 1.5,
-        mb: 3,
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
-        gap: 1.25,
-        alignItems: "center"
-      }}>
-        <WorkflowStrip
-          stages={STATUS_ALL.map((status) => ({
-            id: status,
-            label: STATUS_LABELS[status],
-            description: STATUS_DESCRIPTIONS[status]
-          }))}
-          currentStage={incident.status}
-          mb={0}
-          specialStageColors={{ MITIGATED: "#14532d", RESOLVED: "#14532d", CLOSED: "#14532d" }}
-        />
-        {canManage ? (
-          <TextField
-            select
+  const headerActions = canManage ? (
+    <>
+      {secondaryTransitions.length > 0 ? (
+        <>
+          <IconButton
             size="small"
-            label="Change status"
-            value={transitionTarget ?? ""}
-            onChange={(event) => setTransitionTarget(event.target.value)}
-            sx={statusSelectSx(220)}
+            onClick={(e) => setMoreAnchor(e.currentTarget)}
+            sx={{ border: "1px solid #e2e8f0", borderRadius: 1, width: 32, height: 32 }}
+            aria-label="More status transitions"
           >
-            <MenuItem value="" disabled>No status selected</MenuItem>
-            {nextStatuses.map((status) => (
-              <MenuItem key={status} value={status}>
-                {STATUS_LABELS[status] ?? status}
+            <MoreHorizIcon sx={{ fontSize: 18, color: "#475569" }} />
+          </IconButton>
+          <Menu anchorEl={moreAnchor} open={Boolean(moreAnchor)} onClose={() => setMoreAnchor(null)}>
+            {secondaryTransitions.map(s => (
+              <MenuItem key={s} dense onClick={() => { setTransitionTarget(s); setMoreAnchor(null) }}>
+                {STATUS_LABELS[s] ?? s}
               </MenuItem>
             ))}
-          </TextField>
-        ) : null}
-      </Box>
+          </Menu>
+        </>
+      ) : null}
+      {primary ? (
+        <Button size="small" variant="contained"
+          onClick={() => setTransitionTarget(primary.target)}
+          sx={{ fontSize: 12 }}
+        >
+          {primary.label}
+        </Button>
+      ) : null}
+    </>
+  ) : null
+
+  const metaParts: React.ReactNode[] = [
+    <>Severity <strong style={{ color: "#b91c1c" }}>{incident.severity}</strong></>,
+    <>opened {new Date(incident.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</>,
+    incident.assignee ? `assigned to ${incident.assignee.email.split("@")[0]}` : "Unassigned",
+  ]
+
+  return (
+    <Box>
+      <TicketHeaderCard
+        kind="INC"
+        reference={incident.reference}
+        status={incident.status}
+        statusLabel={STATUS_LABELS[incident.status] ?? incident.status}
+        priority={incident.priority}
+        title={incident.title}
+        actions={headerActions}
+        meta={metaParts.map((m, i) => (
+          <React.Fragment key={i}>{i > 0 ? <span style={{ color: "#cbd5e1", margin: "0 6px" }}>·</span> : null}{m}</React.Fragment>
+        ))}
+        workflow={
+          <WorkflowStrip
+            stages={STATUS_ALL.map((status) => ({
+              id: status,
+              label: STATUS_LABELS[status],
+              description: STATUS_DESCRIPTIONS[status]
+            }))}
+            currentStage={incident.status}
+            mb={0}
+            specialStageColors={{ MITIGATED: "#14532d", RESOLVED: "#14532d", CLOSED: "#14532d" }}
+          />
+        }
+        description={incident.description}
+      />
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 

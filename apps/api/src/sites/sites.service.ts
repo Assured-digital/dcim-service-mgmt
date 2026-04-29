@@ -1,9 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
+import { GeocodingService } from "./geocoding.service"
 
 @Injectable()
 export class SitesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private geocoder: GeocodingService) {}
 
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
@@ -50,6 +51,7 @@ export class SitesService {
     notes?: string
   }) {
     this.assertClientScope(clientId)
+    const country = dto.country ?? "UK"
     const site = await this.prisma.site.create({
       data: {
         clientId,
@@ -57,7 +59,7 @@ export class SitesService {
         address: dto.address,
         city: dto.city,
         postcode: dto.postcode,
-        country: dto.country ?? "UK",
+        country,
         notes: dto.notes
       }
     })
@@ -72,6 +74,19 @@ export class SitesService {
         data: { name: site.name }
       }
     })
+
+    const geo = await this.geocoder.geocodeAddress({
+      address: dto.address,
+      city: dto.city,
+      postcode: dto.postcode,
+      country
+    })
+    if (geo) {
+      return this.prisma.site.update({
+        where: { id: site.id },
+        data: { latitude: geo.lat, longitude: geo.lon, geocodedAt: new Date() }
+      })
+    }
 
     return site
   }
@@ -103,7 +118,22 @@ export class SitesService {
       }
     })
 
-    return updated
+    const addressChanged =
+      "address" in dto || "city" in dto || "postcode" in dto || "country" in dto
+    if (!addressChanged) return updated
+
+    const geo = await this.geocoder.geocodeAddress({
+      address: updated.address,
+      city: updated.city,
+      postcode: updated.postcode,
+      country: updated.country
+    })
+    return this.prisma.site.update({
+      where: { id: site.id },
+      data: geo
+        ? { latitude: geo.lat, longitude: geo.lon, geocodedAt: new Date() }
+        : { latitude: null, longitude: null, geocodedAt: null }
+    })
   }
 
   async removeForClient(clientId: string, id: string) {

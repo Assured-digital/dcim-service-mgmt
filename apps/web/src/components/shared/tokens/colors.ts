@@ -49,16 +49,59 @@ export const priorityDots: Record<string, string> = {
 
 export function resolveIntent(value: string): SemanticIntent {
   const v = value.toUpperCase()
+  if (["OVERDUE","FAIL","CANCELLED","REJECTED","RED","HIGH","BLOCKED","CRITICAL"].some(k => v.includes(k)))
+    return "danger"
   if (["CLOSED","COMPLETED","RESOLVED","GREEN","PASS","DONE"].some(k => v.includes(k)))
     return "success"
-  if (["IN_PROGRESS","ASSIGNED","OPEN","ACTIVE","MITIGATING"].some(k => v.includes(k)))
+  if (["IN_PROGRESS","ASSIGNED","OPEN","ACTIVE","MITIGATING","INVESTIGATING"].some(k => v.includes(k)))
     return "active"
-  if (["NEW","DRAFT","AMBER","MEDIUM","WAITING","IDENTIFIED","ASSESSED","ACCEPTED"].some(k => v.includes(k)))
+  if (["NEW","DRAFT","AMBER","MEDIUM","WAITING","IDENTIFIED","ASSESSED","ACCEPTED","PENDING"].some(k => v.includes(k)))
     return "warning"
-  if (["FAIL","CANCELLED","REJECTED","RED","HIGH","BLOCKED","CRITICAL"].some(k => v.includes(k)))
-    return "danger"
   return "neutral"
 }
+
+// ── Extended tokens for Service Desk mid-fi ────────────────────────────────
+// Slate scale mirroring the polished design's --s-* custom properties.
+export const slate = {
+  50:  "#f8fafc",
+  100: "#f1f5f9",
+  200: "#e2e8f0",
+  300: "#cbd5e1",
+  400: "#94a3b8",
+  500: "#64748b",
+  600: "#475569",
+  700: "#334155",
+  800: "#1e293b",
+  900: "#0f172a",
+} as const
+
+// Dark operator shell tokens (sidebar, topbar).
+export const shellTokens = {
+  bg: "#0d1526",
+  top: "#080f1e",
+  divider: "rgba(255,255,255,0.06)",
+  hover: "rgba(255,255,255,0.04)",
+  selected: "rgba(59,130,246,0.15)",
+  text: "#a3b4c9",
+  bright: "#e2e8f0",
+  mute: "#64748b",
+} as const
+
+export const radii = {
+  xs: 4, sm: 6, md: 8, lg: 12, pill: 999,
+} as const
+
+export const shadows = {
+  card: "0 10px 28px rgba(15,23,42,0.06)",
+  hover: "0 2px 8px rgba(15,23,42,0.06)",
+} as const
+
+// Type-badge colours for SR / INC / CHG.
+export const typeBadgeTokens = {
+  SR:  { bg: "#e0f2fe", text: "#075985" },
+  INC: { bg: "#fee2e2", text: "#b91c1c" },
+  CHG: { bg: "#f3e8ff", text: "#6b21a8" },
+} as const
 
 export function chipSx(value: string) {
   const { bg, text } = semanticTokens[resolveIntent(value)]
