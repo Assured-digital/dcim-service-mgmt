@@ -14,6 +14,7 @@
     "seed:demo:estate": "ts-node prisma/scripts/seed-demo-estate.ts",
     "seed:demo:governance": "ts-node prisma/scripts/seed-demo-governance.ts",
     "seed:demo": "npm run seed:demo:estate && npm run seed:demo:governance",
+    "geocode:sites": "ts-node prisma/scripts/backfill-site-coordinates.ts",
     "test:triage:smoke": "sh scripts/triage-smoke.sh"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { Suspense, useEffect, useRef, useState } from "react"
 import type { NavigateFunction } from "react-router-dom"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -33,7 +33,11 @@ import BusinessIcon from "@mui/icons-material/Business"
 import DnsIcon from "@mui/icons-material/Dns"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import HubIcon from "@mui/icons-material/Hub"
+import AccountTreeIcon from "@mui/icons-material/AccountTree"
+import ViewListIcon from "@mui/icons-material/ViewList"
+import InsightsIcon from "@mui/icons-material/Insights"
 import { api, revokeAndLogout } from "../lib/api"
+import { LoadingState } from "../components/PageState"
 import { getCurrentUser } from "../lib/auth"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
@@ -45,19 +49,22 @@ type Crumb = { label: string; path?: string; onClick?: () => void }
 const BreadcrumbCtx = React.createContext<{
   setRecordLabel: (l: string | null) => void
   setBreadcrumbs: (crumbs: Crumb[]) => void
-}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {} })
+  setHideModuleLabel: (hide: boolean) => void
+  setPageFullBleed: (fullBleed: boolean) => void
+}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {}, setHideModuleLabel: () => {}, setPageFullBleed: () => {} })
 export function useBreadcrumb() { return React.useContext(BreadcrumbCtx) }
 
 const RECORD_CRUMB_SEP_SX = { color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none" as const, flexShrink: 0, mx: "2px" }
 
 function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav: NavigateFunction }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!menuOpen) return
     const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
     }
     document.addEventListener("mousedown", onDown)
     return () => document.removeEventListener("mousedown", onDown)
@@ -70,11 +77,18 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
   }
 
   const n = breadcrumbs.length
+  // Condense when the trail has more than 4 crumbs (5+). Simple count rule.
+  const isCondensed = n > 4
+
+  useEffect(() => {
+    if (!isCondensed) setMenuOpen(false)
+  }, [isCondensed])
+
   if (n === 0) return null
 
-  if (n <= 3) {
+  if (!isCondensed) {
     return (
-      <>
+      <Box ref={viewportRef} sx={{ position: "relative", minWidth: 0, flexShrink: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
         {breadcrumbs.map((crumb, idx) => {
           const isLast = idx === n - 1
           const isClickable = !isLast && !!(crumb.path || crumb.onClick)
@@ -111,39 +125,18 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
             </React.Fragment>
           )
         })}
-      </>
+      </Box>
     )
   }
 
-  const first = breadcrumbs[0]
-  const middle = breadcrumbs.slice(1, -2)
-  const penultimate = breadcrumbs[n - 2]
+  const prior = breadcrumbs.slice(0, -1)
   const last = breadcrumbs[n - 1]
-  const firstClick = !!(first.path || first.onClick)
-  const penClick = !!(penultimate.path || penultimate.onClick)
 
   return (
-    <>
-      <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
-      {firstClick ? (
-        <Box
-          onClick={() => navigateCrumb(first)}
-          sx={{
-            px: "8px", py: "5px", borderRadius: "6px",
-            cursor: "pointer", flexShrink: 0,
-            transition: "background-color 0.12s",
-            "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
-          }}
-        >
-          <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap" }}>{first.label}</Typography>
-        </Box>
-      ) : (
-        <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{first.label}</Typography>
-      )}
-
+    <Box ref={viewportRef} sx={{ position: "relative", minWidth: 0, flexShrink: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
       <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
 
-      <Box ref={wrapRef} sx={{ position: "relative", flexShrink: 0 }}>
+      <Box ref={menuRef} sx={{ position: "relative", flexShrink: 0 }}>
         <Box
           component="button"
           type="button"
@@ -168,7 +161,7 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
             "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
           }}
         >
-          ···
+          …
         </Box>
         {menuOpen ? (
           <Box sx={{
@@ -177,55 +170,43 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
             left: 0,
             mt: "6px",
             zIndex: 2000,
-            minWidth: 200,
+            minWidth: 220,
             py: "6px",
             borderRadius: "8px",
             bgcolor: "#1e293b",
             border: "1px solid #334155",
             boxShadow: "0 8px 24px rgba(0,0,0,0.35)"
           }}>
-            {middle.map((crumb, i) => (
-              <Box
-                key={i}
-                onClick={() => navigateCrumb(crumb)}
-                sx={{
-                  px: "14px",
-                  py: "8px",
-                  cursor: "pointer",
-                  color: "#94a3b8",
-                  fontSize: 13,
-                  lineHeight: 1.35,
-                  wordBreak: "break-word",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#e2e8f0" }
-                }}
-              >
-                {crumb.label}
-              </Box>
-            ))}
+            {prior.map((crumb, i) => {
+              const clickable = !!(crumb.path || crumb.onClick)
+              return (
+                <Box
+                  key={i}
+                  onClick={clickable ? () => navigateCrumb(crumb) : undefined}
+                  sx={{
+                    px: "14px",
+                    py: "8px",
+                    cursor: clickable ? "pointer" : "default",
+                    color: "#94a3b8",
+                    fontSize: 13,
+                    lineHeight: 1.35,
+                    wordBreak: "break-word",
+                    display: "flex", alignItems: "center", gap: "8px",
+                    ...(clickable ? { "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#e2e8f0" } } : {})
+                  }}
+                >
+                  <Box component="span" sx={{ color: "#475569", fontSize: 11, minWidth: 14 }}>{i + 1}.</Box>
+                  <Box component="span" sx={{ flex: 1 }}>{crumb.label}</Box>
+                </Box>
+              )
+            })}
           </Box>
         ) : null}
       </Box>
 
       <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
-      {penClick ? (
-        <Box
-          onClick={() => navigateCrumb(penultimate)}
-          sx={{
-            px: "8px", py: "5px", borderRadius: "6px",
-            cursor: "pointer", flexShrink: 0,
-            transition: "background-color 0.12s",
-            "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
-          }}
-        >
-          <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap" }}>{penultimate.label}</Typography>
-        </Box>
-      ) : (
-        <Typography sx={{ fontSize: 14, color: "#a3b4c9", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{penultimate.label}</Typography>
-      )}
-
-      <Typography sx={RECORD_CRUMB_SEP_SX}>›</Typography>
       <Typography sx={{ fontSize: 14, color: "#e2e8f0", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0, px: "4px" }}>{last.label}</Typography>
-    </>
+    </Box>
   )
 }
 
@@ -237,7 +218,9 @@ const ICON_SIZE = 20
 const SCOPE_INDEPENDENT_PATHS = ["/my-work", "/overview", "/audit", "/clients"]
 
 type NavItem = { label: string; path: string; icon: React.ReactNode; roles: string[] }
-type NavSection = { title: string; icon?: React.ReactNode; items: NavItem[] }
+type NavGroup = { kind: "group"; label: string; icon: React.ReactNode; matchPaths: string[]; roles: string[]; items: NavItem[] }
+type NavSectionEntry = NavItem | NavGroup
+type NavSection = { title: string; icon?: React.ReactNode; items: NavSectionEntry[] }
 
 const personalItems: NavItem[] = [
   { label: "My Work", path: "/my-work", icon: <AssignmentIndIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
@@ -257,16 +240,19 @@ const clientSections: NavSection[] = [
   { title: "", items: [{ label: "Dashboard", path: "/dashboard", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) }] },
   {
     title: "Service Management", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+      { label: "Dashboard", path: "/service-management/dashboard", icon: <InsightsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
       { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
       { label: "Risks & Issues", path: "/risks-issues", icon: <ReportProblemIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-      { label: "Changes", path: "/changes", icon: <AutorenewIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-      { label: "Incidents", path: "/incidents", icon: <NotificationImportantIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      // Changes + Incidents are unified into Service Desk — they no longer have their own nav entries.
     ]
   },
   {
     title: "DCIM", icon: <DnsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
       { label: "Overview", path: "/dcim/overview", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) },
-      { label: "Assets", path: "/asset-management", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { kind: "group", label: "Assets", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, matchPaths: ["/asset-hierarchy", "/asset-register", "/asset-management"], roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER], items: [
+        { label: "Hierarchy", path: "/asset-hierarchy", icon: <AccountTreeIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+        { label: "Register",  path: "/asset-register",  icon: <ViewListIcon sx={{ fontSize: ICON_SIZE }} />,    roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      ]},
       { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
       { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
     ]
@@ -411,10 +397,9 @@ function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children
             overflow: "hidden",
             width: expanded ? 16 : 0, height: 16, flexShrink: 0,
             opacity: expanded ? 1 : 0,
-            transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease",
+            transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease, transform 0.2s ease",
             transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
             color: isOpen ? "#475569" : "#334155",
-            "& svg": { transition: "transform 0.2s ease" }
           }}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M3 1.5L7 5L3 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -422,7 +407,7 @@ function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children
           </Box>
         </Box>
       </Tooltip>
-      <Collapse in={isOpen && expanded} timeout={180}>{children}</Collapse>
+      <Collapse in={isOpen && expanded} timeout={220}>{children}</Collapse>
     </Box>
   )
 }
@@ -445,6 +430,69 @@ function NavItem({ item, selected, onClick, expanded }: { item: NavItem; selecte
         </FadeBox>
       </ListItemButton>
     </Tooltip>
+  )
+}
+
+function NavSubGroup({ group, open, onToggle, pathname, onNavigate, expanded }: {
+  group: NavGroup; open: boolean; onToggle: () => void
+  pathname: string; onNavigate: (path: string) => void; expanded: boolean
+}) {
+  const hasActive = group.matchPaths.some(p => pathname.startsWith(p))
+  return (
+    <Box>
+      <Box onClick={onToggle} sx={{
+        display: "flex", alignItems: "center", borderRadius: "6px", mb: "1px",
+        mx: 0, px: "10px", py: "7px", cursor: "pointer",
+        bgcolor: open ? "rgba(255,255,255,0.04)" : hasActive && !open ? "rgba(59,130,246,0.08)" : "transparent",
+        color: hasActive ? "#7db4f5" : "#a3b4c9",
+        "&:hover": { bgcolor: "rgba(255,255,255,0.04)", color: "#cbd5e1" },
+        transition: "background-color 0.15s"
+      }}>
+        <Box sx={{ color: hasActive ? "#7db4f5" : "#64748b", display: "flex", flexShrink: 0, width: ICON_SIZE, transition: "color 0.15s" }}>
+          {group.icon}
+        </Box>
+        <Box sx={{
+          overflow: "hidden", maxWidth: expanded ? 140 : 0,
+          opacity: expanded ? 1 : 0,
+          transition: "max-width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease",
+          ml: expanded ? "12px" : 0,
+        }}>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap", color: "inherit" }}>
+            {group.label}
+          </Typography>
+        </Box>
+        <Box sx={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          overflow: "hidden",
+          width: expanded ? 16 : 0, height: 16, flexShrink: 0, ml: "auto",
+          opacity: expanded ? 1 : 0,
+          transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease, transform 0.2s ease",
+          transform: open ? "rotate(90deg)" : "rotate(0deg)",
+          color: open ? "#475569" : "#334155",
+        }}>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M3 1.5L7 5L3 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Box>
+      </Box>
+      <Collapse in={open && expanded} timeout={220}>
+        <List dense disablePadding sx={{
+          pt: "2px", pb: "4px",
+          position: "relative", pl: "18px", ml: "8px",
+          "&::before": {
+            content: "\"\"", position: "absolute",
+            left: "12px", top: "4px", bottom: "6px",
+            width: "1px", bgcolor: "rgba(148,163,184,0.25)"
+          }
+        }}>
+          {group.items.filter(i => hasAnyRole(i.roles)).map(item => (
+            <NavItem key={item.path} item={item}
+              selected={pathname.startsWith(item.path)}
+              onClick={() => onNavigate(item.path)} expanded={expanded} />
+          ))}
+        </List>
+      </Collapse>
+    </Box>
   )
 }
 
@@ -495,7 +543,10 @@ export default function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [openSection, setOpenSection] = useState<string | null>(null)
+  const [openSubSection, setOpenSubSection] = useState<string | null>(null)
   const [breadcrumbs, setBreadcrumbsState] = useState<Crumb[]>([])
+  const [hideModuleLabel, setHideModuleLabelState] = useState(false)
+  const [pageFullBleed, setPageFullBleedState] = useState(false)
   const [flyout, setFlyout] = useState<
     | { kind: "section"; title: string; items: NavItem[]; anchor: HTMLElement }
     | { kind: "client"; anchor: HTMLElement }
@@ -510,9 +561,19 @@ export default function Shell() {
   function setBreadcrumbs(crumbs: Crumb[]) {
     setBreadcrumbsState(crumbs)
   }
+  function setHideModuleLabel(hide: boolean) {
+    setHideModuleLabelState(hide)
+  }
+  function setPageFullBleed(fullBleed: boolean) {
+    setPageFullBleedState(fullBleed)
+  }
 
-  // Auto-reset breadcrumbs whenever the route changes
-  React.useEffect(() => { setBreadcrumbsState([]) }, [loc.pathname])
+  // Auto-reset breadcrumbs, module-label hide, and full-bleed whenever the route changes
+  React.useEffect(() => {
+    setBreadcrumbsState([])
+    setHideModuleLabelState(false)
+    setPageFullBleedState(false)
+  }, [loc.pathname])
 
   const sidebarWidth = sidebarExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED
 
@@ -522,10 +583,18 @@ export default function Shell() {
     const sections = [...scopeIndependentSections, ...clientSections]
     const active = sections.find(s =>
       s.title &&
-      s.items.some(item => item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path))
+      s.items.some(item => {
+        if ('kind' in item) return item.matchPaths.some(p => loc.pathname.startsWith(p))
+        return item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)
+      })
     )
-    if (active?.title) setOpenSection(active.title)
-  }, []) // eslint-disable-line
+    setOpenSection(active?.title ?? null)
+  }, [loc.pathname]) // eslint-disable-line
+
+  React.useEffect(() => {
+    const isAssetsPath = loc.pathname.startsWith("/asset-hierarchy") || loc.pathname.startsWith("/asset-register") || loc.pathname.startsWith("/asset-management")
+    setOpenSubSection(isAssetsPath ? "Assets" : null)
+  }, [loc.pathname])
 
   const clients = useQuery({
     queryKey: ["clients"], enabled: canSwitchClients,
@@ -551,15 +620,6 @@ export default function Shell() {
     }
   }, [loc.pathname]) // eslint-disable-line
 
-  React.useEffect(() => {
-    if (!openSection) return
-    const sections = [...scopeIndependentSections, ...clientSections]
-    const section = sections.find(s => s.title === openSection)
-    if (!section) return
-    const stillInSection = section.items.some(item => item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path))
-    if (!stillInSection) setOpenSection(null)
-  }, [loc.pathname]) // eslint-disable-line
-
   const selectedClient = (clients.data ?? []).find(c => c.id === selectedClientId)
 
   function handleClientChange(clientId: string) {
@@ -573,36 +633,43 @@ export default function Shell() {
 
   const initials = currentUser?.email ? currentUser.email.split("@")[0].slice(0, 2).toUpperCase() : "??"
   const roleLabel = currentUser?.role?.toLowerCase().replace(/_/g, " ") ?? ""
-  const allNavItems = [...personalItems, ...scopeIndependentSections.flatMap(s => s.items), ...clientSections.flatMap(s => s.items)]
+  const flatNavItems: NavItem[] = [
+    ...personalItems,
+    ...scopeIndependentSections.flatMap(s => s.items.flatMap(e => 'kind' in e ? e.items : [e])),
+    ...clientSections.flatMap(s => s.items.flatMap(e => 'kind' in e ? e.items : [e])),
+  ]
 
   // Maps URL prefixes that don't match their nav item path to the correct nav item path
   // e.g. /service-requests/:id belongs to the "Service Desk" nav item at /service-desk
   const PATH_PARENT_MAP: Record<string, string> = {
     "/service-requests": "/service-desk",
-    "/incidents": "/incidents",
-    "/changes": "/changes",
-    "/sites": "/asset-management",
-    "/assets": "/asset-management",
+    "/incidents": "/service-desk",
+    "/changes": "/service-desk",
+    "/service-desk/sr": "/service-desk",
+    "/service-desk/inc": "/service-desk",
+    "/service-desk/chg": "/service-desk",
   }
 
   function resolveActivePage(pathname: string) {
-    // Direct prefix match first
-    const direct = allNavItems.find(i =>
+    const direct = flatNavItems.find(i =>
       i.path === "/dashboard" ? pathname === "/dashboard" : i.path !== "/dashboard" && pathname.startsWith(i.path)
     )
     if (direct) return direct
-    // Fallback: check parent map for routes whose URL prefix differs from their nav item
     const parentPath = Object.entries(PATH_PARENT_MAP).find(([prefix]) => pathname.startsWith(prefix))?.[1]
-    return parentPath ? (allNavItems.find(i => i.path === parentPath) ?? null) : null
+    return parentPath ? (flatNavItems.find(i => i.path === parentPath) ?? null) : null
   }
 
   const activePage = resolveActivePage(loc.pathname)
   function sectionHasActive(section: NavSection) {
-    return section.items.some(item =>
-      item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)
-    ) || section.items.some(item =>
-      Object.entries(PATH_PARENT_MAP).some(([prefix, parent]) => loc.pathname.startsWith(prefix) && parent === item.path)
-    )
+    return section.items.some(entry => {
+      if ('kind' in entry) return entry.matchPaths.some(p => loc.pathname.startsWith(p))
+      return entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)
+    }) || section.items.some(entry => {
+      if ('kind' in entry) return false
+      return Object.entries(PATH_PARENT_MAP).some(
+        ([prefix, parent]) => loc.pathname.startsWith(prefix) && parent === entry.path
+      )
+    })
   }
 
   // ── Sidebar nav ───────────────────────────────────────────────────────
@@ -620,6 +687,7 @@ export default function Shell() {
         <IconButton size="small" onClick={() => setSidebarExpanded(e => !e)} sx={{
           position: "absolute", left: "8px",
           width: 36, height: 36, flexShrink: 0, color: "#64748b", borderRadius: "6px",
+          transition: "color 0.15s, background-color 0.12s",
           "&:hover": { bgcolor: "rgba(255,255,255,0.08)", color: "#cbd5e1" }
         }}>
           <MenuIcon sx={{ fontSize: 20 }} />
@@ -656,7 +724,8 @@ export default function Shell() {
               onToggle={(e) => {
                 if (!sidebarExpanded) {
                   const target = e.currentTarget as HTMLElement
-                  setFlyout(prev => prev?.kind === "section" && prev.title === section.title ? null : { kind: "section", title: section.title, items: visible, anchor: target })
+                  const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
+                  setFlyout(prev => prev?.kind === "section" && prev.title === section.title ? null : { kind: "section", title: section.title, items: flyoutItems, anchor: target })
                   return
                 }
                 toggleSection(section.title)
@@ -683,11 +752,15 @@ export default function Shell() {
                   } : {})
                 }}
               >
-                {visible.map(item => (
-                  <NavItem key={item.path} item={item}
-                    selected={item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)}
-                    onClick={() => navigateTo(item.path)} expanded={sidebarExpanded} />
-                ))}
+                {visible.map(entry =>
+                  'kind' in entry
+                    ? <NavSubGroup key={entry.label} group={entry} open={openSubSection === entry.label}
+                        onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
+                        pathname={loc.pathname} onNavigate={navigateTo} expanded={sidebarExpanded} />
+                    : <NavItem key={entry.path} item={entry}
+                        selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
+                        onClick={() => navigateTo(entry.path)} expanded={sidebarExpanded} />
+                )}
               </List>
             </CollapsibleSection>
           )
@@ -733,7 +806,7 @@ export default function Shell() {
 
               // Root (Dashboard) — no header
               if (!section.title) {
-                return visible.map(item => (
+                return visible.filter((i): i is NavItem => !('kind' in i)).map(item => (
                   <List key={item.path} dense disablePadding sx={{ px: 1, pt: "2px" }}>
                     <NavItem item={item} selected={loc.pathname === "/dashboard"} onClick={() => navigateTo(item.path)} expanded={sidebarExpanded} />
                   </List>
@@ -748,9 +821,9 @@ export default function Shell() {
                   isOpen={isOpen} hasActive={hasActive} expanded={sidebarExpanded}
                   onToggle={(e) => {
                     if (!sidebarExpanded) {
-                      // Collapsed: flyout from the section icon
                       const target = e.currentTarget as HTMLElement
-                      setFlyout(prev => prev?.kind === "section" && prev.title === section.title ? null : { kind: "section", title: section.title, items: visible, anchor: target })
+                      const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
+                      setFlyout(prev => prev?.kind === "section" && prev.title === section.title ? null : { kind: "section", title: section.title, items: flyoutItems, anchor: target })
                       return
                     }
                     toggleSection(section.title)
@@ -777,11 +850,15 @@ export default function Shell() {
                       } : {})
                     }}
                   >
-                    {visible.map(item => (
-                      <NavItem key={item.path} item={item}
-                        selected={item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)}
-                        onClick={() => navigateTo(item.path)} expanded={sidebarExpanded} />
-                    ))}
+                    {visible.map(entry =>
+                      'kind' in entry
+                        ? <NavSubGroup key={entry.label} group={entry} open={openSubSection === entry.label}
+                            onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
+                            pathname={loc.pathname} onNavigate={navigateTo} expanded={sidebarExpanded} />
+                        : <NavItem key={entry.path} item={entry}
+                            selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
+                            onClick={() => navigateTo(entry.path)} expanded={sidebarExpanded} />
+                    )}
                   </List>
                 </CollapsibleSection>
               )
@@ -808,7 +885,7 @@ export default function Shell() {
           sx={{ [`& .MuiDrawer-paper`]: { width: SIDEBAR_EXPANDED, background: "#0d1526", borderRight: "1px solid rgba(255,255,255,0.05)" } }}>
           {sidebarNav}
         </Drawer>
-        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: "12px" }}><Outlet /></Box>
+        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: "12px" }}><Suspense fallback={<LoadingState />}><Outlet /></Suspense></Box>
       </Box>
     )
   }
@@ -867,12 +944,14 @@ export default function Shell() {
             ) : null}
 
             {/* › separator */}
-            {activePage && (selectedClient || isScopeIndependent) ? (
+            {activePage && !hideModuleLabel && (selectedClient || isScopeIndependent) ? (
               <Typography sx={{ color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
             ) : null}
 
-            {/* Page name — clickable, navigates to the list page */}
-            {activePage ? (
+            {/* Page name — clickable, navigates to the list page.
+                Pages can hide this segment via setHideModuleLabel(true) when the
+                breadcrumb trail already identifies the module (e.g. Asset Hierarchy / Register). */}
+            {activePage && !hideModuleLabel ? (
               <Box
                 onClick={() => nav(activePage.path)}
                 sx={{
@@ -905,9 +984,21 @@ export default function Shell() {
         </Box>
 
         {/* Page content */}
-        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: { xs: "12px", md: "20px" } }}>
-          <BreadcrumbCtx.Provider value={{ setRecordLabel, setBreadcrumbs }}>
-            <Outlet />
+        <Box
+          component="main"
+          sx={{
+            flex: 1, bgcolor: "#f8fafc",
+            overflow: pageFullBleed ? "hidden" : "auto",
+            p: pageFullBleed ? 0 : { xs: "12px", md: "20px" },
+            display: pageFullBleed ? "flex" : undefined,
+            flexDirection: pageFullBleed ? "column" : undefined,
+            minHeight: 0,
+          }}
+        >
+          <BreadcrumbCtx.Provider value={{ setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed }}>
+            <Suspense fallback={<LoadingState />}>
+              <Outlet />
+            </Suspense>
           </BreadcrumbCtx.Provider>
         </Box>
       </Box>

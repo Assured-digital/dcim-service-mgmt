@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Site" ADD COLUMN "latitude" DOUBLE PRECISION,
+ADD COLUMN "longitude" DOUBLE PRECISION,
+ADD COLUMN "geocodedAt" TIMESTAMP(3);

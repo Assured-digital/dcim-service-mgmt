@@ -1,42 +1,42 @@
-import React, { useEffect } from "react"
+import React, { useEffect, Suspense } from "react"
 import { Navigate, Route, Routes, useParams } from "react-router-dom"
 import { getToken } from "../lib/auth"
 import { setAuthToken } from "../lib/api"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
-import LoginPage from "./LoginPage"
+import { LoadingState } from "../components/PageState"
 import Shell from "./Shell"
-import DashboardPage from "./DashboardPage"
-import ServiceDeskPage from "./ServiceDeskPage"
-import ServiceRequestDetailPage from "./ServiceRequestDetailPage"
-import TasksPage from "./TasksPage"
-import TaskDetailPage from "./TaskDetailPage"
-import RiskDetailPage from "./RiskDetailPage"
-import IssueDetailPage from "./IssueDetailPage"
-import ChangesPage from "./ChangesPage"
-import ChangeDetailPage from "./ChangeDetailPage"
-import IncidentsPage from "./IncidentsPage"
-import IncidentDetailPage from "./IncidentDetailPage"
-import AssetManagementPage from "./AssetManagementPage"
-import SiteDetailPage from "./SiteDetailPage"
-import RoomDetailPage from "./RoomDetailPage"
-import ChecksPage from "./ChecksPage"
-import CheckDetailPage from "./CheckDetailPage"
-import CheckTemplatesPage from "./CheckTemplatesPage"
-import CheckTemplateDetailPage from "./CheckTemplateDetailPage"
-import WorkPackagesPage from "./WorkPackagesPage"
-import AuditTrailPage from "./AuditTrailPage"
-import UsersPage from "./UsersPage"
-import ClientsPage from "./ClientsPage"
-import MyWorkPage from "./MyWorkPage"
-import OverviewPage from "./OverviewPage"
-import DcimOverviewPage from "./DcimOverviewPage"
-import MaintenancePage from "./MaintenancePage"
-import MaintenanceDetailPage from "./MaintenanceDetailPage"
-import ConnectionsPage from "./ConnectionsPage"
-import ConnectionDetailPage from "./ConnectionDetailPage"
-import RisksIssuesPage from "./RisksIssuesPage"
-import RisksIssuesRisksListPage from "./RisksIssuesRisksListPage"
-import RisksIssuesIssuesListPage from "./RisksIssuesIssuesListPage"
+
+const LoginPage                = React.lazy(() => import("./LoginPage"))
+const DashboardPage            = React.lazy(() => import("./DashboardPage"))
+const ServiceDeskPage          = React.lazy(() => import("./ServiceDeskPage"))
+const ServiceDeskDashboard     = React.lazy(() => import("./ServiceDeskDashboard"))
+const ServiceRequestDetailPage = React.lazy(() => import("./ServiceRequestDetailPage"))
+const TasksPage                = React.lazy(() => import("./TasksPage"))
+const TaskDetailPage           = React.lazy(() => import("./TaskDetailPage"))
+const RiskDetailPage           = React.lazy(() => import("./RiskDetailPage"))
+const IssueDetailPage          = React.lazy(() => import("./IssueDetailPage"))
+const ChangeDetailPage         = React.lazy(() => import("./ChangeDetailPage"))
+const IncidentDetailPage       = React.lazy(() => import("./IncidentDetailPage"))
+const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
+const AssetRegisterPage        = React.lazy(() => import("./AssetRegisterPage"))
+const SiteDetailPage           = React.lazy(() => import("./SiteDetailPage"))
+const RoomDetailPage           = React.lazy(() => import("./RoomDetailPage"))
+const ChecksPage               = React.lazy(() => import("./ChecksPage"))
+const CheckDetailPage          = React.lazy(() => import("./CheckDetailPage"))
+const CheckTemplatesPage       = React.lazy(() => import("./CheckTemplatesPage"))
+const CheckTemplateDetailPage  = React.lazy(() => import("./CheckTemplateDetailPage"))
+const WorkPackagesPage         = React.lazy(() => import("./WorkPackagesPage"))
+const AuditTrailPage           = React.lazy(() => import("./AuditTrailPage"))
+const UsersPage                = React.lazy(() => import("./UsersPage"))
+const ClientsPage              = React.lazy(() => import("./ClientsPage"))
+const MyWorkPage               = React.lazy(() => import("./MyWorkPage"))
+const OverviewPage             = React.lazy(() => import("./OverviewPage"))
+const DcimOverviewPage         = React.lazy(() => import("./DcimOverviewPage"))
+const MaintenancePage          = React.lazy(() => import("./MaintenancePage"))
+const MaintenanceDetailPage    = React.lazy(() => import("./MaintenanceDetailPage"))
+const ConnectionsPage          = React.lazy(() => import("./ConnectionsPage"))
+const ConnectionDetailPage     = React.lazy(() => import("./ConnectionDetailPage"))
+const RisksIssuesPage          = React.lazy(() => import("./RisksIssuesPage"))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -51,118 +51,195 @@ function RequireRoles({ roles, children }: { roles: string[]; children: React.Re
 
 function LegacyRiskDetailRedirect() {
   const { id } = useParams()
-  return <Navigate to={id ? `/risks-issues/risks/${id}` : "/risks-issues/risks?view=all"} replace />
+  return <Navigate to={id ? `/risks-issues/risks/${id}` : "/risks-issues"} replace />
 }
 
 function LegacyIssueDetailRedirect() {
   const { id } = useParams()
-  return <Navigate to={id ? `/risks-issues/issues/${id}` : "/risks-issues/issues?view=all"} replace />
+  return <Navigate to={id ? `/risks-issues/issues/${id}` : "/risks-issues"} replace />
+}
+
+function LegacyServiceRequestDetailRedirect() {
+  const { id } = useParams()
+  return <Navigate to={id ? `/service-desk/sr/${id}` : "/service-desk"} replace />
+}
+
+function LegacyIncidentDetailRedirect() {
+  const { id } = useParams()
+  return <Navigate to={id ? `/service-desk/inc/${id}` : "/service-desk"} replace />
+}
+
+function LegacyChangeDetailRedirect() {
+  const { id } = useParams()
+  return <Navigate to={id ? `/service-desk/chg/${id}` : "/service-desk"} replace />
+}
+
+
+function LegacyHierarchySiteRedirect() {
+  const { siteId } = useParams()
+  return <Navigate to={`/asset-hierarchy/${siteId}`} replace />
+}
+
+function LegacyHierarchyRoomRedirect() {
+  const { siteId, roomId } = useParams()
+  return <Navigate to={`/asset-hierarchy/${siteId}/rooms/${roomId}`} replace />
+}
+
+function LegacyHierarchyCabinetRedirect() {
+  const { siteId, cabinetId } = useParams()
+  return <Navigate to={`/asset-hierarchy/${siteId}/cabinets/${cabinetId}`} replace />
+}
+
+function LegacyHierarchyAssetRedirect() {
+  const { siteId, assetId } = useParams()
+  return <Navigate to={`/asset-hierarchy/${siteId}/assets/${assetId}`} replace />
+}
+
+function LegacyRegisterAssetRedirect() {
+  const { assetId } = useParams()
+  return <Navigate to={`/asset-register/assets/${assetId}`} replace />
 }
 
 export default function App() {
   useEffect(() => setAuthToken(getToken()), [])
 
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <Shell />
-          </RequireAuth>
-        }
-      >
-        <Route index element={<MyWorkPage />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="dcim/overview" element={<DcimOverviewPage />} />
-
-        {/* Legacy redirects */}
-        <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />
-        <Route path="triage" element={<Navigate to="/service-desk" replace />} />
-        <Route path="service-requests" element={<Navigate to="/service-desk" replace />} />
-
-        {/* My Work and Overview */}
-        <Route path="my-work" element={<MyWorkPage />} />
+    <Suspense fallback={<LoadingState />}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route
-          path="overview"
+          path="/"
           element={
-            <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
-              <OverviewPage />
-            </RequireRoles>
+            <RequireAuth>
+              <Shell />
+            </RequireAuth>
           }
-        />
+        >
+          <Route index element={<MyWorkPage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="dcim/overview" element={<DcimOverviewPage />} />
 
-        {/* Service desk */}
-        <Route path="service-desk" element={<ServiceDeskPage />} />
-        <Route path="service-requests/:id" element={<ServiceRequestDetailPage />} />
+          {/* Legacy redirects */}
+          <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />
+          <Route path="triage" element={<Navigate to="/service-desk" replace />} />
+          <Route path="service-requests" element={<Navigate to="/service-desk" replace />} />
 
-        {/* Tasks */}
-        <Route path="tasks" element={<TasksPage />} />
-        <Route path="tasks/:id" element={<TaskDetailPage />} />
+          {/* My Work and Overview */}
+          <Route path="my-work" element={<MyWorkPage />} />
+          <Route
+            path="overview"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+                <OverviewPage />
+              </RequireRoles>
+            }
+          />
 
-        {/* Risk & Issue management */}
-        <Route path="risks" element={<Navigate to="/risks-issues/risks?view=all" replace />} />
-        <Route path="issues" element={<Navigate to="/risks-issues/issues?view=all" replace />} />
-        <Route path="risks/:id" element={<LegacyRiskDetailRedirect />} />
-        <Route path="issues/:id" element={<LegacyIssueDetailRedirect />} />
-        <Route path="risks-issues" element={<RisksIssuesPage />}>
-          <Route index element={<Navigate to="risks?view=all" replace />} />
-          <Route path="risks" element={<RisksIssuesRisksListPage />} />
-          <Route path="issues" element={<RisksIssuesIssuesListPage />} />
+          {/* Service desk — unified surface; detail pages render in the right pane via <Outlet /> */}
+          <Route path="service-desk" element={<ServiceDeskPage />}>
+            <Route path="sr/:id" element={<ServiceRequestDetailPage />} />
+            <Route path="inc/:id" element={<IncidentDetailPage />} />
+            <Route path="chg/:id" element={<ChangeDetailPage />} />
+          </Route>
+          {/* Dashboard is its own Service Management nav item — kept off /service-desk
+              so the Service Desk nav doesn't also highlight when the Dashboard is open. */}
+          <Route path="service-management/dashboard" element={<ServiceDeskDashboard />} />
+          {/* Legacy redirect for any deep links that still use the old path. */}
+          <Route path="service-desk/dashboard" element={<Navigate to="/service-management/dashboard" replace />} />
+          {/* Legacy redirects */}
+          <Route path="service-desk/:id" element={<LegacyServiceRequestDetailRedirect />} />
+          <Route path="service-requests/:id" element={<LegacyServiceRequestDetailRedirect />} />
+
+          {/* Tasks */}
+          <Route path="tasks" element={<TasksPage />} />
+          <Route path="tasks/:id" element={<TaskDetailPage />} />
+
+          {/* Risks & Issues — single unified page */}
+          <Route path="risks-issues" element={<RisksIssuesPage />} />
+          <Route path="risks-issues/risks/:id" element={<RiskDetailPage />} />
+          <Route path="risks-issues/issues/:id" element={<IssueDetailPage />} />
+          {/* Legacy risk/issue redirects */}
+          <Route path="risks" element={<Navigate to="/risks-issues" replace />} />
+          <Route path="issues" element={<Navigate to="/risks-issues" replace />} />
+          <Route path="risks/:id" element={<LegacyRiskDetailRedirect />} />
+          <Route path="issues/:id" element={<LegacyIssueDetailRedirect />} />
+
+          {/* Changes — now unified under Service Desk */}
+          <Route path="changes" element={<Navigate to="/service-desk?view=table" replace />} />
+          <Route path="changes/:id" element={<LegacyChangeDetailRedirect />} />
+
+          {/* Incidents — now unified under Service Desk */}
+          <Route path="incidents" element={<Navigate to="/service-desk?view=table" replace />} />
+          <Route path="incidents/:id" element={<LegacyIncidentDetailRedirect />} />
+
+          {/* Asset Hierarchy and Register */}
+          <Route path="asset-hierarchy" element={<AssetHierarchyPage />} />
+          <Route path="asset-hierarchy/:siteId" element={<AssetHierarchyPage />} />
+          <Route path="asset-hierarchy/:siteId/rooms/:roomId" element={<AssetHierarchyPage />} />
+          <Route path="asset-hierarchy/:siteId/cabinets/:cabinetId" element={<AssetHierarchyPage />} />
+          <Route path="asset-hierarchy/:siteId/assets/:assetId" element={<AssetHierarchyPage />} />
+          <Route path="asset-register" element={<AssetRegisterPage />} />
+          <Route path="asset-register/assets/:assetId" element={<AssetRegisterPage />} />
+          {/* Legacy redirects from /asset-management/* */}
+          <Route path="asset-management" element={<Navigate to="/asset-hierarchy" replace />} />
+          <Route path="asset-management/hierarchy" element={<Navigate to="/asset-hierarchy" replace />} />
+          <Route path="asset-management/hierarchy/:siteId" element={<LegacyHierarchySiteRedirect />} />
+          <Route path="asset-management/hierarchy/:siteId/rooms/:roomId" element={<LegacyHierarchyRoomRedirect />} />
+          <Route path="asset-management/hierarchy/:siteId/cabinets/:cabinetId" element={<LegacyHierarchyCabinetRedirect />} />
+          <Route path="asset-management/hierarchy/:siteId/assets/:assetId" element={<LegacyHierarchyAssetRedirect />} />
+          <Route path="asset-management/register" element={<Navigate to="/asset-register" replace />} />
+          <Route path="asset-management/register/assets/:assetId" element={<LegacyRegisterAssetRedirect />} />
+          <Route path="asset-management/:siteId" element={<LegacyHierarchySiteRedirect />} />
+          <Route path="asset-management/:siteId/rooms/:roomId" element={<LegacyHierarchyRoomRedirect />} />
+          <Route path="asset-management/:siteId/cabinets/:cabinetId" element={<LegacyHierarchyCabinetRedirect />} />
+          <Route path="asset-management/:siteId/assets/:assetId" element={<LegacyHierarchyAssetRedirect />} />
+          {/* Legacy rollback paths */}
+          <Route path="asset-management-legacy/:siteId" element={<SiteDetailPage />} />
+          <Route path="asset-management-legacy/:siteId/rooms/:roomId" element={<RoomDetailPage />} />
+
+          {/* DCIM — Maintenance & Connections */}
+          <Route path="maintenance" element={<MaintenancePage />} />
+          <Route path="maintenance/:id" element={<MaintenanceDetailPage />} />
+          <Route path="connections" element={<ConnectionsPage />} />
+          <Route path="connections/:id" element={<ConnectionDetailPage />} />
+
+          {/* Field Work — Engineering Checks */}
+          <Route path="checks" element={<ChecksPage />} />
+          <Route path="checks/:id" element={<CheckDetailPage />} />
+          <Route path="check-templates" element={<CheckTemplatesPage />} />
+          <Route path="check-templates/:id" element={<CheckTemplateDetailPage />} />
+
+          {/* Service Scope */}
+          <Route path="work-packages" element={<WorkPackagesPage />} />
+
+          {/* Admin */}
+          <Route
+            path="audit"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+                <AuditTrailPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="clients"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES]}>
+                <ClientsPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="users"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+                <UsersPage />
+              </RequireRoles>
+            }
+          />
         </Route>
-        <Route path="risks-issues/risks/:id" element={<RiskDetailPage />} />
-        <Route path="risks-issues/issues/:id" element={<IssueDetailPage />} />
-        <Route path="changes" element={<ChangesPage />} />
-        <Route path="changes/:id" element={<ChangeDetailPage />} />
-        <Route path="incidents" element={<IncidentsPage />} />
-        <Route path="incidents/:id" element={<IncidentDetailPage />} />
-
-        {/* Asset Management (Sites + Rooms + Cabinets + Assets) */}
-        <Route path="asset-management" element={<AssetManagementPage />} />
-        <Route path="asset-management/:siteId" element={<SiteDetailPage />} />
-        <Route path="asset-management/:siteId/rooms/:roomId" element={<RoomDetailPage />} />
-        <Route path="maintenance" element={<MaintenancePage />} />
-        <Route path="maintenance/:id" element={<MaintenanceDetailPage />} />
-        <Route path="connections" element={<ConnectionsPage />} />
-        <Route path="connections/:id" element={<ConnectionDetailPage />} />
-
-        {/* Engineering Checks */}
-        <Route path="checks" element={<ChecksPage />} />
-        <Route path="checks/:id" element={<CheckDetailPage />} />
-        <Route path="check-templates" element={<CheckTemplatesPage />} />
-        <Route path="check-templates/:id" element={<CheckTemplateDetailPage />} />
-
-        {/* Service Scope */}
-        <Route path="work-packages" element={<WorkPackagesPage />} />
-
-        {/* Admin */}
-        <Route
-          path="audit"
-          element={
-            <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
-              <AuditTrailPage />
-            </RequireRoles>
-          }
-        />
-        <Route
-          path="clients"
-          element={
-            <RequireRoles roles={[...ORG_SUPER_ROLES]}>
-              <ClientsPage />
-            </RequireRoles>
-          }
-        />
-        <Route
-          path="users"
-          element={
-            <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
-              <UsersPage />
-            </RequireRoles>
-          }
-        />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   )
 }

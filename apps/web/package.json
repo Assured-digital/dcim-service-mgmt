@@ -18,13 +18,17 @@
     "@mui/icons-material": "^5.16.7",
     "@mui/material": "^5.16.7",
     "@mui/x-charts": "^8.28.2",
+    "@mui/x-data-grid": "^7.29.12",
     "@tanstack/react-query": "^5.56.2",
     "axios": "^1.7.4",
+    "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^7.17.0",

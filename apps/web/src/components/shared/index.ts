@@ -8,6 +8,11 @@ export { Badge } from "./primitives/Badge"
 export { SectionHeader } from "./primitives/SectionHeader"
 export { EmptySlot } from "./primitives/EmptySlot"
 export { PanelCard } from "./primitives/PanelCard"
+export { TypeBadge } from "./primitives/TypeBadge"
+export type { TicketKind } from "./primitives/TypeBadge"
+export { PriorityDot } from "./primitives/PriorityDot"
+export { Avatar } from "./primitives/Avatar"
+export type { AvatarVariant, AvatarSize } from "./primitives/Avatar"
 
 // Composites
 export { DetailHeader } from "./composites/DetailHeader"

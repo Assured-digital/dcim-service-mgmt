@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Box, Button, Card, Chip, Dialog,
+  Box, Button, Card, Chip, Dialog,
   DialogActions, DialogContent, DialogTitle, IconButton,
   Menu, MenuItem, Popover, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TextField,
@@ -20,6 +20,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { chipSx } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
@@ -524,13 +525,13 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
   onSuccess?: () => Promise<void> | void
 }) {
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [priority, setPriority] = React.useState("medium")
   const [dueAt, setDueAt] = React.useState("")
   const [assigneeId, setAssigneeId] = React.useState("")
   const [saving, setSaving] = React.useState(false)
-  const [error, setError] = React.useState("")
 
   const { data: users } = useQuery({
     queryKey: ["users"],
@@ -540,7 +541,7 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
 
   async function handleCreate() {
     if (!title.trim()) return
-    setSaving(true); setError("")
+    setSaving(true)
     try {
       await api.post("/tasks", {
         title, description: description || undefined,
@@ -553,8 +554,9 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
       setTitle(""); setDescription(""); setPriority("medium"); setDueAt(""); setAssigneeId("")
       qc.invalidateQueries({ queryKey: ["tasks"] })
       await onSuccess?.()
+      notify.success("Task created")
     } catch (e: any) {
-      setError(e?.message ?? "Failed to create task")
+      notify.error(e?.message ?? "Failed to create task")
     } finally { setSaving(false) }
   }
 
@@ -568,7 +570,6 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
               <Typography variant="caption" color="#0369a1">Linked to: <strong>{linkedEntityLabel}</strong></Typography>
             </Box>
           ) : null}
-          {error ? <Alert severity="error">{error}</Alert> : null}
           <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} fullWidth required />
           <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} multiline rows={3} fullWidth />
           <Stack direction="row" spacing={1.5}>
@@ -616,8 +617,8 @@ export function TaskQuickDetailModal({
   onUpdateStatus: (taskId: string, status: string) => Promise<void>
 }) {
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const [activeTab, setActiveTab] = React.useState<"details" | "work-notes" | "history">("details")
-  const [error, setError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [newNote, setNewNote] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
@@ -654,13 +655,11 @@ export function TaskQuickDetailModal({
     setPriority(task.priority)
     setAssigneeId(task.assigneeId ?? "")
     setDueAt(task.dueAt ? task.dueAt.slice(0, 10) : "")
-    setError("")
   }, [task])
 
   async function handleSave() {
     if (!task || !canManage) return
     setSaving(true)
-    setError("")
     try {
       if (status !== task.status) {
         await onUpdateStatus(task.id, status)
@@ -675,8 +674,9 @@ export function TaskQuickDetailModal({
       await qc.invalidateQueries({ queryKey: ["task-detail", task.id] })
       await qc.invalidateQueries({ queryKey: ["audit-task", task.id] })
       await qc.invalidateQueries({ queryKey: ["tasks"] })
+      notify.success("Task updated")
     } catch (e: any) {
-      setError(e?.message ?? "Failed to save task changes")
+      notify.error(e?.message ?? "Failed to save task changes")
     } finally {
       setSaving(false)
     }
@@ -689,6 +689,9 @@ export function TaskQuickDetailModal({
       await api.post("/comments/work-note", { entityType: "Task", entityId: taskId, body: newNote.trim() })
       setNewNote("")
       await qc.invalidateQueries({ queryKey: ["work-notes-task", taskId] })
+      notify.success("Note added")
+    } catch (e: any) {
+      notify.error(e?.message ?? "Failed to add note")
     } finally {
       setSavingNote(false)
     }
@@ -732,7 +735,6 @@ export function TaskQuickDetailModal({
       </DialogTitle>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1, pb: 1.5 }}>
         <Box>
-          {error ? <Alert severity="error">{error}</Alert> : null}
           <Tabs value={activeTab} onChange={(_event: React.SyntheticEvent, v: string) => setActiveTab(v as "details" | "work-notes" | "history")} sx={{ minHeight: 38 }}>
             <Tab value="details" label="Details" sx={{ minHeight: 38 }} />
             <Tab value="work-notes" label={`Work notes (${workNotes.length})`} sx={{ minHeight: 38 }} />
@@ -876,6 +878,7 @@ export default function TasksPage() {
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const currentUser = getCurrentUser()
 
   const [viewMode, setViewMode] = React.useState<"list" | "board">(() => {
@@ -915,7 +918,6 @@ export default function TasksPage() {
   const [dueAnchor, setDueAnchor] = React.useState<{ el: HTMLElement; task: Task } | null>(null)
   const [menuAnchor, setMenuAnchor] = React.useState<{ el: HTMLElement; task: Task } | null>(null)
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
-  const [boardError, setBoardError] = React.useState("")
   const [activeDragTaskId, setActiveDragTaskId] = React.useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
@@ -1006,7 +1008,6 @@ export default function TasksPage() {
 
   function handleDragStart(event: DragStartEvent) {
     setActiveDragTaskId(String(event.active.id))
-    setBoardError("")
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -1031,9 +1032,10 @@ export default function TasksPage() {
     try {
       await updateStatus(sourceTask.id, targetStatus, false)
       qc.invalidateQueries({ queryKey: ["tasks"] })
+      notify.success(`Task moved to ${STATUS_LABELS[targetStatus] ?? targetStatus}`)
     } catch (e: any) {
       qc.setQueryData(["tasks"], snapshot)
-      setBoardError(e?.message ?? "Failed to update task status")
+      notify.error(e?.message ?? "Failed to update task status")
     }
   }
 
@@ -1232,7 +1234,6 @@ export default function TasksPage() {
       {tasks.length === 0 && !creatingInline ? (
         <EmptyState title="No tasks yet" detail="Tasks are created from triage, service requests, risks, issues and sites." />
       ) : null}
-      {boardError ? <Alert severity="error" sx={{ mb: 2 }}>{boardError}</Alert> : null}
 
       {/* ── BOARD VIEW ─────────────────────────────────────────────────── */}
       {viewMode === "board" && (tasks.length > 0 || creatingInline) ? (

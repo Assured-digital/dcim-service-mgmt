@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
+  Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, Divider, MenuItem, Stack, Tab, Tabs,
   TextField, Typography
 } from "@mui/material"
@@ -14,6 +14,7 @@ import {
   WorkflowStrip
 } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
@@ -94,7 +95,7 @@ function entityLabel(type: string | null) {
 function entityPath(type: string | null, id: string | null) {
   if (!type || !id) return null
   const paths: Record<string, string> = {
-    ServiceRequest: `/service-requests/${id}`,
+    ServiceRequest: `/service-desk/${id}`,
     ChangeRequest: `/changes/${id}`,
     Risk: `/risks-issues/risks/${id}`,
     Issue: `/risks-issues/issues/${id}`,
@@ -144,7 +145,7 @@ export default function TaskDetailPage() {
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
-  const [error, setError] = React.useState("")
+  const { notify } = useNotification()
   const [activeTab, setActiveTab] = React.useState(0)
 
   const [transitionTarget, setTransitionTarget] = React.useState<string | null>(null)
@@ -200,7 +201,6 @@ export default function TaskDetailPage() {
   async function handleTransition() {
     if (!transitionTarget || !task) return
     setSavingTransition(true)
-    setError("")
     try {
       await api.post(`/tasks/${id}/status`, {
         status: transitionTarget,
@@ -211,14 +211,16 @@ export default function TaskDetailPage() {
           entityType: "Task", entityId: id, body: transitionComment.trim()
         })
       }
+      const target = transitionTarget
       setTransitionTarget(null)
       setTransitionComment("")
       qc.invalidateQueries({ queryKey: ["task-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-task", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-task", id] })
       qc.invalidateQueries({ queryKey: ["tasks"] })
+      notify.success(`Status updated to ${STATUS_LABELS[target] ?? target}`)
     } catch (e: unknown) {
-      setError(getApiErrorMessage(e, "Failed to update status"))
+      notify.error(getApiErrorMessage(e, "Failed to update status"))
     } finally {
       setSavingTransition(false)
     }
@@ -226,7 +228,6 @@ export default function TaskDetailPage() {
 
   async function handleSaveProperties() {
     setSavingProperties(true)
-    setError("")
     try {
       await api.put(`/tasks/${id}`, {
         title: editTitle,
@@ -239,8 +240,9 @@ export default function TaskDetailPage() {
       qc.invalidateQueries({ queryKey: ["task-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-task", id] })
       qc.invalidateQueries({ queryKey: ["tasks"] })
+      notify.success("Task updated")
     } catch (e: unknown) {
-      setError(getApiErrorMessage(e, "Failed to save"))
+      notify.error(getApiErrorMessage(e, "Failed to save"))
     } finally {
       setSavingProperties(false)
     }
@@ -255,6 +257,9 @@ export default function TaskDetailPage() {
       })
       setWorkNoteBody("")
       qc.invalidateQueries({ queryKey: ["work-notes-task", id] })
+      notify.success("Note added")
+    } catch (e: unknown) {
+      notify.error(getApiErrorMessage(e, "Failed to add note"))
     } finally {
       setSavingNote(false)
     }
@@ -389,7 +394,6 @@ export default function TaskDetailPage() {
         ) : null}
       </Box>
 
-      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
       <Box sx={{
         display: "grid",

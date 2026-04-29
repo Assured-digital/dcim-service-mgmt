@@ -4,12 +4,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, MenuItem, Stack,
+  DialogContent, DialogTitle, Divider, IconButton, Menu, MenuItem, Stack,
   Tab, Tabs, TextField, Typography
 } from "@mui/material"
 import LockIcon from "@mui/icons-material/Lock"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import AddIcon from "@mui/icons-material/Add"
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
 import {
   Badge, PropertiesPanel, LinkedEntitiesPanel, SectionHeader,
   chipSx, statusSelectSx, type LinkedTask, WorkflowStrip
@@ -18,6 +19,7 @@ import { ErrorState, LoadingState } from "../components/PageState"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useBreadcrumb } from "./Shell"
+import { TicketHeaderCard, primaryTransition } from "../components/ticket-detail/TicketHeaderCard"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type AuditEvent = {
@@ -195,6 +197,7 @@ export default function ServiceRequestDetailPage() {
 
   const [activeTab, setActiveTab] = React.useState(0)
   const [error, setError] = React.useState("")
+  const [moreAnchor, setMoreAnchor] = React.useState<null | HTMLElement>(null)
   const [taskOpen, setTaskOpen] = React.useState(false)
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
 
@@ -291,7 +294,7 @@ export default function ServiceRequestDetailPage() {
       qc.invalidateQueries({ queryKey: ["sr-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-sr", id] })
-      qc.invalidateQueries({ queryKey: ["service-requests"] })
+      qc.invalidateQueries({ queryKey: ["tickets"] })
     } catch (e: unknown) {
       setError(getApiErrorMessage(e, "Failed"))
     } finally { setSavingTransition(false) }
@@ -356,85 +359,90 @@ export default function ServiceRequestDetailPage() {
     qc.invalidateQueries({ queryKey: ["tasks"] })
   }
 
-  return (
-    <Box>
-      <Box sx={{
-        bgcolor: "var(--color-background-secondary)",
-        border: "0.5px solid var(--color-border-tertiary)",
-        borderTopLeftRadius: 8, borderTopRightRadius: 8,
-        px: 2.5, pt: 1.25, pb: 2
-      }}>
-        <SectionHeader
-          label="SERVICE REQUEST"
-          action={canManage && nextStatuses.includes("CANCELLED") ? (
-            <Button size="small" color="error" variant="outlined"
-              onClick={() => setTransitionTarget("CANCELLED")}>
-              Cancel request
-            </Button>
-          ) : undefined}
-        />
-        <Typography variant="h5" fontWeight={700} sx={{ color: "var(--color-text-primary)", lineHeight: 1.2 }}>
-          {sr.subject}
-        </Typography>
-        <Divider sx={{ my: 1.5 }} />
-        <Typography sx={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: "#94a3b8",
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          mb: 0.5
-        }}>
-          DESCRIPTION
-        </Typography>
-        <Typography variant="body2" sx={{ color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
-          {sr.description}
-        </Typography>
-        <Divider sx={{ mt: 1.5 }} />
-      </Box>
+  const primary = primaryTransition("SR", sr.status)
+  const canCancel = canManage && nextStatuses.includes("CANCELLED")
+  const secondaryTransitions = nextStatuses.filter(s => s !== primary?.target && s !== "CANCELLED")
 
-      <Box sx={{
-        border: "0.5px solid var(--color-border-tertiary)",
-        borderTop: "none",
-        borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
-        bgcolor: "var(--color-background-primary)",
-        p: 1.5,
-        mb: 2,
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
-        gap: 1.25,
-        alignItems: "center"
-      }}>
-        <WorkflowStrip
-          stages={STATUS_ALL.map(s => ({ id: s, label: STATUS_LABELS[s], description: STATUS_DESCRIPTIONS[s] }))}
-          currentStage={sr.status}
-          mb={0}
-          specialStageColors={{ COMPLETED: "#14532d", CLOSED: "#14532d" }}
-        />
-        {canManage ? (
-          <TextField
-            select
+  const headerActions = canManage ? (
+    <>
+      {canCancel ? (
+        <Button size="small" color="error" variant="outlined"
+          onClick={() => setTransitionTarget("CANCELLED")}
+          sx={{ fontSize: 12 }}
+        >
+          Cancel request
+        </Button>
+      ) : null}
+      {secondaryTransitions.length > 0 ? (
+        <>
+          <IconButton
             size="small"
-            label="Change status"
-            value={transitionTarget ?? ""}
-            onChange={(e) => setTransitionTarget(e.target.value)}
-            sx={statusSelectSx(190)}
+            onClick={(e) => setMoreAnchor(e.currentTarget)}
+            sx={{ border: "1px solid #e2e8f0", borderRadius: 1, width: 32, height: 32 }}
+            aria-label="More status transitions"
           >
-            <MenuItem value="" disabled>
-              No status selected
-            </MenuItem>
-            {nextStatuses.map((status) => (
-              <MenuItem key={status} value={status}>
-                {STATUS_LABELS[status] ?? status}
+            <MoreHorizIcon sx={{ fontSize: 18, color: "#475569" }} />
+          </IconButton>
+          <Menu
+            anchorEl={moreAnchor}
+            open={Boolean(moreAnchor)}
+            onClose={() => setMoreAnchor(null)}
+          >
+            {secondaryTransitions.map(s => (
+              <MenuItem
+                key={s} dense
+                onClick={() => { setTransitionTarget(s); setMoreAnchor(null) }}
+              >
+                {STATUS_LABELS[s] ?? s}
               </MenuItem>
             ))}
-          </TextField>
-        ) : null}
-      </Box>
+          </Menu>
+        </>
+      ) : null}
+      {primary ? (
+        <Button
+          size="small" variant="contained"
+          onClick={() => setTransitionTarget(primary.target)}
+          sx={{ fontSize: 12 }}
+        >
+          {primary.label}
+        </Button>
+      ) : null}
+    </>
+  ) : null
+
+  const metaParts: React.ReactNode[] = []
+  metaParts.push(sr.client.name)
+  metaParts.push(<>opened {new Date(sr.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</>)
+  metaParts.push(sr.assignee ? `assigned to ${sr.assignee.email.split("@")[0]}` : "Unassigned")
+
+  return (
+    <Box>
+      <TicketHeaderCard
+        kind="SR"
+        reference={sr.reference}
+        status={sr.status}
+        statusLabel={STATUS_LABELS[sr.status] ?? sr.status}
+        priority={sr.priority}
+        title={sr.subject}
+        actions={headerActions}
+        meta={metaParts.map((m, i) => (
+          <React.Fragment key={i}>{i > 0 ? <span style={{ color: "#cbd5e1", margin: "0 6px" }}>·</span> : null}{m}</React.Fragment>
+        ))}
+        workflow={
+          <WorkflowStrip
+            stages={STATUS_ALL.map(s => ({ id: s, label: STATUS_LABELS[s], description: STATUS_DESCRIPTIONS[s] }))}
+            currentStage={sr.status}
+            mb={0}
+            specialStageColors={{ COMPLETED: "#14532d", CLOSED: "#14532d" }}
+          />
+        }
+        description={sr.description}
+      />
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
-      {/* ── Two-column layout ────────────────────────────────────────────── */}
+      {/* ── Two-column layout: conversation (wide left) + properties (280px right) ── */}
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 280px" }, gap: 3, alignItems: "start" }}>
 
         {/* ── Left column ─────────────────────────────────────────────────── */}
@@ -641,7 +649,7 @@ export default function ServiceRequestDetailPage() {
                       await api.post(`/service-requests/${id}/status`, { status: "ASSIGNED" })
                       qc.invalidateQueries({ queryKey: ["sr-detail", id] })
                       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
-                      qc.invalidateQueries({ queryKey: ["service-requests"] })
+                      qc.invalidateQueries({ queryKey: ["tickets"] })
                     } finally { setSavingProperties(false) }
                   }}>
                   Assign & move to Assigned
