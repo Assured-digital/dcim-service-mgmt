@@ -32,7 +32,6 @@ COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
-COPY apps/api/.env ./apps/api/.env
 
 WORKDIR /app/apps/api
 EXPOSE 3001
