@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 set -e
 
 # ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ if [ "$APP_ENV" = "production" ]; then
     if npm run 2>/dev/null | grep -q "  start:prod"; then
         exec npm run start:prod
     else
-        exec node dist/main.js
+        exec node dist/src/main.js
     fi
 else
     echo "Local mode: db push + seed + dev server (unchanged MVP behaviour)."
