@@ -23,28 +23,9 @@ RUN npm run build
 # No node, no source code, no dev dependencies. ~25MB instead of ~1GB.
 FROM nginx:alpine AS runtime
 
-# SPA-friendly nginx config: any unknown route falls back to index.html so
-# client-side routing works. Without this, a refresh on e.g. /sites/123
-# would return 404 from nginx.
-RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'
-server {
-  listen 80;
-  server_name _;
-  root /usr/share/nginx/html;
-  index index.html;
-
-  # Static assets: long cache, fingerprinted by Vite.
-  location /assets/ {
-    expires 1y;
-    add_header Cache-Control "public, immutable";
-  }
-
-  # Everything else: serve index.html, let React Router handle the path.
-  location / {
-    try_files $uri $uri/ /index.html;
-  }
-}
-EOF
+# SPA-friendly nginx config (COPY'd in rather than heredoc — heredoc-in-RUN
+# is unreliable across Docker contexts and produced an empty file).
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 
