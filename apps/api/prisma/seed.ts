@@ -155,7 +155,6 @@ async function seedClientData(params: {
   // ────────────────────────────────────────────────────────────────────────
   const staffUsers = await prisma.user.findMany({
     where: {
-      organizationId: organization.id,
       role: {
         in: [Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER]
       }
