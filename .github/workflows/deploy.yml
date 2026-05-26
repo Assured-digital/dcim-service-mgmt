@@ -57,6 +57,7 @@ jobs:
         # in one step. Same command we used manually all week.
         run: |
           az acr build \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --registry ${{ env.ACR_NAME }} \
             --image dcms-api:${{ steps.tag.outputs.tag }} \
             --image dcms-api:latest-test \
@@ -68,6 +69,7 @@ jobs:
         # Web build needs VITE_API_BASE_URL baked in at build time.
         run: |
           az acr build \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --registry ${{ env.ACR_NAME }} \
             --image dcms-web:${{ steps.tag.outputs.tag }} \
             --image dcms-web:latest-test \
