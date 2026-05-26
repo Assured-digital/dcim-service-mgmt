@@ -152,6 +152,207 @@ async function seedClientData(params: {
       })
     }
   }
+  // ────────────────────────────────────────────────────────────────────────
+  const staffUsers = await prisma.user.findMany({
+    where: {
+      organizationId: organization.id,
+      role: {
+        in: [Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER]
+      }
+    },
+    select: { id: true }
+  })
+
+  const pickAssignee = (status: ServiceRequestStatus): string | null => {
+    // NEW tickets are unassigned by convention (awaiting triage)
+    if (status === ServiceRequestStatus.NEW) return null
+    if (staffUsers.length === 0) return assigneeId
+    return staffUsers[Math.floor(Math.random() * staffUsers.length)].id
+  }
+
+  const daysAgo = (n: number): Date => {
+    const d = new Date()
+    d.setDate(d.getDate() - n)
+    return d
+  }
+
+  // Reference numbering follows existing pattern: SR-2026-NNNN for Nova,
+  // SR-{code}-NNNN for others. Existing seed uses 0001-0002, so start at 0003.
+  const refPrefix = isNova ? "SR-2026" : `SR-${code}`
+
+  type ExtendedSR = {
+    refSuffix: string
+    subject: string
+    description: string
+    status: ServiceRequestStatus
+    priority: "low" | "medium" | "high" | "critical"
+    daysOld: number
+    closureSummary?: string
+  }
+
+  const extendedRequests: ExtendedSR[] = [
+    // ── Maintenance (planned/scheduled work) ────────────────────────────
+    {
+      refSuffix: "0003",
+      subject: "Q3 UPS battery health test - Suite B",
+      description:
+        "Scheduled quarterly battery health test across all UPS units in Suite B. Includes runtime simulation and load test under controlled conditions. Coordinated with client ops for maintenance window.",
+      status: ServiceRequestStatus.COMPLETED,
+      priority: "medium",
+      daysOld: 12,
+      closureSummary:
+        "All UPS units passed quarterly health checks. Battery runtime within spec at 18-22 minutes per unit. Next quarterly test scheduled for Q4."
+    },
+    {
+      refSuffix: "0004",
+      subject: "Annual generator load test",
+      description:
+        "Annual full-load test of standby generator unit. Includes coordination with grid disconnection sequence, testing of automatic transfer switch, and review of fuel system condition. Client ops to be notified 48 hours in advance.",
+      status: ServiceRequestStatus.IN_PROGRESS,
+      priority: "high",
+      daysOld: 5
+    },
+    {
+      refSuffix: "0005",
+      subject: "HVAC quarterly filter replacement - all CRAC units",
+      description:
+        "Routine quarterly replacement of intake filters across all CRAC units. Includes visual inspection of coils and condensate drains.",
+      status: ServiceRequestStatus.ASSIGNED,
+      priority: "medium",
+      daysOld: 3
+    },
+    {
+      refSuffix: "0006",
+      subject: "Cable management audit - aisle 4",
+      description:
+        "Walk-through audit of cable routing, labelling and overhead containment for aisle 4. Document any non-compliance for remediation tasks.",
+      status: ServiceRequestStatus.IN_PROGRESS,
+      priority: "low",
+      daysOld: 8
+    },
+    {
+      refSuffix: "0007",
+      subject: "Firmware update - core switching",
+      description:
+        "Apply vendor firmware update to core switching infrastructure. Pre-staging configuration verification required. Maintenance window needed; coordinate with client network team.",
+      status: ServiceRequestStatus.WAITING_CUSTOMER,
+      priority: "high",
+      daysOld: 6
+    },
+    {
+      refSuffix: "0008",
+      subject: "Annual electrical safety inspection",
+      description:
+        "Annual electrical safety inspection (PAT and fixed installation). Engineer to be accompanied by qualified electrician. Generate certificate and file with compliance docs.",
+      status: ServiceRequestStatus.NEW,
+      priority: "medium",
+      daysOld: 1
+    },
+    {
+      refSuffix: "0009",
+      subject: "Fire suppression system annual service",
+      description:
+        "Annual service of fire suppression system by approved vendor. Includes pressure test, sensor calibration, and replacement of any expired components. Coordinate with building management for access.",
+      status: ServiceRequestStatus.ASSIGNED,
+      priority: "high",
+      daysOld: 4
+    },
+
+    // ── Change requests (customer-initiated) ────────────────────────────
+    {
+      refSuffix: "0010",
+      subject: "Add new server to Rack A1",
+      description:
+        "Customer-requested provision of new 1U server (Dell PowerEdge R650) into Rack A1. Includes physical install, power circuit allocation, network port assignment, and asset register entry.",
+      status: ServiceRequestStatus.IN_PROGRESS,
+      priority: "medium",
+      daysOld: 2
+    },
+    {
+      refSuffix: "0011",
+      subject: "Move power feed - Rack B3 to redundant PDU",
+      description:
+        "Customer change request to migrate Rack B3 power feed from PDU-15 to PDU-22 for redundancy compliance. Requires no-impact migration outside business hours.",
+      status: ServiceRequestStatus.WAITING_CUSTOMER,
+      priority: "high",
+      daysOld: 9
+    },
+    {
+      refSuffix: "0012",
+      subject: "Network port reconfiguration - VLAN realignment",
+      description:
+        "Reconfigure 12 switch ports in cabinet A2 onto new VLAN 240. Coordinate with customer's network team for cutover timing.",
+      status: ServiceRequestStatus.CLOSED,
+      priority: "medium",
+      daysOld: 22,
+      closureSummary:
+        "VLAN realignment completed during planned maintenance window. All 12 ports validated, traffic flowing as expected. Customer signed off."
+    },
+    {
+      refSuffix: "0013",
+      subject: "Cross-connect provisioning - new fibre pair to Meet-Me Room",
+      description:
+        "Provision new fibre cross-connect from customer cage to MMR cabinet position 14. SMF, LC/LC, labelled both ends.",
+      status: ServiceRequestStatus.ASSIGNED,
+      priority: "medium",
+      daysOld: 7
+    },
+    {
+      refSuffix: "0014",
+      subject: "Equipment decommission - legacy core switch",
+      description:
+        "Decommission and remove legacy Cisco 6509 core switch from cabinet B1. Includes secure data sanitisation of any storage, asset register update, and disposal documentation.",
+      status: ServiceRequestStatus.IN_PROGRESS,
+      priority: "low",
+      daysOld: 14
+    },
+    {
+      refSuffix: "0015",
+      subject: "Rack space relocation - consolidate aisle 4",
+      description:
+        "Customer-requested consolidation of partially-occupied racks in aisle 4. Migrate equipment from B5 and B7 into B6 to free contiguous space for upcoming hardware refresh.",
+      status: ServiceRequestStatus.COMPLETED,
+      priority: "medium",
+      daysOld: 18,
+      closureSummary:
+        "Consolidation complete. B5 and B7 returned to inventory. B6 now hosts all relocated equipment, validated and powered up. Asset register updated."
+    },
+
+    // One genuinely urgent change request to show priority variety
+    {
+      refSuffix: "0016",
+      subject: "Emergency access permission - vendor on-call escalation",
+      description:
+        "Urgent customer request for after-hours access permission for vendor engineer to perform emergency hardware swap. Verify customer authorisation via verbal+email confirmation per policy.",
+      status: ServiceRequestStatus.NEW,
+      priority: "critical",
+      daysOld: 0
+    }
+  ]
+
+  for (const req of extendedRequests) {
+    const reference = `${refPrefix}-${req.refSuffix}`
+    const existing = await prisma.serviceRequest.findUnique({
+      where: { reference }
+    })
+    if (existing) continue
+
+    await prisma.serviceRequest.create({
+      data: {
+        reference,
+        clientId: client.id,
+        subject: req.subject,
+        description: req.description,
+        status: req.status,
+        priority: req.priority,
+        assigneeId: pickAssignee(req.status),
+        createdById,
+        closureSummary: req.closureSummary,
+        createdAt: daysAgo(req.daysOld),
+        updatedAt: daysAgo(Math.max(0, req.daysOld - 1))
+      }
+    })
+  }
 
   // ── Triage / Public Submissions ────────────────────────────────────
   const triageSamples = isNova
