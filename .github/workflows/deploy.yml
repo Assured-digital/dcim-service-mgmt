@@ -1,0 +1,154 @@
+name: Deploy to test
+
+# Triggers on push to main. Also exposes a manual "Run workflow" button
+# in the GitHub Actions UI so you can re-deploy without a new commit.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# OIDC requires id-token permission. contents:read for checkout.
+permissions:
+  id-token: write
+  contents: read
+
+# Hard-coded environment-specific values. When prod arrives (Phase 4)
+# we'll parameterise these via a matrix or per-environment job.
+env:
+  AZURE_RESOURCE_GROUP: rg-adsm-test
+  ACR_NAME: acradsmtest01
+  ACR_LOGIN_SERVER: acradsmtest01.azurecr.io
+  API_APP: adsm-api-test
+  WEB_APP: adsm-web-test
+  MIGRATE_JOB: job-migrate-test
+  # The web image needs this baked in at build time so the React
+  # bundle knows where the api lives.
+  API_PUBLIC_URL: https://adsm-api-test.salmonbeach-ccd287ba.uksouth.azurecontainerapps.io
+
+jobs:
+  deploy:
+    name: Build, migrate, deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        # Short git SHA — what's running can always be traced back to a commit.
+        # Also tag with `latest-test` so manual redeploys of the same SHA still work.
+        run: |
+          echo "tag=git-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "Image tag for this run: git-${GITHUB_SHA::7}"
+
+      - name: Azure login (OIDC)
+        # Federated login. No stored secret material. The runner presents
+        # a GitHub-signed token; Azure verifies the subject claim matches
+        # the federated credential we registered, then issues an Azure token.
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build & push api image
+        # az acr build builds in Azure (free build minutes) and pushes
+        # in one step. Same command we used manually all week.
+        run: |
+          az acr build \
+            --registry ${{ env.ACR_NAME }} \
+            --image dcms-api:${{ steps.tag.outputs.tag }} \
+            --image dcms-api:latest-test \
+            --file apps/api/Dockerfile \
+            --output none \
+            .
+
+      - name: Build & push web image
+        # Web build needs VITE_API_BASE_URL baked in at build time.
+        run: |
+          az acr build \
+            --registry ${{ env.ACR_NAME }} \
+            --image dcms-web:${{ steps.tag.outputs.tag }} \
+            --image dcms-web:latest-test \
+            --file apps/web/Dockerfile \
+            --build-arg VITE_API_BASE_URL=${{ env.API_PUBLIC_URL }} \
+            --output none \
+            .
+
+      - name: Update migrate job to new image and run it
+        # Point the job at the freshly-built api image, then trigger.
+        # Wait for it to finish; fail the workflow if migrations error.
+        run: |
+          echo "Updating migrate job image..."
+          az containerapp job update \
+            --name ${{ env.MIGRATE_JOB }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-api:${{ steps.tag.outputs.tag }} \
+            --output none
+
+          echo "Triggering migrate job..."
+          EXECUTION=$(az containerapp job start \
+            --name ${{ env.MIGRATE_JOB }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query name --output tsv)
+          echo "Execution: $EXECUTION"
+
+          echo "Waiting for migrate job to finish (timeout 5 min)..."
+          for i in {1..30}; do
+            STATUS=$(az containerapp job execution show \
+              --name ${{ env.MIGRATE_JOB }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --job-execution-name "$EXECUTION" \
+              --query properties.status --output tsv)
+            echo "  status: $STATUS"
+            if [ "$STATUS" = "Succeeded" ]; then
+              echo "Migrate job succeeded."
+              break
+            fi
+            if [ "$STATUS" = "Failed" ]; then
+              echo "::error::Migrate job failed. See Log Analytics."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          if [ "$STATUS" != "Succeeded" ]; then
+            echo "::error::Migrate job did not complete within 5 minutes (last status: $STATUS)."
+            exit 1
+          fi
+
+      - name: Deploy api
+        run: |
+          az containerapp update \
+            --name ${{ env.API_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-api:${{ steps.tag.outputs.tag }} \
+            --output none
+          echo "api deployed."
+
+      - name: Deploy web
+        run: |
+          az containerapp update \
+            --name ${{ env.WEB_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-web:${{ steps.tag.outputs.tag }} \
+            --output none
+          echo "web deployed."
+
+      - name: Summary
+        # Posts a friendly summary at the bottom of the Actions run page.
+        # Tells you exactly what got deployed where.
+        run: |
+          API_FQDN=$(az containerapp show --name ${{ env.API_APP }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn --output tsv)
+          WEB_FQDN=$(az containerapp show --name ${{ env.WEB_APP }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn --output tsv)
+          {
+            echo "## Deploy complete"
+            echo ""
+            echo "| Component | Image | URL |"
+            echo "|---|---|---|"
+            echo "| api | \`dcms-api:${{ steps.tag.outputs.tag }}\` | https://$API_FQDN |"
+            echo "| web | \`dcms-web:${{ steps.tag.outputs.tag }}\` | https://$WEB_FQDN |"
+            echo ""
+            echo "Commit: \`${{ github.sha }}\`"
+          } >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,35 @@
+# Enforce consistent line endings regardless of contributor OS or git config.
+#
+# Why this exists: shell scripts and Dockerfiles MUST use LF. If Windows
+# checks them out as CRLF, the Linux shell inside containers fails with
+# errors like `#!/bin/sh: not found` and `set: Illegal option`. This file
+# makes the rule travel with the repo so no one has to remember to set
+# core.autocrlf correctly on their machine.
+
+# Default: let git handle text normalisation automatically.
+* text=auto
+
+# Always LF — these break if they ever become CRLF.
+*.sh            text eol=lf
+*.bash          text eol=lf
+Dockerfile      text eol=lf
+*.dockerfile    text eol=lf
+docker-entrypoint.sh text eol=lf
+*.yml           text eol=lf
+*.yaml           text eol=lf
+
+# Windows-only scripts: keep CRLF so they run correctly on Windows.
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+
+# Binary files: never touch.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.zip           binary
+*.woff          binary
+*.woff2         binary

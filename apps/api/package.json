@@ -17,6 +17,9 @@
     "geocode:sites": "ts-node prisma/scripts/backfill-site-coordinates.ts",
     "test:triage:smoke": "sh scripts/triage-smoke.sh"
   },
+  "prisma": {
+    "seed": "ts-node --transpile-only prisma/seed.ts"
+  },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
     "@nestjs/core": "^10.4.0",

@@ -57,15 +57,17 @@ services:
       - ./packages:/app/packages
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    environment:
-      - VITE_API_BASE_URL=http://localhost:3001
-    ports:
-      - "5173:5173"
-    depends_on:
-      - api
+      build:
+        context: .
+        dockerfile: apps/web/Dockerfile
+        target: build        # stop at the build stage, skip nginx
+      environment:
+        - VITE_API_BASE_URL=http://localhost:3001
+      ports:
+        - "5173:5173"
+      command: npm run dev -- --host 0.0.0.0 --port 5173
+      depends_on:
+        - api
 
 volumes:
   pgdata:
