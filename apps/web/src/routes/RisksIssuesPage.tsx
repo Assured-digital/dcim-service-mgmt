@@ -1,10 +1,10 @@
 import React from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  MenuItem, Stack, Tab, Tabs, TextField, Typography
+  MenuItem, Stack, TextField, Typography
 } from "@mui/material"
 import {
   DataGrid, GridColDef, GridRenderCellParams,
@@ -12,8 +12,6 @@ import {
   GridToolbarColumnsButton, GridToolbarExport
 } from "@mui/x-data-grid"
 import AddIcon from "@mui/icons-material/Add"
-import WarningAmberIcon from "@mui/icons-material/WarningAmber"
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import { chipSx } from "../components/shared"
 import { LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -38,6 +36,49 @@ type Issue = {
 }
 
 type EntityType = "risks" | "issues"
+type TypeFilter = "all" | "risks" | "issues"
+
+type UnifiedRow = {
+  kind: "RSK" | "ISS"
+  id: string
+  reference: string
+  title: string
+  status: string
+  severityKey: string
+  severityLabel: string
+  updatedAt: string
+}
+
+const TYPE_BADGE_TOKENS: Record<"RSK" | "ISS", { bg: string; text: string }> = {
+  RSK: { bg: "#fef3c7", text: "#b45309" },
+  ISS: { bg: "#fce7f3", text: "#be185d" },
+}
+
+function RiskIssueTypeBadge({ kind }: { kind: "RSK" | "ISS" }) {
+  const token = TYPE_BADGE_TOKENS[kind]
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minWidth: 30,
+        height: 20,
+        px: "7px",
+        borderRadius: "4px",
+        bgcolor: token.bg,
+        color: token.text,
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.05em",
+        lineHeight: 1,
+      }}
+    >
+      {kind}
+    </Box>
+  )
+}
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -169,13 +210,28 @@ export default function RisksIssuesPage() {
   const { setRecordLabel } = useBreadcrumb()
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
 
-  const [entity, setEntity] = React.useState<EntityType>("risks")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rawType = searchParams.get("type")
+  const typeFilter: TypeFilter =
+    rawType === "risks" ? "risks" : rawType === "issues" ? "issues" : "all"
+
+  function setTypeFilter(next: TypeFilter) {
+    const params = new URLSearchParams(searchParams)
+    if (next === "all") params.delete("type")
+    else params.set("type", next)
+    setSearchParams(params, { replace: true })
+  }
+
   const [quickView, setQuickView] = React.useState<QuickView>("all")
   const [riskFilters, setRiskFilters] = React.useState<RiskFilterState>(INITIAL_RISK_FILTERS)
   const [issueFilters, setIssueFilters] = React.useState<IssueFilterState>(INITIAL_ISSUE_FILTERS)
 
   const [riskLogOpen, setRiskLogOpen] = React.useState(false)
   const [issueLogOpen, setIssueLogOpen] = React.useState(false)
+
+  // Sidebar detail filters are entity-specific. When the top-level type filter
+  // is "all", default to showing risk-style detail filters.
+  const sidebarEntity: EntityType = typeFilter === "issues" ? "issues" : "risks"
 
   const { data: risksRaw = [], isLoading: risksLoading } = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<Risk[]>("/risks")).data, staleTime: STALE_TIME })
   const { data: issuesRaw = [], isLoading: issuesLoading } = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<Issue[]>("/issues")).data, staleTime: STALE_TIME })
@@ -206,7 +262,7 @@ export default function RisksIssuesPage() {
   const issueSeverityCounts = React.useMemo(() => { const c: Record<string, number> = { RED: 0, AMBER: 0, GREEN: 0 }; for (const i of openIssues) c[i.severity] = (c[i.severity] ?? 0) + 1; return c }, [openIssues])
   const issueReviewCounts = React.useMemo(() => { const c: Record<string, number> = { overdue: 0, due_soon: 0, none: 0 }; for (const i of openIssues) { const s = reviewStatus(i.reviewDate, i.status); if (s in c) c[s]++ }; return c }, [openIssues])
 
-  const quickCounts = React.useMemo(() => entity === "risks" ? {
+  const quickCounts = React.useMemo(() => sidebarEntity === "risks" ? {
     all: risksRaw.length,
     assigned: risksRaw.filter(r => r.status === "UNDER_REVIEW" || r.status === "MITIGATING").length,
     urgent: openRisks.filter(r => deriveRag(r.likelihood, r.impact) === "RED").length,
@@ -216,57 +272,147 @@ export default function RisksIssuesPage() {
     assigned: issuesRaw.filter(i => i.status === "OPEN" || i.status === "IN_PROGRESS").length,
     urgent: openIssues.filter(i => i.severity === "RED").length,
     review_due: openIssues.filter(i => reviewStatus(i.reviewDate, i.status) === "overdue").length,
-  }, [entity, risksRaw, issuesRaw, openRisks, openIssues])
+  }, [sidebarEntity, risksRaw, issuesRaw, openRisks, openIssues])
 
-  React.useEffect(() => { setRecordLabel(entity === "risks" ? "Risks" : "Issues") }, [entity, setRecordLabel])
+  React.useEffect(() => {
+    setRecordLabel(typeFilter === "issues" ? "Issues" : typeFilter === "risks" ? "Risks" : "Risks & issues")
+  }, [typeFilter, setRecordLabel])
 
   function toggleRiskFilter(kind: keyof RiskFilterState, value: string) { setRiskFilters(prev => { const set = new Set(prev[kind]); if (set.has(value)) set.delete(value); else set.add(value); return { ...prev, [kind]: set } }) }
   function toggleIssueFilter(kind: keyof IssueFilterState, value: string) { setIssueFilters(prev => { const set = new Set(prev[kind]); if (set.has(value)) set.delete(value); else set.add(value); return { ...prev, [kind]: set } }) }
-  function selectQuickView(e: EntityType, v: QuickView) { setEntity(e); setQuickView(v); if (e === "risks") setRiskFilters(INITIAL_RISK_FILTERS); else setIssueFilters(INITIAL_ISSUE_FILTERS) }
 
-  const riskColumns: GridColDef<Risk>[] = React.useMemo(() => [
-    { field: "reference", headerName: "Ref", width: 100, renderCell: (p: GridRenderCellParams<Risk>) => <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#475569", fontWeight: 700 }}>{p.value}</Typography> },
-    { field: "title", headerName: "Title", flex: 1, minWidth: 200 },
-    { field: "rag", headerName: "RAG", width: 80, valueGetter: (_v, row) => deriveRag(row.likelihood, row.impact), renderCell: (p) => <Chip size="small" sx={ragChipSx(p.value as string)} label={RAG_LABELS[p.value as string] ?? p.value} /> },
-    { field: "likelihood", headerName: "Likelihood", width: 100, renderCell: (p) => <Chip size="small" sx={ragChipSx(p.value as string)} label={p.value as string} /> },
-    { field: "impact", headerName: "Impact", width: 90, renderCell: (p) => <Chip size="small" sx={ragChipSx(p.value as string)} label={p.value as string} /> },
-    { field: "status", headerName: "Status", width: 110, renderCell: (p) => <Chip size="small" sx={chipSx(p.value as string)} label={RISK_STATUS_LABELS[p.value as string] ?? p.value} /> },
-    { field: "reviewDate", headerName: "Review", width: 100, renderCell: (p: GridRenderCellParams<Risk>) => { const v = p.value as string | null; if (!v) return <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>—</Typography>; const rs = reviewStatus(v, p.row.status); const color = rs === "overdue" ? "#b91c1c" : rs === "due_soon" ? "#b45309" : "#64748b"; return <Typography sx={{ fontSize: 12, color, fontWeight: rs === "overdue" ? 600 : 400 }}>{rs === "overdue" ? "Overdue" : new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Typography> } },
-    { field: "createdAt", headerName: "Logged", width: 90, renderCell: (p) => <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>{new Date(p.value as string).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Typography> },
+  // Build the unified row set: merge filtered risks + issues into a single
+  // shape the grid can render, then sort by updatedAt descending.
+  const unifiedRows: UnifiedRow[] = React.useMemo(() => {
+    const rows: UnifiedRow[] = []
+    if (typeFilter !== "issues") {
+      for (const r of filteredRisks) {
+        const rag = deriveRag(r.likelihood, r.impact)
+        rows.push({
+          kind: "RSK",
+          id: `RSK-${r.id}`,
+          reference: r.reference,
+          title: r.title,
+          status: r.status,
+          severityKey: rag,
+          severityLabel: RAG_LABELS[rag] ?? rag,
+          updatedAt: r.updatedAt,
+        })
+      }
+    }
+    if (typeFilter !== "risks") {
+      for (const i of filteredIssues) {
+        rows.push({
+          kind: "ISS",
+          id: `ISS-${i.id}`,
+          reference: i.reference,
+          title: i.title,
+          status: i.status,
+          severityKey: i.severity,
+          severityLabel: RAG_LABELS[i.severity] ?? i.severity,
+          updatedAt: i.updatedAt,
+        })
+      }
+    }
+    rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    return rows
+  }, [typeFilter, filteredRisks, filteredIssues])
+
+  const unifiedColumns: GridColDef<UnifiedRow>[] = React.useMemo(() => [
+    {
+      field: "kind", headerName: "Type", width: 70, sortable: false,
+      renderCell: (p: GridRenderCellParams<UnifiedRow>) => <RiskIssueTypeBadge kind={p.value as "RSK" | "ISS"} />,
+    },
+    {
+      field: "reference", headerName: "Ref", width: 110,
+      renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
+        <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#475569", fontWeight: 700 }}>{p.value as string}</Typography>
+      ),
+    },
+    {
+      field: "title", headerName: "Title", flex: 1, minWidth: 240,
+      renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
+        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>{p.value as string}</Typography>
+      ),
+    },
+    {
+      field: "status", headerName: "Status", width: 130,
+      renderCell: (p: GridRenderCellParams<UnifiedRow>) => {
+        const labels = (p.row as UnifiedRow).kind === "RSK" ? RISK_STATUS_LABELS : ISSUE_STATUS_LABELS
+        return <Chip size="small" sx={chipSx(p.value as string)} label={labels[p.value as string] ?? p.value} />
+      },
+    },
+    {
+      field: "severityKey", headerName: "Severity / Impact", width: 150, sortable: false,
+      renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
+        <Chip size="small" sx={ragChipSx(p.value as string)} label={(p.row as UnifiedRow).severityLabel} />
+      ),
+    },
+    {
+      field: "assignee", headerName: "Assignee", width: 140, sortable: false,
+      valueGetter: () => "",
+      renderCell: () => (
+        <Typography sx={{ fontSize: 12, fontStyle: "italic", color: "#94a3b8" }}>Unassigned</Typography>
+      ),
+    },
+    {
+      field: "updatedAt", headerName: "Updated", width: 110,
+      valueGetter: v => v ? new Date(v as string) : null,
+      renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
+        <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>
+          {p.value ? (p.value as Date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}
+        </Typography>
+      ),
+    },
   ], [])
 
-  const issueColumns: GridColDef<Issue>[] = React.useMemo(() => [
-    { field: "reference", headerName: "Ref", width: 100, renderCell: (p: GridRenderCellParams<Issue>) => <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#475569", fontWeight: 700 }}>{p.value}</Typography> },
-    { field: "title", headerName: "Title", flex: 1, minWidth: 200 },
-    { field: "severity", headerName: "Severity", width: 90, renderCell: (p) => <Chip size="small" sx={ragChipSx(p.value as string)} label={RAG_LABELS[p.value as string] ?? p.value} /> },
-    { field: "status", headerName: "Status", width: 110, renderCell: (p) => <Chip size="small" sx={chipSx(p.value as string)} label={ISSUE_STATUS_LABELS[p.value as string] ?? p.value} /> },
-    { field: "reviewDate", headerName: "Review", width: 100, renderCell: (p: GridRenderCellParams<Issue>) => { const v = p.value as string | null; if (!v) return <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>—</Typography>; const rs = reviewStatus(v, p.row.status); const color = rs === "overdue" ? "#b91c1c" : rs === "due_soon" ? "#b45309" : "#64748b"; return <Typography sx={{ fontSize: 12, color, fontWeight: rs === "overdue" ? 600 : 400 }}>{rs === "overdue" ? "Overdue" : new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Typography> } },
-    { field: "createdAt", headerName: "Logged", width: 90, renderCell: (p) => <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>{new Date(p.value as string).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Typography> },
-  ], [])
+  const totalRaw = typeFilter === "risks" ? risksRaw.length
+    : typeFilter === "issues" ? issuesRaw.length
+    : risksRaw.length + issuesRaw.length
+  const totalLabel = typeFilter === "risks" ? "risks"
+    : typeFilter === "issues" ? "issues"
+    : "items"
 
-  const kpis = entity === "risks" ? riskKpis : issueKpis
-  const filterCount = entity === "risks" ? countActiveFilters(riskFilters) : countActiveFilters(issueFilters)
+  const kpis = sidebarEntity === "risks" ? riskKpis : issueKpis
+  const filterCount = sidebarEntity === "risks" ? countActiveFilters(riskFilters) : countActiveFilters(issueFilters)
+
+  const isLoading = risksLoading || issuesLoading
 
   const gridSx = React.useMemo(() => ({
     border: "none", height: "100%",
-    "& .MuiDataGrid-cell": { borderColor: "#f1f5f9", cursor: "pointer" },
+    "& .MuiDataGrid-cell": {
+      borderColor: "#f1f5f9",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+    },
     "& .MuiDataGrid-columnHeaders": { bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", fontSize: 12 },
     "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 500 },
     "& .MuiDataGrid-footerContainer": { borderTop: "1px solid #e2e8f0" },
     "& .MuiDataGrid-row:hover": { bgcolor: "#f8fafc" },
   }), [])
 
+  function handleRowClick(row: UnifiedRow) {
+    const realId = row.id.replace(/^(RSK|ISS)-/, "")
+    if (row.kind === "RSK") navigate(`/risks-issues/risks/${realId}`)
+    else navigate(`/risks-issues/issues/${realId}`)
+  }
+
+  const TYPE_OPTIONS: Array<{ id: TypeFilter; label: string }> = [
+    { id: "all", label: "All" },
+    { id: "risks", label: "Risks" },
+    { id: "issues", label: "Issues" },
+  ]
+
   return (
     <Box sx={{ mx: { xs: "-12px", md: "-24px" }, mt: { xs: "-12px", md: "-24px" }, mb: { xs: "-12px", md: "-24px" }, height: "calc(100vh - 56px)", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)" }}>
 
       {/* ── Left panel ─────────────────────────────────────────────────── */}
       <Box sx={{ width: 240, minWidth: 240, bgcolor: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-primary)", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-        <Box sx={{ height: HEADER_HEIGHT, borderBottom: "1px solid var(--color-border-primary)", flexShrink: 0, display: "flex", alignItems: "center" }}>
-          <Tabs value={entity} onChange={(_e, v) => { setEntity(v); setQuickView("all") }} variant="fullWidth"
-            sx={{ minHeight: "100%", width: "100%", "& .MuiTab-root": { minHeight: HEADER_HEIGHT, fontSize: 12, fontWeight: 500, textTransform: "none", color: "#64748b", "&.Mui-selected": { color: "#1d4ed8" } }, "& .MuiTabs-indicator": { bgcolor: "#1d4ed8" } }}>
-            <Tab value="risks" icon={<WarningAmberIcon sx={{ fontSize: 14 }} />} iconPosition="start" label="Risks" />
-            <Tab value="issues" icon={<ErrorOutlineIcon sx={{ fontSize: 14 }} />} iconPosition="start" label="Issues" />
-          </Tabs>
+        <Box sx={{ height: HEADER_HEIGHT, borderBottom: "1px solid var(--color-border-primary)", flexShrink: 0, display: "flex", alignItems: "center", px: "16px" }}>
+          <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+            Risks &amp; issues
+          </Typography>
         </Box>
 
         <Box sx={{ flex: 1, minHeight: 0, py: "4px" }}>
@@ -274,7 +420,7 @@ export default function RisksIssuesPage() {
           {QUICK_VIEWS.map(v => {
             const isActive = quickView === v.key
             return (
-              <Stack key={v.key} direction="row" alignItems="center" onClick={() => selectQuickView(entity, v.key)}
+              <Stack key={v.key} direction="row" alignItems="center" onClick={() => setQuickView(v.key)}
                 sx={{ px: "12px", py: "3px", cursor: "pointer", borderLeft: isActive ? "2px solid #1d4ed8" : "2px solid transparent", bgcolor: isActive ? "rgba(29,78,216,0.07)" : "transparent", "&:hover": { bgcolor: isActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
                 <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "#1d4ed8" : "#475569", fontWeight: isActive ? 600 : 400 }}>{v.label}</Typography>
                 <Typography sx={{ fontSize: 10, color: "#94a3b8" }}>{quickCounts[v.key] ?? 0}</Typography>
@@ -284,7 +430,21 @@ export default function RisksIssuesPage() {
 
           <Box sx={{ height: 1, bgcolor: "#f1f5f9", mx: "12px", my: "6px" }} />
 
-          {entity === "risks" ? (
+          {typeFilter === "issues" ? (
+            <>
+              <FilterSection label="Status" items={ISSUE_STATUSES.map(s => ({ key: s, label: ISSUE_STATUS_LABELS[s], count: issueStatusCounts[s] ?? 0 }))} selected={issueFilters.statuses} onToggle={v => toggleIssueFilter("statuses", v)} />
+              <FilterSection label="Severity" items={[
+                { key: "RED", label: "High", count: issueSeverityCounts.RED, chipSx: ragChipSx("RED") },
+                { key: "AMBER", label: "Medium", count: issueSeverityCounts.AMBER, chipSx: ragChipSx("AMBER") },
+                { key: "GREEN", label: "Low", count: issueSeverityCounts.GREEN, chipSx: ragChipSx("GREEN") },
+              ]} selected={issueFilters.severities} onToggle={v => toggleIssueFilter("severities", v)} />
+              <FilterSection label="Review status" items={[
+                { key: "overdue", label: "Overdue", count: issueReviewCounts.overdue },
+                { key: "due_soon", label: "Due this week", count: issueReviewCounts.due_soon },
+                { key: "none", label: "No date set", count: issueReviewCounts.none },
+              ]} selected={issueFilters.reviewFilter} onToggle={v => toggleIssueFilter("reviewFilter", v)} />
+            </>
+          ) : typeFilter === "risks" ? (
             <>
               <FilterSection label="Status" items={RISK_STATUSES.map(s => ({ key: s, label: RISK_STATUS_LABELS[s], count: riskStatusCounts[s] ?? 0 }))} selected={riskFilters.statuses} onToggle={v => toggleRiskFilter("statuses", v)} />
               <FilterSection label="RAG rating" items={[
@@ -299,24 +459,16 @@ export default function RisksIssuesPage() {
               ]} selected={riskFilters.reviewFilter} onToggle={v => toggleRiskFilter("reviewFilter", v)} />
             </>
           ) : (
-            <>
-              <FilterSection label="Status" items={ISSUE_STATUSES.map(s => ({ key: s, label: ISSUE_STATUS_LABELS[s], count: issueStatusCounts[s] ?? 0 }))} selected={issueFilters.statuses} onToggle={v => toggleIssueFilter("statuses", v)} />
-              <FilterSection label="Severity" items={[
-                { key: "RED", label: "High", count: issueSeverityCounts.RED, chipSx: ragChipSx("RED") },
-                { key: "AMBER", label: "Medium", count: issueSeverityCounts.AMBER, chipSx: ragChipSx("AMBER") },
-                { key: "GREEN", label: "Low", count: issueSeverityCounts.GREEN, chipSx: ragChipSx("GREEN") },
-              ]} selected={issueFilters.severities} onToggle={v => toggleIssueFilter("severities", v)} />
-              <FilterSection label="Review status" items={[
-                { key: "overdue", label: "Overdue", count: issueReviewCounts.overdue },
-                { key: "due_soon", label: "Due this week", count: issueReviewCounts.due_soon },
-                { key: "none", label: "No date set", count: issueReviewCounts.none },
-              ]} selected={issueFilters.reviewFilter} onToggle={v => toggleIssueFilter("reviewFilter", v)} />
-            </>
+            <Box sx={{ px: "12px", pt: "4px" }}>
+              <Typography sx={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>
+                Pick Risks or Issues to filter further.
+              </Typography>
+            </Box>
           )}
 
-          {filterCount > 0 ? (
+          {filterCount > 0 && typeFilter !== "all" ? (
             <Box sx={{ px: "12px", pt: "4px" }}>
-              <Typography onClick={() => entity === "risks" ? setRiskFilters(INITIAL_RISK_FILTERS) : setIssueFilters(INITIAL_ISSUE_FILTERS)}
+              <Typography onClick={() => sidebarEntity === "risks" ? setRiskFilters(INITIAL_RISK_FILTERS) : setIssueFilters(INITIAL_ISSUE_FILTERS)}
                 sx={{ fontSize: 11, color: "#2563eb", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
                 Clear all filters ({filterCount})
               </Typography>
@@ -327,36 +479,77 @@ export default function RisksIssuesPage() {
 
       {/* ── Right panel ────────────────────────────────────────────────── */}
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-        <Box sx={{ height: HEADER_HEIGHT, bgcolor: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-primary)", px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#0f172a", flex: 1 }}>
-            {entity === "risks" ? "Risks" : "Issues"}{quickView !== "all" ? ` — ${QUICK_VIEWS.find(v => v.key === quickView)?.label ?? ""}` : ""}
-          </Typography>
-          {canManage ? <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 13 }} />} onClick={() => entity === "risks" ? setRiskLogOpen(true) : setIssueLogOpen(true)} sx={{ fontSize: 12 }}>Log {entity === "risks" ? "risk" : "issue"}</Button> : null}
+        {/* Top bar — TYPE filter chips on the left, Log button on the right. */}
+        <Box sx={{ height: HEADER_HEIGHT, bgcolor: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-primary)", px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 1.5 }}>
+          <Stack direction="row" spacing={0.75} sx={{ flex: 1 }}>
+            {TYPE_OPTIONS.map(t => {
+              const isActive = typeFilter === t.id
+              return (
+                <Box
+                  key={t.id}
+                  onClick={() => setTypeFilter(t.id)}
+                  sx={{
+                    px: 1.25, py: 0.5, borderRadius: 999, cursor: "pointer",
+                    fontSize: 12, fontWeight: isActive ? 600 : 500,
+                    bgcolor: isActive ? "#e8f1ff" : "transparent",
+                    color: isActive ? "#1d4ed8" : "#475569",
+                    border: isActive ? "1px solid #bfdbfe" : "1px solid #e2e8f0",
+                    "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc" },
+                  }}
+                >
+                  {t.label}
+                </Box>
+              )
+            })}
+          </Stack>
+          {canManage ? (
+            <Stack direction="row" spacing={1}>
+              {typeFilter !== "issues" ? (
+                <Button size="small" variant={typeFilter === "risks" ? "contained" : "outlined"} startIcon={<AddIcon sx={{ fontSize: 13 }} />} onClick={() => setRiskLogOpen(true)} sx={{ fontSize: 12 }}>Log risk</Button>
+              ) : null}
+              {typeFilter !== "risks" ? (
+                <Button size="small" variant={typeFilter === "issues" ? "contained" : "outlined"} startIcon={<AddIcon sx={{ fontSize: 13 }} />} onClick={() => setIssueLogOpen(true)} sx={{ fontSize: 12 }}>Log issue</Button>
+              ) : null}
+            </Stack>
+          ) : null}
         </Box>
 
         <Box sx={{ flex: 1, minHeight: 0, p: "16px 20px", display: "flex", flexDirection: "column" }}>
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: "10px", mb: "16px", flexShrink: 0 }}>
-            <KpiCard label={`Open ${entity}`} value={kpis.open} />
-            <KpiCard label="High severity" value={kpis.high} color={kpis.high > 0 ? "#b91c1c" : undefined} />
-            <KpiCard label="Review overdue" value={kpis.overdue} color={kpis.overdue > 0 ? "#b45309" : undefined} />
-            <KpiCard label="Avg age (days)" value={kpis.avgAge} />
-          </Box>
+          {typeFilter !== "all" ? (
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: "10px", mb: "16px", flexShrink: 0 }}>
+              <KpiCard label={`Open ${sidebarEntity}`} value={kpis.open} />
+              <KpiCard label="High severity" value={kpis.high} color={kpis.high > 0 ? "#b91c1c" : undefined} />
+              <KpiCard label="Review overdue" value={kpis.overdue} color={kpis.overdue > 0 ? "#b45309" : undefined} />
+              <KpiCard label="Avg age (days)" value={kpis.avgAge} />
+            </Box>
+          ) : null}
 
           <Box sx={{ flex: 1, minHeight: 400 }}>
             <Box sx={{ height: "100%", minWidth: 0, bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
               <Box sx={{ px: "14px", py: "6px", borderBottom: "1px solid #e2e8f0", fontSize: 11.5, color: "#64748b", display: "flex", alignItems: "center", flexShrink: 0 }}>
-                <Box component="span" sx={{ color: "#0f172a", fontWeight: 500 }}>{entity === "risks" ? filteredRisks.length : filteredIssues.length}</Box>
+                <Box component="span" sx={{ color: "#0f172a", fontWeight: 500 }}>{unifiedRows.length}</Box>
                 {" of "}
-                <Box component="span" sx={{ color: "#0f172a", fontWeight: 500, mx: "3px" }}>{entity === "risks" ? risksRaw.length : issuesRaw.length}</Box>
-                {entity}{filterCount > 0 ? ` · ${filterCount} filter${filterCount !== 1 ? "s" : ""} active` : ""}
+                <Box component="span" sx={{ color: "#0f172a", fontWeight: 500, mx: "3px" }}>{totalRaw}</Box>
+                {totalLabel}{typeFilter !== "all" && filterCount > 0 ? ` · ${filterCount} filter${filterCount !== 1 ? "s" : ""} active` : ""}
               </Box>
               <Box sx={{ flex: 1, minHeight: 0 }}>
-                <Box sx={{ display: entity === "risks" ? "flex" : "none", flexDirection: "column", height: "100%" }}>
-                  {risksLoading ? <LoadingState /> : <DataGrid rows={filteredRisks} columns={riskColumns} density="compact" initialState={{ pagination: { paginationModel: { pageSize: 25 } } }} pageSizeOptions={[25, 50, 100]} disableRowSelectionOnClick onRowClick={params => navigate(`/risks-issues/risks/${params.row.id}`)} slots={{ toolbar: GridInnerToolbar }} sx={gridSx} />}
-                </Box>
-                <Box sx={{ display: entity === "issues" ? "flex" : "none", flexDirection: "column", height: "100%" }}>
-                  {issuesLoading ? <LoadingState /> : <DataGrid rows={filteredIssues} columns={issueColumns} density="compact" initialState={{ pagination: { paginationModel: { pageSize: 25 } } }} pageSizeOptions={[25, 50, 100]} disableRowSelectionOnClick onRowClick={params => navigate(`/risks-issues/issues/${params.row.id}`)} slots={{ toolbar: GridInnerToolbar }} sx={gridSx} />}
-                </Box>
+                {isLoading ? <LoadingState /> : (
+                  <DataGrid
+                    rows={unifiedRows}
+                    columns={unifiedColumns}
+                    density="compact"
+                    rowHeight={64}
+                    initialState={{
+                      pagination: { paginationModel: { pageSize: 25 } },
+                      sorting: { sortModel: [{ field: "updatedAt", sort: "desc" }] },
+                    }}
+                    pageSizeOptions={[25, 50, 100]}
+                    disableRowSelectionOnClick
+                    onRowClick={params => handleRowClick(params.row as UnifiedRow)}
+                    slots={{ toolbar: GridInnerToolbar }}
+                    sx={gridSx}
+                  />
+                )}
               </Box>
             </Box>
           </Box>

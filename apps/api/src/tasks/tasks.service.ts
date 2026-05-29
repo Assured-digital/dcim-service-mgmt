@@ -65,7 +65,10 @@ export class TasksService {
     this.assertClientScope(clientId);
     const task = await this.prisma.task.findFirst({
       where: { id, clientId },
-      include: { incident: true }
+      include: {
+        incident: true,
+        assignee: { select: { id: true, email: true } }
+      }
     });
     if (!task) throw new NotFoundException("Task not found");
     return task;

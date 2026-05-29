@@ -1,86 +1,340 @@
 import React from "react"
-import { useParams, useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, IconButton, Menu, MenuItem, Stack,
-  Tab, Tabs, TextField, Typography
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  Paper,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
 } from "@mui/material"
-import LockIcon from "@mui/icons-material/Lock"
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import AddIcon from "@mui/icons-material/Add"
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
-import {
-  Badge, PropertiesPanel, LinkedEntitiesPanel, SectionHeader,
-  chipSx, statusSelectSx, type LinkedTask, WorkflowStrip
-} from "../components/shared"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import LinkIcon from "@mui/icons-material/Link"
+import AttachFileIcon from "@mui/icons-material/AttachFile"
+import DescriptionIcon from "@mui/icons-material/Description"
+import ImageIcon from "@mui/icons-material/Image"
+import FileDownloadIcon from "@mui/icons-material/FileDownload"
+import PlayArrowIcon from "@mui/icons-material/PlayArrow"
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
+import PersonIcon from "@mui/icons-material/Person"
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
+import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
+import LockIcon from "@mui/icons-material/Lock"
+import ContentCopyIcon from "@mui/icons-material/ContentCopy"
+import CloseIcon from "@mui/icons-material/Close"
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined"
+import AssignmentIcon from "@mui/icons-material/Assignment"
+import StorageIcon from "@mui/icons-material/Storage"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
+import LocationOnIcon from "@mui/icons-material/LocationOn"
+import BuildIcon from "@mui/icons-material/Build"
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
+import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
+import { type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
-import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
-import { useBreadcrumb } from "./Shell"
-import { TicketHeaderCard, primaryTransition } from "../components/ticket-detail/TicketHeaderCard"
+import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
+import {
+  RecordDetailShell,
+  StatusPopover,
+  TransitionDialog,
+  type CentreSection,
+  type DetailField,
+  type MoreMenuItem,
+  type PopoverOption,
+  type RecordMetadata,
+  type RightSection,
+  type StatusConfig,
+  type StatusOption,
+  type Transition,
+} from "../components/detail"
+import { transitions as serviceRequestTransitions } from "../config/transitions/serviceRequestTransitions"
 
-// ── Types ──────────────────────────────────────────────────────────────────
-type AuditEvent = {
-  id: string; action: string; actorEmail?: string | null
-  data?: { from?: string; to?: string; fields?: string[] } | null; createdAt: string
-}
-
-type SRComment = {
-  id: string; body: string; type: string
-  visibleToCustomer: boolean; fromCustomer: boolean
-  createdAt: string; author: { id: string; email: string }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — preserve existing API shape
+// ─────────────────────────────────────────────────────────────────────────────
 
 type SR = {
-  id: string; reference: string; subject: string; description: string
-  status: string; priority: string; closureSummary: string | null
-  createdAt: string; updatedAt: string
+  id: string
+  reference: string
+  subject: string
+  description: string
+  status: string
+  priority: string
+  closureSummary: string | null
+  createdById?: string | null
+  createdAt: string
+  updatedAt: string
   assignee: { id: string; email: string } | null
   client: { id: string; name: string }
 }
 
+type AuditEvent = {
+  id: string
+  action: string
+  actorUserId?: string | null
+  actorEmail?: string | null
+  data?: Record<string, unknown> | null
+  createdAt: string
+}
+
+type SRComment = {
+  id: string
+  body: string
+  type: string
+  visibleToCustomer: boolean
+  fromCustomer: boolean
+  createdAt: string
+  author: { id: string; email: string }
+}
+
+type Attachment = {
+  id: string
+  fileName: string
+  fileSize: number
+  mimeType: string
+  createdAt: string
+  url?: string
+}
+
 type User = { id: string; email: string }
 
-// ── Constants ──────────────────────────────────────────────────────────────
-const STATUS_ALL = ["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CUSTOMER", "COMPLETED", "CLOSED"]
-
-const STATUS_FLOW: Record<string, string[]> = {
-  NEW: ["ASSIGNED", "IN_PROGRESS", "CANCELLED"],
-  ASSIGNED: ["IN_PROGRESS", "WAITING_CUSTOMER", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_CUSTOMER", "COMPLETED", "CANCELLED"],
-  WAITING_CUSTOMER: ["IN_PROGRESS", "COMPLETED", "CANCELLED"],
-  COMPLETED: ["CLOSED"],
-  CLOSED: [], CANCELLED: []
+type LinkedTaskWithAssignee = LinkedTask & {
+  assigneeId?: string | null
+  assignee?: { id: string; email: string } | null
 }
+
+type FeedEventType = "status" | "comment" | "assignment" | "link"
+
+type FeedEvent = {
+  id: string
+  type: FeedEventType
+  actor: string
+  text: React.ReactNode
+  note?: string
+  time: string
+  createdAt: string
+}
+
+interface LinkedEntity {
+  type: string
+  id: string
+}
+
+const FILTER_VALUES = ["all", "comment", "status", "assignment", "link"] as const
+type ActivityFilter = typeof FILTER_VALUES[number]
+
+const FILTER_OPTIONS: { value: ActivityFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "comment", label: "Comments" },
+  { value: "status", label: "Status" },
+  { value: "assignment", label: "Assignments" },
+  { value: "link", label: "Links" },
+]
+
+type EditableField = "subject" | "description" | "priority" | "assigneeId"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Status config — spec sections 8 + 9.3
+// ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<string, string> = {
-  NEW: "New", ASSIGNED: "Assigned", IN_PROGRESS: "In progress",
-  WAITING_CUSTOMER: "Waiting on customer", COMPLETED: "Completed",
-  CLOSED: "Closed", CANCELLED: "Cancelled"
+  NEW: "New",
+  ASSIGNED: "Assigned",
+  IN_PROGRESS: "In progress",
+  WAITING_CUSTOMER: "Waiting on customer",
+  COMPLETED: "Completed",
+  CLOSED: "Closed",
+  CANCELLED: "Cancelled",
 }
 
-const STATUS_DESCRIPTIONS: Record<string, string> = {
-  NEW: "Received, not yet actioned",
-  ASSIGNED: "Allocated to an engineer",
-  IN_PROGRESS: "Actively being worked on",
-  WAITING_CUSTOMER: "Awaiting customer response",
-  COMPLETED: "Work done, pending closure",
-  CLOSED: "Resolved and closed",
-  CANCELLED: "Cancelled"
+const STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
+  NEW: { bg: "#f1efe8", text: "#5f5e5a" },
+  ASSIGNED: { bg: "#e6f1fb", text: "#185fa5" },
+  IN_PROGRESS: { bg: "#e6f1fb", text: "#185fa5" },
+  WAITING_CUSTOMER: { bg: "#faeeda", text: "#854f0b" },
+  COMPLETED: { bg: "#eaf3de", text: "#3b6d11" },
+  CLOSED: { bg: "#f1efe8", text: "#5f5e5a" },
+  CANCELLED: { bg: "#f1efe8", text: "#5f5e5a" },
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function priorityChipSx(priority: string) {
-  const m: Record<string, { bgcolor: string; color: string }> = {
-    critical: { bgcolor: "#fee2e2", color: "#b91c1c" },
-    high: { bgcolor: "#ffedd5", color: "#c2410c" },
-    medium: { bgcolor: "#fef3c7", color: "#b45309" },
-    low: { bgcolor: "#f0fdf4", color: "#15803d" }
+const STATUS_ICONS: Record<string, React.ReactNode> = {
+  NEW: <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />,
+  ASSIGNED: <PersonIcon sx={{ fontSize: 14 }} />,
+  IN_PROGRESS: <PlayArrowIcon sx={{ fontSize: 14 }} />,
+  WAITING_CUSTOMER: <HourglassEmptyIcon sx={{ fontSize: 14 }} />,
+  COMPLETED: <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />,
+  CLOSED: <LockIcon sx={{ fontSize: 14 }} />,
+  CANCELLED: <CancelOutlinedIcon sx={{ fontSize: 14 }} />,
+}
+
+const SR_STATUS_ORDER = [
+  "NEW",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "WAITING_CUSTOMER",
+  "COMPLETED",
+  "CLOSED",
+  "CANCELLED",
+]
+
+const SR_STATUS_CONFIG: StatusConfig = {
+  options: SR_STATUS_ORDER.map<StatusOption>((value) => ({
+    value,
+    label: STATUS_LABELS[value],
+    badgeClass: `b-${value.toLowerCase()}`,
+    bg: STATUS_COLOURS[value].bg,
+    iconColor: STATUS_COLOURS[value].text,
+    icon: STATUS_ICONS[value],
+    buttonIcon: STATUS_ICONS[value],
+  })),
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Priority popover options
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PRIORITY_VALUES = ["low", "medium", "high", "critical"]
+
+const PRIORITY_COLOURS: Record<string, { bg: string; text: string }> = {
+  low: { bg: "#dcfce7", text: "#15803d" },
+  medium: { bg: "#fef3c7", text: "#b45309" },
+  high: { bg: "#ffedd5", text: "#c2410c" },
+  critical: { bg: "#fee2e2", text: "#b91c1c" },
+}
+
+const PRIORITY_OPTIONS: PopoverOption[] = PRIORITY_VALUES.map((value) => ({
+  value,
+  label: value.charAt(0).toUpperCase() + value.slice(1),
+  iconBg: PRIORITY_COLOURS[value].bg,
+  iconColor: PRIORITY_COLOURS[value].text,
+  icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
+}))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task status colour map — spec section 10
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In progress",
+  BLOCKED: "Blocked",
+  DONE: "Done",
+}
+
+const TASK_STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
+  OPEN: { bg: "#f1efe8", text: "#5f5e5a" },
+  IN_PROGRESS: { bg: "#e6f1fb", text: "#185fa5" },
+  BLOCKED: { bg: "#fcebeb", text: "#a32d2d" },
+  DONE: { bg: "#eaf3de", text: "#3b6d11" },
+}
+
+const TASK_STATUS_OPTIONS: PopoverOption[] = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map((value) => ({
+  value,
+  label: TASK_STATUS_LABELS[value],
+  iconBg: TASK_STATUS_COLOURS[value].bg,
+  iconColor: TASK_STATUS_COLOURS[value].text,
+  icon: <AssignmentIcon sx={{ fontSize: 14 }} />,
+}))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Type badge — spec section 3.3 (SR)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SR_TYPE_BADGE = (
+  <Box
+    component="span"
+    sx={{
+      fontSize: 10,
+      fontWeight: 500,
+      bgcolor: "#eaf3de",
+      color: "#3b6d11",
+      px: 1,
+      py: 0.25,
+      borderRadius: 1,
+      letterSpacing: "0.04em",
+    }}
+  >
+    SR
+  </Box>
+)
+
+// Linked record kind visuals
+type LinkedEntityKind = "asset" | "risk" | "site" | "incident" | "change" | "issue" | "default"
+
+interface LinkedEntityVisual {
+  Icon: React.ComponentType<{ sx?: object }>
+  bg: string
+  fg: string
+  label: string
+}
+
+const LINKED_ENTITY_VISUALS: Record<LinkedEntityKind, LinkedEntityVisual> = {
+  asset: { Icon: StorageIcon, bg: "#e6f1fb", fg: "#185fa5", label: "ASSET" },
+  risk: { Icon: WarningAmberIcon, bg: "#faeeda", fg: "#854f0b", label: "RSK" },
+  site: { Icon: LocationOnIcon, bg: "#eaf3de", fg: "#3b6d11", label: "SITE" },
+  incident: { Icon: ErrorOutlineIcon, bg: "#fcebeb", fg: "#a32d2d", label: "INC" },
+  change: { Icon: BuildIcon, bg: "#e6f1fb", fg: "#185fa5", label: "CHG" },
+  issue: { Icon: ErrorOutlineIcon, bg: "#fbeaf0", fg: "#993556", label: "ISS" },
+  default: { Icon: LinkIcon, bg: "#eef2f6", fg: "#475569", label: "REF" },
+}
+
+function entityKindFromType(value?: string | null): LinkedEntityKind {
+  if (!value) return "default"
+  const v = value.toLowerCase()
+  if (v === "asset") return "asset"
+  if (v === "risk") return "risk"
+  if (v === "site") return "site"
+  if (v === "incident") return "incident"
+  if (v === "change") return "change"
+  if (v === "issue") return "issue"
+  return "default"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatDateTime(value: string): string {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ""
+  const date = d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+  })
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+  return `${date}, ${time}`
+}
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / Math.pow(1024, i)
+  return `${value < 10 && i > 0 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
+}
+
+function getInitials(email: string): string {
+  const local = email.split("@")[0] ?? email
+  const parts = local.split(/[._-]/).filter(Boolean)
+  if (parts.length >= 2 && parts[0] && parts[1]) {
+    return (parts[0][0] + parts[1][0]).toUpperCase()
   }
-  return { ...(m[priority?.toLowerCase()] ?? { bgcolor: "#f1f5f9", color: "#475569" }), fontWeight: 600, fontSize: 11 }
+  return local.slice(0, 2).toUpperCase()
 }
+
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null && "message" in error) {
     const message = (error as { message?: unknown }).message
@@ -90,643 +344,1702 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-function actionLabel(action: string, data?: { from?: string; to?: string; fields?: string[] } | null): string {
-  switch (action) {
-    case "CREATED": return "Request created"
-    case "STATUS_UPDATED": return `Status changed: ${data?.from ?? ""} → ${data?.to ?? ""}`
-    case "UPDATED": return "Request updated"
-    case "CLOSED": return "Request closed"
-    case "CUSTOMER_UPDATE_ADDED": return "Customer update sent"
-    default: return action.toLowerCase().replaceAll("_", " ")
-  }
+function readDataString(data: Record<string, unknown> | null | undefined, key: string): string | null {
+  if (!data) return null
+  const v = data[key]
+  return typeof v === "string" && v.length > 0 ? v : null
 }
 
-// ── Unified timeline item ──────────────────────────────────────────────────
-type TimelineItem =
-  | { kind: "audit"; event: AuditEvent }
-  | { kind: "work_note"; comment: SRComment }
-  | { kind: "customer_update"; comment: SRComment }
-
-function getTimestamp(item: TimelineItem) {
-  if (item.kind === "audit") return item.event.createdAt
-  return item.comment.createdAt
+function readDataFields(data: Record<string, unknown> | null | undefined): string[] {
+  if (!data) return []
+  const v = data["fields"]
+  return Array.isArray(v) ? v.filter((f): f is string => typeof f === "string") : []
 }
 
-function TimelineEntry({ item }: { item: TimelineItem }) {
-  if (item.kind === "audit") {
-    const { event } = item
-    return (
-      <Box sx={{ display: "flex", gap: "10px", py: "10px" }}>
-        <Box sx={{ width: 28, height: 28, borderRadius: "50%", bgcolor: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, mt: "2px" }}>
-          <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#94a3b8" }} />
-        </Box>
-        <Box sx={{ flex: 1, pt: "4px" }}>
-          <Typography sx={{ fontSize: 13, color: "#0f172a", fontWeight: 500 }}>
-            {actionLabel(event.action, event.data)}
-          </Typography>
-          <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: "2px" }}>
-            {event.actorEmail ?? "System"} · {new Date(event.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
-          </Typography>
-        </Box>
-      </Box>
-    )
-  }
-
-  if (item.kind === "work_note") {
-    const { comment } = item
-    return (
-      <Box sx={{ display: "flex", gap: "10px", py: "10px" }}>
-        <Box sx={{ width: 28, height: 28, borderRadius: "50%", bgcolor: "#f1f5f9", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, mt: "2px" }}>
-          <LockIcon sx={{ fontSize: 13 }} />
-        </Box>
-        <Box sx={{ flex: 1 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: "4px" }}>
-            <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>
-              {comment.author.email.split("@")[0]}
-            </Typography>
-            <Chip label="Work note" size="small" sx={{ height: 16, fontSize: 10, bgcolor: "#f1f5f9", color: "#475569" }} />
-            <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>
-              {new Date(comment.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
-            </Typography>
-          </Stack>
-          <Box sx={{ bgcolor: "#f8fafc", borderLeft: "3px solid #e2e8f0", px: "12px", py: "8px", borderRadius: "0 6px 6px 0" }}>
-            <Typography sx={{ fontSize: 13, color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-              {comment.body}
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
-    )
-  }
-
-  // customer_update
-  const { comment } = item
+function bold(value: string): React.ReactNode {
   return (
-    <Box sx={{ display: "flex", gap: "10px", py: "10px" }}>
-      <Box sx={{ width: 28, height: 28, borderRadius: "50%", bgcolor: "#eff6ff", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, mt: "2px" }}>
-        <ChatBubbleOutlineIcon sx={{ fontSize: 13 }} />
-      </Box>
-      <Box sx={{ flex: 1 }}>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: "4px" }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>
-            {comment.author.email.split("@")[0]}
-          </Typography>
-          <Chip label="Customer update" size="small" sx={{ height: 16, fontSize: 10, bgcolor: "#eff6ff", color: "#1d4ed8" }} />
-          <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>
-            {new Date(comment.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
-          </Typography>
-        </Stack>
-        <Box sx={{ bgcolor: "#eff6ff", borderLeft: "3px solid #1d4ed8", px: "12px", py: "8px", borderRadius: "0 6px 6px 0" }}>
-          <Typography sx={{ fontSize: 13, color: "#1e3a5f", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-            {comment.body}
-          </Typography>
-        </Box>
-      </Box>
+    <Box component="span" sx={{ fontWeight: 600, color: "text.primary" }}>
+      {value}
     </Box>
   )
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
+const ACTION_LABELS: Record<string, string> = {
+  CREATED: "Logged the request",
+  UPDATED: "Updated request",
+  STATUS_UPDATED: "Status changed",
+  CLOSED: "Closed the request",
+  CUSTOMER_UPDATE_ADDED: "Customer update sent",
+}
+
+function describeAuditEvent(
+  action: string,
+  data?: Record<string, unknown> | null,
+): { type: FeedEventType; text: React.ReactNode } {
+  const label = ACTION_LABELS[action] ?? action
+
+  if (action === "STATUS_UPDATED") {
+    const fromRaw = readDataString(data, "from")
+    const toRaw = readDataString(data, "to")
+    const from = fromRaw ? STATUS_LABELS[fromRaw] ?? fromRaw : null
+    const to = toRaw ? STATUS_LABELS[toRaw] ?? toRaw : null
+    return {
+      type: "status",
+      text: (
+        <>
+          {label}
+          {from && to ? <> {bold(from)} → {bold(to)}</> : null}
+        </>
+      ),
+    }
+  }
+
+  if (action === "CREATED") {
+    return { type: "status", text: <>{label}</> }
+  }
+
+  if (action === "UPDATED") {
+    const fields = readDataFields(data)
+    if (fields.length === 1 && fields[0] === "assigneeId") {
+      const assigneeName =
+        readDataString(data, "assignee") ??
+        readDataString(data, "assigneeEmail") ??
+        readDataString(data, "assigneeName")
+      return {
+        type: "assignment",
+        text: assigneeName
+          ? <>Assigned to {bold(assigneeName)}</>
+          : <>Assignee updated</>,
+      }
+    }
+    return {
+      type: "status",
+      text: (
+        <>
+          {label}
+          {fields.length ? <>: {bold(fields.join(", "))}</> : null}
+        </>
+      ),
+    }
+  }
+
+  return { type: "status", text: <>{label}</> }
+}
+
+interface FeedVisual {
+  Icon: React.ComponentType<{ sx?: object }>
+  bg: string
+  fg: string
+}
+
+const FEED_VISUALS: Record<FeedEventType, FeedVisual> = {
+  status: { Icon: PlayArrowIcon, bg: "#e6f1fb", fg: "#185fa5" },
+  comment: { Icon: ChatBubbleOutlineIcon, bg: "#eaf3de", fg: "#3b6d11" },
+  assignment: { Icon: PersonIcon, bg: "#faeeda", fg: "#854f0b" },
+  link: { Icon: LinkIcon, bg: "#fbeaf0", fg: "#993556" },
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inline editable text (spec section 5.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface InlineEditableProps {
+  value: string
+  placeholder?: string
+  multiline?: boolean
+  ariaLabel: string
+  onCommit: (next: string) => void
+  textSx?: object
+}
+
+const InlineEditable = React.memo(function InlineEditable({
+  value,
+  placeholder,
+  multiline = false,
+  ariaLabel,
+  onCommit,
+  textSx,
+}: InlineEditableProps) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [editing, setEditing] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    if (!editing && ref.current && ref.current.innerText !== value) {
+      ref.current.innerText = value
+    }
+  }, [value, editing])
+
+  const handleClick = React.useCallback(() => {
+    if (editing) return
+    setEditing(true)
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.focus()
+      const sel = window.getSelection()
+      if (sel) {
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        sel.removeAllRanges()
+        sel.addRange(range)
+      }
+    })
+  }, [editing])
+
+  const commit = React.useCallback(() => {
+    const el = ref.current
+    const next = (el?.innerText ?? "").trim()
+    if (!next) {
+      if (el) el.innerText = value
+    } else if (next !== value) {
+      onCommit(next)
+    }
+    setEditing(false)
+  }, [value, onCommit])
+
+  const handleKey = React.useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        if (ref.current) ref.current.innerText = value
+        setEditing(false)
+        ref.current?.blur()
+      }
+      if (!multiline && e.key === "Enter") {
+        e.preventDefault()
+        ref.current?.blur()
+      }
+    },
+    [value, multiline]
+  )
+
+  const isEmpty = !value && !editing
+
+  return (
+    <Box
+      ref={ref}
+      role="textbox"
+      aria-label={ariaLabel}
+      contentEditable={editing}
+      suppressContentEditableWarning
+      onClick={handleClick}
+      onBlur={commit}
+      onKeyDown={handleKey}
+      sx={{
+        outline: "none",
+        cursor: editing ? "text" : "pointer",
+        borderRadius: 1,
+        px: 0.75,
+        py: 0.5,
+        whiteSpace: multiline ? "pre-wrap" : "normal",
+        border: "1.5px solid",
+        borderColor: editing ? "primary.main" : "transparent",
+        bgcolor: "transparent",
+        color: isEmpty ? "text.disabled" : "text.primary",
+        "&:hover": editing
+          ? undefined
+          : { bgcolor: "action.hover" },
+        ...textSx,
+      }}
+    >
+      {isEmpty ? placeholder ?? "" : null}
+    </Box>
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Title card (spec section 5.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SRTitleCardProps {
+  subject: string
+  description: string
+  onCommitSubject: (next: string) => void
+  onCommitDescription: (next: string) => void
+}
+
+const SRTitleCard = React.memo(function SRTitleCard({
+  subject,
+  description,
+  onCommitSubject,
+  onCommitDescription,
+}: SRTitleCardProps) {
+  return (
+    <Box sx={{ mb: 2.5 }}>
+      <Typography
+        variant="caption"
+        color="text.tertiary"
+        sx={{ fontWeight: 500, display: "block", mb: 0.5 }}
+      >
+        Subject
+      </Typography>
+      <InlineEditable
+        value={subject}
+        ariaLabel="Service request subject"
+        onCommit={onCommitSubject}
+        textSx={{
+          fontSize: "1.25rem",
+          fontWeight: 500,
+          lineHeight: 1.6,
+          fontFamily: "'Space Grotesk', sans-serif",
+          px: 0,
+          mx: 0,
+        }}
+      />
+
+      <Typography
+        variant="caption"
+        color="text.tertiary"
+        sx={{ fontWeight: 500, display: "block", mt: 1.5, mb: 0.5 }}
+      >
+        Description
+      </Typography>
+      <InlineEditable
+        value={description}
+        placeholder="Add a description"
+        multiline
+        ariaLabel="Service request description"
+        onCommit={onCommitDescription}
+        textSx={{
+          fontSize: "0.8125rem",
+          lineHeight: 1.5,
+          color: "text.secondary",
+          px: 0,
+          mx: 0,
+        }}
+      />
+    </Box>
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tasks section (spec 5.2 — Tasks)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface TaskStatusBadgeProps {
+  status: string
+  onClick: (anchor: HTMLElement) => void
+}
+
+const TaskStatusBadge = React.memo(function TaskStatusBadge({
+  status,
+  onClick,
+}: TaskStatusBadgeProps) {
+  const colours = TASK_STATUS_COLOURS[status] ?? TASK_STATUS_COLOURS.OPEN
+  const label = TASK_STATUS_LABELS[status] ?? status
+  const handleClick = React.useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      e.stopPropagation()
+      onClick(e.currentTarget)
+    },
+    [onClick]
+  )
+  return (
+    <Box
+      component="button"
+      onClick={handleClick}
+      sx={{
+        all: "unset",
+        cursor: "pointer",
+        bgcolor: colours.bg,
+        color: colours.text,
+        fontSize: 10,
+        fontWeight: 500,
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        flexShrink: 0,
+        minWidth: 82,
+        textAlign: "center",
+        display: "inline-flex",
+        justifyContent: "center",
+      }}
+    >
+      {label}
+    </Box>
+  )
+})
+
+interface AssigneeCellProps {
+  assignee: { id: string; email: string } | null | undefined
+  onClick: (anchor: HTMLElement) => void
+}
+
+const AssigneeCell = React.memo(function AssigneeCell({
+  assignee,
+  onClick,
+}: AssigneeCellProps) {
+  const handleClick = React.useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      e.stopPropagation()
+      onClick(e.currentTarget)
+    },
+    [onClick]
+  )
+  return (
+    <Box
+      onClick={handleClick}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.5,
+        flexShrink: 0,
+        cursor: "pointer",
+      }}
+    >
+      {assignee ? (
+        <>
+          <Box
+            sx={{
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              bgcolor: "#eaf3de",
+              color: "#3b6d11",
+              fontSize: 9,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {getInitials(assignee.email)}
+          </Box>
+          <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+            {assignee.email}
+          </Typography>
+        </>
+      ) : (
+        <Typography
+          color="text.tertiary"
+          sx={{ fontSize: 11, fontStyle: "italic" }}
+        >
+          Unassigned
+        </Typography>
+      )}
+    </Box>
+  )
+})
+
+interface TasksSectionContentProps {
+  tasks: LinkedTaskWithAssignee[]
+  users: User[]
+  canManage: boolean
+  onCreate: () => void
+  onSelectTask: (taskId: string) => void
+  onChangeTaskStatus: (taskId: string, nextStatus: string) => void
+  onChangeTaskAssignee: (taskId: string, nextAssigneeId: string) => void
+}
+
+const TasksSectionContent = React.memo(function TasksSectionContent({
+  tasks,
+  users,
+  canManage,
+  onCreate,
+  onSelectTask,
+  onChangeTaskStatus,
+  onChangeTaskAssignee,
+}: TasksSectionContentProps) {
+  const [activePopover, setActivePopover] = React.useState<{
+    taskId: string
+    type: "status" | "assignee"
+    anchor: HTMLElement
+  } | null>(null)
+
+  const handleStatusClick = React.useCallback(
+    (taskId: string) => (anchor: HTMLElement) => {
+      setActivePopover({ taskId, type: "status", anchor })
+    },
+    []
+  )
+
+  const closeStatusPopover = React.useCallback(() => setActivePopover(null), [])
+
+  const handleStatusSelect = React.useCallback(
+    (next: string) => {
+      if (activePopover?.type !== "status") return
+      onChangeTaskStatus(activePopover.taskId, next)
+      setActivePopover(null)
+    },
+    [activePopover, onChangeTaskStatus]
+  )
+
+  const handleAssigneeClick = React.useCallback(
+    (taskId: string) => (anchor: HTMLElement) => {
+      setActivePopover({ taskId, type: "assignee", anchor })
+    },
+    []
+  )
+
+  const closeAssigneePopover = React.useCallback(
+    () => setActivePopover(null),
+    []
+  )
+
+  const handleAssigneeSelect = React.useCallback(
+    (next: string) => {
+      if (activePopover?.type !== "assignee") return
+      onChangeTaskAssignee(activePopover.taskId, next)
+      setActivePopover(null)
+    },
+    [activePopover, onChangeTaskAssignee]
+  )
+
+  const handleRowClick = React.useCallback(
+    (taskId: string) => () => onSelectTask(taskId),
+    [onSelectTask]
+  )
+
+  const assigneeOptions = React.useMemo<PopoverOption[]>(() => {
+    const list: PopoverOption[] = users.map((u) => ({
+      value: u.id,
+      label: u.email,
+      iconBg: "#eaf3de",
+      iconColor: "#3b6d11",
+      icon: (
+        <Box component="span" sx={{ fontSize: 9, fontWeight: 600 }}>
+          {getInitials(u.email)}
+        </Box>
+      ),
+    }))
+    return [
+      {
+        value: "",
+        label: "Unassigned",
+        iconBg: "#f1efe8",
+        iconColor: "#5f5e5a",
+        icon: <PersonIcon sx={{ fontSize: 14 }} />,
+      },
+      ...list,
+    ]
+  }, [users])
+
+  return (
+    <Box>
+      {tasks.map((task) => (
+        <Paper
+          key={task.id}
+          variant="outlined"
+          onClick={handleRowClick(task.id)}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            px: 1.25,
+            py: 0.875,
+            mb: 0.5,
+            borderRadius: 1,
+            cursor: "pointer",
+            "&:hover": { bgcolor: "action.hover" },
+          }}
+        >
+          <Typography
+            sx={{
+              flex: 1,
+              fontSize: 12,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: "text.primary",
+            }}
+          >
+            {task.title}
+          </Typography>
+          <AssigneeCell
+            assignee={task.assignee ?? null}
+            onClick={handleAssigneeClick(task.id)}
+          />
+          <TaskStatusBadge
+            status={task.status}
+            onClick={handleStatusClick(task.id)}
+          />
+        </Paper>
+      ))}
+
+      {canManage ? (
+        <Button
+          variant="text"
+          size="small"
+          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+          onClick={onCreate}
+          sx={{ textTransform: "none", mt: 1 }}
+        >
+          Add task
+        </Button>
+      ) : null}
+
+      <StatusPopover
+        id="task-status-popover"
+        header="Task status"
+        options={TASK_STATUS_OPTIONS}
+        currentValue={
+          activePopover?.type === "status"
+            ? tasks.find((t) => t.id === activePopover.taskId)?.status ?? ""
+            : ""
+        }
+        onSelect={handleStatusSelect}
+        anchorEl={activePopover?.type === "status" ? activePopover.anchor : null}
+        open={activePopover?.type === "status"}
+        onClose={closeStatusPopover}
+      />
+
+      <StatusPopover
+        id="task-assignee-popover"
+        header="Assignee"
+        options={assigneeOptions}
+        currentValue={
+          activePopover?.type === "assignee"
+            ? tasks.find((t) => t.id === activePopover.taskId)?.assigneeId ?? ""
+            : ""
+        }
+        onSelect={handleAssigneeSelect}
+        anchorEl={activePopover?.type === "assignee" ? activePopover.anchor : null}
+        open={activePopover?.type === "assignee"}
+        onClose={closeAssigneePopover}
+      />
+    </Box>
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Linked records section
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface LinkedRecordsContentProps {
+  entities: LinkedEntity[]
+  onAddLink: () => void
+}
+
+function entityDisplayName(type: string): string {
+  const t = type.toLowerCase()
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
+  entities,
+  onAddLink,
+}: LinkedRecordsContentProps) {
+  return (
+    <Box>
+      {entities.length === 0 ? null : (
+        entities.map((entity) => {
+          const visual = LINKED_ENTITY_VISUALS[entityKindFromType(entity.type)]
+          const Icon = visual.Icon
+          return (
+            <Box
+              key={`${entity.type}-${entity.id}`}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                py: 0.625,
+                borderRadius: 1,
+                cursor: "pointer",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 1,
+                  bgcolor: visual.bg,
+                  color: visual.fg,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon sx={{ fontSize: 14 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  sx={{
+                    fontSize: 12,
+                    display: "block",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    color: "text.primary",
+                  }}
+                >
+                  {entityDisplayName(entity.type)}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: 10,
+                    color: "var(--color-text-tertiary)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {entity.id}
+                </Typography>
+              </Box>
+            </Box>
+          )
+        })
+      )}
+      <Button
+        variant="text"
+        size="small"
+        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+        onClick={onAddLink}
+        sx={{ textTransform: "none", mt: 0.25 }}
+      >
+        Link record
+      </Button>
+    </Box>
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity section (spec section 6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface FeedItemProps {
+  event: FeedEvent
+  isLast: boolean
+}
+
+const FeedItem = React.memo(function FeedItem({ event, isLast }: FeedItemProps) {
+  const visual = FEED_VISUALS[event.type]
+  const Icon = visual.Icon
+
+  return (
+    <Box sx={{ display: "flex", gap: 1.5, py: 1, position: "relative" }}>
+      {!isLast ? (
+        <Box
+          sx={{
+            position: "absolute",
+            left: 12,
+            top: 28,
+            bottom: -8,
+            width: "1px",
+            bgcolor: "divider",
+          }}
+        />
+      ) : null}
+      <Box
+        sx={{
+          width: 24,
+          height: 24,
+          borderRadius: "50%",
+          bgcolor: visual.bg,
+          color: visual.fg,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          zIndex: 1,
+        }}
+      >
+        <Icon sx={{ fontSize: 14 }} />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.primary" }}>
+            {event.actor}
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+            {event.time}
+          </Typography>
+        </Stack>
+        <Typography sx={{ fontSize: 12, color: "text.secondary", lineHeight: 1.5 }}>
+          {event.text}
+        </Typography>
+        {event.note && event.note.trim().length > 0 ? (
+          <Box
+            sx={{
+              borderLeft: "2px solid",
+              borderColor: "success.light",
+              pl: 1,
+              py: 0.5,
+              bgcolor: "action.hover",
+              borderRadius: "0 4px 4px 0",
+              mt: 0.5,
+              fontSize: 12,
+            }}
+          >
+            <Typography sx={{ fontSize: 12, color: "text.primary", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+              {event.note}
+            </Typography>
+          </Box>
+        ) : null}
+      </Box>
+    </Box>
+  )
+})
+
+interface ActivityContentProps {
+  events: FeedEvent[]
+  activeFilter: ActivityFilter
+  onFilterChange: (filter: ActivityFilter) => void
+  noteValue: string
+  onNoteChange: (value: string) => void
+  savingNote: boolean
+  onPostNote: () => void
+}
+
+const ActivityContent = React.memo(function ActivityContent({
+  events,
+  activeFilter,
+  onFilterChange,
+  noteValue,
+  onNoteChange,
+  savingNote,
+  onPostNote,
+}: ActivityContentProps) {
+  const handleFilterClick = React.useCallback(
+    (filter: ActivityFilter) => () => onFilterChange(filter),
+    [onFilterChange]
+  )
+
+  const handleNoteFieldChange = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => onNoteChange(e.target.value),
+    [onNoteChange]
+  )
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: "wrap" }}>
+        {FILTER_OPTIONS.map((opt) => {
+          const isActive = activeFilter === opt.value
+          return (
+            <Chip
+              key={opt.value}
+              size="small"
+              label={opt.label}
+              onClick={handleFilterClick(opt.value)}
+              variant={isActive ? "filled" : "outlined"}
+              color={isActive ? "primary" : "default"}
+            />
+          )
+        })}
+      </Stack>
+
+      {activeFilter === "comment" ? (
+        <Paper variant="outlined" sx={{ overflow: "hidden", mb: 1.75 }}>
+          <TextField
+            multiline
+            minRows={2}
+            fullWidth
+            placeholder="Add a work note..."
+            variant="outlined"
+            size="small"
+            value={noteValue}
+            onChange={handleNoteFieldChange}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                "& fieldset": { border: 0 },
+                "&:hover fieldset": { border: 0 },
+                "&.Mui-focused fieldset": { border: 0 },
+              },
+            }}
+          />
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "flex-end",
+              p: 0.75,
+              borderTop: "0.5px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Button
+              variant="contained"
+              size="small"
+              disabled={!noteValue.trim() || savingNote}
+              onClick={onPostNote}
+            >
+              Post note
+            </Button>
+          </Box>
+        </Paper>
+      ) : null}
+
+      {events.length === 0 ? (
+        <Typography
+          variant="caption"
+          sx={{ color: "var(--color-text-tertiary)" }}
+        >
+          No activity to show
+        </Typography>
+      ) : (
+        events.map((event, idx) => (
+          <FeedItem key={event.id} event={event} isLast={idx === events.length - 1} />
+        ))
+      )}
+    </Box>
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attachments section (spec 7.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface AttachmentsContentProps {
+  attachments: Attachment[]
+  onAttach: () => void
+  onDownload: (attachment: Attachment) => void
+}
+
+const AttachmentsContent = React.memo(function AttachmentsContent({
+  attachments,
+  onAttach,
+  onDownload,
+}: AttachmentsContentProps) {
+  const handleDownload = React.useCallback(
+    (attachment: Attachment) => () => onDownload(attachment),
+    [onDownload]
+  )
+
+  // TODO: wire attachments API
+  return (
+    <Box>
+      {attachments.map((attachment) => {
+        const isImage = attachment.mimeType.startsWith("image/")
+        const Icon = isImage ? ImageIcon : DescriptionIcon
+        return (
+          <Box
+            key={attachment.id}
+            onClick={handleDownload(attachment)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              py: 0.625,
+              borderRadius: 1,
+              cursor: "pointer",
+              "&:hover": { bgcolor: "action.hover" },
+            }}
+          >
+            <Box
+              sx={{
+                width: 26,
+                height: 26,
+                borderRadius: 1,
+                bgcolor: "action.hover",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Icon sx={{ fontSize: 14, color: "text.secondary" }} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  display: "block",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {attachment.fileName}
+              </Typography>
+              <Typography sx={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
+                {formatFileSize(attachment.fileSize)} · {new Date(attachment.createdAt).toLocaleDateString("en-GB")}
+              </Typography>
+            </Box>
+            <FileDownloadIcon sx={{ fontSize: 12, color: "var(--color-text-tertiary)" }} />
+          </Box>
+        )
+      })}
+      <Button
+        variant="text"
+        size="small"
+        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+        onClick={onAttach}
+        sx={{ textTransform: "none", mt: 0.25 }}
+      >
+        Attach file
+      </Button>
+    </Box>
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ServiceRequestDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { setRecordLabel } = useBreadcrumb()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
+  const canManage = hasAnyRole([
+    ...ORG_SUPER_ROLES,
+    ROLES.SERVICE_MANAGER,
+    ROLES.SERVICE_DESK_ANALYST,
+  ])
 
-  const [activeTab, setActiveTab] = React.useState(0)
+  const activityParam = searchParams.get("activity")
+  const activeFilter: ActivityFilter = React.useMemo(() => {
+    if (activityParam && (FILTER_VALUES as readonly string[]).includes(activityParam)) {
+      return activityParam as ActivityFilter
+    }
+    return "all"
+  }, [activityParam])
+
+  const handleFilterChange = React.useCallback(
+    (filter: ActivityFilter) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (filter === "all") next.delete("activity")
+          else next.set("activity", filter)
+          return next
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
+
   const [error, setError] = React.useState("")
-  const [moreAnchor, setMoreAnchor] = React.useState<null | HTMLElement>(null)
   const [taskOpen, setTaskOpen] = React.useState(false)
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
-
-  // Transition
-  const [transitionTarget, setTransitionTarget] = React.useState<string | null>(null)
-  const [transitionComment, setTransitionComment] = React.useState("")
-  const [closureSummary, setClosureSummary] = React.useState("")
-  const [savingTransition, setSavingTransition] = React.useState(false)
-
-  // Properties edit
-  const [editingProperties, setEditingProperties] = React.useState(false)
-  const [editAssigneeId, setEditAssigneeId] = React.useState("")
-  const [editPriority, setEditPriority] = React.useState("")
-  const [savingProperties, setSavingProperties] = React.useState(false)
-
-  // Comments
-  const [noteBody, setNoteBody] = React.useState("")
-  const [customerBody, setCustomerBody] = React.useState("")
+  const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
-  const [savingCustomer, setSavingCustomer] = React.useState(false)
-  const [activeInput, setActiveInput] = React.useState<"note" | "customer" | null>(null)
+  const [transitionTarget, setTransitionTarget] = React.useState<Transition | null>(null)
+  const [linkCopied, setLinkCopied] = React.useState(false)
+  const [tasksOpen, setTasksOpen] = React.useState(true)
+  const [activityOpen, setActivityOpen] = React.useState(true)
 
-  // ── Queries ───────────────────────────────────────────────────────────────
+  // ── Queries (preserved exactly) ────────────────────────────────────────────
+
   const { data: sr, isLoading } = useQuery({
     queryKey: ["sr-detail", id],
     queryFn: async () => (await api.get<SR>(`/service-requests/${id}`)).data,
-    enabled: !!id
+    enabled: !!id,
   })
 
   const { data: linkedTasks } = useQuery({
     queryKey: ["linked-tasks-sr", id],
-    queryFn: async () => (await api.get<LinkedTask[]>("/tasks", { params: { linkedEntityType: "ServiceRequest", linkedEntityId: id } })).data,
-    enabled: !!id
+    queryFn: async () =>
+      (
+        await api.get<LinkedTaskWithAssignee[]>("/tasks", {
+          params: { linkedEntityType: "ServiceRequest", linkedEntityId: id },
+        })
+      ).data,
+    enabled: !!id,
   })
 
   const { data: workNotes } = useQuery({
     queryKey: ["work-notes-sr", id],
-    queryFn: async () => (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/work-notes`)).data,
-    enabled: !!id
+    queryFn: async () =>
+      (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/work-notes`)).data,
+    enabled: !!id,
   })
 
   const { data: customerUpdates } = useQuery({
     queryKey: ["customer-updates-sr", id],
-    queryFn: async () => (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/customer-updates`)).data,
-    enabled: !!id
+    queryFn: async () =>
+      (await api.get<SRComment[]>(`/comments/ServiceRequest/${id}/customer-updates`)).data,
+    enabled: !!id,
   })
 
   const { data: auditEvents } = useQuery({
     queryKey: ["audit-sr", id],
-    queryFn: async () => (await api.get<AuditEvent[]>(`/audit-events/entity/ServiceRequest/${id}`)).data,
-    enabled: !!id
+    queryFn: async () =>
+      (await api.get<AuditEvent[]>(`/audit-events/entity/ServiceRequest/${id}`)).data,
+    enabled: !!id,
   })
 
-  const { data: users } = useQuery({
+  const { data: users = [] } = useQuery({
     queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data
+    queryFn: async () => (await api.get<User[]>("/users")).data,
   })
 
-  React.useEffect(() => {
-    if (sr) {
-      setRecordLabel(sr.reference)
-      setClosureSummary(sr.closureSummary ?? "")
-      setEditAssigneeId(sr.assignee?.id ?? "")
-      setEditPriority(sr.priority)
-    }
-  }, [sr]) // eslint-disable-line
+  const attachments: Attachment[] = React.useMemo(() => [], [])
 
-  // ── Build unified timeline ────────────────────────────────────────────────
-  const timeline = React.useMemo((): TimelineItem[] => {
-    const items: TimelineItem[] = [
-      ...(auditEvents ?? []).map(e => ({ kind: "audit" as const, event: e })),
-      ...(workNotes ?? []).map(c => ({ kind: "work_note" as const, comment: c })),
-      ...(customerUpdates ?? []).map(c => ({ kind: "customer_update" as const, comment: c }))
-    ]
-    return items.sort((a, b) => new Date(getTimestamp(b)).getTime() - new Date(getTimestamp(a)).getTime())
-  }, [auditEvents, workNotes, customerUpdates])
+  // ── Mutations (preserved exactly) ──────────────────────────────────────────
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  async function handleTransition() {
-    if (!transitionTarget || !sr) return
-    setSavingTransition(true); setError("")
+  const handleFieldChange = React.useCallback(
+    async (field: EditableField, value: string) => {
+      if (!sr) return
+      setError("")
+      try {
+        await api.put(`/service-requests/${id}`, { [field]: value })
+        qc.invalidateQueries({ queryKey: ["sr-detail", id] })
+        qc.invalidateQueries({ queryKey: ["audit-sr", id] })
+        qc.invalidateQueries({ queryKey: ["tickets"] })
+      } catch (e: unknown) {
+        setError(getApiErrorMessage(e, "Failed to save service request"))
+      }
+    },
+    [id, sr, qc]
+  )
+
+  const handleAddNote = React.useCallback(async () => {
+    if (!workNoteBody.trim()) return
+    setSavingNote(true)
     try {
-      const needsClosure = transitionTarget === "COMPLETED" || transitionTarget === "CLOSED"
-      await api.post(`/service-requests/${id}/status`, {
-        status: transitionTarget,
-        closureSummary: needsClosure ? closureSummary : undefined
+      await api.post("/comments/work-note", {
+        entityType: "ServiceRequest",
+        entityId: id,
+        body: workNoteBody.trim(),
+        serviceRequestId: id,
       })
-      if (transitionComment.trim()) {
+      setWorkNoteBody("")
+      qc.invalidateQueries({ queryKey: ["work-notes-sr", id] })
+      qc.invalidateQueries({ queryKey: ["audit-sr", id] })
+      if (activeFilter !== "all") {
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev)
+            next.delete("activity")
+            return next
+          },
+          { replace: true }
+        )
+      }
+    } finally {
+      setSavingNote(false)
+    }
+  }, [activeFilter, id, qc, setSearchParams, workNoteBody])
+
+  const statusMutation = useMutation({
+    mutationFn: async ({
+      to,
+      data,
+    }: {
+      to: string
+      data?: Record<string, string>
+    }) => {
+      const assigneeId = data?.assigneeId?.trim()
+      if (assigneeId) {
+        await api.put(`/service-requests/${id}`, { assigneeId })
+      }
+
+      const closureSummary = data?.resolution?.trim()
+      const payload: { status: string; closureSummary?: string } = { status: to }
+      if (closureSummary) {
+        payload.closureSummary = closureSummary
+      }
+      await api.post(`/service-requests/${id}/status`, payload)
+
+      const note = (data?.note ?? data?.reason ?? "").trim()
+      if (note) {
         await api.post("/comments/work-note", {
-          entityType: "ServiceRequest", entityId: id, body: transitionComment.trim(), serviceRequestId: id
+          entityType: "ServiceRequest",
+          entityId: id,
+          body: note,
+          serviceRequestId: id,
         })
       }
-      setTransitionTarget(null); setTransitionComment("")
+    },
+    onSuccess: () => {
+      setError("")
       qc.invalidateQueries({ queryKey: ["sr-detail", id] })
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
       qc.invalidateQueries({ queryKey: ["work-notes-sr", id] })
       qc.invalidateQueries({ queryKey: ["tickets"] })
-    } catch (e: unknown) {
-      setError(getApiErrorMessage(e, "Failed"))
-    } finally { setSavingTransition(false) }
-  }
+    },
+    onError: (e: unknown) => {
+      setError(getApiErrorMessage(e, "Failed to update status"))
+    },
+  })
 
-  async function handleSaveProperties() {
-    setSavingProperties(true); setError("")
-    try {
-      await api.put(`/service-requests/${id}`, {
-        assigneeId: editAssigneeId || undefined, priority: editPriority
-      })
-      setEditingProperties(false)
-      qc.invalidateQueries({ queryKey: ["sr-detail", id] })
-      qc.invalidateQueries({ queryKey: ["audit-sr", id] })
-    } catch (e: unknown) {
-      setError(getApiErrorMessage(e, "Failed to save"))
-    } finally { setSavingProperties(false) }
-  }
+  const handleStatusChange = React.useCallback(
+    (to: string) => {
+      if (!sr) return
+      const transition = serviceRequestTransitions.find(
+        (t) => t.from === sr.status && t.to === to
+      )
+      if (transition?.requiresDialog) {
+        setTransitionTarget(transition)
+      } else {
+        statusMutation.mutate({ to })
+      }
+    },
+    [sr, statusMutation]
+  )
 
-  async function handleAddNote() {
-    if (!noteBody.trim()) return
-    setSavingNote(true)
-    try {
-      await api.post("/comments/work-note", {
-        entityType: "ServiceRequest", entityId: id, body: noteBody.trim(), serviceRequestId: id
-      })
-      setNoteBody(""); setActiveInput(null)
-      qc.invalidateQueries({ queryKey: ["work-notes-sr", id] })
-      qc.invalidateQueries({ queryKey: ["audit-sr", id] })
-    } finally { setSavingNote(false) }
-  }
+  const handleTransitionConfirm = React.useCallback(
+    (data: Record<string, string>) => {
+      if (!transitionTarget) return
+      statusMutation.mutate({ to: transitionTarget.to, data })
+      setTransitionTarget(null)
+    },
+    [transitionTarget, statusMutation]
+  )
 
-  async function handleCustomerUpdate() {
-    if (!customerBody.trim()) return
-    setSavingCustomer(true)
-    try {
-      await api.post("/comments/customer-update", {
-        entityType: "ServiceRequest", entityId: id, body: customerBody.trim(), serviceRequestId: id
-      })
-      setCustomerBody(""); setActiveInput(null)
+  const handleTransitionClose = React.useCallback(() => {
+    setTransitionTarget(null)
+  }, [])
+
+  // Customer-update mutation preserved (not surfaced in the new compose box).
+  const customerUpdateMutation = useMutation({
+    mutationFn: async (body: string) =>
+      api.post("/comments/customer-update", {
+        entityType: "ServiceRequest",
+        entityId: id,
+        body: body.trim(),
+        serviceRequestId: id,
+      }),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["customer-updates-sr", id] })
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
-    } finally { setSavingCustomer(false) }
-  }
+    },
+  })
+  void customerUpdateMutation
+
+  const patchLinkedTask = React.useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (taskId: string, patch: Record<string, any>) => {
+      await api.put(`/tasks/${taskId}`, patch)
+      qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })
+      qc.invalidateQueries({ queryKey: ["tasks"] })
+    },
+    [id, qc]
+  )
+
+  const updateLinkedTaskStatus = React.useCallback(
+    async (taskId: string, status: string) => {
+      await api.post(`/tasks/${taskId}/status`, { status })
+      qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })
+      qc.invalidateQueries({ queryKey: ["tasks"] })
+    },
+    [id, qc]
+  )
+
+  const updateLinkedTaskAssignee = React.useCallback(
+    async (taskId: string, assigneeId: string) => {
+      await api.put(`/tasks/${taskId}`, { assigneeId: assigneeId || null })
+      qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })
+      qc.invalidateQueries({ queryKey: ["tasks"] })
+    },
+    [id, qc]
+  )
+
+  const handleOpenCreateTask = React.useCallback(() => setTaskOpen(true), [])
+  const handleCloseCreateTask = React.useCallback(() => setTaskOpen(false), [])
+  const handleSelectTask = React.useCallback(
+    (taskId: string) => setQuickTaskId(taskId),
+    []
+  )
+  const handleCloseQuickTask = React.useCallback(() => setQuickTaskId(null), [])
+  const handleCreateTaskSuccess = React.useCallback(
+    () => qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] }),
+    [id, qc]
+  )
+
+  const handleOpenFullTask = React.useCallback(
+    (taskId: string) => {
+      if (!sr) return
+      navigate(`/tasks/${taskId}`, {
+        state: { fromSR: sr.id, fromSRRef: sr.reference },
+      })
+    },
+    [sr, navigate]
+  )
+
+  const handleAttach = React.useCallback(() => {
+    // TODO: wire attachments API
+  }, [])
+  const handleDownloadAttachment = React.useCallback((_attachment: Attachment) => {
+    // TODO: wire attachments API
+  }, [])
+
+  const handleAddLink = React.useCallback(() => {
+    // TODO: link entity dialog
+  }, [])
+
+  const handleBack = React.useCallback(() => navigate(-1), [navigate])
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+
+  const linkedEntities = React.useMemo<LinkedEntity[]>(() => [], [])
+
+  const allFeedEvents = React.useMemo<FeedEvent[]>(() => {
+    const audit: FeedEvent[] = (auditEvents ?? []).map((e) => {
+      const { type, text } = describeAuditEvent(e.action, e.data)
+      const transitionComment =
+        e.action === "STATUS_UPDATED"
+          ? readDataString(e.data, "comment") ?? readDataString(e.data, "closureSummary")
+          : null
+      return {
+        id: `audit-${e.id}`,
+        type,
+        actor: e.actorEmail ?? "System",
+        text,
+        note: transitionComment ?? undefined,
+        time: formatDateTime(e.createdAt),
+        createdAt: e.createdAt,
+      }
+    })
+    const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
+      id: `note-${n.id}`,
+      type: "comment",
+      actor: n.author.email,
+      text: <>added a work note</>,
+      note: n.body,
+      time: formatDateTime(n.createdAt),
+      createdAt: n.createdAt,
+    }))
+    const updates: FeedEvent[] = (customerUpdates ?? []).map((c) => ({
+      id: `cu-${c.id}`,
+      type: "comment",
+      actor: c.author.email,
+      text: <>sent a customer update</>,
+      note: c.body,
+      time: formatDateTime(c.createdAt),
+      createdAt: c.createdAt,
+    }))
+    return [...audit, ...notes, ...updates].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+  }, [auditEvents, workNotes, customerUpdates])
+
+  const visibleFeedEvents = React.useMemo<FeedEvent[]>(() => {
+    if (activeFilter === "all") return allFeedEvents
+    return allFeedEvents.filter((e) => e.type === activeFilter)
+  }, [allFeedEvents, activeFilter])
+
+  const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const list: PopoverOption[] = users.map((u) => ({
+      value: u.id,
+      label: u.email,
+      iconBg: "#eaf3de",
+      iconColor: "#3b6d11",
+      icon: <PersonIcon sx={{ fontSize: 14 }} />,
+    }))
+    return [
+      {
+        value: "",
+        label: "Unassigned",
+        iconBg: "#f1efe8",
+        iconColor: "#5f5e5a",
+        icon: <PersonIcon sx={{ fontSize: 14 }} />,
+      },
+      ...list,
+    ]
+  }, [users])
+
+  // ── Title commit handlers ──────────────────────────────────────────────────
+
+  const handleCommitSubject = React.useCallback(
+    (next: string) => handleFieldChange("subject", next),
+    [handleFieldChange]
+  )
+  const handleCommitDescription = React.useCallback(
+    (next: string) => handleFieldChange("description", next),
+    [handleFieldChange]
+  )
+
+  // ── Field-popover handlers ─────────────────────────────────────────────────
+
+  const handleSelectPriority = React.useCallback(
+    (v: string) => handleFieldChange("priority", v),
+    [handleFieldChange]
+  )
+  const handleSelectAssignee = React.useCallback(
+    (v: string) => handleFieldChange("assigneeId", v),
+    [handleFieldChange]
+  )
+
+  // ── More menu ──────────────────────────────────────────────────────────────
+
+  const handleCopyLink = React.useCallback(() => {
+    const href = window.location.href
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(href).then(() => setLinkCopied(true))
+    } else {
+      setLinkCopied(true)
+    }
+  }, [])
+
+  const handleCloseRequest = React.useCallback(() => {
+    if (!sr) return
+    handleStatusChange("CLOSED")
+  }, [sr, handleStatusChange])
+
+  const handleCancelRequest = React.useCallback(() => {
+    if (!sr) return
+    handleStatusChange("CANCELLED")
+  }, [sr, handleStatusChange])
+
+  const moreMenuItems = React.useMemo<MoreMenuItem[]>(
+    () => [
+      {
+        label: "Copy link",
+        icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
+        onClick: handleCopyLink,
+      },
+      {
+        label: "Close request",
+        icon: <CloseIcon sx={{ fontSize: 14 }} />,
+        onClick: handleCloseRequest,
+      },
+      {
+        label: "Cancel request",
+        icon: <CancelOutlinedIcon sx={{ fontSize: 14 }} />,
+        onClick: handleCancelRequest,
+        danger: true,
+      },
+    ],
+    [handleCopyLink, handleCloseRequest, handleCancelRequest]
+  )
+
+  const handleLinkSnackbarClose = React.useCallback(() => setLinkCopied(false), [])
+
+  // ── Detail fields ──────────────────────────────────────────────────────────
+
+  const detailFields = React.useMemo<DetailField[]>(() => {
+    if (!sr) return []
+    const priorityColours = PRIORITY_COLOURS[sr.priority] ?? PRIORITY_COLOURS.medium
+    const valueWrapperSx = {
+      width: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      textAlign: "right",
+      gap: 0.5,
+    } as const
+    const fields: DetailField[] = [
+      {
+        key: "type",
+        label: "Type",
+        editable: false,
+        value: (
+          <Box sx={valueWrapperSx}>
+            <Typography variant="body2" color="text.secondary">
+              Service Request
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        key: "client",
+        label: "Client",
+        editable: false,
+        value: (
+          <Box sx={valueWrapperSx}>
+            <Typography variant="body2" color="text.secondary">
+              {sr.client.name}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        key: "priority",
+        label: "Priority",
+        editable: true,
+        currentValue: sr.priority,
+        popoverOptions: PRIORITY_OPTIONS,
+        onSelect: handleSelectPriority,
+        value: (
+          <Box sx={valueWrapperSx}>
+            <Chip
+              size="small"
+              label={sr.priority.charAt(0).toUpperCase() + sr.priority.slice(1)}
+              sx={{
+                bgcolor: priorityColours.bg,
+                color: priorityColours.text,
+                fontWeight: 600,
+                fontSize: 11,
+                height: 20,
+              }}
+            />
+          </Box>
+        ),
+      },
+      {
+        key: "assigneeId",
+        label: "Assignee",
+        editable: true,
+        currentValue: sr.assignee?.id ?? "",
+        popoverOptions: usersOptions,
+        onSelect: handleSelectAssignee,
+        value: (
+          <Box sx={valueWrapperSx}>
+            {sr.assignee ? (
+              <Typography sx={{ fontSize: 12 }}>{sr.assignee.email}</Typography>
+            ) : (
+              <Typography
+                sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}
+              >
+                Unassigned
+              </Typography>
+            )}
+          </Box>
+        ),
+      },
+    ]
+
+    if (sr.closureSummary) {
+      fields.push({
+        key: "closureSummary",
+        label: "Closure",
+        editable: false,
+        value: (
+          <Box sx={valueWrapperSx}>
+            <Typography sx={{ fontSize: 12, color: "#3b6d11", whiteSpace: "pre-wrap" }}>
+              {sr.closureSummary}
+            </Typography>
+          </Box>
+        ),
+      })
+    }
+
+    return fields
+  }, [sr, usersOptions, handleSelectPriority, handleSelectAssignee])
+
+  // ── Centre sections ────────────────────────────────────────────────────────
+
+  const handleToggleTasks = React.useCallback(() => setTasksOpen((o) => !o), [])
+  const handleToggleActivity = React.useCallback(() => setActivityOpen((o) => !o), [])
+
+  const sections = React.useMemo<CentreSection[]>(() => {
+    if (!sr) return []
+    return [
+      {
+        id: "tasks",
+        title: "",
+        flush: true,
+        content: (
+          <Box sx={{ mb: 0 }}>
+            <Divider sx={{ my: 2.5 }} />
+            <Box
+              onClick={handleToggleTasks}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                cursor: "pointer",
+                mb: 1,
+                userSelect: "none",
+                width: "fit-content",
+              }}
+            >
+              <ExpandMoreIcon
+                sx={{
+                  fontSize: 16,
+                  color: "text.secondary",
+                  transform: tasksOpen ? "none" : "rotate(-90deg)",
+                  transition: "transform .15s",
+                }}
+              />
+              <Typography variant="caption" fontWeight={500} color="text.secondary">
+                Tasks
+              </Typography>
+            </Box>
+            {tasksOpen && (
+              <Box>
+                <TasksSectionContent
+                  tasks={linkedTasks ?? []}
+                  users={users}
+                  canManage={canManage}
+                  onCreate={handleOpenCreateTask}
+                  onSelectTask={handleSelectTask}
+                  onChangeTaskStatus={updateLinkedTaskStatus}
+                  onChangeTaskAssignee={updateLinkedTaskAssignee}
+                />
+              </Box>
+            )}
+          </Box>
+        ),
+      },
+      {
+        id: "activity",
+        title: "",
+        flush: true,
+        content: (
+          <Box sx={{ mb: 0 }}>
+            <Divider sx={{ my: 2.5 }} />
+            <Box
+              onClick={handleToggleActivity}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                cursor: "pointer",
+                mb: 1.5,
+                userSelect: "none",
+              }}
+            >
+              <ExpandMoreIcon
+                sx={{
+                  fontSize: 16,
+                  color: "text.secondary",
+                  transform: activityOpen ? "none" : "rotate(-90deg)",
+                  transition: "transform .15s",
+                }}
+              />
+              <Typography variant="caption" fontWeight={500} color="text.secondary">
+                Activity
+              </Typography>
+            </Box>
+            {activityOpen && (
+              <Box>
+                <ActivityContent
+                  events={visibleFeedEvents}
+                  activeFilter={activeFilter}
+                  onFilterChange={handleFilterChange}
+                  noteValue={workNoteBody}
+                  onNoteChange={setWorkNoteBody}
+                  savingNote={savingNote}
+                  onPostNote={handleAddNote}
+                />
+              </Box>
+            )}
+          </Box>
+        ),
+      },
+    ]
+  }, [
+    sr,
+    linkedTasks,
+    users,
+    canManage,
+    handleOpenCreateTask,
+    handleSelectTask,
+    updateLinkedTaskStatus,
+    updateLinkedTaskAssignee,
+    visibleFeedEvents,
+    activeFilter,
+    handleFilterChange,
+    workNoteBody,
+    savingNote,
+    handleAddNote,
+    tasksOpen,
+    activityOpen,
+    handleToggleTasks,
+    handleToggleActivity,
+  ])
+
+  // ── Right sections ─────────────────────────────────────────────────────────
+
+  const submittedByEmail = React.useMemo(() => {
+    if (!sr?.createdById) return null
+    const createdById = sr.createdById
+    const match = users.find((u) => u.id === createdById)
+    return match?.email ?? null
+  }, [sr, users])
+
+  const metadata = React.useMemo<RecordMetadata | undefined>(() => {
+    if (!sr) return undefined
+    return {
+      submittedBy: submittedByEmail,
+      createdAt: sr.createdAt,
+      updatedAt: sr.updatedAt,
+    }
+  }, [sr, submittedByEmail])
+
+  const rightSections = React.useMemo<RightSection[]>(() => {
+    return [
+      {
+        id: "attachments",
+        title: "Attachments",
+        icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
+        defaultOpen: false,
+        content: (
+          <AttachmentsContent
+            attachments={attachments}
+            onAttach={handleAttach}
+            onDownload={handleDownloadAttachment}
+          />
+        ),
+      },
+      {
+        id: "linked",
+        title: "Linked records",
+        icon: <LinkIcon sx={{ fontSize: 12 }} />,
+        defaultOpen: false,
+        content: (
+          <LinkedRecordsContent entities={linkedEntities} onAddLink={handleAddLink} />
+        ),
+      },
+    ]
+  }, [
+    attachments,
+    handleAttach,
+    handleDownloadAttachment,
+    linkedEntities,
+    handleAddLink,
+  ])
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (isLoading) return <LoadingState />
   if (!sr) return <ErrorState title="Service request not found" />
 
-  const nextStatuses = STATUS_FLOW[sr.status] ?? []
-  const needsClosure = transitionTarget === "COMPLETED" || transitionTarget === "CLOSED"
-  const closureRequired = needsClosure && !closureSummary.trim()
-
-  async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
-    await api.put(`/tasks/${taskId}`, patch)
-    qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })
-    qc.invalidateQueries({ queryKey: ["tasks"] })
-  }
-
-  async function updateLinkedTaskStatus(taskId: string, status: string) {
-    await api.post(`/tasks/${taskId}/status`, { status })
-    qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })
-    qc.invalidateQueries({ queryKey: ["tasks"] })
-  }
-
-  const primary = primaryTransition("SR", sr.status)
-  const canCancel = canManage && nextStatuses.includes("CANCELLED")
-  const secondaryTransitions = nextStatuses.filter(s => s !== primary?.target && s !== "CANCELLED")
-
-  const headerActions = canManage ? (
-    <>
-      {canCancel ? (
-        <Button size="small" color="error" variant="outlined"
-          onClick={() => setTransitionTarget("CANCELLED")}
-          sx={{ fontSize: 12 }}
-        >
-          Cancel request
-        </Button>
-      ) : null}
-      {secondaryTransitions.length > 0 ? (
-        <>
-          <IconButton
-            size="small"
-            onClick={(e) => setMoreAnchor(e.currentTarget)}
-            sx={{ border: "1px solid #e2e8f0", borderRadius: 1, width: 32, height: 32 }}
-            aria-label="More status transitions"
-          >
-            <MoreHorizIcon sx={{ fontSize: 18, color: "#475569" }} />
-          </IconButton>
-          <Menu
-            anchorEl={moreAnchor}
-            open={Boolean(moreAnchor)}
-            onClose={() => setMoreAnchor(null)}
-          >
-            {secondaryTransitions.map(s => (
-              <MenuItem
-                key={s} dense
-                onClick={() => { setTransitionTarget(s); setMoreAnchor(null) }}
-              >
-                {STATUS_LABELS[s] ?? s}
-              </MenuItem>
-            ))}
-          </Menu>
-        </>
-      ) : null}
-      {primary ? (
-        <Button
-          size="small" variant="contained"
-          onClick={() => setTransitionTarget(primary.target)}
-          sx={{ fontSize: 12 }}
-        >
-          {primary.label}
-        </Button>
-      ) : null}
-    </>
-  ) : null
-
-  const metaParts: React.ReactNode[] = []
-  metaParts.push(sr.client.name)
-  metaParts.push(<>opened {new Date(sr.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</>)
-  metaParts.push(sr.assignee ? `assigned to ${sr.assignee.email.split("@")[0]}` : "Unassigned")
-
   return (
-    <Box>
-      <TicketHeaderCard
-        kind="SR"
-        reference={sr.reference}
-        status={sr.status}
-        statusLabel={STATUS_LABELS[sr.status] ?? sr.status}
-        priority={sr.priority}
-        title={sr.subject}
-        actions={headerActions}
-        meta={metaParts.map((m, i) => (
-          <React.Fragment key={i}>{i > 0 ? <span style={{ color: "#cbd5e1", margin: "0 6px" }}>·</span> : null}{m}</React.Fragment>
-        ))}
-        workflow={
-          <WorkflowStrip
-            stages={STATUS_ALL.map(s => ({ id: s, label: STATUS_LABELS[s], description: STATUS_DESCRIPTIONS[s] }))}
-            currentStage={sr.status}
-            mb={0}
-            specialStageColors={{ COMPLETED: "#14532d", CLOSED: "#14532d" }}
+    <>
+      {error ? (
+        <Box sx={{ px: 3, pt: 2 }}>
+          <Alert severity="error" onClose={() => setError("")}>
+            {error}
+          </Alert>
+        </Box>
+      ) : null}
+
+      <RecordDetailShell
+        backLabel="Back"
+        onBack={handleBack}
+        recordRef={sr.reference}
+        typeBadge={SR_TYPE_BADGE}
+        currentStatus={sr.status}
+        statusConfig={SR_STATUS_CONFIG}
+        onStatusChange={handleStatusChange}
+        moreMenuItems={moreMenuItems}
+        titleCard={
+          <SRTitleCard
+            subject={sr.subject}
+            description={sr.description}
+            onCommitSubject={handleCommitSubject}
+            onCommitDescription={handleCommitDescription}
           />
         }
-        description={sr.description}
+        sections={sections}
+        detailFields={detailFields}
+        metadata={metadata}
+        rightSections={rightSections}
       />
 
-      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-
-      {/* ── Two-column layout: conversation (wide left) + properties (280px right) ── */}
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 280px" }, gap: 3, alignItems: "start" }}>
-
-        {/* ── Left column ─────────────────────────────────────────────────── */}
-        <Stack spacing={2}>
-          {/* Activity */}
-          <Card>
-            <Box sx={{ borderBottom: "1px solid #e2e8f0" }}>
-              <Tabs value={activeTab} onChange={(_, v) => { setActiveTab(v); setActiveInput(null); setNoteBody(""); setCustomerBody("") }}
-                sx={{ px: 2, minHeight: 44 }} textColor="inherit"
-                TabIndicatorProps={{ style: { backgroundColor: "#1d4ed8" } }}>
-                <Tab label="Activity" icon={<Badge count={timeline.length} />} iconPosition="end" sx={{ fontSize: 13, minHeight: 44 }} />
-                <Tab label="Work notes" icon={<Badge count={(workNotes ?? []).length} />} iconPosition="end" sx={{ fontSize: 13, minHeight: 44 }} />
-                <Tab label="Customer updates" icon={<Badge count={(customerUpdates ?? []).length} />} iconPosition="end" sx={{ fontSize: 13, minHeight: 44 }} />
-              </Tabs>
-            </Box>
-            <CardContent>
-
-              {/* ── Tab 0: Activity — merged timeline, read-only ── */}
-              {activeTab === 0 ? (
-                timeline.length === 0 ? (
-                  <Typography sx={{ fontSize: 13, color: "#94a3b8", textAlign: "center", py: 3 }}>
-                    No activity yet
-                  </Typography>
-                ) : (
-                  <Box sx={{ "& > *": { borderBottom: "1px solid #f1f5f9" }, "& > *:last-child": { borderBottom: "none" } }}>
-                    {timeline.map((item, i) => <TimelineEntry key={i} item={item} />)}
-                  </Box>
-                )
-              ) : null}
-
-              {/* ── Tab 1: Work notes ── */}
-              {activeTab === 1 ? (
-                <Stack spacing={2}>
-                  {/* Existing notes */}
-                  {(workNotes ?? []).length === 0 && !activeInput ? (
-                    <Typography sx={{ fontSize: 13, color: "#94a3b8", textAlign: "center", py: 2 }}>
-                      No work notes yet
-                    </Typography>
-                  ) : null}
-                  {(workNotes ?? []).length > 0 ? (
-                    <Box sx={{ "& > *": { borderBottom: "1px solid #f1f5f9" }, "& > *:last-child": { borderBottom: "none" } }}>
-                      {(workNotes ?? [])
-                        .slice()
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        .map((c, i) => <TimelineEntry key={i} item={{ kind: "work_note", comment: c }} />)}
-                    </Box>
-                  ) : null}
-
-                  {/* Add note */}
-                  {canManage ? (
-                    activeInput === "note" ? (
-                      <Box sx={{ p: "12px", bgcolor: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                        <TextField multiline rows={3} fullWidth size="small" autoFocus
-                          placeholder="Add a work note visible only to the team..."
-                          value={noteBody} onChange={e => setNoteBody(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Escape") { setActiveInput(null); setNoteBody("") } }} />
-                        <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: "8px" }}>
-                          <Button size="small" variant="text" onClick={() => { setActiveInput(null); setNoteBody("") }} sx={{ fontSize: 12, color: "#64748b" }}>Cancel</Button>
-                          <Button size="small" variant="contained" onClick={handleAddNote}
-                            disabled={savingNote || !noteBody.trim()} sx={{ fontSize: 12 }}>
-                            {savingNote ? "Saving..." : "Save note"}
-                          </Button>
-                        </Stack>
-                      </Box>
-                    ) : (
-                      <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 13 }} />}
-                        onClick={() => setActiveInput("note")}
-                        sx={{ alignSelf: "flex-start", fontSize: 12, color: "#475569", borderColor: "#e2e8f0" }}>
-                        Add work note
-                      </Button>
-                    )
-                  ) : null}
-                </Stack>
-              ) : null}
-
-              {/* ── Tab 2: Customer updates ── */}
-              {activeTab === 2 ? (
-                <Stack spacing={2}>
-                  {/* Existing updates */}
-                  {(customerUpdates ?? []).length === 0 && !activeInput ? (
-                    <Typography sx={{ fontSize: 13, color: "#94a3b8", textAlign: "center", py: 2 }}>
-                      No customer updates yet
-                    </Typography>
-                  ) : null}
-                  {(customerUpdates ?? []).length > 0 ? (
-                    <Box sx={{ "& > *": { borderBottom: "1px solid #f1f5f9" }, "& > *:last-child": { borderBottom: "none" } }}>
-                      {(customerUpdates ?? [])
-                        .slice()
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        .map((c, i) => <TimelineEntry key={i} item={{ kind: "customer_update", comment: c }} />)}
-                    </Box>
-                  ) : null}
-
-                  {/* Send update */}
-                  {canManage ? (
-                    activeInput === "customer" ? (
-                      <Box sx={{ p: "12px", bgcolor: "#eff6ff", borderRadius: "8px", border: "1px solid #bfdbfe" }}>
-                        <Typography sx={{ fontSize: 11, fontWeight: 600, color: "#1d4ed8", mb: "8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Visible to client
-                        </Typography>
-                        <TextField multiline rows={3} fullWidth size="small" autoFocus
-                          placeholder="Write an update that the customer will see..."
-                          value={customerBody} onChange={e => setCustomerBody(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Escape") { setActiveInput(null); setCustomerBody("") } }} />
-                        <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: "8px" }}>
-                          <Button size="small" variant="text" onClick={() => { setActiveInput(null); setCustomerBody("") }} sx={{ fontSize: 12, color: "#64748b" }}>Cancel</Button>
-                          <Button size="small" variant="contained" onClick={handleCustomerUpdate}
-                            disabled={savingCustomer || !customerBody.trim()} sx={{ fontSize: 12, bgcolor: "#1d4ed8" }}>
-                            {savingCustomer ? "Sending..." : "Send update"}
-                          </Button>
-                        </Stack>
-                      </Box>
-                    ) : (
-                      <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 13 }} />}
-                        onClick={() => setActiveInput("customer")}
-                        sx={{ alignSelf: "flex-start", fontSize: 12, bgcolor: "#1d4ed8" }}>
-                        Send customer update
-                      </Button>
-                    )
-                  ) : null}
-                </Stack>
-              ) : null}
-
-            </CardContent>
-          </Card>
-        </Stack>
-
-        {/* ── Right column ────────────────────────────────────────────────── */}
-        <Stack spacing={2}>
-          {/* Properties */}
-          {editingProperties ? (
-            <Card>
-              <CardContent>
-                <Stack spacing={2}>
-                  <TextField select label="Assignee" value={editAssigneeId}
-                    onChange={e => setEditAssigneeId(e.target.value)} size="small" fullWidth>
-                    <MenuItem value="">Unassigned</MenuItem>
-                    {(users ?? []).map(u => <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>)}
-                  </TextField>
-                  <TextField select label="Priority" value={editPriority}
-                    onChange={e => setEditPriority(e.target.value)} size="small" fullWidth>
-                    <MenuItem value="low">Low</MenuItem>
-                    <MenuItem value="medium">Medium</MenuItem>
-                    <MenuItem value="high">High</MenuItem>
-                    <MenuItem value="critical">Critical</MenuItem>
-                  </TextField>
-                  <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                    <Button size="small" onClick={() => setEditingProperties(false)}>Cancel</Button>
-                    <Button size="small" variant="contained" onClick={handleSaveProperties} disabled={savingProperties}>
-                      {savingProperties ? "Saving..." : "Save"}
-                    </Button>
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          ) : (
-            <PropertiesPanel
-              onEdit={canManage && !["CLOSED", "CANCELLED"].includes(sr.status) ? () => setEditingProperties(true) : undefined}
-              rows={[
-                {
-                  label: "Reference",
-                  value: <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{sr.reference}</Typography>
-                },
-                { label: "Client", value: <Typography variant="caption" fontWeight={600}>{sr.client.name}</Typography> },
-                {
-                  label: "Assignee",
-                  value: sr.assignee ? (
-                    <Stack direction="row" spacing={0.5} alignItems="center">
-                      <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {sr.assignee.email.slice(0, 2).toUpperCase()}
-                      </Box>
-                      <Typography variant="caption">{sr.assignee.email.split("@")[0]}</Typography>
-                    </Stack>
-                  ) : (
-                    <Typography variant="caption" color="text.secondary">Unassigned</Typography>
-                  )
-                },
-                { label: "Priority", value: <Chip size="small" sx={priorityChipSx(sr.priority)} label={sr.priority} /> },
-                { label: "Raised", value: <Typography variant="caption">{new Date(sr.createdAt).toLocaleDateString("en-GB")}</Typography> },
-                { label: "Updated", value: <Typography variant="caption">{new Date(sr.updatedAt).toLocaleDateString("en-GB")}</Typography> },
-                ...(sr.closureSummary ? [{ label: "Closure", value: <Typography variant="caption" sx={{ color: "#15803d" }}>{sr.closureSummary}</Typography> }] : [])
-              ]}
-            />
-          )}
-
-          {/* Quick assign — shown when NEW and unassigned */}
-          {sr.status === "NEW" && !sr.assignee && canManage ? (
-            <Card sx={{ border: "1px solid #fcd34d", bgcolor: "#fffbeb" }}>
-              <CardContent sx={{ py: "12px !important" }}>
-                <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#b45309", mb: "8px" }}>
-                  Unassigned request
-                </Typography>
-                <TextField select label="Assign to" value={editAssigneeId}
-                  onChange={e => setEditAssigneeId(e.target.value)} size="small" fullWidth sx={{ mb: "8px" }}>
-                  <MenuItem value="">Select assignee...</MenuItem>
-                  {(users ?? []).map(u => <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>)}
-                </TextField>
-                <Button size="small" variant="contained" fullWidth
-                  disabled={!editAssigneeId || savingProperties}
-                  onClick={async () => {
-                    setSavingProperties(true)
-                    try {
-                      await api.put(`/service-requests/${id}`, { assigneeId: editAssigneeId, priority: sr.priority })
-                      await api.post(`/service-requests/${id}/status`, { status: "ASSIGNED" })
-                      qc.invalidateQueries({ queryKey: ["sr-detail", id] })
-                      qc.invalidateQueries({ queryKey: ["audit-sr", id] })
-                      qc.invalidateQueries({ queryKey: ["tickets"] })
-                    } finally { setSavingProperties(false) }
-                  }}>
-                  Assign & move to Assigned
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {/* Linked tasks */}
-          <LinkedEntitiesPanel
-            items={linkedTasks ?? []}
-            onNavigate={task => setQuickTaskId(task.id)}
-            onCreate={canManage ? () => setTaskOpen(true) : undefined}
-          />
-        </Stack>
-      </Box>
-
-      {/* ── Transition dialog ────────────────────────────────────────────── */}
-      <Dialog open={!!transitionTarget} onClose={() => setTransitionTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>
-          Move to {STATUS_LABELS[transitionTarget ?? ""] ?? transitionTarget}
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 0.5 }}>
-            {transitionTarget === "CANCELLED" ? (
-              <Alert severity="warning">This request will be cancelled. This cannot be undone.</Alert>
-            ) : null}
-            {transitionTarget === "WAITING_CUSTOMER" ? (
-              <Alert severity="info" sx={{ fontSize: 12 }}>
-                The request will be paused waiting for a customer response. Send a customer update to notify them.
-              </Alert>
-            ) : null}
-            {needsClosure ? (
-              <TextField
-                label="Closure summary *"
-                multiline rows={3} fullWidth
-                value={closureSummary}
-                onChange={e => setClosureSummary(e.target.value)}
-                placeholder="Describe what was done to resolve this request..."
-                error={closureRequired}
-                helperText={closureRequired ? "Closure summary is required" : ""}
-              />
-            ) : null}
-            <TextField
-              label="Add a note (optional)" multiline rows={2} fullWidth size="small"
-              value={transitionComment} onChange={e => setTransitionComment(e.target.value)}
-              placeholder="Add context for this status change..."
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTransitionTarget(null)}>Cancel</Button>
-          <Button variant="contained" onClick={handleTransition}
-            disabled={savingTransition || (needsClosure && closureRequired)}>
-            {savingTransition ? "Saving..." : "Confirm"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Create task modal */}
       <CreateTaskModal
-        open={taskOpen} onClose={() => setTaskOpen(false)}
-        linkedEntityType="ServiceRequest" linkedEntityId={sr.id}
+        open={taskOpen}
+        onClose={handleCloseCreateTask}
+        linkedEntityType="ServiceRequest"
+        linkedEntityId={sr.id}
         linkedEntityLabel={sr.reference}
-        onSuccess={() => qc.invalidateQueries({ queryKey: ["linked-tasks-sr", id] })}
+        onSuccess={handleCreateTaskSuccess}
       />
 
       <TaskQuickDetailModal
         open={Boolean(quickTaskId)}
         taskId={quickTaskId}
-        users={users ?? []}
+        users={users}
         canManage={canManage}
-        onClose={() => setQuickTaskId(null)}
-        onOpenFull={(taskId) => navigate(`/tasks/${taskId}`, { state: { fromSR: sr.id, fromSRRef: sr.reference } })}
+        onClose={handleCloseQuickTask}
+        onOpenFull={handleOpenFullTask}
         onPatchTask={patchLinkedTask}
         onUpdateStatus={updateLinkedTaskStatus}
       />
-    </Box>
+
+      <TransitionDialog
+        open={transitionTarget !== null}
+        transition={transitionTarget}
+        onConfirm={handleTransitionConfirm}
+        onClose={handleTransitionClose}
+      />
+
+      <Snackbar
+        open={linkCopied}
+        autoHideDuration={2000}
+        onClose={handleLinkSnackbarClose}
+        message="Link copied"
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
+    </>
   )
 }

@@ -27,7 +27,6 @@ import FilterListIcon from "@mui/icons-material/FilterList"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
-import FiberNewIcon from "@mui/icons-material/FiberNew"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
 import { TypeBadge, PriorityDot, Avatar as TicketAvatar } from "../components/shared"
 import { resolveIntent, semanticTokens } from "../components/shared/tokens/colors"
@@ -404,19 +403,16 @@ function NavRail({
 }) {
   const tickets: SavedView[] = [
     { id: "open", label: "All open", count: counts.open, icon: <InboxIcon sx={{ fontSize: 18 }} /> },
-    { id: "new", label: "New", count: counts.new, icon: <FiberNewIcon sx={{ fontSize: 18 }} /> },
     { id: "mine", label: "My tickets", count: counts.mine, icon: <PersonIcon sx={{ fontSize: 18 }} /> },
-    { id: "overdue", label: "Overdue", count: counts.overdue, icon: <PriorityHighIcon sx={{ fontSize: 18 }} /> },
     { id: "unassigned", label: "Unassigned", count: counts.unassigned, icon: <HelpOutlineIcon sx={{ fontSize: 18 }} /> },
+    { id: "closed", label: "Resolved 30d", count: counts.closed, icon: <CheckCircleOutlineIcon sx={{ fontSize: 18 }} /> },
+    { id: "overdue", label: "Overdue", count: counts.overdue, icon: <PriorityHighIcon sx={{ fontSize: 18 }} /> },
   ]
   const types: Array<{ id: TicketKind | "all"; label: string; icon: React.ReactNode }> = [
     { id: "all", label: "All", icon: <FilterListIcon sx={{ fontSize: 18 }} /> },
     { id: "SR", label: "Service requests", icon: <AssignmentIcon sx={{ fontSize: 18 }} /> },
     { id: "INC", label: "Incidents", icon: <ReportProblemIcon sx={{ fontSize: 18 }} /> },
     { id: "CHG", label: "Change", icon: <BuildIcon sx={{ fontSize: 18 }} /> },
-  ]
-  const closed: SavedView[] = [
-    { id: "closed", label: "Resolved 30d", count: counts.closed, icon: <CheckCircleOutlineIcon sx={{ fontSize: 18 }} /> },
   ]
 
   function renderItem(v: SavedView) {
@@ -492,8 +488,6 @@ function NavRail({
       {tickets.map(renderItem)}
       <Typography sx={sectionLabelSx}>Type</Typography>
       {types.map(renderTypeItem)}
-      <Typography sx={sectionLabelSx}>Closed</Typography>
-      {closed.map(renderItem)}
     </Box>
   )
 }
@@ -706,7 +700,7 @@ function UnifiedServiceDeskView() {
                 rows={filtered}
                 columns={unifiedColumns}
                 density="compact"
-                rowHeight={42}
+                rowHeight={64}
                 initialState={{
                   pagination: { paginationModel: { pageSize: 50 } },
                   sorting: { sortModel: [{ field: "updatedAt", sort: "desc" }] },
