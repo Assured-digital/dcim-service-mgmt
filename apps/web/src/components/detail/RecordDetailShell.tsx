@@ -19,6 +19,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import { useNavigate } from "react-router-dom"
 import { StatusPopover, type PopoverOption } from "./StatusPopover"
 import { useBreadcrumb } from "../../routes/Shell"
+import { PRODUCT_NAME } from "../../lib/usePageTitle"
 
 export interface StatusOption {
   value: string
@@ -303,7 +304,11 @@ function RecordDetailShellImpl({
 
   React.useEffect(() => {
     setRecordLabel(recordRef)
-    return () => setRecordLabel("")
+    document.title = `${recordRef} · ${PRODUCT_NAME}`
+    return () => {
+      setRecordLabel("")
+      document.title = PRODUCT_NAME
+    }
   }, [recordRef, setRecordLabel])
 
   const [openPopoverId, setOpenPopoverId] = React.useState<string | null>(null)

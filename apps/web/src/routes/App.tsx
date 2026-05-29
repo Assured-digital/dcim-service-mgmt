@@ -4,6 +4,7 @@ import { getToken } from "../lib/auth"
 import { setAuthToken } from "../lib/api"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { LoadingState } from "../components/PageState"
+import PageTitle from "../components/PageTitle"
 import Shell from "./Shell"
 
 const LoginPage                = React.lazy(() => import("./LoginPage"))
@@ -105,6 +106,9 @@ export default function App() {
 
   return (
     <Suspense fallback={<LoadingState />}>
+      {/* Drives the tab title from the route; mounted before <Routes> so a record
+          detail page's title effect (deeper in the tree) runs after and wins. */}
+      <PageTitle />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
