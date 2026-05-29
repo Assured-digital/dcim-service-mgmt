@@ -47,6 +47,7 @@ import {
   type StatusConfig,
   type StatusOption,
 } from "../components/detail"
+import { useBreadcrumb } from "./Shell"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -993,6 +994,14 @@ export default function MaintenanceDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { setPageFullBleed } = useBreadcrumb()
+
+  // Render flush in the Shell content area (no surrounding padding/frame), matching
+  // the Service Request detail page, whose ServiceDeskPage wrapper sets this.
+  React.useEffect(() => {
+    setPageFullBleed(true)
+    return () => setPageFullBleed(false)
+  }, [setPageFullBleed])
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,

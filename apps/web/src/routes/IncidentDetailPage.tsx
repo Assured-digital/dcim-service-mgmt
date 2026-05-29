@@ -745,52 +745,49 @@ const TasksSectionContent = React.memo(function TasksSectionContent({
   onChangeTaskStatus,
   onChangeTaskAssignee,
 }: TasksSectionContentProps) {
-  const [activeStatusPopover, setActiveStatusPopover] = React.useState<{
+  const [activePopover, setActivePopover] = React.useState<{
     taskId: string
-    anchor: HTMLElement
-  } | null>(null)
-  const [activeAssigneePopover, setActiveAssigneePopover] = React.useState<{
-    taskId: string
+    type: "status" | "assignee"
     anchor: HTMLElement
   } | null>(null)
 
   const handleStatusClick = React.useCallback(
     (taskId: string) => (anchor: HTMLElement) => {
-      setActiveStatusPopover({ taskId, anchor })
+      setActivePopover({ taskId, type: "status", anchor })
     },
     []
   )
 
-  const closeStatusPopover = React.useCallback(() => setActiveStatusPopover(null), [])
+  const closeStatusPopover = React.useCallback(() => setActivePopover(null), [])
 
   const handleStatusSelect = React.useCallback(
     (next: string) => {
-      if (!activeStatusPopover) return
-      onChangeTaskStatus(activeStatusPopover.taskId, next)
-      setActiveStatusPopover(null)
+      if (activePopover?.type !== "status") return
+      onChangeTaskStatus(activePopover.taskId, next)
+      setActivePopover(null)
     },
-    [activeStatusPopover, onChangeTaskStatus]
+    [activePopover, onChangeTaskStatus]
   )
 
   const handleAssigneeClick = React.useCallback(
     (taskId: string) => (anchor: HTMLElement) => {
-      setActiveAssigneePopover({ taskId, anchor })
+      setActivePopover({ taskId, type: "assignee", anchor })
     },
     []
   )
 
   const closeAssigneePopover = React.useCallback(
-    () => setActiveAssigneePopover(null),
+    () => setActivePopover(null),
     []
   )
 
   const handleAssigneeSelect = React.useCallback(
     (next: string) => {
-      if (!activeAssigneePopover) return
-      onChangeTaskAssignee(activeAssigneePopover.taskId, next)
-      setActiveAssigneePopover(null)
+      if (activePopover?.type !== "assignee") return
+      onChangeTaskAssignee(activePopover.taskId, next)
+      setActivePopover(null)
     },
-    [activeAssigneePopover, onChangeTaskAssignee]
+    [activePopover, onChangeTaskAssignee]
   )
 
   const handleRowClick = React.useCallback(
@@ -882,13 +879,13 @@ const TasksSectionContent = React.memo(function TasksSectionContent({
         header="Task status"
         options={TASK_STATUS_OPTIONS}
         currentValue={
-          activeStatusPopover
-            ? tasks.find((t) => t.id === activeStatusPopover.taskId)?.status ?? ""
+          activePopover?.type === "status"
+            ? tasks.find((t) => t.id === activePopover.taskId)?.status ?? ""
             : ""
         }
         onSelect={handleStatusSelect}
-        anchorEl={activeStatusPopover?.anchor ?? null}
-        open={activeStatusPopover !== null}
+        anchorEl={activePopover?.type === "status" ? activePopover.anchor : null}
+        open={activePopover?.type === "status"}
         onClose={closeStatusPopover}
       />
 
@@ -897,13 +894,13 @@ const TasksSectionContent = React.memo(function TasksSectionContent({
         header="Assignee"
         options={assigneeOptions}
         currentValue={
-          activeAssigneePopover
-            ? tasks.find((t) => t.id === activeAssigneePopover.taskId)?.assigneeId ?? ""
+          activePopover?.type === "assignee"
+            ? tasks.find((t) => t.id === activePopover.taskId)?.assigneeId ?? ""
             : ""
         }
         onSelect={handleAssigneeSelect}
-        anchorEl={activeAssigneePopover?.anchor ?? null}
-        open={activeAssigneePopover !== null}
+        anchorEl={activePopover?.type === "assignee" ? activePopover.anchor : null}
+        open={activePopover?.type === "assignee"}
         onClose={closeAssigneePopover}
       />
     </Box>
