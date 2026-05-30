@@ -12,10 +12,6 @@ on:
         description: "Git ref to build the web image from (branch, tag, or SHA)"
         required: true
         default: main
-      run_bootstrap:
-        description: "Run the admin bootstrap job? (only needed on first deploy)"
-        type: boolean
-        default: false
 
 permissions:
   id-token: write
@@ -29,7 +25,6 @@ env:
   API_APP: adsm-api-prod
   WEB_APP: adsm-web-prod
   MIGRATE_JOB: job-migrate-prod
-  BOOTSTRAP_JOB: job-bootstrap-prod
   API_PUBLIC_URL: https://adsm-api-prod.happypond-cb5f4d7f.uksouth.azurecontainerapps.io
 
 jobs:
@@ -104,40 +99,6 @@ jobs:
             sleep 10
           done
           [ "$STATUS" != "Succeeded" ] && { echo "::error::Migrate timed out ($STATUS)."; exit 1; } || true
-
-      - name: Run bootstrap job (first deploy only)
-        if: ${{ github.event.inputs.run_bootstrap == 'true' }}
-        run: |
-          TAG="${{ github.event.inputs.api_image_tag }}"
-          echo "Updating bootstrap job image and injecting admin credentials..."
-          az containerapp job update \
-            --name ${{ env.BOOTSTRAP_JOB }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-api:$TAG \
-            --set-env-vars \
-              APP_ENV=production \
-              BOOTSTRAP_ADMIN_EMAIL=secretref:bootstrap-admin-email \
-              BOOTSTRAP_ADMIN_PASSWORD=secretref:bootstrap-admin-password \
-            --secrets \
-              bootstrap-admin-email=${{ secrets.BOOTSTRAP_ADMIN_EMAIL }} \
-              bootstrap-admin-password='${{ secrets.BOOTSTRAP_ADMIN_PASSWORD }}' \
-            --output none
-          EXECUTION=$(az containerapp job start \
-            --name ${{ env.BOOTSTRAP_JOB }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query name --output tsv)
-          echo "Bootstrap execution: $EXECUTION"
-          for i in {1..30}; do
-            STATUS=$(az containerapp job execution show \
-              --name ${{ env.BOOTSTRAP_JOB }} \
-              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-              --job-execution-name "$EXECUTION" \
-              --query properties.status --output tsv)
-            echo "  bootstrap status: $STATUS"
-            [ "$STATUS" = "Succeeded" ] && break
-            if [ "$STATUS" = "Failed" ]; then echo "::error::Bootstrap failed."; exit 1; fi
-            sleep 10
-          done
 
       - name: Deploy API
         run: |
