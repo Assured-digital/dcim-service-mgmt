@@ -60,6 +60,7 @@ jobs:
           echo "Promoting dcms-api:$TAG from test ACR to prod ACR..."
           az acr import \
             --name ${{ env.ACR_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --source ${{ env.TEST_ACR_LOGIN_SERVER }}/dcms-api:$TAG \
             --image dcms-api:$TAG \
             --force
