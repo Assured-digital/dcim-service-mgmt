@@ -1,0 +1,172 @@
+name: Deploy to production
+
+# Manual only. No push trigger — prod deploys are deliberate.
+# The 'tag' input is the verified API image tag to promote from test.
+on:
+  workflow_dispatch:
+    inputs:
+      api_image_tag:
+        description: "API image tag to promote from test ACR (e.g. git-1b8fdc5)"
+        required: true
+      web_source_ref:
+        description: "Git ref to build the web image from (branch, tag, or SHA)"
+        required: true
+        default: main
+      run_bootstrap:
+        description: "Run the admin bootstrap job? (only needed on first deploy)"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_RESOURCE_GROUP: rg-adsm-prod
+  ACR_NAME: acradsmprod01
+  ACR_LOGIN_SERVER: acradsmprod01.azurecr.io
+  TEST_ACR_LOGIN_SERVER: acradsmtest01.azurecr.io
+  API_APP: adsm-api-prod
+  WEB_APP: adsm-web-prod
+  MIGRATE_JOB: job-migrate-prod
+  BOOTSTRAP_JOB: job-bootstrap-prod
+  API_PUBLIC_URL: https://adsm-api-prod.happypond-cb5f4d7f.uksouth.azurecontainerapps.io
+
+jobs:
+  deploy:
+    name: Promote, build, migrate, deploy
+    runs-on: ubuntu-latest
+    # Binds to the gated environment — triggers the approval gate
+    # and unlocks the environment secrets.
+    environment: production
+
+    steps:
+      - name: Checkout (web build source)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.web_source_ref }}
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2.2.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Promote API image (test ACR -> prod ACR)
+        # Build-once: import the EXACT verified API image from test.
+        run: |
+          TAG="${{ github.event.inputs.api_image_tag }}"
+          echo "Promoting dcms-api:$TAG from test ACR to prod ACR..."
+          az acr import \
+            --name ${{ env.ACR_NAME }} \
+            --source ${{ env.TEST_ACR_LOGIN_SERVER }}/dcms-api:$TAG \
+            --image dcms-api:$TAG \
+            --force
+          echo "Promoted dcms-api:$TAG"
+
+      - name: Build & push web image (prod URL baked in)
+        # Web MUST build fresh — Vite bakes the API URL at build time.
+        run: |
+          TAG="${{ github.event.inputs.api_image_tag }}"
+          az acr build \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --registry ${{ env.ACR_NAME }} \
+            --image dcms-web:$TAG \
+            --file apps/web/Dockerfile \
+            --build-arg VITE_API_BASE_URL=${{ env.API_PUBLIC_URL }} \
+            --output none \
+            .
+
+      - name: Update migrate job & run it
+        run: |
+          TAG="${{ github.event.inputs.api_image_tag }}"
+          az containerapp job update \
+            --name ${{ env.MIGRATE_JOB }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-api:$TAG \
+            --output none
+          EXECUTION=$(az containerapp job start \
+            --name ${{ env.MIGRATE_JOB }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query name --output tsv)
+          echo "Migrate execution: $EXECUTION"
+          for i in {1..30}; do
+            STATUS=$(az containerapp job execution show \
+              --name ${{ env.MIGRATE_JOB }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --job-execution-name "$EXECUTION" \
+              --query properties.status --output tsv)
+            echo "  migrate status: $STATUS"
+            [ "$STATUS" = "Succeeded" ] && break
+            if [ "$STATUS" = "Failed" ]; then echo "::error::Migrate failed."; exit 1; fi
+            sleep 10
+          done
+          [ "$STATUS" != "Succeeded" ] && { echo "::error::Migrate timed out ($STATUS)."; exit 1; } || true
+
+      - name: Run bootstrap job (first deploy only)
+        if: ${{ github.event.inputs.run_bootstrap == 'true' }}
+        run: |
+          TAG="${{ github.event.inputs.api_image_tag }}"
+          echo "Updating bootstrap job image and injecting admin credentials..."
+          az containerapp job update \
+            --name ${{ env.BOOTSTRAP_JOB }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-api:$TAG \
+            --set-env-vars \
+              APP_ENV=production \
+              BOOTSTRAP_ADMIN_EMAIL=secretref:bootstrap-admin-email \
+              BOOTSTRAP_ADMIN_PASSWORD=secretref:bootstrap-admin-password \
+            --replace-secrets \
+              bootstrap-admin-email=${{ secrets.BOOTSTRAP_ADMIN_EMAIL }} \
+              bootstrap-admin-password='${{ secrets.BOOTSTRAP_ADMIN_PASSWORD }}' \
+            --output none
+          EXECUTION=$(az containerapp job start \
+            --name ${{ env.BOOTSTRAP_JOB }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query name --output tsv)
+          echo "Bootstrap execution: $EXECUTION"
+          for i in {1..30}; do
+            STATUS=$(az containerapp job execution show \
+              --name ${{ env.BOOTSTRAP_JOB }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --job-execution-name "$EXECUTION" \
+              --query properties.status --output tsv)
+            echo "  bootstrap status: $STATUS"
+            [ "$STATUS" = "Succeeded" ] && break
+            if [ "$STATUS" = "Failed" ]; then echo "::error::Bootstrap failed."; exit 1; fi
+            sleep 10
+          done
+
+      - name: Deploy API
+        run: |
+          TAG="${{ github.event.inputs.api_image_tag }}"
+          az containerapp update \
+            --name ${{ env.API_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-api:$TAG \
+            --output none
+          echo "API deployed."
+
+      - name: Deploy web
+        run: |
+          TAG="${{ github.event.inputs.api_image_tag }}"
+          az containerapp update \
+            --name ${{ env.WEB_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/dcms-web:$TAG \
+            --output none
+          echo "Web deployed."
+
+      - name: Summary
+        run: |
+          API_FQDN=$(az containerapp show --name ${{ env.API_APP }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn --output tsv)
+          WEB_FQDN=$(az containerapp show --name ${{ env.WEB_APP }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn --output tsv)
+          {
+            echo "## Production deploy complete"
+            echo ""
+            echo "| Component | Image | URL |"
+            echo "|---|---|---|"
+            echo "| API | \`dcms-api:${{ github.event.inputs.api_image_tag }}\` (promoted) | https://$API_FQDN |"
+            echo "| web | \`dcms-web:${{ github.event.inputs.api_image_tag }}\` (built) | https://$WEB_FQDN |"
+          } >> $GITHUB_STEP_SUMMARY
