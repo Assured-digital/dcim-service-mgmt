@@ -739,6 +739,10 @@ async function seedCheckTemplates() {
 }
 
 async function main() {
+  if (process.env.APP_ENV === "production") {
+    console.error("Refusing to run demo seed in production (APP_ENV=production).")
+    process.exit(1)
+  }
   // 1) Organisation
   const orgName = "DCMS Default Organization"
   const organization = await prisma.organization.upsert({
