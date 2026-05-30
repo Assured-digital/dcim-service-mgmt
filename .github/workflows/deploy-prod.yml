@@ -118,7 +118,7 @@ jobs:
               APP_ENV=production \
               BOOTSTRAP_ADMIN_EMAIL=secretref:bootstrap-admin-email \
               BOOTSTRAP_ADMIN_PASSWORD=secretref:bootstrap-admin-password \
-            --replace-secrets \
+            --secrets \
               bootstrap-admin-email=${{ secrets.BOOTSTRAP_ADMIN_EMAIL }} \
               bootstrap-admin-password='${{ secrets.BOOTSTRAP_ADMIN_PASSWORD }}' \
             --output none
