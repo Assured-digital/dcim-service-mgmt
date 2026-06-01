@@ -17,6 +17,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility"
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff"
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh"
 import { api, type ApiError } from "../lib/api"
+import { useNotification } from "./NotificationProvider"
 import { getCurrentUser } from "../lib/auth"
 import { AD_STAFF_ROLES, CLIENT_OWN_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId } from "../lib/scope"
@@ -163,6 +164,7 @@ function StatusSegmented({
 
 export default function UserFormDrawer({ open, mode, user, onClose, context }: Props) {
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const currentUser = getCurrentUser()
   const isEdit = mode === "edit"
 
@@ -177,6 +179,9 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
   }, [allowedRoles, context])
 
   const [email, setEmail] = useState("")
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [knownAs, setKnownAs] = useState("")
   const [role, setRole] = useState<UserRole>(contextRoles[0] ?? ROLES.CLIENT_VIEWER)
   const [clientId, setClientId] = useState("")
   const [password, setPassword] = useState("")
@@ -194,11 +199,17 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
     if (!open) return
     if (isEdit && user) {
       setEmail(user.email)
+      setFirstName(user.firstName ?? "")
+      setLastName(user.lastName ?? "")
+      setKnownAs(user.knownAs ?? "")
       setRole(contextRoles.includes(user.role) ? user.role : (contextRoles[0] ?? user.role))
       setClientId(user.clientId ?? "")
       setIsActive(user.isActive)
     } else {
       setEmail("")
+      setFirstName("")
+      setLastName("")
+      setKnownAs("")
       setRole(contextRoles[0] ?? ROLES.CLIENT_VIEWER)
       // In the client view, pre-fill the client field from the global scope so
       // the admin doesn't have to re-pick the client they're already in.
@@ -222,6 +233,9 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
     mutationFn: async () => {
       if (isEdit && user) {
         return updateUser(user.id, {
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+          knownAs: knownAs.trim() || undefined,
           role,
           clientId: needsClient ? clientId : undefined,
           isActive,
@@ -231,6 +245,9 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
       return createUser({
         email: email.trim(),
         password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        knownAs: knownAs.trim() || undefined,
         role,
         clientId: needsClient ? clientId : undefined,
         isActive
@@ -240,6 +257,7 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
       await qc.invalidateQueries({ queryKey: ["users-admin"] })
       await qc.invalidateQueries({ queryKey: ["users-org"] })
       await qc.invalidateQueries({ queryKey: ["users"] })
+      notify.success(isEdit ? "User updated" : "User created")
       onClose()
     }
   })
@@ -251,9 +269,22 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
 
   const passwordTooShort = password.trim().length > 0 && password.trim().length < 8
   const passwordMissing = !isEdit && password.trim().length < 8
+  // Email is only editable on create; surface the required + format indicator there.
   const emailMissing = !isEdit && !email.trim()
+  const emailInvalid = !isEdit && !!email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const emailError = emailMissing || emailInvalid
+  // First / last name are required in BOTH create and edit modes.
+  const firstNameMissing = !firstName.trim()
+  const lastNameMissing = !lastName.trim()
   const clientMissing = needsClient && !clientId
-  const canSubmit = !emailMissing && !passwordMissing && !passwordTooShort && !clientMissing && !mutation.isPending
+  const canSubmit =
+    !emailError &&
+    !firstNameMissing &&
+    !lastNameMissing &&
+    !passwordMissing &&
+    !passwordTooShort &&
+    !clientMissing &&
+    !mutation.isPending
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -275,6 +306,9 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isEdit}
+              required={!isEdit}
+              error={emailError}
+              helperText={emailMissing ? "Email is required." : emailInvalid ? "Enter a valid email." : undefined}
               fullWidth
               size="small"
               autoComplete="off"
@@ -292,6 +326,43 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
                     }
                   : undefined
               }
+            />
+          </Box>
+
+          <Box>
+            <FieldLabel>First name</FieldLabel>
+            <TextField
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+              error={firstNameMissing}
+              helperText={firstNameMissing ? "First name is required." : undefined}
+              fullWidth
+              size="small"
+            />
+          </Box>
+
+          <Box>
+            <FieldLabel>Last name</FieldLabel>
+            <TextField
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              error={lastNameMissing}
+              helperText={lastNameMissing ? "Last name is required." : undefined}
+              fullWidth
+              size="small"
+            />
+          </Box>
+
+          <Box>
+            <FieldLabel>Known as</FieldLabel>
+            <TextField
+              value={knownAs}
+              onChange={(e) => setKnownAs(e.target.value)}
+              placeholder={firstName.trim() ? `Defaults to ${firstName.trim()}` : "Defaults to first name"}
+              fullWidth
+              size="small"
             />
           </Box>
 

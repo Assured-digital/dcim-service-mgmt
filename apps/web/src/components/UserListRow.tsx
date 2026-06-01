@@ -15,14 +15,28 @@ function initialsFromEmail(email: string): string {
   return local.slice(0, 2).toUpperCase()
 }
 
+// Display name precedence: knownAs → "firstName lastName" (trimmed) → null.
+// Returning null signals "no name on record" so the caller falls back to email.
+function displayNameFor(user: UserView): string | null {
+  return user.knownAs?.trim() || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || null
+}
+
+// Derive 1–2 initials from a display name: first letters of the first two
+// whitespace-separated words; if a single word, its first two characters.
+function initialsFromName(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return (words[0] || "").slice(0, 2).toUpperCase()
+}
+
 // Resolve the assigned-client display as a LIST of labels. Org-level users
-// (ORG_OWNER/ORG_ADMIN/legacy ADMIN) always read "Organization" regardless of
+// (ORG_OWNER/ORG_ADMIN/legacy ADMIN) always read "Organisation" regardless of
 // any stray clientId on the record (seed-data quirk). Everyone else shows their
 // client name(s). Returned as an array so multi-client assignment can render
 // here later without reworking the row.
 function clientLabelsFor(user: UserView, clientNameById: Map<string, string>): string[] {
-  if (isOrgSuperRole(user.role)) return ["Organization"]
-  if (!user.clientId) return ["Organization"]
+  if (isOrgSuperRole(user.role)) return ["Organisation"]
+  if (!user.clientId) return ["Organisation"]
   return [clientNameById.get(user.clientId) ?? user.clientId]
 }
 
@@ -36,6 +50,8 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
   const orgLevel = isOrgSuperRole(user.role)
   const clientLabels = clientLabelsFor(user, clientNameById)
   const roleLabel = user.role.replace(/_/g, " ").toLowerCase()
+  const displayName = displayNameFor(user)
+  const initials = displayName ? initialsFromName(displayName) : initialsFromEmail(user.email)
 
   return (
     <Box
@@ -73,23 +89,23 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
           letterSpacing: 0.3
         }}
       >
-        {initialsFromEmail(user.email)}
+        {initials}
       </Box>
 
-      {/* Main — email + status, then role chip + assigned client(s) */}
+      {/* Main — name (or email) + status, then role chip + assigned client(s) */}
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography
             sx={{
               fontSize: 13.5,
-              fontWeight: 500,
+              fontWeight: displayName ? 600 : 500,
               color: "var(--color-text-primary, #0f172a)",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap"
             }}
           >
-            {user.email}
+            {displayName ?? user.email}
           </Typography>
           {user.isActive ? (
             <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.375, flexShrink: 0 }}>
@@ -102,6 +118,21 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
             </Typography>
           )}
         </Box>
+
+        {/* Secondary muted email line — shown only when a name occupies the primary line. */}
+        {displayName && (
+          <Typography
+            sx={{
+              fontSize: 12,
+              color: "var(--color-text-muted, #64748b)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {user.email}
+          </Typography>
+        )}
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.5, flexWrap: "wrap" }}>
           <Chip

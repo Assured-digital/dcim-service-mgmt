@@ -19,6 +19,9 @@ export type UserRole =
 export type UserView = {
   id: string
   email: string
+  firstName: string | null
+  lastName: string | null
+  knownAs: string | null
   role: UserRole
   organizationId: string | null
   clientId: string | null
@@ -31,6 +34,9 @@ export type UserView = {
 export type CreateUserInput = {
   email: string
   password: string
+  firstName: string
+  lastName: string
+  knownAs?: string
   role: UserRole
   clientId?: string
   isActive?: boolean
@@ -38,6 +44,9 @@ export type CreateUserInput = {
 
 // Mirrors UpdateUserDto.
 export type UpdateUserInput = {
+  firstName?: string
+  lastName?: string
+  knownAs?: string
   role?: UserRole
   clientId?: string
   isActive?: boolean

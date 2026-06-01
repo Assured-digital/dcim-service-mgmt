@@ -36,6 +36,9 @@ export class UsersService {
     id: string;
     email: string;
     role: Role;
+    firstName: string | null;
+    lastName: string | null;
+    knownAs: string | null;
     organizationId: string | null;
     clientId: string | null;
     isActive: boolean;
@@ -46,6 +49,9 @@ export class UsersService {
       id: user.id,
       email: user.email,
       role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      knownAs: user.knownAs,
       organizationId: user.organizationId,
       clientId: user.clientId,
       isActive: user.isActive,
@@ -143,6 +149,9 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        firstName: true,
+        lastName: true,
+        knownAs: true,
         organizationId: true,
         clientId: true,
         isActive: true,
@@ -180,6 +189,9 @@ export class UsersService {
         email: dto.email.toLowerCase(),
         passwordHash,
         role: dto.role,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        knownAs: dto.knownAs ?? null,
         organizationId,
         clientId,
         isActive: dto.isActive ?? true
@@ -188,6 +200,9 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        firstName: true,
+        lastName: true,
+        knownAs: true,
         organizationId: true,
         clientId: true,
         isActive: true,
@@ -238,6 +253,9 @@ export class UsersService {
 
     const data: Prisma.UserUpdateInput = {
       role: dto.role,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      knownAs: dto.knownAs,
       client: nextClientId ? { connect: { id: nextClientId } } : { disconnect: true },
       isActive: dto.isActive
     };
@@ -256,6 +274,9 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        firstName: true,
+        lastName: true,
+        knownAs: true,
         organizationId: true,
         clientId: true,
         isActive: true,
