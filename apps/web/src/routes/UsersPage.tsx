@@ -1,328 +1,186 @@
-import React, { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  FormControlLabel,
-  MenuItem,
-  Stack,
-  Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography
-} from "@mui/material";
-import { api, type ApiError } from "../lib/api";
-import { getCurrentUser } from "../lib/auth";
-import { EmptyState, ErrorState, LoadingState } from "../components/PageState";
-import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac";
+import React from "react"
+import { useQuery } from "@tanstack/react-query"
+import { Box, Button, Card, Chip, Typography } from "@mui/material"
+import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid"
+import PersonAddIcon from "@mui/icons-material/PersonAdd"
+import EditIcon from "@mui/icons-material/Edit"
+import { api } from "../lib/api"
+import { listUsers, type UserView } from "../lib/users"
+import { EmptyState, ErrorState } from "../components/PageState"
+import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import UserFormDrawer, { type UserFormMode } from "../components/UserFormDrawer"
 
-type UserRecord = {
-  id: string;
-  email: string;
-  role: string;
-  clientId: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
+type Client = { id: string; name: string }
 
-type Client = {
-  id: string;
-  name: string;
-};
+const UsersToolbar = makeGridToolbar("users")
 
-type UserDraft = {
-  role: string;
-  isActive: boolean;
-};
-
-const orgOwnerAssignableRoles = [
-  ROLES.ORG_OWNER,
-  ROLES.ORG_ADMIN,
-  ROLES.SERVICE_MANAGER,
-  ROLES.SERVICE_DESK_ANALYST,
-  ROLES.ENGINEER,
-  ROLES.CLIENT_VIEWER
-];
-
-const orgAdminAssignableRoles = [ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER];
-const managerRoles = [ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER];
+function UsersNoRowsOverlay() {
+  return (
+    <Box sx={{ p: 2 }}>
+      <EmptyState title="No users yet" detail="Create a user to grant operational access for this client scope." />
+    </Box>
+  )
+}
 
 export default function UsersPage() {
-  const qc = useQueryClient();
-  const currentUser = getCurrentUser();
-  const isOrgSuper = hasAnyRole([...ORG_SUPER_ROLES]);
-  const isOrgOwner = hasAnyRole([ROLES.ORG_OWNER, ROLES.ADMIN]);
-  const allowedRoles = isOrgOwner ? orgOwnerAssignableRoles : isOrgSuper ? orgAdminAssignableRoles : managerRoles;
+  const [drawerOpen, setDrawerOpen] = React.useState(false)
+  const [mode, setMode] = React.useState<UserFormMode>("create")
+  const [selected, setSelected] = React.useState<UserView | null>(null)
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState(allowedRoles[0]);
-  const [clientId, setClientId] = useState(currentUser?.clientId ?? "");
-  const [isActive, setIsActive] = useState(true);
-  const [scopeClientId, setScopeClientId] = useState(currentUser?.clientId ?? "");
-  const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
-  const [createNotice, setCreateNotice] = useState<{ tone: "success" | "info"; message: string } | null>(null);
-
-  const users = useQuery({
-    queryKey: ["users", scopeClientId],
-    queryFn: async () => {
-      const headers = { "x-client-id": scopeClientId || "" };
-      return (await api.get<UserRecord[]>("/users", { headers })).data;
-    }
-  });
+  // x-client-id is auto-attached by the api.ts interceptor for org-super users
+  // based on the global client selector — no manual scoping here.
+  const users = useQuery({ queryKey: ["users-admin"], queryFn: listUsers })
 
   const clients = useQuery({
     queryKey: ["clients"],
-    enabled: isOrgSuper,
     queryFn: async () => (await api.get<Client[]>("/clients")).data
-  });
+  })
 
-  const clientOptions = useMemo(() => clients.data ?? [], [clients.data]);
+  const clientNameById = React.useMemo(
+    () => new Map((clients.data ?? []).map((c) => [c.id, c.name])),
+    [clients.data]
+  )
 
-  const create = useMutation({
-    mutationFn: async () =>
-      (
-        await api.post<UserRecord>("/users", {
-          email,
-          password,
-          role,
-          clientId: clientId || undefined,
-          isActive
-        })
-      ).data,
-    onSuccess: async (created) => {
-      setEmail("");
-      setPassword("");
-      setRole(allowedRoles[0]);
-      setIsActive(true);
-      if (scopeClientId && created.clientId !== scopeClientId) {
-        const scopedClientName = clientOptions.find((c) => c.id === scopeClientId)?.name ?? scopeClientId;
-        const createdClientName = created.clientId
-          ? (clientOptions.find((c) => c.id === created.clientId)?.name ?? created.clientId)
-          : "No client";
-        setCreateNotice({
-          tone: "info",
-          message: `User created under ${createdClientName}. Current view scope is ${scopedClientName}, so it is hidden from this table.`
-        });
-      } else {
-        setCreateNotice({
-          tone: "success",
-          message: `User created: ${created.email}`
-        });
+  function openCreate() {
+    setSelected(null)
+    setMode("create")
+    setDrawerOpen(true)
+  }
+
+  function openEdit(user: UserView) {
+    setSelected(user)
+    setMode("edit")
+    setDrawerOpen(true)
+  }
+
+  const columns: GridColDef<UserView>[] = React.useMemo(
+    () => [
+      {
+        field: "email",
+        headerName: "Email",
+        flex: 1,
+        minWidth: 220,
+        renderCell: (p: GridRenderCellParams<UserView>) => (
+          <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{p.value as string}</Typography>
+        )
+      },
+      {
+        field: "role",
+        headerName: "Role",
+        width: 190,
+        renderCell: (p) => (
+          <Chip
+            size="small"
+            label={(p.value as string).replace(/_/g, " ").toLowerCase()}
+            sx={{ bgcolor: "#eef2ff", color: "#3730a3", fontWeight: 600, textTransform: "capitalize" }}
+          />
+        )
+      },
+      {
+        field: "clientId",
+        headerName: "Client",
+        width: 180,
+        valueGetter: (v) => (v ? clientNameById.get(v as string) ?? (v as string) : "Organization"),
+        renderCell: (p) => (
+          <Typography sx={{ fontSize: 12.5, color: p.row.clientId ? "#0f172a" : "#64748b" }}>
+            {p.value as string}
+          </Typography>
+        )
+      },
+      {
+        field: "isActive",
+        headerName: "Status",
+        width: 120,
+        renderCell: (p) =>
+          (p.value as boolean) ? (
+            <Chip size="small" label="active" sx={{ bgcolor: "#dcfce7", color: "#166534", fontWeight: 600 }} />
+          ) : (
+            <Chip size="small" label="inactive" sx={{ bgcolor: "#f1f5f9", color: "#64748b", fontWeight: 600 }} />
+          )
+      },
+      {
+        field: "updatedAt",
+        headerName: "Updated",
+        width: 130,
+        valueGetter: (v) => (v ? new Date(v as string) : null),
+        renderCell: (p) => (
+          <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>
+            {p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}
+          </Typography>
+        )
+      },
+      {
+        field: "actions",
+        headerName: "",
+        width: 90,
+        sortable: false,
+        filterable: false,
+        disableExport: true,
+        renderCell: (p) => (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<EditIcon sx={{ fontSize: 15 }} />}
+            onClick={() => openEdit(p.row)}
+          >
+            Edit
+          </Button>
+        )
       }
-      await qc.invalidateQueries({ queryKey: ["users"] });
-    }
-  });
-
-  const update = useMutation({
-    mutationFn: async (payload: { id: string; role: string; isActive: boolean }) =>
-      (await api.patch<UserRecord>(`/users/${payload.id}`, { role: payload.role, isActive: payload.isActive })).data,
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["users"] });
-    }
-  });
-
-  const mutationError = [create.error, update.error].find(Boolean) as ApiError | undefined;
-  const mutationErrorMessage = Array.isArray(mutationError?.message)
-    ? mutationError.message.join(", ")
-    : mutationError?.message;
-  const clientLabelById = new Map((clientOptions ?? []).map((c) => [c.id, c.name]));
+    ],
+    [clientNameById]
+  )
 
   return (
     <Box>
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
-            <TextField
-              label="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              autoComplete="off"
-              inputProps={{ autoComplete: "off" }}
-            />
-            <TextField
-              label="Temporary Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              autoComplete="new-password"
-            />
-            <TextField
-              select
-              label="Role"
-              value={role}
-              onChange={(e) => setRole(e.target.value as (typeof allowedRoles)[number])}
-              sx={{ minWidth: 220 }}
-            >
-              {allowedRoles.map((r) => (
-                <MenuItem key={r} value={r}>
-                  {r}
-                </MenuItem>
-              ))}
-            </TextField>
-            {isOrgSuper ? (
-              <TextField
-                select
-                label="Client"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                sx={{ minWidth: 220 }}
-              >
-                <MenuItem value="">No client</MenuItem>
-                {clientOptions.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            ) : null}
-            <FormControlLabel
-              control={<Switch checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />}
-              label="Active"
-              sx={{ whiteSpace: "nowrap", pr: 1 }}
-            />
-            <Button
-              variant="contained"
-              onClick={() => create.mutate()}
-              disabled={!email.trim() || password.trim().length < 8 || create.isPending}
-            >
-              Create
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-
       <Card>
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ mb: 2 }}>
-            {isOrgSuper ? (
-              <TextField
-                select
-                label="View scope"
-                value={scopeClientId}
-                onChange={(e) => {
-                  setScopeClientId(e.target.value);
-                  setCreateNotice(null);
-                }}
-                sx={{ minWidth: 260 }}
-              >
-                <MenuItem value="">All clients</MenuItem>
-                {clientOptions.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            ) : (
-              <Chip label="Scoped to your client" color="default" variant="outlined" />
-            )}
-          </Stack>
+        <Box
+          sx={{
+            borderBottom: "1px solid #e2e8f0",
+            px: 2,
+            py: 1.25,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1.5
+          }}
+        >
+          <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#334155" }}>User management</Typography>
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<PersonAddIcon sx={{ fontSize: 16 }} />}
+            onClick={openCreate}
+          >
+            Create user
+          </Button>
+        </Box>
 
-          {users.isLoading ? <LoadingState /> : null}
-          {users.error ? <ErrorState title="Failed to load users" /> : null}
-          {createNotice ? (
-            <Alert severity={createNotice.tone} sx={{ mb: 2 }} onClose={() => setCreateNotice(null)}>
-              {createNotice.message}
-            </Alert>
-          ) : null}
-          {mutationErrorMessage ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {mutationErrorMessage}
-            </Alert>
-          ) : null}
-          {!users.isLoading && !users.error && (users.data?.length ?? 0) === 0 ? (
-            <EmptyState title="No users found" detail="Create users to grant operational access for this client scope." />
-          ) : null}
+        {users.isError ? (
+          <Box sx={{ p: 2 }}>
+            <ErrorState title="Failed to load users" />
+          </Box>
+        ) : null}
 
-          <TableContainer>
-            <Table sx={{ minWidth: 980 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Client</TableCell>
-                  <TableCell>Updated</TableCell>
-                  <TableCell align="right">Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(users.data ?? []).map((user) => {
-                  const row = drafts[user.id] ?? { role: user.role, isActive: user.isActive };
-                  const changed = row.role !== user.role || row.isActive !== user.isActive;
-                  return (
-                    <TableRow key={user.id}>
-                      <TableCell sx={{ fontWeight: 700 }}>{user.email}</TableCell>
-                      <TableCell>
-                        <TextField
-                          select
-                          size="small"
-                          value={row.role}
-                          sx={{ minWidth: 210 }}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [user.id]: { ...row, role: e.target.value }
-                            }))
-                          }
-                        >
-                          {allowedRoles.map((r) => (
-                            <MenuItem key={r} value={r}>
-                              {r}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                      </TableCell>
-                      <TableCell>
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={row.isActive}
-                              onChange={(e) =>
-                                setDrafts((prev) => ({
-                                  ...prev,
-                                  [user.id]: { ...row, isActive: e.target.checked }
-                                }))
-                              }
-                            />
-                          }
-                          label={row.isActive ? "active" : "inactive"}
-                        />
-                      </TableCell>
-                      <TableCell>{(user.clientId && clientLabelById.get(user.clientId)) || user.clientId || "-"}</TableCell>
-                      <TableCell>{new Date(user.updatedAt).toLocaleDateString()}</TableCell>
-                      <TableCell align="right">
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          disabled={!changed || update.isPending}
-                          onClick={() => update.mutate({ id: user.id, role: row.role, isActive: row.isActive })}
-                        >
-                          Save
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
+        <Box sx={{ height: 620 }}>
+          <DataGrid
+            rows={users.data ?? []}
+            columns={columns}
+            loading={users.isLoading}
+            density="compact"
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+              sorting: { sortModel: [{ field: "isActive", sort: "desc" }, { field: "email", sort: "asc" }] }
+            }}
+            pageSizeOptions={[25, 50, 100]}
+            disableRowSelectionOnClick
+            slots={{ toolbar: UsersToolbar, noRowsOverlay: UsersNoRowsOverlay }}
+            sx={dataGridSx(false)}
+          />
+        </Box>
       </Card>
+
+      <UserFormDrawer open={drawerOpen} mode={mode} user={selected} onClose={() => setDrawerOpen(false)} />
     </Box>
-  );
+  )
 }
