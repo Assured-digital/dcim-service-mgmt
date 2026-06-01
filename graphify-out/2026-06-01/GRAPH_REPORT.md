@@ -1,0 +1,442 @@
+# Graph Report - C:\Users\jz\dcim-service-mgmt  (2026-06-01)
+
+## Corpus Check
+- cluster-only mode — file stats not available
+
+## Summary
+- 1852 nodes · 3737 edges · 100 communities (76 shown, 24 thin omitted)
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.97)
+- Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `d2815b43`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
+
+## Community Hubs (Navigation)
+- [[_COMMUNITY_Community 0|Community 0]]
+- [[_COMMUNITY_Community 1|Community 1]]
+- [[_COMMUNITY_Community 2|Community 2]]
+- [[_COMMUNITY_Community 3|Community 3]]
+- [[_COMMUNITY_Community 4|Community 4]]
+- [[_COMMUNITY_Community 5|Community 5]]
+- [[_COMMUNITY_Community 6|Community 6]]
+- [[_COMMUNITY_Community 7|Community 7]]
+- [[_COMMUNITY_Community 8|Community 8]]
+- [[_COMMUNITY_Community 9|Community 9]]
+- [[_COMMUNITY_Community 10|Community 10]]
+- [[_COMMUNITY_Community 11|Community 11]]
+- [[_COMMUNITY_Community 12|Community 12]]
+- [[_COMMUNITY_Community 13|Community 13]]
+- [[_COMMUNITY_Community 14|Community 14]]
+- [[_COMMUNITY_Community 15|Community 15]]
+- [[_COMMUNITY_Community 16|Community 16]]
+- [[_COMMUNITY_Community 17|Community 17]]
+- [[_COMMUNITY_Community 18|Community 18]]
+- [[_COMMUNITY_Community 19|Community 19]]
+- [[_COMMUNITY_Community 20|Community 20]]
+- [[_COMMUNITY_Community 21|Community 21]]
+- [[_COMMUNITY_Community 22|Community 22]]
+- [[_COMMUNITY_Community 23|Community 23]]
+- [[_COMMUNITY_Community 24|Community 24]]
+- [[_COMMUNITY_Community 25|Community 25]]
+- [[_COMMUNITY_Community 26|Community 26]]
+- [[_COMMUNITY_Community 27|Community 27]]
+- [[_COMMUNITY_Community 28|Community 28]]
+- [[_COMMUNITY_Community 29|Community 29]]
+- [[_COMMUNITY_Community 30|Community 30]]
+- [[_COMMUNITY_Community 31|Community 31]]
+- [[_COMMUNITY_Community 32|Community 32]]
+- [[_COMMUNITY_Community 33|Community 33]]
+- [[_COMMUNITY_Community 34|Community 34]]
+- [[_COMMUNITY_Community 35|Community 35]]
+- [[_COMMUNITY_Community 36|Community 36]]
+- [[_COMMUNITY_Community 37|Community 37]]
+- [[_COMMUNITY_Community 38|Community 38]]
+- [[_COMMUNITY_Community 39|Community 39]]
+- [[_COMMUNITY_Community 40|Community 40]]
+- [[_COMMUNITY_Community 41|Community 41]]
+- [[_COMMUNITY_Community 42|Community 42]]
+- [[_COMMUNITY_Community 43|Community 43]]
+- [[_COMMUNITY_Community 44|Community 44]]
+- [[_COMMUNITY_Community 45|Community 45]]
+- [[_COMMUNITY_Community 46|Community 46]]
+- [[_COMMUNITY_Community 47|Community 47]]
+- [[_COMMUNITY_Community 48|Community 48]]
+- [[_COMMUNITY_Community 49|Community 49]]
+- [[_COMMUNITY_Community 50|Community 50]]
+- [[_COMMUNITY_Community 51|Community 51]]
+- [[_COMMUNITY_Community 53|Community 53]]
+- [[_COMMUNITY_Community 54|Community 54]]
+- [[_COMMUNITY_Community 55|Community 55]]
+- [[_COMMUNITY_Community 56|Community 56]]
+- [[_COMMUNITY_Community 57|Community 57]]
+- [[_COMMUNITY_Community 58|Community 58]]
+- [[_COMMUNITY_Community 59|Community 59]]
+- [[_COMMUNITY_Community 60|Community 60]]
+- [[_COMMUNITY_Community 61|Community 61]]
+- [[_COMMUNITY_Community 62|Community 62]]
+- [[_COMMUNITY_Community 63|Community 63]]
+- [[_COMMUNITY_Community 64|Community 64]]
+- [[_COMMUNITY_Community 65|Community 65]]
+- [[_COMMUNITY_Community 66|Community 66]]
+- [[_COMMUNITY_Community 67|Community 67]]
+- [[_COMMUNITY_Community 69|Community 69]]
+- [[_COMMUNITY_Community 70|Community 70]]
+- [[_COMMUNITY_Community 71|Community 71]]
+- [[_COMMUNITY_Community 72|Community 72]]
+- [[_COMMUNITY_Community 73|Community 73]]
+- [[_COMMUNITY_Community 75|Community 75]]
+- [[_COMMUNITY_Community 76|Community 76]]
+- [[_COMMUNITY_Community 77|Community 77]]
+- [[_COMMUNITY_Community 78|Community 78]]
+- [[_COMMUNITY_Community 79|Community 79]]
+- [[_COMMUNITY_Community 80|Community 80]]
+- [[_COMMUNITY_Community 81|Community 81]]
+- [[_COMMUNITY_Community 83|Community 83]]
+- [[_COMMUNITY_Community 84|Community 84]]
+- [[_COMMUNITY_Community 85|Community 85]]
+- [[_COMMUNITY_Community 86|Community 86]]
+- [[_COMMUNITY_Community 87|Community 87]]
+- [[_COMMUNITY_Community 88|Community 88]]
+- [[_COMMUNITY_Community 89|Community 89]]
+- [[_COMMUNITY_Community 90|Community 90]]
+- [[_COMMUNITY_Community 91|Community 91]]
+- [[_COMMUNITY_Community 94|Community 94]]
+- [[_COMMUNITY_Community 95|Community 95]]
+- [[_COMMUNITY_Community 96|Community 96]]
+- [[_COMMUNITY_Community 97|Community 97]]
+- [[_COMMUNITY_Community 98|Community 98]]
+- [[_COMMUNITY_Community 99|Community 99]]
+
+## God Nodes (most connected - your core abstractions)
+1. `getJwtUser()` - 132 edges
+2. `resolveClientScope()` - 119 edges
+3. `hasAnyRole()` - 50 edges
+4. `api` - 44 edges
+5. `LoadingState()` - 34 edges
+6. `ErrorState()` - 33 edges
+7. `useBreadcrumb()` - 32 edges
+8. `chipSx()` - 29 edges
+9. `ROLES` - 27 edges
+10. `ORG_SUPER_ROLES` - 26 edges
+
+## Surprising Connections (you probably didn't know these)
+- `Deployment Plan` --references--> `Production Deployment Workflow`  [INFERRED]
+  docs/DEPLOYMENT-PLAN.md → .github/workflows/deploy-prod.yml
+- `RecentRow()` --calls--> `chipSx()`  [EXTRACTED]
+  apps/web/src/routes/DashboardPage.tsx → apps/web/src/components/shared/tokens/colors.ts
+- `RequireRoles()` --calls--> `hasAnyRole()`  [EXTRACTED]
+  apps/web/src/routes/App.tsx → apps/web/src/lib/rbac.ts
+- `ChangeDetailPage()` --calls--> `hasAnyRole()`  [EXTRACTED]
+  apps/web/src/routes/ChangeDetailPage.tsx → apps/web/src/lib/rbac.ts
+- `ChecksPage()` --calls--> `hasAnyRole()`  [EXTRACTED]
+  apps/web/src/routes/ChecksPage.tsx → apps/web/src/lib/rbac.ts
+
+## Import Cycles
+- None detected.
+
+## Communities (100 total, 24 thin omitted)
+
+### Community 0 - "Community 0"
+Cohesion: 0.07
+Nodes (12): JwtUser, isOrgOwnerRole(), isOrgSuperRole(), ORG_SUPER_ROLES, createClient(), updateClient(), createUser(), UpdateUserDto (+4 more)
+
+### Community 1 - "Community 1"
+Cohesion: 0.04
+Nodes (50): ActivityContent, ActivityContentProps, ActivityFilter, APPROVAL_COLOURS, APPROVAL_DEFAULT_COLOURS, ApprovalsSectionContent, Attachment, AuditEvent (+42 more)
+
+### Community 2 - "Community 2"
+Cohesion: 0.04
+Nodes (50): ACTION_LABELS, ActivityContent, ActivityContentProps, ActivityFilter, AssessmentField, AssessmentSectionContent, AssessmentSectionContentProps, AssigneeCellProps (+42 more)
+
+### Community 3 - "Community 3"
+Cohesion: 0.04
+Nodes (49): ACTION_LABELS, ActivityContent, ActivityContentProps, ActivityFilter, AssigneeCell, AssigneeCellProps, Attachment, AttachmentsContent (+41 more)
+
+### Community 4 - "Community 4"
+Cohesion: 0.04
+Nodes (49): ACTION_LABELS, ActivityContent, ActivityContentProps, ActivityFilter, AssigneeCell, AssigneeCellProps, Attachment, AttachmentsContent (+41 more)
+
+### Community 5 - "Community 5"
+Cohesion: 0.04
+Nodes (46): ACTION_LABELS, ActivityContent, ActivityContentProps, ActivityFilter, AssigneeCell, AssigneeCellProps, Attachment, AttachmentsContent (+38 more)
+
+### Community 6 - "Community 6"
+Cohesion: 0.04
+Nodes (42): ACTION_LABELS, ActivityContent, ActivityContentProps, ActivityFilter, Attachment, AttachmentsContent, AttachmentsContentProps, AuditEvent (+34 more)
+
+### Community 7 - "Community 7"
+Cohesion: 0.07
+Nodes (34): AD_STAFF_ROLES, CLIENT_OWN_ROLES, hasAnyRole(), isAdStaffRole(), isClientOwnRole(), ORG_SUPER_ROLES, ROLES, Check (+26 more)
+
+### Community 8 - "Community 8"
+Cohesion: 0.05
+Nodes (34): ActivityContent, ActivityContentProps, ActivityFilter, AssetOption, Attachment, AttachmentsContent, AttachmentsContentProps, EditableField (+26 more)
+
+### Community 9 - "Community 9"
+Cohesion: 0.10
+Nodes (26): dataGridSx(), makeGridToolbar(), EmptyState(), ErrorState(), UserFormMode, UserView, Client, StaffToolbar (+18 more)
+
+### Community 10 - "Community 10"
+Cohesion: 0.05
+Nodes (37): dependencies, axios, @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, @emotion/react, @emotion/styled, leaflet (+29 more)
+
+### Community 11 - "Community 11"
+Cohesion: 0.10
+Nodes (24): isEmpty(), PropertyRow, CentreSection, CentreSectionViewProps, CollapsibleRightPanel, CollapsibleRightPanelProps, DetailField, formatMetadataDate() (+16 more)
+
+### Community 12 - "Community 12"
+Cohesion: 0.10
+Nodes (8): ListFilters, makeIncidentRef(), ConvertTriageItemDto, TriageConvertTargetType, TriageLifecycleStatus, TriageSourceType, makeIncidentRef(), makeServiceRequestRef()
+
+### Community 13 - "Community 13"
+Cohesion: 0.07
+Nodes (19): getSelectedClientId(), AttentionItem, ClientHealthCard(), ClientStat, lastActivityLabel(), OverviewData, RAG_COLOURS, BreadcrumbCtx (+11 more)
+
+### Community 14 - "Community 14"
+Cohesion: 0.12
+Nodes (7): JwtAuthGuard, Roles(), ConvertPublicSubmissionDto, CreatePublicSubmissionDto, CreateRequestIntakeDto, UpdateTriageItemStatusDto, CreateWorkPackageDto
+
+### Community 15 - "Community 15"
+Cohesion: 0.11
+Nodes (3): envInt(), LoginDto, RefreshTokenDto
+
+### Community 16 - "Community 16"
+Cohesion: 0.08
+Nodes (26): Props, ASSET_LIFECYCLE_OPTIONS, barColor(), getApiErrorMessage(), InfoRow, ROOM_TYPE_LABELS, Site, uFill() (+18 more)
+
+### Community 17 - "Community 17"
+Cohesion: 0.08
+Nodes (17): Asset, applyFilters(), applyFiltersExcluding(), emptyForKey(), FilterKey, FilterState, INITIAL_FILTERS, LIFECYCLE_LABEL (+9 more)
+
+### Community 18 - "Community 18"
+Cohesion: 0.07
+Nodes (20): countActiveFilters(), CreateRecordModalProps, EntityType, INITIAL_ISSUE_FILTERS, INITIAL_RISK_FILTERS, Issue, ISSUE_STATUS_LABELS, ISSUE_STATUSES (+12 more)
+
+### Community 19 - "Community 19"
+Cohesion: 0.10
+Nodes (23): MaintenanceTab(), ALL_PRIORITIES, ALL_STATUSES, capitalize(), COLUMNS, DEFAULT_VISIBLE_COLUMNS, formatDate(), initials() (+15 more)
+
+### Community 20 - "Community 20"
+Cohesion: 0.08
+Nodes (22): Asset, ASSET_LIFECYCLE_OPTIONS, ASSET_TYPE_BG, assetBg(), AuditEvent, Cabinet, Check, ElevationSide (+14 more)
+
+### Community 21 - "Community 21"
+Cohesion: 0.16
+Nodes (9): resolveClientScope(), CancelCheckDto, CreateCheckDto, CreateCheckTemplateDto, CreateCheckTemplateItemDto, CreateFollowOnDto, ReviewCheckDto, SubmitCheckDto (+1 more)
+
+### Community 22 - "Community 22"
+Cohesion: 0.12
+Nodes (7): ListOperationalQueryDto, CreateIncidentDto, UpdateIncidentDto, UpdateIncidentStatusDto, toCsv(), CloseServiceRequestDto, CreateServiceRequestDto
+
+### Community 23 - "Community 23"
+Cohesion: 0.12
+Nodes (26): actionLabel(), ASSET_TYPE_BG, assetBg(), AuditEvent, Cabinet, Check, ElevationSide, formatKw() (+18 more)
+
+### Community 24 - "Community 24"
+Cohesion: 0.07
+Nodes (14): EditAction, Props, ActionDialog, AssetDetailMode, AuditEventWithActor, ConnectionsTab, CreateModal, labelSx (+6 more)
+
+### Community 25 - "Community 25"
+Cohesion: 0.08
+Nodes (19): DEFAULT_DURATION, Notification, Notify, NotifyOptions, NotifySeverity, useNotification(), CHANGE_TYPES, PRIORITIES (+11 more)
+
+### Community 27 - "Community 27"
+Cohesion: 0.11
+Nodes (4): ALL_INTERNAL, CreateCommentDto, CreateCustomerUpdateDto, CreateDocumentReferenceDto
+
+### Community 29 - "Community 29"
+Cohesion: 0.08
+Nodes (9): AdminUsersPage, OverviewPage, RequireRoles(), UsersPage, AssetSummary, CheckSummary, ConnectionSummary, MaintenanceSummary (+1 more)
+
+### Community 30 - "Community 30"
+Cohesion: 0.14
+Nodes (3): CreateAssetDto, UpdateAssetDto, getJwtUser()
+
+### Community 31 - "Community 31"
+Cohesion: 0.15
+Nodes (14): LinkedTask, PropertyRow, WorkflowStage, WorkflowStrip(), WorkflowStripProps, Badge(), BadgeProps, EmptySlot() (+6 more)
+
+### Community 32 - "Community 32"
+Cohesion: 0.12
+Nodes (20): ACTIVE_INC, ACTIVE_SR, CHG_INTENT, dueAtChange(), dueAtIncident(), dueAtSR(), INC_INTENT, intentFor() (+12 more)
+
+### Community 33 - "Community 33"
+Cohesion: 0.13
+Nodes (12): AuditItem, Props, LoadingState(), priorityChipSx(), statusChipSx(), Actor, AuditEvent, AuditResponse (+4 more)
+
+### Community 34 - "Community 34"
+Cohesion: 0.19
+Nodes (17): ApiError, LoginResponse, logout(), RetryableConfig, revokeAndLogout(), setAuthToken(), tryRefreshAccessToken(), base64UrlDecode() (+9 more)
+
+### Community 35 - "Community 35"
+Cohesion: 0.11
+Nodes (14): TicketKind, priorityDot(), radii, RAGLevel, ragTokens, SemanticIntent, semanticTokens, shadows (+6 more)
+
+### Community 36 - "Community 36"
+Cohesion: 0.10
+Nodes (21): dependencies, @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, bcryptjs, class-transformer, class-validator, cookie-parser, dotenv (+13 more)
+
+### Community 37 - "Community 37"
+Cohesion: 0.15
+Nodes (4): geocoder, prisma, GeocodeQuery, GeocodeResult
+
+### Community 38 - "Community 38"
+Cohesion: 0.25
+Nodes (3): CreateMaintenanceDto, ListMaintenanceQueryDto, UpdateMaintenanceDto
+
+### Community 39 - "Community 39"
+Cohesion: 0.26
+Nodes (3): CreateConnectionDto, ListConnectionsQueryDto, UpdateConnectionDto
+
+### Community 40 - "Community 40"
+Cohesion: 0.12
+Nodes (11): ClientFormMode, Props, api, ClientView, CreateClientInput, listClients(), UpdateClientInput, Asset (+3 more)
+
+### Community 41 - "Community 41"
+Cohesion: 0.21
+Nodes (17): ADDITIONAL_SITES, CABINET_ASSETS, CabinetProfile, CSV_PATH, DEFAULT_U_HEIGHT, estimatePowerDrawW(), main(), nextRand() (+9 more)
+
+### Community 42 - "Community 42"
+Cohesion: 0.17
+Nodes (15): NestJS API, Production Deployment Workflow, Test Deployment Workflow, Deployment Plan, Docker Compose Configuration, MinIO Object Storage, PostgreSQL Database, RBAC Role Matrix Audit (+7 more)
+
+### Community 43 - "Community 43"
+Cohesion: 0.13
+Nodes (14): useTickets(), Assignee, Client, formatDue(), MyWorkPage(), Site, URGENCY_LABELS, URGENCY_ORDER (+6 more)
+
+### Community 44 - "Community 44"
+Cohesion: 0.13
+Nodes (12): Client, MANAGER_ASSIGNABLE, ORG_ADMIN_ASSIGNABLE, ORG_OWNER_ASSIGNABLE, Props, UserFormContext, CreateUserInput, listOrgUsers() (+4 more)
+
+### Community 45 - "Community 45"
+Cohesion: 0.18
+Nodes (6): CreateRiskDto, UpdateRiskDto, UpdateRiskStatusDto, ALL_INTERNAL, CreateTaskDto, UpdateTaskStatusDto
+
+### Community 46 - "Community 46"
+Cohesion: 0.12
+Nodes (17): devDependencies, eslint, eslint-config-prettier, eslint-plugin-import, @nestjs/cli, @nestjs/schematics, @nestjs/testing, prettier (+9 more)
+
+### Community 47 - "Community 47"
+Cohesion: 0.13
+Nodes (8): isNewStatus(), TicketKind, QueueView, SavedView, sectionLabelSx, StatusCell(), VIEW_OPTIONS, resolveIntent()
+
+### Community 48 - "Community 48"
+Cohesion: 0.15
+Nodes (10): buildChartData(), Check, DashboardPage(), formatDateForInput(), getDateRangeFromPreset(), Issue, RecentRow(), Risk (+2 more)
+
+### Community 50 - "Community 50"
+Cohesion: 0.13
+Nodes (14): compilerOptions, allowSyntheticDefaultImports, baseUrl, declaration, emitDecoratorMetadata, experimentalDecorators, incremental, module (+6 more)
+
+### Community 53 - "Community 53"
+Cohesion: 0.22
+Nodes (13): CHANGE_TEMPLATES, FORCE, INCIDENT_TEMPLATES, ISSUE_TEMPLATES, main(), MAINT_WORK_TYPES, prisma, rand() (+5 more)
+
+### Community 54 - "Community 54"
+Cohesion: 0.14
+Nodes (13): compilerOptions, isolatedModules, jsx, lib, module, moduleResolution, noEmit, resolveJsonModule (+5 more)
+
+### Community 55 - "Community 55"
+Cohesion: 0.32
+Nodes (3): AzureBlobStorageProvider, S3StorageProvider, PresignResult
+
+### Community 58 - "Community 58"
+Cohesion: 0.29
+Nodes (4): AddApprovalDto, CreateChangeDto, UpdateChangeDto, UpdateChangeStatusDto
+
+### Community 59 - "Community 59"
+Cohesion: 0.29
+Nodes (4): CreateIssueDto, UpdateIssueDto, UpdateIssueStatusDto, ALL_INTERNAL
+
+### Community 60 - "Community 60"
+Cohesion: 0.18
+Nodes (11): scripts, build, geocode:sites, lint, prisma:generate, prisma:migrate, prisma:studio, seed:demo (+3 more)
+
+### Community 63 - "Community 63"
+Cohesion: 0.22
+Nodes (4): categoryMixFromSubject(), CategoryPanel(), Delta, ServiceDeskDashboard()
+
+### Community 64 - "Community 64"
+Cohesion: 0.20
+Nodes (7): Check, CHECK_STATUSES, ChecksPage(), Site, STATUS_LABELS, Template, User
+
+### Community 65 - "Community 65"
+Cohesion: 0.22
+Nodes (8): env, es2021, node, extends, parserOptions, ecmaVersion, sourceType, root
+
+### Community 70 - "Community 70"
+Cohesion: 0.29
+Nodes (4): ChipIntent, Ticket, Column, COLUMNS
+
+### Community 72 - "Community 72"
+Cohesion: 0.25
+Nodes (7): name, private, scripts, build, dev, lint, workspaces
+
+### Community 73 - "Community 73"
+Cohesion: 0.25
+Nodes (7): env, browser, es2021, extends, parser, plugins, root
+
+### Community 75 - "Community 75"
+Cohesion: 0.33
+Nodes (6): Avatar(), AvatarSize, AvatarVariant, initialsFrom(), sizeMap, variantColours
+
+### Community 77 - "Community 77"
+Cohesion: 0.29
+Nodes (3): MappedSite, Props, SiteAssetCounts
+
+### Community 79 - "Community 79"
+Cohesion: 0.53
+Nodes (5): clientCode(), main(), prisma, seedCheckTemplates(), seedClientData()
+
+### Community 80 - "Community 80"
+Cohesion: 0.33
+Nodes (5): compilerOptions, esModuleInterop, module, strict, target
+
+### Community 81 - "Community 81"
+Cohesion: 0.33
+Nodes (5): name, prisma, seed, private, version
+
+### Community 83 - "Community 83"
+Cohesion: 0.50
+Nodes (4): bold(), describeAuditEvent(), readDataFields(), readDataString()
+
+### Community 84 - "Community 84"
+Cohesion: 0.50
+Nodes (4): bold(), describeAuditEvent(), readDataFields(), readDataString()
+
+### Community 85 - "Community 85"
+Cohesion: 0.50
+Nodes (4): bold(), describeAuditEvent(), readDataFields(), readDataString()
+
+### Community 87 - "Community 87"
+Cohesion: 0.50
+Nodes (3): ApiError, JwtUser, Role
+
+### Community 89 - "Community 89"
+Cohesion: 0.67
+Nodes (3): RecordDetailShell Component, Record Detail Page Spec, StatusPopover Component
+
+## Knowledge Gaps
+- **719 isolated node(s):** `root`, `ecmaVersion`, `sourceType`, `node`, `es2021` (+714 more)
+  These have ≤1 connection - possible missing edges or undocumented components.
+- **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+
+## Suggested Questions
+_Questions this graph is uniquely positioned to answer:_
+
+- **Why does `api` connect `Community 40` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 13`, `Community 16`, `Community 17`, `Community 18`, `Community 19`, `Community 20`, `Community 23`, `Community 24`, `Community 25`, `Community 29`, `Community 32`, `Community 33`, `Community 34`, `Community 43`, `Community 44`, `Community 47`, `Community 48`, `Community 64`?**
+  _High betweenness centrality (0.076) - this node is a cross-community bridge._
+- **Why does `CreateServiceRequestDto` connect `Community 22` to `Community 24`, `Community 25`, `Community 47`?**
+  _High betweenness centrality (0.061) - this node is a cross-community bridge._
+- **Why does `LoadingState()` connect `Community 33` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 13`, `Community 16`, `Community 18`, `Community 19`, `Community 20`, `Community 24`, `Community 29`, `Community 40`, `Community 43`, `Community 47`, `Community 48`, `Community 63`, `Community 64`?**
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **What connects `root`, `ecmaVersion`, `sourceType` to the rest of the system?**
+  _719 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Community 0` be split into smaller, more focused modules?**
+  _Cohesion score 0.07005649717514124 - nodes in this community are weakly interconnected._
+- **Should `Community 1` be split into smaller, more focused modules?**
+  _Cohesion score 0.03623611922852133 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.03690260133091349 - nodes in this community are weakly interconnected._

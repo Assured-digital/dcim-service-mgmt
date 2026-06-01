@@ -5,12 +5,10 @@ import {
   Box,
   Button,
   Drawer,
-  FormControlLabel,
   IconButton,
   InputAdornment,
   MenuItem,
   Stack,
-  Switch,
   TextField,
   Tooltip,
   Typography
@@ -20,18 +18,27 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff"
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh"
 import { api, type ApiError } from "../lib/api"
 import { getCurrentUser } from "../lib/auth"
-import { ROLES } from "../lib/rbac"
+import { AD_STAFF_ROLES, CLIENT_OWN_ROLES, ROLES } from "../lib/rbac"
+import { getSelectedClientId } from "../lib/scope"
 import { createUser, updateUser, type UserRole, type UserView } from "../lib/users"
 
 type Client = { id: string; name: string }
 
 export type UserFormMode = "create" | "edit"
 
+// Which population this drawer is managing. "org-staff" = Assured Digital staff
+// (Top Admin → Users); "client" = a client's own users (Client Admin → Users).
+// It narrows the role picker to the relevant category and, for the client
+// context, pre-fills the client field from the global scope. Undefined keeps the
+// legacy behaviour (full assignable list, no pre-fill).
+export type UserFormContext = "org-staff" | "client"
+
 type Props = {
   open: boolean
   mode: UserFormMode
   user: UserView | null
   onClose: () => void
+  context?: UserFormContext
 }
 
 // Role allow-lists mirror UsersService.assertCanAssignRole (UX only — the
@@ -73,15 +80,104 @@ function generateStrongPassword(): string {
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("")
 }
 
-export default function UserFormDrawer({ open, mode, user, onClose }: Props) {
+// 12px muted label sitting above each field for consistent vertical rhythm.
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography
+      component="label"
+      sx={{
+        display: "block",
+        fontSize: 12,
+        fontWeight: 600,
+        color: "var(--color-text-muted, #64748b)",
+        mb: 0.625
+      }}
+    >
+      {children}
+    </Typography>
+  )
+}
+
+// Segmented Active / Inactive status control, replacing the oversized Switch.
+// Two adjacent pill segments in a bordered container; the active state is
+// highlighted (Active = success, Inactive = muted). The Inactive segment is
+// disabled when editing your own account (mirrors the server self-guard).
+function StatusSegmented({
+  value,
+  onChange,
+  disableInactive
+}: {
+  value: boolean
+  onChange: (active: boolean) => void
+  disableInactive: boolean
+}) {
+  const segment = (active: boolean) => {
+    const selected = value === active
+    const disabled = !active && disableInactive
+    const selectedSx = active
+      ? { bgcolor: "#dcfce7", color: "#166534" }
+      : { bgcolor: "var(--color-background-tertiary, #f1f5f9)", color: "var(--color-text-secondary, #475569)" }
+    return (
+      <Box
+        role="button"
+        aria-pressed={selected}
+        onClick={() => {
+          if (disabled || selected) return
+          onChange(active)
+        }}
+        sx={{
+          flex: 1,
+          textAlign: "center",
+          py: 0.75,
+          fontSize: 13,
+          fontWeight: 600,
+          borderRadius: 1.5,
+          cursor: disabled ? "not-allowed" : selected ? "default" : "pointer",
+          userSelect: "none",
+          opacity: disabled ? 0.5 : 1,
+          ...(selected ? selectedSx : { color: "var(--color-text-muted, #64748b)" }),
+          transition: "background-color 120ms ease, color 120ms ease"
+        }}
+      >
+        {active ? "Active" : "Inactive"}
+      </Box>
+    )
+  }
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        gap: 0.5,
+        p: 0.5,
+        border: "1px solid var(--color-border-primary, #e2e8f0)",
+        borderRadius: 2,
+        bgcolor: "var(--color-background-primary, #ffffff)"
+      }}
+    >
+      {segment(true)}
+      {segment(false)}
+    </Box>
+  )
+}
+
+export default function UserFormDrawer({ open, mode, user, onClose, context }: Props) {
   const qc = useQueryClient()
   const currentUser = getCurrentUser()
   const isEdit = mode === "edit"
 
   const allowedRoles = useMemo(() => assignableRolesFor(currentUser?.role), [currentUser?.role])
 
+  // Narrow the actor's assignable roles to the view's population. Keeps the same
+  // server-mirrored allow-list, just scoped to AD-staff or client-own roles.
+  const contextRoles = useMemo(() => {
+    if (context === "org-staff") return allowedRoles.filter((r) => AD_STAFF_ROLES.includes(r))
+    if (context === "client") return allowedRoles.filter((r) => CLIENT_OWN_ROLES.includes(r))
+    return allowedRoles
+  }, [allowedRoles, context])
+
   const [email, setEmail] = useState("")
-  const [role, setRole] = useState<UserRole>(allowedRoles[0] ?? ROLES.CLIENT_VIEWER)
+  const [role, setRole] = useState<UserRole>(contextRoles[0] ?? ROLES.CLIENT_VIEWER)
   const [clientId, setClientId] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -98,18 +194,20 @@ export default function UserFormDrawer({ open, mode, user, onClose }: Props) {
     if (!open) return
     if (isEdit && user) {
       setEmail(user.email)
-      setRole(allowedRoles.includes(user.role) ? user.role : (allowedRoles[0] ?? user.role))
+      setRole(contextRoles.includes(user.role) ? user.role : (contextRoles[0] ?? user.role))
       setClientId(user.clientId ?? "")
       setIsActive(user.isActive)
     } else {
       setEmail("")
-      setRole(allowedRoles[0] ?? ROLES.CLIENT_VIEWER)
-      setClientId("")
+      setRole(contextRoles[0] ?? ROLES.CLIENT_VIEWER)
+      // In the client view, pre-fill the client field from the global scope so
+      // the admin doesn't have to re-pick the client they're already in.
+      setClientId(context === "client" ? (getSelectedClientId() ?? "") : "")
       setIsActive(true)
     }
     setPassword("")
     setShowPassword(false)
-  }, [open, mode, user, allowedRoles])
+  }, [open, mode, user, contextRoles, context])
 
   const needsClient = requiresClientScope(role)
 
@@ -140,6 +238,7 @@ export default function UserFormDrawer({ open, mode, user, onClose }: Props) {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["users-admin"] })
+      await qc.invalidateQueries({ queryKey: ["users-org"] })
       await qc.invalidateQueries({ queryKey: ["users"] })
       onClose()
     }
@@ -168,107 +267,127 @@ export default function UserFormDrawer({ open, mode, user, onClose }: Props) {
             : "Provision operational access for a user in the selected scope."}
         </Typography>
 
-        <Stack spacing={2} sx={{ flex: 1, overflowY: "auto", pr: 0.5 }}>
-          <TextField
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={isEdit}
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-            autoComplete="off"
-            inputProps={{ autoComplete: "off" }}
-          />
+        <Stack spacing={2.25} sx={{ flex: 1, overflowY: "auto", pr: 0.5 }}>
+          <Box>
+            <FieldLabel>Email</FieldLabel>
+            <TextField
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isEdit}
+              fullWidth
+              size="small"
+              autoComplete="off"
+              inputProps={{ autoComplete: "off" }}
+              sx={
+                isEdit
+                  ? {
+                      "& .MuiInputBase-root.Mui-disabled": {
+                        bgcolor: "var(--color-background-secondary, #f8fafc)"
+                      },
+                      "& .MuiInputBase-input.Mui-disabled": {
+                        WebkitTextFillColor: "var(--color-text-muted, #64748b)",
+                        color: "var(--color-text-muted, #64748b)"
+                      }
+                    }
+                  : undefined
+              }
+            />
+          </Box>
 
-          <TextField
-            select
-            label="Role"
-            value={role}
-            onChange={(e) => setRole(e.target.value as UserRole)}
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-          >
-            {allowedRoles.map((r) => (
-              <MenuItem key={r} value={r}>
-                {r}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          {needsClient ? (
+          <Box>
+            <FieldLabel>Role</FieldLabel>
             <TextField
               select
-              label="Client"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              required
-              error={clientMissing}
-              helperText={clientMissing ? "A client is required for this role." : undefined}
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
               fullWidth
-              InputLabelProps={{ shrink: true }}
+              size="small"
             >
-              <MenuItem value="">— Select client —</MenuItem>
-              {(clients.data ?? []).map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.name}
+              {contextRoles.map((r) => (
+                <MenuItem key={r} value={r}>
+                  {r}
                 </MenuItem>
               ))}
             </TextField>
+          </Box>
+
+          {needsClient ? (
+            <Box>
+              <FieldLabel>Client</FieldLabel>
+              <TextField
+                select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                required
+                error={clientMissing}
+                helperText={clientMissing ? "A client is required for this role." : undefined}
+                fullWidth
+                size="small"
+              >
+                <MenuItem value="">— Select client —</MenuItem>
+                {(clients.data ?? []).map((c) => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
           ) : null}
 
-          <TextField
-            label={isEdit ? "Reset password (leave blank to keep current)" : "Password"}
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required={!isEdit}
-            error={passwordTooShort}
-            helperText={
-              passwordTooShort
-                ? "Must be at least 8 characters."
-                : "Setting a password signs the user out of existing sessions."
-            }
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-            autoComplete="new-password"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Tooltip title="Generate strong password">
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      onClick={() => {
-                        setPassword(generateStrongPassword())
-                        setShowPassword(true)
-                      }}
-                    >
-                      <AutoFixHighIcon fontSize="small" />
+          <Box>
+            <FieldLabel>{isEdit ? "Reset password" : "Password"}</FieldLabel>
+            <TextField
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required={!isEdit}
+              error={passwordTooShort}
+              placeholder={isEdit ? "Leave blank to keep current" : undefined}
+              helperText={
+                passwordTooShort
+                  ? "Must be at least 8 characters."
+                  : "Setting a password signs the user out of existing sessions."
+              }
+              fullWidth
+              size="small"
+              autoComplete="new-password"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Generate strong password">
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        onClick={() => {
+                          setPassword(generateStrongPassword())
+                          setShowPassword(true)
+                        }}
+                      >
+                        <AutoFixHighIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <IconButton edge="end" size="small" onClick={() => setShowPassword((s) => !s)}>
+                      {showPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
                     </IconButton>
-                  </Tooltip>
-                  <IconButton edge="end" size="small" onClick={() => setShowPassword((s) => !s)}>
-                    {showPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-                  </IconButton>
-                </InputAdornment>
-              )
-            }}
-          />
+                  </InputAdornment>
+                )
+              }}
+            />
+          </Box>
 
           {isEdit ? (
-            <Tooltip title={editingSelf ? "You cannot deactivate your own account" : ""} placement="top-start">
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={isActive}
-                    disabled={editingSelf}
-                    onChange={(e) => setIsActive(e.target.checked)}
-                  />
-                }
-                label={isActive ? "Active" : "Inactive"}
-                sx={{ width: "fit-content" }}
-              />
-            </Tooltip>
+            <Box>
+              <FieldLabel>Status</FieldLabel>
+              <Tooltip
+                title={editingSelf ? "You cannot deactivate your own account" : ""}
+                placement="top-start"
+              >
+                <Box>
+                  <StatusSegmented value={isActive} onChange={setIsActive} disableInactive={editingSelf} />
+                </Box>
+              </Tooltip>
+            </Box>
           ) : null}
 
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}

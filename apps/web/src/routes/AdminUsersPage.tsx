@@ -4,30 +4,25 @@ import { Box, Button, InputAdornment, Stack, TextField, Typography } from "@mui/
 import PersonAddIcon from "@mui/icons-material/PersonAdd"
 import SearchIcon from "@mui/icons-material/Search"
 import { api } from "../lib/api"
-import { listUsers, type UserView } from "../lib/users"
-import { isClientOwnRole } from "../lib/rbac"
+import { listOrgUsers, type UserView } from "../lib/users"
+import { isAdStaffRole } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import UserListRow from "../components/UserListRow"
 import UserFormDrawer, { type UserFormMode } from "../components/UserFormDrawer"
 
 type Client = { id: string; name: string }
 
-export default function UsersPage() {
+// Top Admin → Users: Assured Digital's own staff, org-wide (not filtered by the
+// global client selector). Client-own users live under Client Admin → Users.
+export default function AdminUsersPage() {
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [mode, setMode] = React.useState<UserFormMode>("create")
   const [selected, setSelected] = React.useState<UserView | null>(null)
   const [search, setSearch] = React.useState("")
 
-  // x-client-id is auto-attached by the api.ts interceptor for org-super users
-  // based on the global client selector — no manual scoping here.
-  const users = useQuery({ queryKey: ["users-admin"], queryFn: listUsers })
-
-  // This view manages the client's OWN users only (CLIENT_VIEWER + future client
-  // roles). AD-staff assigned to this client are managed in Top Admin → Users.
-  const clientUsers = React.useMemo(
-    () => (users.data ?? []).filter((u) => isClientOwnRole(u.role)),
-    [users.data]
-  )
+  // Org-wide fetch: listOrgUsers sends an explicit empty x-client-id so the
+  // interceptor doesn't scope us to the selected client.
+  const users = useQuery({ queryKey: ["users-org"], queryFn: listOrgUsers })
 
   const clients = useQuery({
     queryKey: ["clients"],
@@ -39,17 +34,24 @@ export default function UsersPage() {
     [clients.data]
   )
 
+  // AD-staff roles only (ORG_OWNER/ORG_ADMIN/SERVICE_MANAGER/ANALYST/ENGINEER,
+  // plus legacy ADMIN). CLIENT_VIEWER and PUBLIC_USER are excluded.
+  const staffUsers = React.useMemo(
+    () => (users.data ?? []).filter((u) => isAdStaffRole(u.role)),
+    [users.data]
+  )
+
   // Client-side filter of the visible rows by email or role.
   const visibleUsers = React.useMemo(() => {
     const q = search.trim().toLowerCase()
-    const sorted = [...clientUsers].sort(
+    const sorted = [...staffUsers].sort(
       (a, b) => Number(b.isActive) - Number(a.isActive) || a.email.localeCompare(b.email)
     )
     if (!q) return sorted
     return sorted.filter(
       (u) => u.email.toLowerCase().includes(q) || u.role.replace(/_/g, " ").toLowerCase().includes(q)
     )
-  }, [clientUsers, search])
+  }, [staffUsers, search])
 
   function openCreate() {
     setSelected(null)
@@ -76,7 +78,7 @@ export default function UsersPage() {
         }}
       >
         <Typography sx={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary, #0f172a)" }}>
-          User management
+          Staff users
         </Typography>
         <Button
           size="small"
@@ -112,7 +114,7 @@ export default function UsersPage() {
         search.trim() ? (
           <EmptyState title="No matching users" detail="Try a different email or role." />
         ) : (
-          <EmptyState title="No users yet" detail="Create a user to grant operational access for this client scope." />
+          <EmptyState title="No staff users yet" detail="Create a user to grant Assured Digital staff access." />
         )
       ) : (
         <Stack spacing={1}>
@@ -122,7 +124,7 @@ export default function UsersPage() {
         </Stack>
       )}
 
-      <UserFormDrawer open={drawerOpen} mode={mode} user={selected} onClose={() => setDrawerOpen(false)} context="client" />
+      <UserFormDrawer open={drawerOpen} mode={mode} user={selected} onClose={() => setDrawerOpen(false)} context="org-staff" />
     </Box>
   )
 }

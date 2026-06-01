@@ -51,6 +51,15 @@ export async function listUsers() {
   return (await api.get<UserView[]>("/users")).data
 }
 
+// Org-wide list for the Top Admin → Users view. Sending an explicit (empty)
+// x-client-id stops the api.ts interceptor from injecting the globally-selected
+// client, so a super-role gets every user in their organization — the server
+// still enforces org isolation and never crosses organizations. The two user
+// views then split this result by role category client-side.
+export async function listOrgUsers() {
+  return (await api.get<UserView[]>("/users", { headers: { "x-client-id": "" } })).data
+}
+
 export async function createUser(dto: CreateUserInput) {
   return (await api.post<UserView>("/users", dto)).data
 }

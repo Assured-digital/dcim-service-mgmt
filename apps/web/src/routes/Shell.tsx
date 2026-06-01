@@ -215,7 +215,7 @@ const SIDEBAR_EXPANDED = 236
 const SIDEBAR_COLLAPSED = 56
 const HEADER_HEIGHT = 56
 const ICON_SIZE = 20
-const SCOPE_INDEPENDENT_PATHS = ["/my-work", "/overview", "/audit", "/clients"]
+const SCOPE_INDEPENDENT_PATHS = ["/my-work", "/overview", "/audit", "/clients", "/admin/users"]
 
 type NavItem = { label: string; path: string; icon: React.ReactNode; roles: string[] }
 type NavGroup = { kind: "group"; label: string; icon: React.ReactNode; matchPaths: string[]; roles: string[]; items: NavItem[] }
@@ -232,6 +232,7 @@ const scopeIndependentSections: NavSection[] = [
     title: "Admin", icon: <AdminPanelSettingsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
       { label: "Audit Trail", path: "/audit", icon: <HistoryIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
       { label: "Clients", path: "/clients", icon: <ApartmentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
+      { label: "Users", path: "/admin/users", icon: <ManageAccountsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
     ]
   }
 ]

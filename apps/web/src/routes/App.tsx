@@ -29,6 +29,7 @@ const CheckTemplateDetailPage  = React.lazy(() => import("./CheckTemplateDetailP
 const WorkPackagesPage         = React.lazy(() => import("./WorkPackagesPage"))
 const AuditTrailPage           = React.lazy(() => import("./AuditTrailPage"))
 const UsersPage                = React.lazy(() => import("./UsersPage"))
+const AdminUsersPage           = React.lazy(() => import("./AdminUsersPage"))
 const ClientsPage              = React.lazy(() => import("./ClientsPage"))
 const MyWorkPage               = React.lazy(() => import("./MyWorkPage"))
 const OverviewPage             = React.lazy(() => import("./OverviewPage"))
@@ -238,6 +239,15 @@ export default function App() {
             element={
               <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
                 <UsersPage />
+              </RequireRoles>
+            }
+          />
+          {/* Top Admin → Users: Assured Digital staff, org-wide */}
+          <Route
+            path="admin/users"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES]}>
+                <AdminUsersPage />
               </RequireRoles>
             }
           />
