@@ -23,6 +23,16 @@ export class ClientsController {
     return this.clients.list(actor);
   }
 
+  // Own-client lookup for any authenticated user (incl. client-scoped roles).
+  // No @Roles → reachable by all authenticated users; returns ONLY the caller's
+  // own client (derived from their JWT clientId), never another client.
+  // Declared before @Get(":id") so "me" is not matched as an :id param.
+  @Get("me")
+  async getMine(@Req() req: any) {
+    const actor = getJwtUser(req);
+    return this.clients.getMine(actor);
+  }
+
   @Get(":id")
   @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN)
   async get(@Req() req: any, @Param("id") id: string) {

@@ -237,7 +237,7 @@ export default function App() {
           <Route
             path="users"
             element={
-              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+              <RequireRoles roles={[...ORG_SUPER_ROLES]}>
                 <UsersPage />
               </RequireRoles>
             }

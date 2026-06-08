@@ -21,6 +21,20 @@ export class ClientsService {
     });
   }
 
+  // Returns ONLY the caller's own client, derived strictly from their JWT clientId.
+  // Never accepts a client id param — cannot be used to fetch another client.
+  async getMine(actor: JwtUser) {
+    if (!actor.clientId) {
+      throw new NotFoundException("No client assigned");
+    }
+    const client = await this.prisma.client.findUnique({
+      where: { id: actor.clientId },
+      select: { id: true, name: true }
+    });
+    if (!client) throw new NotFoundException("Client not found");
+    return client;
+  }
+
   async get(actor: JwtUser, id: string) {
     const organizationId = await this.requireOrganizationScope(actor);
     const client = await this.prisma.client.findUnique({ where: { id } });

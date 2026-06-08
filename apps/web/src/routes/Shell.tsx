@@ -268,7 +268,7 @@ const clientSections: NavSection[] = [
   {
     title: "Client Admin", icon: <AdminPanelSettingsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
       { label: "Service Scope", path: "/work-packages", icon: <WorkIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
-      { label: "Users", path: "/users", icon: <ManageAccountsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
+      { label: "Users", path: "/users", icon: <ManageAccountsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
     ]
   }
 ]
@@ -536,7 +536,7 @@ export default function Shell() {
   const queryClient = useQueryClient()
   const currentUser = getCurrentUser()
 
-  const canSwitchClients = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
+  const canSwitchClients = hasAnyRole([...ORG_SUPER_ROLES])
   const isScopeIndependent = SCOPE_INDEPENDENT_PATHS.some(p => loc.pathname.startsWith(p))
 
   const [selectedClientId, setSelectedClientIdState] = useState(getSelectedClientId() ?? "")
@@ -622,6 +622,13 @@ export default function Shell() {
   }, [loc.pathname]) // eslint-disable-line
 
   const selectedClient = (clients.data ?? []).find(c => c.id === selectedClientId)
+
+  // Non-switchers (client-scoped roles) are auto-scoped by the backend and have
+  // no access to GET /clients. Fetch their own client name for the breadcrumb.
+  const myClient = useQuery({
+    queryKey: ["my-client"], enabled: !canSwitchClients && !!currentUser?.clientId,
+    queryFn: async () => (await api.get<{ id: string; name: string }>("/clients/me")).data
+  })
 
   function handleClientChange(clientId: string) {
     setSelectedClientIdState(clientId); setSelectedClientId(clientId || null)
@@ -796,7 +803,7 @@ export default function Shell() {
             </Box>
             <SbDivider />
           </Box>
-        ) : <SbDivider />}
+        ) : null}
 
         {/* Client-scoped sections */}
         {(!canSwitchClients || selectedClientId) ? (
@@ -922,30 +929,43 @@ export default function Shell() {
         <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: "#080f1e", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", px: "16px", gap: "8px" }}>
           <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
 
-            {/* Client badge — clickable, navigates to dashboard */}
-            {selectedClient && !isScopeIndependent ? (
-              <Box
-                onClick={() => nav("/dashboard")}
-                sx={{
-                  display: "flex", alignItems: "center", gap: "7px",
-                  px: "12px", py: "6px",
-                  bgcolor: "rgba(255,255,255,0.08)", borderRadius: "8px",
-                  border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0,
-                  cursor: "pointer", transition: "all 0.12s",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.14)", borderColor: "rgba(255,255,255,0.22)" }
-                }}
-              >
+            {/* Client badge — switchers: clickable, navigates to dashboard */}
+            {canSwitchClients ? (
+              selectedClient && !isScopeIndependent ? (
+                <Box
+                  onClick={() => nav("/dashboard")}
+                  sx={{
+                    display: "flex", alignItems: "center", gap: "7px",
+                    px: "12px", py: "6px",
+                    bgcolor: "rgba(255,255,255,0.08)", borderRadius: "8px",
+                    border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0,
+                    cursor: "pointer", transition: "all 0.12s",
+                    "&:hover": { bgcolor: "rgba(255,255,255,0.14)", borderColor: "rgba(255,255,255,0.22)" }
+                  }}
+                >
+                  <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#22c55e", flexShrink: 0 }} />
+                  <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#e2e8f0" }}>{selectedClient.name}</Typography>
+                </Box>
+              ) : isScopeIndependent ? (
+                <Box sx={{ px: "12px", py: "6px", bgcolor: "rgba(255,255,255,0.05)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+                  <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#64748b" }}>All clients</Typography>
+                </Box>
+              ) : null
+            ) : myClient.data ? (
+              // Non-switchers: assigned client name, non-interactive (no dropdown, no navigation)
+              <Box sx={{
+                display: "flex", alignItems: "center", gap: "7px",
+                px: "12px", py: "6px",
+                bgcolor: "rgba(255,255,255,0.08)", borderRadius: "8px",
+                border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0
+              }}>
                 <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#22c55e", flexShrink: 0 }} />
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#e2e8f0" }}>{selectedClient.name}</Typography>
-              </Box>
-            ) : isScopeIndependent ? (
-              <Box sx={{ px: "12px", py: "6px", bgcolor: "rgba(255,255,255,0.05)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#64748b" }}>All clients</Typography>
+                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#e2e8f0" }}>{myClient.data.name}</Typography>
               </Box>
             ) : null}
 
             {/* › separator */}
-            {activePage && !hideModuleLabel && (selectedClient || isScopeIndependent) ? (
+            {activePage && !hideModuleLabel && (canSwitchClients ? (selectedClient || isScopeIndependent) : !!myClient.data) ? (
               <Typography sx={{ color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
             ) : null}
 
