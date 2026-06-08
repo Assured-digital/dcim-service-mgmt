@@ -1,6 +1,3 @@
--- Ensure gen_random_uuid() is available for the backfill below.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 -- CreateTable
 CREATE TABLE "UserClientAssignment" (
     "id" TEXT NOT NULL,
