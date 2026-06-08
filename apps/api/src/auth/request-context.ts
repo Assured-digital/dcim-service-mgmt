@@ -46,13 +46,35 @@ export async function resolveClientScope(
     return scoped;
   }
 
-  if (!user.clientId) {
-    throw new ForbiddenException("Missing client scope");
+  // Client-scoped (non-super) branch.
+  // Phase 2 (multi-client): scope is now sourced from the UserClientAssignment join
+  // table, not the User.clientId scalar. This is behaviour-preserving for existing
+  // users: every current user was backfilled to exactly ONE assignment (= their old
+  // clientId), so the single-assignment paths below return the identical result.
+  // The cross-client guard generalises from "== user.clientId" to "IN assigned set".
+  const assignments = await prisma.userClientAssignment.findMany({
+    where: { userId: user.userId },
+    select: { clientId: true }
+  });
+  const assignedClientIds = assignments.map((a) => a.clientId);
+
+  if (assignedClientIds.length === 0) {
+    throw new ForbiddenException("No client assignments");
   }
 
-  if (requested && requested !== user.clientId) {
-    throw new ForbiddenException("Cross-client access denied");
+  if (requested) {
+    // Cross-client guard: the requested client must be one the user is assigned to.
+    if (!assignedClientIds.includes(requested)) {
+      throw new ForbiddenException("Not assigned to this client");
+    }
+    return requested;
   }
 
-  return user.clientId;
+  // No explicit selection: single-assignment users auto-scope (the existing-user case).
+  // Multi-client users without a selection get the first assignment deterministically
+  // (sorted) — a valid assigned scope; the scope selector normally supplies one in Phase 4.
+  if (assignedClientIds.length === 1) {
+    return assignedClientIds[0];
+  }
+  return [...assignedClientIds].sort()[0];
 }
