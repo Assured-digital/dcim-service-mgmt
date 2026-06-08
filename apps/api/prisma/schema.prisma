@@ -130,6 +130,7 @@ model Client {
   documents DocumentReference[]
   requestIntakes RequestIntake[]
   connections Connection[]
+  userAssignments UserClientAssignment[]
 }
 
 model Site {
@@ -329,6 +330,7 @@ model User {
   assignedChecks     Check[]  @relation("AssignedCheck")
   reviewingChecks    Check[]  @relation("CheckReviewer")
   performedMaintenance MaintenanceLog[] @relation("PerformedMaintenance")
+  clientAssignments UserClientAssignment[]
 }
 
 model PublicSubmission {
@@ -658,4 +660,18 @@ model Comment {
   updatedAt         DateTime @updatedAt
   serviceRequestId  String?
   serviceRequest    ServiceRequest? @relation("ServiceRequestComments", fields: [serviceRequestId], references: [id])
+}
+
+model UserClientAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  clientId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([userId])
+  @@index([clientId])
 }
