@@ -41,6 +41,21 @@ export class ClientsService {
     return client;
   }
 
+  // Returns the LIST of clients the CALLER is assigned to (id + name), derived
+  // strictly from the caller's own UserClientAssignment rows. Never returns
+  // another user's assignments or an arbitrary client list. Zero assignments →
+  // empty array (not an error).
+  async listMine(actor: JwtUser) {
+    const assignments = await this.prisma.userClientAssignment.findMany({
+      where: { userId: actor.userId },
+      select: { client: { select: { id: true, name: true } } }
+    });
+    return assignments
+      .map((a) => a.client)
+      .filter((c): c is { id: string; name: string } => !!c)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async get(actor: JwtUser, id: string) {
     const organizationId = await this.requireOrganizationScope(actor);
     const client = await this.prisma.client.findUnique({ where: { id } });

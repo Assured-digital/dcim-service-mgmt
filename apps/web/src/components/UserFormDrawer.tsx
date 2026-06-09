@@ -4,10 +4,16 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
+  Chip,
   Drawer,
+  FormHelperText,
   IconButton,
   InputAdornment,
+  ListItemText,
   MenuItem,
+  OutlinedInput,
+  Select,
   Stack,
   TextField,
   Tooltip,
@@ -18,7 +24,7 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff"
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh"
 import { api, type ApiError } from "../lib/api"
 import { useNotification } from "./NotificationProvider"
-import { getCurrentUser } from "../lib/auth"
+import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
 import { AD_STAFF_ROLES, CLIENT_OWN_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId } from "../lib/scope"
 import { createUser, updateUser, type UserRole, type UserView } from "../lib/users"
@@ -183,16 +189,25 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
   const [lastName, setLastName] = useState("")
   const [knownAs, setKnownAs] = useState("")
   const [role, setRole] = useState<UserRole>(contextRoles[0] ?? ROLES.CLIENT_VIEWER)
-  const [clientId, setClientId] = useState("")
+  const [clientIds, setClientIds] = useState<string[]>([])
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isActive, setIsActive] = useState(true)
 
+  // Assignable-client source by role: org-super creators see ALL org clients
+  // (/clients); client-scoped creators see only their own assignments
+  // (/clients/mine) and must never call the admin-only /clients.
+  const isOrgSuper = isOrgSuperRole(currentUser?.role)
   const clients = useQuery({
-    queryKey: ["clients"],
+    queryKey: isOrgSuper ? ["clients"] : ["clients-mine"],
     enabled: open,
-    queryFn: async () => (await api.get<Client[]>("/clients")).data
+    queryFn: async () => (await api.get<Client[]>(isOrgSuper ? "/clients" : "/clients/mine")).data
   })
+
+  const clientNameById = useMemo(
+    () => new Map((clients.data ?? []).map((c) => [c.id, c.name])),
+    [clients.data]
+  )
 
   // Reset form whenever the drawer opens or the target user changes.
   useEffect(() => {
@@ -203,7 +218,7 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
       setLastName(user.lastName ?? "")
       setKnownAs(user.knownAs ?? "")
       setRole(contextRoles.includes(user.role) ? user.role : (contextRoles[0] ?? user.role))
-      setClientId(user.clientId ?? "")
+      setClientIds(user.clientIds ?? [])
       setIsActive(user.isActive)
     } else {
       setEmail("")
@@ -213,7 +228,8 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
       setRole(contextRoles[0] ?? ROLES.CLIENT_VIEWER)
       // In the client view, pre-fill the client field from the global scope so
       // the admin doesn't have to re-pick the client they're already in.
-      setClientId(context === "client" ? (getSelectedClientId() ?? "") : "")
+      const scoped = context === "client" ? getSelectedClientId() : null
+      setClientIds(scoped ? [scoped] : [])
       setIsActive(true)
     }
     setPassword("")
@@ -224,7 +240,7 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
 
   // Clear the client field when switching to an org-level role.
   useEffect(() => {
-    if (!needsClient && clientId) setClientId("")
+    if (!needsClient && clientIds.length) setClientIds([])
   }, [needsClient]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const editingSelf = isEdit && !!user && user.id === currentUser?.userId
@@ -237,7 +253,7 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
           lastName: lastName.trim() || undefined,
           knownAs: knownAs.trim() || undefined,
           role,
-          clientId: needsClient ? clientId : undefined,
+          clientIds: needsClient ? clientIds : undefined,
           isActive,
           password: password.trim() ? password : undefined
         })
@@ -249,7 +265,7 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
         lastName: lastName.trim(),
         knownAs: knownAs.trim() || undefined,
         role,
-        clientId: needsClient ? clientId : undefined,
+        clientIds: needsClient ? clientIds : undefined,
         isActive
       })
     },
@@ -276,7 +292,7 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
   // First / last name are required in BOTH create and edit modes.
   const firstNameMissing = !firstName.trim()
   const lastNameMissing = !lastName.trim()
-  const clientMissing = needsClient && !clientId
+  const clientMissing = needsClient && clientIds.length === 0
   const canSubmit =
     !emailError &&
     !firstNameMissing &&
@@ -385,24 +401,43 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
 
           {needsClient ? (
             <Box>
-              <FieldLabel>Client</FieldLabel>
-              <TextField
-                select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                required
+              <FieldLabel>{clientIds.length > 1 ? "Clients" : "Client"}</FieldLabel>
+              <Select
+                multiple
+                value={clientIds}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setClientIds(typeof v === "string" ? v.split(",") : v)
+                }}
+                input={<OutlinedInput />}
+                displayEmpty
                 error={clientMissing}
-                helperText={clientMissing ? "A client is required for this role." : undefined}
                 fullWidth
                 size="small"
+                renderValue={(selected) =>
+                  selected.length === 0 ? (
+                    <Typography sx={{ color: "var(--color-text-muted, #64748b)", fontSize: 14 }}>
+                      — Select client(s) —
+                    </Typography>
+                  ) : (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                      {selected.map((id) => (
+                        <Chip key={id} size="small" label={clientNameById.get(id) ?? id} />
+                      ))}
+                    </Box>
+                  )
+                }
               >
-                <MenuItem value="">— Select client —</MenuItem>
                 {(clients.data ?? []).map((c) => (
                   <MenuItem key={c.id} value={c.id}>
-                    {c.name}
+                    <Checkbox checked={clientIds.includes(c.id)} size="small" sx={{ py: 0.25 }} />
+                    <ListItemText primary={c.name} />
                   </MenuItem>
                 ))}
-              </TextField>
+              </Select>
+              {clientMissing ? (
+                <FormHelperText error>At least one client is required for this role.</FormHelperText>
+              ) : null}
             </Box>
           ) : null}
 

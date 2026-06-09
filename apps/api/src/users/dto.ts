@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
+import { IsArray, IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
 
 export class CreateUserDto {
   @IsEmail()
@@ -28,8 +28,9 @@ export class CreateUserDto {
   knownAs?: string;
 
   @IsOptional()
-  @IsUUID()
-  clientId?: string;
+  @IsArray()
+  @IsUUID("all", { each: true })
+  clientIds?: string[];
 
   @IsOptional()
   @IsBoolean()
@@ -42,8 +43,9 @@ export class UpdateUserDto {
   role?: Role;
 
   @IsOptional()
-  @IsUUID()
-  clientId?: string;
+  @IsArray()
+  @IsUUID("all", { each: true })
+  clientIds?: string[];
 
   @IsOptional()
   @IsBoolean()

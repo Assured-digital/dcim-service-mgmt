@@ -38,7 +38,7 @@ import ViewListIcon from "@mui/icons-material/ViewList"
 import InsightsIcon from "@mui/icons-material/Insights"
 import { api, revokeAndLogout } from "../lib/api"
 import { LoadingState } from "../components/PageState"
-import { getCurrentUser } from "../lib/auth"
+import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
 
@@ -536,7 +536,11 @@ export default function Shell() {
   const queryClient = useQueryClient()
   const currentUser = getCurrentUser()
 
-  const canSwitchClients = hasAnyRole([...ORG_SUPER_ROLES])
+  // Two-state client selector: every logged-in user gets the selector; only its
+  // DATA SOURCE differs. Org-super sources from GET /clients (all org clients) and
+  // can be "All clients" on scope-independent pages; client-scoped users source
+  // from GET /clients/mine (only their assignments) and are always scoped to one.
+  const isOrgSuper = isOrgSuperRole(currentUser?.role)
   const isScopeIndependent = SCOPE_INDEPENDENT_PATHS.some(p => loc.pathname.startsWith(p))
 
   const [selectedClientId, setSelectedClientIdState] = useState(getSelectedClientId() ?? "")
@@ -597,41 +601,60 @@ export default function Shell() {
     setOpenSubSection(isAssetsPath ? "Assets" : null)
   }, [loc.pathname])
 
+  // Org-super: all org clients. Client-scoped: only the caller's assignments.
   const clients = useQuery({
-    queryKey: ["clients"], enabled: canSwitchClients,
+    queryKey: ["clients"], enabled: isOrgSuper,
     queryFn: async () => (await api.get<Array<{ id: string; name: string }>>("/clients")).data
   })
+  const myClients = useQuery({
+    queryKey: ["clients-mine"], enabled: !isOrgSuper,
+    queryFn: async () => (await api.get<Array<{ id: string; name: string }>>("/clients/mine")).data
+  })
+  // The list that populates the selector + flyout for this user.
+  const clientList = isOrgSuper ? (clients.data ?? []) : (myClients.data ?? [])
+
+  // Invalidate everything EXCEPT the two client-list queries (which are scope-
+  // independent themselves) when the active client changes.
+  const invalidateScoped = () =>
+    queryClient.invalidateQueries({
+      predicate: q => q.queryKey[0] !== "clients" && q.queryKey[0] !== "clients-mine"
+    })
+
+  // Default/validate the active client against the user's list. Always leaves a
+  // valid selection (first in the list) so client-scoped sections can render —
+  // EXCEPT org-super on a scope-independent page, where "" means "All clients".
+  React.useEffect(() => {
+    if (isOrgSuper && isScopeIndependent) return
+    if (clientList.length === 0) return
+    const valid = selectedClientId && clientList.some(c => c.id === selectedClientId)
+    if (!valid) {
+      const next = clientList[0].id
+      setSelectedClientIdState(next)
+      setSelectedClientId(next)
+      invalidateScoped()
+    }
+  }, [clients.data, myClients.data, isScopeIndependent]) // eslint-disable-line
 
   React.useEffect(() => {
-    if (!canSwitchClients || (clients.data?.length ?? 0) === 0 || isScopeIndependent) return
-    const stored = selectedClientId && clients.data?.some(c => c.id === selectedClientId) ? selectedClientId : ""
-    if (stored && stored !== selectedClientId) { setSelectedClientIdState(stored); setSelectedClientId(stored); queryClient.invalidateQueries({ predicate: q => q.queryKey[0] !== "clients" }) }
-  }, [clients.data]) // eslint-disable-line
-
-  React.useEffect(() => {
-    if (isScopeIndependent && canSwitchClients) { setSelectedClientIdState(""); setOpenSection(null); queryClient.invalidateQueries({ predicate: q => q.queryKey[0] !== "clients" }) }
-    // Re-read stored scope when returning from scope-independent pages
-    if (!isScopeIndependent && canSwitchClients && !selectedClientId) {
+    // Org-super on a scope-independent page: drop scope to "All clients" (keeps
+    // the stored selection so it can be restored on return).
+    if (isOrgSuper && isScopeIndependent) { setSelectedClientIdState(""); setOpenSection(null); invalidateScoped() }
+    // Returning to a scoped page: re-read stored scope (the default effect above
+    // fills in the first client if there's no valid stored selection).
+    if (isOrgSuper && !isScopeIndependent && !selectedClientId) {
       const stored = getSelectedClientId()
       if (stored && clients.data?.some(c => c.id === stored)) {
         setSelectedClientIdState(stored)
-        queryClient.invalidateQueries({ predicate: q => q.queryKey[0] !== "clients" })
+        invalidateScoped()
       }
     }
   }, [loc.pathname]) // eslint-disable-line
 
-  const selectedClient = (clients.data ?? []).find(c => c.id === selectedClientId)
-
-  // Non-switchers (client-scoped roles) are auto-scoped by the backend and have
-  // no access to GET /clients. Fetch their own client name for the breadcrumb.
-  const myClient = useQuery({
-    queryKey: ["my-client"], enabled: !canSwitchClients,
-    queryFn: async () => (await api.get<{ id: string; name: string }>("/clients/me")).data
-  })
+  const selectedClient = clientList.find(c => c.id === selectedClientId)
 
   function handleClientChange(clientId: string) {
     setSelectedClientIdState(clientId); setSelectedClientId(clientId || null)
-    queryClient.invalidateQueries({ predicate: q => q.queryKey[0] !== "clients" })
+    invalidateScoped()
     if (clientId) nav("/dashboard")
   }
 
@@ -775,37 +798,37 @@ export default function Shell() {
 
         <SbDivider />
 
-        {/* Client scope */}
-        {canSwitchClients ? (
-          <Box sx={{ mx: "6px", mb: "4px" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: "10px", px: "10px", pb: "6px" }}>
-              <Tooltip title={!sidebarExpanded ? (selectedClient ? `Client: ${selectedClient.name}` : "Select client") : ""} placement="right">
-                <Box
-                  onClick={!sidebarExpanded ? e => { const t = e.currentTarget as HTMLElement; setFlyout(prev => prev?.kind === "client" ? null : { kind: "client", anchor: t }) } : undefined}
-                  sx={{ flexShrink: 0, width: ICON_SIZE, height: ICON_SIZE, display: "flex", alignItems: "center", justifyContent: "center", cursor: !sidebarExpanded ? "pointer" : "default", color: selectedClientId ? "#7db4f5" : "#475569" }}
-                >
-                  <BusinessIcon sx={{ fontSize: ICON_SIZE }} />
-                </Box>
-              </Tooltip>
-              <FadeBox visible={sidebarExpanded} maxW={160}>
-                <Typography sx={{ fontSize: 10.5, fontWeight: 500, letterSpacing: "0.07em", textTransform: "uppercase", color: "#64748b", whiteSpace: "nowrap" }}>
-                  Client scope
-                </Typography>
-              </FadeBox>
-            </Box>
-            <Box sx={{ maxHeight: sidebarExpanded ? 56 : 0, opacity: sidebarExpanded ? 1 : 0, overflow: "hidden", transition: "max-height 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease" }}>
-              <Select size="small" value={selectedClientId} onChange={e => handleClientChange(e.target.value)} displayEmpty IconComponent={KeyboardArrowDownIcon}
-                sx={{ width: "100%", fontSize: 13, color: selectedClientId ? "#e2e8f0" : "#64748b", bgcolor: "rgba(255,255,255,0.04)", borderRadius: "6px", border: selectedClientId ? "1px solid rgba(255,255,255,0.1)" : "1px dashed rgba(255,255,255,0.08)", "& .MuiOutlinedInput-notchedOutline": { border: "none" }, "& .MuiSvgIcon-root": { color: "#64748b", fontSize: 16 }, "& .MuiSelect-select": { py: "7px", px: "10px" }, "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
-                <MenuItem value="" sx={{ fontSize: 13, color: "#94a3b8" }}>— Select client —</MenuItem>
-                {(clients.data ?? []).map(c => <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>{c.name}</MenuItem>)}
-              </Select>
-            </Box>
-            <SbDivider />
+        {/* Client scope — always shown; list source differs by role (see clientList) */}
+        <Box sx={{ mx: "6px", mb: "4px" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: "10px", px: "10px", pb: "6px" }}>
+            <Tooltip title={!sidebarExpanded ? (selectedClient ? `Client: ${selectedClient.name}` : "Select client") : ""} placement="right">
+              <Box
+                onClick={!sidebarExpanded ? e => { const t = e.currentTarget as HTMLElement; setFlyout(prev => prev?.kind === "client" ? null : { kind: "client", anchor: t }) } : undefined}
+                sx={{ flexShrink: 0, width: ICON_SIZE, height: ICON_SIZE, display: "flex", alignItems: "center", justifyContent: "center", cursor: !sidebarExpanded ? "pointer" : "default", color: selectedClientId ? "#7db4f5" : "#475569" }}
+              >
+                <BusinessIcon sx={{ fontSize: ICON_SIZE }} />
+              </Box>
+            </Tooltip>
+            <FadeBox visible={sidebarExpanded} maxW={160}>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 500, letterSpacing: "0.07em", textTransform: "uppercase", color: "#64748b", whiteSpace: "nowrap" }}>
+                Client scope
+              </Typography>
+            </FadeBox>
           </Box>
-        ) : null}
+          <Box sx={{ maxHeight: sidebarExpanded ? 56 : 0, opacity: sidebarExpanded ? 1 : 0, overflow: "hidden", transition: "max-height 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease" }}>
+            <Select size="small" value={selectedClientId} onChange={e => handleClientChange(e.target.value)} displayEmpty IconComponent={KeyboardArrowDownIcon}
+              sx={{ width: "100%", fontSize: 13, color: selectedClientId ? "#e2e8f0" : "#64748b", bgcolor: "rgba(255,255,255,0.04)", borderRadius: "6px", border: selectedClientId ? "1px solid rgba(255,255,255,0.1)" : "1px dashed rgba(255,255,255,0.08)", "& .MuiOutlinedInput-notchedOutline": { border: "none" }, "& .MuiSvgIcon-root": { color: "#64748b", fontSize: 16 }, "& .MuiSelect-select": { py: "7px", px: "10px" }, "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
+              <MenuItem value="" sx={{ fontSize: 13, color: "#94a3b8" }}>— Select client —</MenuItem>
+              {clientList.map(c => <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>{c.name}</MenuItem>)}
+            </Select>
+          </Box>
+          <SbDivider />
+        </Box>
 
-        {/* Client-scoped sections */}
-        {(!canSwitchClients || selectedClientId) ? (
+        {/* Client-scoped sections — render once an active client is resolved
+            (always true for client-scoped users; "" only for org-super on a
+            scope-independent page, where we prompt to pick a client). */}
+        {selectedClientId ? (
           <>
             {clientSections.map(section => {
               const visible = section.items.filter(i => hasAnyRole(i.roles))
@@ -918,7 +941,7 @@ export default function Shell() {
         <SectionFlyout title={flyout.title} items={flyout.items} anchorEl={flyout.anchor} onClose={() => setFlyout(null)} onNavigate={navigateTo} pathname={loc.pathname} />
       ) : null}
       {flyout?.kind === "client" && !sidebarExpanded ? (
-        <ClientFlyout anchorEl={flyout.anchor} clients={clients.data ?? []} selectedClientId={selectedClientId} onSelect={id => { handleClientChange(id); setFlyout(null) }} onClose={() => setFlyout(null)} />
+        <ClientFlyout anchorEl={flyout.anchor} clients={clientList} selectedClientId={selectedClientId} onSelect={id => { handleClientChange(id); setFlyout(null) }} onClose={() => setFlyout(null)} />
       ) : null}
 
       {/* Right column: header + content */}
@@ -928,43 +951,33 @@ export default function Shell() {
         <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: "#080f1e", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", px: "16px", gap: "8px" }}>
           <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
 
-            {/* Client badge — switchers: clickable, navigates to dashboard */}
-            {canSwitchClients ? (
-              selectedClient && !isScopeIndependent ? (
-                <Box
-                  onClick={() => nav("/dashboard")}
-                  sx={{
-                    display: "flex", alignItems: "center", gap: "7px",
-                    px: "12px", py: "6px",
-                    bgcolor: "rgba(255,255,255,0.08)", borderRadius: "8px",
-                    border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0,
-                    cursor: "pointer", transition: "all 0.12s",
-                    "&:hover": { bgcolor: "rgba(255,255,255,0.14)", borderColor: "rgba(255,255,255,0.22)" }
-                  }}
-                >
-                  <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#22c55e", flexShrink: 0 }} />
-                  <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#e2e8f0" }}>{selectedClient.name}</Typography>
-                </Box>
-              ) : isScopeIndependent ? (
-                <Box sx={{ px: "12px", py: "6px", bgcolor: "rgba(255,255,255,0.05)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-                  <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#64748b" }}>All clients</Typography>
-                </Box>
-              ) : null
-            ) : myClient.data ? (
-              // Non-switchers: assigned client name, non-interactive (no dropdown, no navigation)
-              <Box sx={{
-                display: "flex", alignItems: "center", gap: "7px",
-                px: "12px", py: "6px",
-                bgcolor: "rgba(255,255,255,0.08)", borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0
-              }}>
+            {/* Client badge — "All clients" for org-super on scope-independent
+                pages; otherwise the active client (clickable → dashboard). A
+                single-assignment client-scoped user gets the same badge; clicking
+                navigates to their dashboard, which is harmless. */}
+            {isOrgSuper && isScopeIndependent ? (
+              <Box sx={{ px: "12px", py: "6px", bgcolor: "rgba(255,255,255,0.05)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#64748b" }}>All clients</Typography>
+              </Box>
+            ) : selectedClient ? (
+              <Box
+                onClick={() => nav("/dashboard")}
+                sx={{
+                  display: "flex", alignItems: "center", gap: "7px",
+                  px: "12px", py: "6px",
+                  bgcolor: "rgba(255,255,255,0.08)", borderRadius: "8px",
+                  border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0,
+                  cursor: "pointer", transition: "all 0.12s",
+                  "&:hover": { bgcolor: "rgba(255,255,255,0.14)", borderColor: "rgba(255,255,255,0.22)" }
+                }}
+              >
                 <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#22c55e", flexShrink: 0 }} />
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#e2e8f0" }}>{myClient.data.name}</Typography>
+                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#e2e8f0" }}>{selectedClient.name}</Typography>
               </Box>
             ) : null}
 
             {/* › separator */}
-            {activePage && !hideModuleLabel && (canSwitchClients ? (selectedClient || isScopeIndependent) : !!myClient.data) ? (
+            {activePage && !hideModuleLabel && ((isOrgSuper && isScopeIndependent) || !!selectedClient) ? (
               <Typography sx={{ color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none", flexShrink: 0, mx: "2px" }}>›</Typography>
             ) : null}
 

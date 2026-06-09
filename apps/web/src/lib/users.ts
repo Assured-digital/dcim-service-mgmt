@@ -24,7 +24,12 @@ export type UserView = {
   knownAs: string | null
   role: UserRole
   organizationId: string | null
+  // Phase 4 multi-client: clientId is the FIRST assigned client (back-compat,
+  // null for org-level/unassigned); clientIds + clients are the full assigned
+  // set the multi-select UI consumes.
   clientId: string | null
+  clientIds: string[]
+  clients: { id: string; name: string }[]
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -38,7 +43,7 @@ export type CreateUserInput = {
   lastName: string
   knownAs?: string
   role: UserRole
-  clientId?: string
+  clientIds?: string[]
   isActive?: boolean
 }
 
@@ -48,7 +53,7 @@ export type UpdateUserInput = {
   lastName?: string
   knownAs?: string
   role?: UserRole
-  clientId?: string
+  clientIds?: string[]
   isActive?: boolean
   password?: string
 }

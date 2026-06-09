@@ -33,6 +33,16 @@ export class ClientsController {
     return this.clients.getMine(actor);
   }
 
+  // The caller's full assigned-client set (id + name), for the client-scoped
+  // multi-assignment selector. No @Roles → any authenticated user; derived
+  // strictly from the caller's own UserClientAssignment rows. Returns [] for a
+  // user with zero assignments (not an error). Declared before @Get(":id").
+  @Get("mine")
+  async listMine(@Req() req: any) {
+    const actor = getJwtUser(req);
+    return this.clients.listMine(actor);
+  }
+
   @Get(":id")
   @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN)
   async get(@Req() req: any, @Param("id") id: string) {

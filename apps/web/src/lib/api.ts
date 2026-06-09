@@ -1,5 +1,5 @@
 import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
-import { clearSession, getCurrentUser, getToken, isOrgSuperRole, setSession } from "./auth";
+import { clearSession, getCurrentUser, getToken, setSession } from "./auth";
 import { getSelectedClientId } from "./scope";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
@@ -112,21 +112,26 @@ function normaliseApiError(err: unknown): ApiError {
   return { statusCode, message: ax.message };
 }
 
-// Response interceptor: handle auth + return consistent errors
+// Request interceptor: inject the selected client scope for ANY authenticated
+// user (org-super AND client-scoped). The backend validates the requested client
+// against the caller's permissions (org-super: their org; client-scoped: their
+// assignments) and 403s a bad selection, so it cannot leak across tenants. An
+// explicit x-client-id already on the request is always respected (e.g. the
+// org-wide users list sends "" to opt out of scoping).
 api.interceptors.request.use((config) => {
   const user = getCurrentUser();
-  if (isOrgSuperRole(user?.role)) {
-    const headers = axios.AxiosHeaders.from(config.headers ?? {});
-    const hasExplicitScopeHeader =
-      headers.has("x-client-id") ||
-      headers.has("X-Client-Id");
-    if (hasExplicitScopeHeader) return config;
+  if (!user) return config;
 
-    const selectedClientId = getSelectedClientId();
-    if (selectedClientId) {
-      headers.set("x-client-id", selectedClientId);
-      config.headers = headers;
-    }
+  const headers = axios.AxiosHeaders.from(config.headers ?? {});
+  const hasExplicitScopeHeader =
+    headers.has("x-client-id") ||
+    headers.has("X-Client-Id");
+  if (hasExplicitScopeHeader) return config;
+
+  const selectedClientId = getSelectedClientId();
+  if (selectedClientId) {
+    headers.set("x-client-id", selectedClientId);
+    config.headers = headers;
   }
   return config;
 });

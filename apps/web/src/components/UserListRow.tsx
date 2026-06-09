@@ -31,13 +31,14 @@ function initialsFromName(name: string): string {
 
 // Resolve the assigned-client display as a LIST of labels. Org-level users
 // (ORG_OWNER/ORG_ADMIN/legacy ADMIN) always read "Organisation" regardless of
-// any stray clientId on the record (seed-data quirk). Everyone else shows their
-// client name(s). Returned as an array so multi-client assignment can render
-// here later without reworking the row.
+// any stray assignment on the record (seed-data quirk). Everyone else shows the
+// full set of assigned client names (multi-client). Prefers the embedded
+// clients[] (carries names); falls back to clientIds via the name map.
 function clientLabelsFor(user: UserView, clientNameById: Map<string, string>): string[] {
   if (isOrgSuperRole(user.role)) return ["Organisation"]
-  if (!user.clientId) return ["Organisation"]
-  return [clientNameById.get(user.clientId) ?? user.clientId]
+  if (user.clients?.length) return user.clients.map((c) => c.name)
+  if (user.clientIds?.length) return user.clientIds.map((id) => clientNameById.get(id) ?? id)
+  return ["Organisation"]
 }
 
 type Props = {
@@ -149,21 +150,18 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
             }}
           />
           <Typography sx={{ fontSize: 12, color: "var(--color-text-tertiary, #94a3b8)" }}>·</Typography>
-          {/* Multi-client-ready: a list of client tags, single today. */}
-          {clientLabels.map((label, i) => (
-            <Typography
-              key={i}
-              sx={{
-                fontSize: 12,
-                color: "var(--color-text-muted, #64748b)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
-              }}
-            >
-              {label}
-            </Typography>
-          ))}
+          {/* Assigned client(s) — comma-separated for multi-client assignment. */}
+          <Typography
+            sx={{
+              fontSize: 12,
+              color: "var(--color-text-muted, #64748b)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {clientLabels.join(", ")}
+          </Typography>
         </Box>
       </Box>
 
