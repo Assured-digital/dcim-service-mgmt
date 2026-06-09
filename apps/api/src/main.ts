@@ -2,10 +2,10 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { ValidationPipe } from "@nestjs/common";
-import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import * as cookieParser from "cookie-parser";
 import { Request, Response, NextFunction } from "express";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import { setupSwagger, SWAGGER_PATH } from "./swagger";
 
 async function bootstrap() {
   const corsOrigins =
@@ -40,20 +40,14 @@ async function bootstrap() {
     })
   );
 
-  const config = new DocumentBuilder()
-    .setTitle("DCMS API")
-    .setDescription("DC Service Management MVP API")
-    .setVersion("0.1.0")
-    .addBearerAuth()
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("docs", app, document);
+  setupSwagger(app);
 
   const port = Number(process.env.PORT ?? 3001);
-  
+
   await app.listen(port, "0.0.0.0");
-  console.log(`API running on http://0.0.0.0:${port} (docs: /docs)`);
+  console.log(
+    `API running on http://0.0.0.0:${port} (docs: /${SWAGGER_PATH})`
+  );
 }
 
 bootstrap();

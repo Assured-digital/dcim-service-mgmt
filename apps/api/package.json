@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "openapi:generate": "ts-node scripts/generate-openapi.ts",
     "seed": "prisma db seed",
     "seed:demo:estate": "ts-node prisma/scripts/seed-demo-estate.ts",
     "seed:demo:governance": "ts-node prisma/scripts/seed-demo-governance.ts",
