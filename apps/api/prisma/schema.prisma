@@ -2,6 +2,13 @@ generator client {
   provider = "prisma-client-js"
 }
 
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "../../../docs/erd.md"
+  // Emit diffable Mermaid markdown (not a rendered image) so the ERD stays
+  // reviewable in git. .md output wraps the diagram in a ```mermaid code block.
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
