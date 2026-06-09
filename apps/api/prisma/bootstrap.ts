@@ -39,7 +39,6 @@ async function main() {
       passwordHash: await bcrypt.hash(password, 10),
       role: Role.ORG_OWNER,
       organizationId: organization.id,
-      clientId: null,
       isActive: true
     }
   })

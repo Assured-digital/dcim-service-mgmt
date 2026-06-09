@@ -8,7 +8,6 @@ export type JwtUser = {
   email: string;
   role: Role;
   organizationId?: string | null;
-  clientId?: string | null;
 };
 
 export function getJwtUser(req: { user?: unknown }): JwtUser {
@@ -19,39 +18,26 @@ export function getJwtUser(req: { user?: unknown }): JwtUser {
   return user;
 }
 
-export async function resolveClientScope(
+/**
+ * Single source of truth for CLIENT-SCOPED (non-super) client resolution.
+ *
+ * Scope is sourced from the UserClientAssignment join table (Phase 3: the
+ * User.clientId scalar no longer exists). This is behaviour-preserving for
+ * existing users: every current user was backfilled to exactly ONE assignment
+ * (= their old clientId), so the single-assignment paths below return the
+ * identical result. The cross-client guard generalises from "== user.clientId"
+ * to "IN assigned set".
+ *
+ * Both resolveClientScope (client-scoped branch) and UsersService delegate here
+ * so client-scoped resolution lives in exactly one place.
+ */
+export async function resolveAssignedClient(
   user: JwtUser,
   requestedClientId: string | undefined,
   prisma: PrismaService
 ): Promise<string> {
   const requested = requestedClientId?.trim() || undefined;
 
-  if (isOrgSuperRole(user.role)) {
-    const scoped = requested ?? user.clientId ?? undefined;
-    if (!scoped) {
-      throw new BadRequestException(
-        "Org-super requests must include client scope. Provide x-client-id or assign a default clientId."
-      );
-    }
-    const client = await prisma.client.findUnique({
-      where: { id: scoped },
-      select: { id: true, organizationId: true }
-    });
-    if (!client) {
-      throw new ForbiddenException("Invalid client scope");
-    }
-    if (user.organizationId && client.organizationId !== user.organizationId) {
-      throw new ForbiddenException("Cross-organization access denied");
-    }
-    return scoped;
-  }
-
-  // Client-scoped (non-super) branch.
-  // Phase 2 (multi-client): scope is now sourced from the UserClientAssignment join
-  // table, not the User.clientId scalar. This is behaviour-preserving for existing
-  // users: every current user was backfilled to exactly ONE assignment (= their old
-  // clientId), so the single-assignment paths below return the identical result.
-  // The cross-client guard generalises from "== user.clientId" to "IN assigned set".
   const assignments = await prisma.userClientAssignment.findMany({
     where: { userId: user.userId },
     select: { clientId: true }
@@ -77,4 +63,37 @@ export async function resolveClientScope(
     return assignedClientIds[0];
   }
   return [...assignedClientIds].sort()[0];
+}
+
+export async function resolveClientScope(
+  user: JwtUser,
+  requestedClientId: string | undefined,
+  prisma: PrismaService
+): Promise<string> {
+  const requested = requestedClientId?.trim() || undefined;
+
+  if (isOrgSuperRole(user.role)) {
+    // Phase 3: there is no User.clientId fallback any more — org-super callers
+    // must supply a client scope explicitly (the frontend scope selector always
+    // sends x-client-id for these roles).
+    if (!requested) {
+      throw new BadRequestException(
+        "Org-super requests must include client scope. Provide x-client-id."
+      );
+    }
+    const client = await prisma.client.findUnique({
+      where: { id: requested },
+      select: { id: true, organizationId: true }
+    });
+    if (!client) {
+      throw new ForbiddenException("Invalid client scope");
+    }
+    if (user.organizationId && client.organizationId !== user.organizationId) {
+      throw new ForbiddenException("Cross-organization access denied");
+    }
+    return requested;
+  }
+
+  // Client-scoped (non-super) branch — delegate to the single source of truth.
+  return resolveAssignedClient(user, requested, prisma);
 }

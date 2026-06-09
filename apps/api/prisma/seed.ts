@@ -797,17 +797,23 @@ async function main() {
     where: { email: adminEmail },
     update: {
       role: Role.ORG_OWNER,
-      organizationId: organization.id,
-      clientId: clientA.id
+      organizationId: organization.id
     },
     create: {
       email: adminEmail,
       passwordHash: await bcrypt.hash("Admin123!", 10),
       role: Role.ORG_OWNER,
       organizationId: organization.id,
-      clientId: clientA.id,
       isActive: true
     }
+  })
+
+  // Client scope now lives on the UserClientAssignment join table (Phase 3:
+  // User.clientId is gone). Preserve the admin's single-client assignment.
+  await prisma.userClientAssignment.upsert({
+    where: { userId_clientId: { userId: admin.id, clientId: clientA.id } },
+    update: {},
+    create: { userId: admin.id, clientId: clientA.id }
   })
 
   // 4) Internal staff users
@@ -835,17 +841,23 @@ async function main() {
   ]
 
   for (const u of internalUsers) {
-    await prisma.user.upsert({
+    const internalUser = await prisma.user.upsert({
       where: { email: u.email },
-      update: { role: u.role, organizationId: organization.id, clientId: u.clientId },
+      update: { role: u.role, organizationId: organization.id },
       create: {
         email: u.email,
         passwordHash: await bcrypt.hash("Admin123!", 10),
         role: u.role,
         organizationId: organization.id,
-        clientId: u.clientId,
         isActive: true
       }
+    })
+
+    // Single-client assignment (replaces the former User.clientId scalar).
+    await prisma.userClientAssignment.upsert({
+      where: { userId_clientId: { userId: internalUser.id, clientId: u.clientId } },
+      update: {},
+      create: { userId: internalUser.id, clientId: u.clientId }
     })
   }
 

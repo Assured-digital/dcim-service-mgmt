@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateClientDto, UpdateClientDto } from "./dto";
-import { JwtUser } from "../auth/request-context";
+import { JwtUser, resolveAssignedClient } from "../auth/request-context";
 
 @Injectable()
 export class ClientsService {
@@ -21,14 +21,20 @@ export class ClientsService {
     });
   }
 
-  // Returns ONLY the caller's own client, derived strictly from their JWT clientId.
-  // Never accepts a client id param — cannot be used to fetch another client.
+  // Returns ONLY the caller's own client, derived strictly from their client
+  // assignment(s). Never accepts a client id param — cannot be used to fetch
+  // another client.
   async getMine(actor: JwtUser) {
-    if (!actor.clientId) {
+    let assignedClientId: string;
+    try {
+      assignedClientId = await resolveAssignedClient(actor, undefined, this.prisma);
+    } catch {
+      // No assignment (e.g. an org-level user with no client) → preserve the
+      // previous "no client assigned" semantics.
       throw new NotFoundException("No client assigned");
     }
     const client = await this.prisma.client.findUnique({
-      where: { id: actor.clientId },
+      where: { id: assignedClientId },
       select: { id: true, name: true }
     });
     if (!client) throw new NotFoundException("Client not found");

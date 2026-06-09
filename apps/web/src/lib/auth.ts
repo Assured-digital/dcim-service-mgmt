@@ -6,7 +6,6 @@ export type CurrentUser = {
   email: string;
   role: string;
   organizationId: string | null;
-  clientId: string | null;
 };
 
 export function getToken() {
@@ -40,8 +39,7 @@ export function getCurrentUser(): CurrentUser | null {
       userId: parsed.userId,
       email: parsed.email ?? "",
       role: parsed.role,
-      organizationId: parsed.organizationId ?? null,
-      clientId: parsed.clientId ?? null
+      organizationId: parsed.organizationId ?? null
     };
   } catch {
     return inferUserFromToken(getToken());
@@ -75,8 +73,7 @@ function inferUserFromToken(token: string | null): CurrentUser | null {
       userId: payload.userId,
       email: payload.email ?? "",
       role: payload.role,
-      organizationId: payload.organizationId ?? null,
-      clientId: payload.clientId ?? null
+      organizationId: payload.organizationId ?? null
     };
   } catch {
     return null;

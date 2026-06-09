@@ -20,7 +20,6 @@ export type LoginResponse = {
     email: string;
     role: string;
     organizationId: string | null;
-    clientId: string | null;
   };
 };
 

@@ -27,14 +27,12 @@ export class AuthService {
     email: string;
     role: Role;
     organizationId: string | null;
-    clientId: string | null;
   }) {
     return {
       userId: user.id,
       email: user.email,
       role: user.role as Role,
-      organizationId: user.organizationId,
-      clientId: user.clientId
+      organizationId: user.organizationId
     };
   }
 
@@ -43,7 +41,6 @@ export class AuthService {
     email: string;
     role: Role;
     organizationId: string | null;
-    clientId: string | null;
   }) {
     const accessToken = await this.jwt.signAsync(payload, {
       secret: process.env.JWT_SECRET,
@@ -91,7 +88,6 @@ export class AuthService {
       email: string;
       role: Role;
       organizationId: string | null;
-      clientId: string | null;
     };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {

@@ -4,7 +4,9 @@ import { JwtAuthGuard } from "../auth/jwt.guard"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
 import { Role } from "@prisma/client"
-import { getJwtUser } from "../auth/request-context"
+import { getJwtUser, resolveAssignedClient } from "../auth/request-context"
+import { isOrgSuperRole } from "../auth/role-scope"
+import { PrismaService } from "../prisma/prisma.service"
 import { MyWorkService } from "./my-work.service"
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -12,7 +14,7 @@ import { MyWorkService } from "./my-work.service"
 @ApiBearerAuth()
 @Controller("my-work")
 export class MyWorkController {
-  constructor(private myWork: MyWorkService) {}
+  constructor(private myWork: MyWorkService, private prisma: PrismaService) {}
 
   @Get()
   @Roles(
@@ -21,6 +23,13 @@ export class MyWorkController {
   )
   async get(@Req() req: any) {
     const user = getJwtUser(req)
-    return this.myWork.getMyWork(user.userId, user.role as Role, user.clientId ?? null)
+    const role = user.role as Role
+    // org-super and service managers query across all clients (clientId ignored by
+    // the service); client-scoped roles resolve their assigned client.
+    const clientId =
+      isOrgSuperRole(role) || role === Role.SERVICE_MANAGER
+        ? null
+        : await resolveAssignedClient(user, undefined, this.prisma)
+    return this.myWork.getMyWork(user.userId, role, clientId)
   }
 }

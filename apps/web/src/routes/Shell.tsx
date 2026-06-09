@@ -604,8 +604,7 @@ export default function Shell() {
 
   React.useEffect(() => {
     if (!canSwitchClients || (clients.data?.length ?? 0) === 0 || isScopeIndependent) return
-    const stored = selectedClientId && clients.data?.some(c => c.id === selectedClientId) ? selectedClientId
-      : currentUser?.clientId && clients.data?.some(c => c.id === currentUser.clientId) ? currentUser.clientId : ""
+    const stored = selectedClientId && clients.data?.some(c => c.id === selectedClientId) ? selectedClientId : ""
     if (stored && stored !== selectedClientId) { setSelectedClientIdState(stored); setSelectedClientId(stored); queryClient.invalidateQueries({ predicate: q => q.queryKey[0] !== "clients" }) }
   }, [clients.data]) // eslint-disable-line
 
@@ -626,7 +625,7 @@ export default function Shell() {
   // Non-switchers (client-scoped roles) are auto-scoped by the backend and have
   // no access to GET /clients. Fetch their own client name for the breadcrumb.
   const myClient = useQuery({
-    queryKey: ["my-client"], enabled: !canSwitchClients && !!currentUser?.clientId,
+    queryKey: ["my-client"], enabled: !canSwitchClients,
     queryFn: async () => (await api.get<{ id: string; name: string }>("/clients/me")).data
   })
 

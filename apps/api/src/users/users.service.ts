@@ -6,11 +6,30 @@ import {
   NotFoundException
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { JwtUser } from "../auth/request-context";
+import { JwtUser, resolveAssignedClient } from "../auth/request-context";
 import { Prisma, Role } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { CreateUserDto, UpdateUserDto } from "./dto";
 import { isOrgOwnerRole, isOrgSuperRole } from "../auth/role-scope";
+
+// Single select used for every user view. Includes the client assignment(s) so
+// toView can derive the (single, in Phase 3) clientId from the join table now
+// that User.clientId is gone.
+const userViewSelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  email: true,
+  role: true,
+  firstName: true,
+  lastName: true,
+  knownAs: true,
+  organizationId: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+  clientAssignments: { select: { clientId: true } }
+});
+
+type UserView = Prisma.UserGetPayload<{ select: typeof userViewSelect }>;
 
 const MANAGER_ALLOWED_ROLES: Role[] = [Role.SERVICE_DESK_ANALYST, Role.ENGINEER, Role.CLIENT_VIEWER];
 const ORG_ADMIN_ALLOWED_ROLES: Role[] = [
@@ -32,19 +51,7 @@ const ORG_OWNER_ALLOWED_ROLES: Role[] = [
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  private toView(user: {
-    id: string;
-    email: string;
-    role: Role;
-    firstName: string | null;
-    lastName: string | null;
-    knownAs: string | null;
-    organizationId: string | null;
-    clientId: string | null;
-    isActive: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  }) {
+  private toView(user: UserView) {
     return {
       id: user.id,
       email: user.email,
@@ -53,7 +60,10 @@ export class UsersService {
       lastName: user.lastName,
       knownAs: user.knownAs,
       organizationId: user.organizationId,
-      clientId: user.clientId,
+      // Phase 3: single-assignment users surface their one assigned client so the
+      // frontend's current single-client display keeps working. (Multi-assignment
+      // listing is Phase 4.)
+      clientId: user.clientAssignments[0]?.clientId ?? null,
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
@@ -91,21 +101,17 @@ export class UsersService {
   private async resolveTargetClientId(actor: JwtUser, requestedClientId?: string | null) {
     if (isOrgSuperRole(actor.role)) {
       const organizationId = await this.requireOrganizationScope(actor);
-      const candidate = requestedClientId ?? actor.clientId ?? null;
+      // Org-super has no implicit client; org-level roles resolve to null, and a
+      // client-requiring role must have an explicit, in-organization client.
+      const candidate = requestedClientId ?? null;
       if (!candidate) return null;
       await this.assertClientInOrganization(candidate, organizationId);
       return candidate;
     }
 
-    if (!actor.clientId) {
-      throw new ForbiddenException("Missing client scope");
-    }
-
-    if (requestedClientId && requestedClientId !== actor.clientId) {
-      throw new ForbiddenException("Cross-client user management is not allowed.");
-    }
-
-    return actor.clientId;
+    // Client-scoped actor: resolve via the assignment join table (single source of
+    // truth). Returns the actor's single assigned client, or validates the request.
+    return resolveAssignedClient(actor, requestedClientId ?? undefined, this.prisma);
   }
 
   private async requireOrganizationScope(actor: JwtUser) {
@@ -137,27 +143,15 @@ export class UsersService {
 
     if (isOrgSuperRole(actor.role)) {
       where.organizationId = await this.requireOrganizationScope(actor);
-      if (clientId) where.clientId = clientId;
+      if (clientId) where.clientAssignments = { some: { clientId } };
     } else if (clientId) {
-      where.clientId = clientId;
+      where.clientAssignments = { some: { clientId } };
     }
 
     const users = await this.prisma.user.findMany({
       where,
       orderBy: [{ isActive: "desc" }, { email: "asc" }],
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        knownAs: true,
-        organizationId: true,
-        clientId: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true
-      }
+      select: userViewSelect
     });
 
     return users.map((u) => this.toView(u));
@@ -193,37 +187,50 @@ export class UsersService {
         lastName: dto.lastName,
         knownAs: dto.knownAs ?? null,
         organizationId,
-        clientId,
-        isActive: dto.isActive ?? true
+        isActive: dto.isActive ?? true,
+        // Client-requiring roles get exactly ONE assignment row (preserves the
+        // current single-client behaviour). Multi-assignment is Phase 4.
+        clientAssignments: clientId
+          ? { create: { client: { connect: { id: clientId } } } }
+          : undefined
       },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        knownAs: true,
-        organizationId: true,
-        clientId: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true
-      }
+      select: userViewSelect
     });
 
     return this.toView(created);
   }
 
   async update(actor: JwtUser, userId: string, dto: UpdateUserDto) {
-    const target = await this.prisma.user.findUnique({ where: { id: userId } });
+    const target = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+        clientAssignments: { select: { clientId: true } }
+      }
+    });
     if (!target) throw new NotFoundException("User not found");
+    const targetClientIds = target.clientAssignments.map((a) => a.clientId);
 
     const actorOrgId = await this.requireOrganizationScope(actor);
     if (target.organizationId !== actorOrgId) {
       throw new ForbiddenException("Cross-organization user management is not allowed.");
     }
-    if (!isOrgSuperRole(actor.role) && target.clientId !== actor.clientId) {
-      throw new ForbiddenException("Cross-client user management is not allowed.");
+    // Cross-client guard (assignment-based, intersection): a client-scoped actor may
+    // manage the target only if they share AT LEAST ONE assigned client. This is
+    // multi-assignment-correct — it considers the actor's full assigned set, not a
+    // single resolved client.
+    if (!isOrgSuperRole(actor.role)) {
+      const actorAssignments = await this.prisma.userClientAssignment.findMany({
+        where: { userId: actor.userId },
+        select: { clientId: true }
+      });
+      const actorClientIds = actorAssignments.map((a) => a.clientId);
+      const sharesClient = targetClientIds.some((c) => actorClientIds.includes(c));
+      if (!sharesClient) {
+        throw new ForbiddenException("Cross-client user management is not allowed.");
+      }
     }
 
     if (dto.role) {
@@ -240,7 +247,7 @@ export class UsersService {
     }
 
     const nextClientId = roleRequiresClient
-      ? await this.resolveTargetClientId(actor, dto.clientId ?? target.clientId ?? null)
+      ? await this.resolveTargetClientId(actor, dto.clientId ?? targetClientIds[0] ?? null)
       : null;
 
     if (roleRequiresClient && !nextClientId) {
@@ -256,7 +263,6 @@ export class UsersService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       knownAs: dto.knownAs,
-      client: nextClientId ? { connect: { id: nextClientId } } : { disconnect: true },
       isActive: dto.isActive
     };
 
@@ -267,22 +273,28 @@ export class UsersService {
       data.refreshTokenExpiresAt = null;
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id: target.id },
-      data,
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        knownAs: true,
-        organizationId: true,
-        clientId: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true
+    // Desired single-assignment state (Phase 3): exactly the resolved client, or none
+    // for org-level roles. Only touch the join table when it differs from the current
+    // set — i.e. replace the assignment if the client changed.
+    const desiredClientIds = nextClientId ? [nextClientId] : [];
+    const assignmentsUnchanged =
+      desiredClientIds.length === targetClientIds.length &&
+      desiredClientIds.every((c) => targetClientIds.includes(c));
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (!assignmentsUnchanged) {
+        await tx.userClientAssignment.deleteMany({ where: { userId: target.id } });
+        if (nextClientId) {
+          await tx.userClientAssignment.create({
+            data: { userId: target.id, clientId: nextClientId }
+          });
+        }
       }
+      return tx.user.update({
+        where: { id: target.id },
+        data,
+        select: userViewSelect
+      });
     });
 
     return this.toView(updated);
