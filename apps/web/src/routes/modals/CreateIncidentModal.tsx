@@ -1,13 +1,12 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Button, Dialog, DialogContent, DialogTitle, MenuItem, Stack, TextField
 } from "@mui/material"
 import { api } from "../../lib/api"
 import { useNotification } from "../../components/NotificationProvider"
-
-type User = { id: string; email: string }
+import { useAssignableUsers } from "../../lib/useAssignableUsers"
 
 const SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 const PRIORITIES = ["low", "medium", "high", "critical"]
@@ -38,11 +37,9 @@ export function CreateIncidentModal({
   const [assigneeId, setAssigneeId] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data,
-    enabled: open,
-  })
+  // Assignee picker source — operational-callable & client-scoped, replacing the
+  // admin-only GET /users that 403'd for operational roles. value = id, label = displayName.
+  const { data: users = [] } = useAssignableUsers()
 
   async function handleCreate() {
     if (!title.trim() || !description.trim()) return
@@ -86,7 +83,7 @@ export function CreateIncidentModal({
           </Stack>
           <TextField select label="Assignee" value={assigneeId} onChange={e => setAssigneeId(e.target.value)} fullWidth>
             <MenuItem value="">Unassigned</MenuItem>
-            {users.map(u => <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>)}
+            {users.map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
           </TextField>
           <Stack direction="row" justifyContent="flex-end" gap={1}>
             <Button onClick={onClose}>Cancel</Button>

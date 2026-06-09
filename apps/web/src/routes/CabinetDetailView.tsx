@@ -10,10 +10,11 @@ import StorageIcon from "@mui/icons-material/Storage"
 import { chipSx } from "../components/shared"
 import { TaskQuickDetailModal } from "./TasksPage"
 import {
-  Asset, Cabinet, Room, RackTab, ElevationSide, UserOption,
+  Asset, Cabinet, Room, RackTab, ElevationSide,
   AuditEvent, LinkedTask, LinkedServiceRequest, LinkedRisk, LinkedIssue,
   assetBg, lifecycleSx, normalizeRackSide, formatKw, actionLabel, stripeBg
 } from "../lib/infrastructure"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 // ─── Rack elevation (inlined, memoized) ──────────────────────────────────
 
@@ -173,11 +174,9 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
     queryFn: async () => (await api.get<LinkedIssue[]>("/issues", { params: { linkedEntityType: "Cabinet", linkedEntityId: cabinet.id } })).data,
     enabled: rackTab === "linked"
   })
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<UserOption[]>("/users")).data,
-    enabled: rackTab === "linked"
-  })
+  // Assignee picker source (feeds the linked-task quick-detail modal) —
+  // operational-callable & client-scoped, replacing admin-only GET /users.
+  const { data: users = [] } = useAssignableUsers()
 
   // ── Handlers ───────────────────────────────────────────────────────────
 

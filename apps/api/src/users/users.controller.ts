@@ -22,6 +22,24 @@ export class UsersController {
     return this.users.list(actor, requestedClientId);
   }
 
+  // Operational-callable assignee picker. Deliberately broader than the admin-only
+  // GET /users above: AD-staff who assign work need it. Declared before any param
+  // route so "assignable" isn't captured as an :id. Returns a minimal projection
+  // (id, displayName, email) — never a user-management data surface.
+  @Get("assignable")
+  @Roles(
+    Role.ORG_OWNER,
+    Role.ORG_ADMIN,
+    Role.ADMIN,
+    Role.SERVICE_MANAGER,
+    Role.SERVICE_DESK_ANALYST,
+    Role.ENGINEER
+  )
+  async listAssignable(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
+    const actor = getJwtUser(req);
+    return this.users.listAssignable(actor, requestedClientId);
+  }
+
   @Post()
   @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN)
   async create(@Req() req: any, @Body() dto: CreateUserDto) {

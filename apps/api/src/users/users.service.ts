@@ -6,11 +6,34 @@ import {
   NotFoundException
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { JwtUser, resolveAssignedClient } from "../auth/request-context";
+import { JwtUser, resolveAssignedClient, resolveClientScope } from "../auth/request-context";
 import { Prisma, Role } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { CreateUserDto, UpdateUserDto } from "./dto";
-import { isOrgOwnerRole, isOrgSuperRole } from "../auth/role-scope";
+import { isOrgSuperRole, isOrgOwnerRole, ORG_SUPER_ROLES } from "../auth/role-scope";
+
+// AD-staff roles who can be ASSIGNED work (and, broader than admin, who can call
+// the assignable picker). Excludes CLIENT_VIEWER and PUBLIC_USER by design.
+const ASSIGNABLE_STAFF_ROLES: Role[] = [
+  Role.ORG_OWNER,
+  Role.ORG_ADMIN,
+  Role.ADMIN,
+  Role.SERVICE_MANAGER,
+  Role.SERVICE_DESK_ANALYST,
+  Role.ENGINEER
+];
+
+// Minimal projection for the assignee picker — name fields + email only. NOT the
+// full userViewSelect: no role, isActive, or client assignments leak here.
+const assignablePickSelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  knownAs: true
+});
+
+type AssignablePick = Prisma.UserGetPayload<{ select: typeof assignablePickSelect }>;
 
 // Single select used for every user view. Includes the client assignment(s)
 // (with client name) so toView can return the FULL assigned-client set now that
@@ -195,6 +218,50 @@ export class UsersService {
     });
 
     return users.map((u) => this.toView(u));
+  }
+
+  /**
+   * Assignee picker (operational, non-admin-callable). Lists AD-staff in the
+   * caller's organisation who are assignable to the SCOPED client.
+   *
+   * Scope flows through resolveClientScope — the same isolation chokepoint as
+   * every other scoped endpoint: a client-scoped caller requesting a client
+   * they're not assigned to gets the usual 403; org-super is validated against
+   * their org. The returned clientId is what we compute the assignable set for.
+   *
+   * Assignable = active AD-staff in the caller's org AND
+   *   (role IN ORG_SUPER_ROLES        — org-super span every client, so they're
+   *                                      assignable to the scoped one too)
+   *   OR (assigned to the scoped client via UserClientAssignment).
+   */
+  async listAssignable(actor: JwtUser, requestedClientId?: string) {
+    const clientId = await resolveClientScope(actor, requestedClientId ?? undefined, this.prisma);
+    const organizationId = await this.requireOrganizationScope(actor);
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+        role: { in: ASSIGNABLE_STAFF_ROLES },
+        OR: [
+          // Org-super staff span all clients → assignable to the scoped one.
+          { role: { in: ORG_SUPER_ROLES } },
+          // Client-scoped staff: only if assigned to the scoped client.
+          { clientAssignments: { some: { clientId } } }
+        ]
+      },
+      select: assignablePickSelect
+    });
+
+    return users
+      .map((u) => this.toAssignableView(u))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }
+
+  private toAssignableView(user: AssignablePick) {
+    const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+    const displayName = user.knownAs?.trim() || fullName || user.email;
+    return { id: user.id, displayName, email: user.email };
   }
 
   async create(actor: JwtUser, dto: CreateUserDto) {

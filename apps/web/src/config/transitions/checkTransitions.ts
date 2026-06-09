@@ -24,7 +24,7 @@ export const transitions: Transition[] = [
     color: "primary",
     requiresDialog: true,
     dialogFields: [
-      { key: "assigneeId", label: "Assignee", type: "text", required: true },
+      { key: "assigneeId", label: "Assignee", type: "assignee", required: true },
     ],
   },
   {

@@ -20,6 +20,7 @@ import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { TaskQuickDetailModal } from "./TasksPage"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Asset = {
@@ -48,7 +49,6 @@ type LinkedTask = { id: string; reference: string; title: string; status: string
 type LinkedServiceRequest = { id: string; reference: string; subject: string; status: string; priority: string }
 type LinkedRisk = { id: string; reference: string; title: string; status: string; likelihood: string; impact: string }
 type LinkedIssue = { id: string; reference: string; title: string; status: string; severity: string }
-type UserOption = { id: string; email: string }
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ROOM_TYPE_LABELS: Record<string, string> = {
@@ -330,10 +330,9 @@ export default function SiteDetailPage() {
     queryFn: async () => (await api.get<LinkedIssue[]>("/issues", { params: { linkedEntityType: "Cabinet", linkedEntityId: selectedCabinetId } })).data,
     enabled: !!selectedCabinetId && rackTab === "linked"
   })
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<UserOption[]>("/users")).data
-  })
+  // Assignee picker source (feeds the linked-task quick-detail modal) —
+  // operational-callable & client-scoped, replacing admin-only GET /users.
+  const { data: users = [] } = useAssignableUsers()
 
   const isLoading = siteLoading || roomsLoading || cabinetsLoading
 

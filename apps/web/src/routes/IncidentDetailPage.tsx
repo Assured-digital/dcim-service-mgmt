@@ -58,6 +58,7 @@ import {
   type Transition,
 } from "../components/detail"
 import { transitions as incidentTransitions } from "../config/transitions/incidentTransitions"
+import { useAssignableUsers, type AssignableUser } from "../lib/useAssignableUsers"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -728,7 +729,7 @@ const AssigneeCell = React.memo(function AssigneeCell({
 
 interface TasksSectionContentProps {
   tasks: LinkedTaskWithAssignee[]
-  users: User[]
+  users: AssignableUser[]
   canManage: boolean
   onCreate: () => void
   onSelectTask: (taskId: string) => void
@@ -798,7 +799,7 @@ const TasksSectionContent = React.memo(function TasksSectionContent({
   const assigneeOptions = React.useMemo<PopoverOption[]>(() => {
     const list: PopoverOption[] = users.map((u) => ({
       value: u.id,
-      label: u.email,
+      label: u.displayName,
       iconBg: "#eaf3de",
       iconColor: "#3b6d11",
       icon: (
@@ -1356,10 +1357,17 @@ export default function IncidentDetailPage() {
     enabled: !!id,
   })
 
+  // Admin-only directory — retained ONLY to resolve the "submitted by" creator
+  // (createdById → email). Operational viewers 403 here and get [] (unchanged
+  // behaviour); org-super resolve it. NOT an assignee picker — see
+  // assignableUsers below for the (now operational-callable) pickers.
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
     queryFn: async () => (await api.get<User[]>("/users")).data,
   })
+
+  // Assignee-picker source (operational-callable; scoped to the active client).
+  const { data: assignableUsers = [] } = useAssignableUsers()
 
   const { data: linkedTasks } = useQuery({
     queryKey: ["linked-tasks-incident", id],
@@ -1592,9 +1600,9 @@ export default function IncidentDetailPage() {
   }, [allFeedEvents, activeFilter])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
-    const list: PopoverOption[] = users.map((u) => ({
+    const list: PopoverOption[] = assignableUsers.map((u) => ({
       value: u.id,
-      label: u.email,
+      label: u.displayName,
       iconBg: "#eaf3de",
       iconColor: "#3b6d11",
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
@@ -1609,7 +1617,7 @@ export default function IncidentDetailPage() {
       },
       ...list,
     ]
-  }, [users])
+  }, [assignableUsers])
 
   // ── Title commit handlers ──────────────────────────────────────────────────
 
@@ -1825,7 +1833,7 @@ export default function IncidentDetailPage() {
               <Box>
                 <TasksSectionContent
                   tasks={linkedTasks ?? []}
-                  users={users}
+                  users={assignableUsers}
                   canManage={canManage}
                   onCreate={handleOpenCreateTask}
                   onSelectTask={handleSelectTask}
@@ -1887,7 +1895,7 @@ export default function IncidentDetailPage() {
   }, [
     incident,
     linkedTasks,
-    users,
+    assignableUsers,
     canManage,
     handleOpenCreateTask,
     handleSelectTask,
@@ -1997,7 +2005,7 @@ export default function IncidentDetailPage() {
       <TaskQuickDetailModal
         open={Boolean(quickTaskId)}
         taskId={quickTaskId}
-        users={users}
+        users={assignableUsers}
         canManage={canManage}
         onClose={handleCloseQuickTask}
         onOpenFull={handleOpenFullTask}

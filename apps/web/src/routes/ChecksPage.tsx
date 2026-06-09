@@ -10,6 +10,7 @@ import {
 import { chipSx } from "../components/shared"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 type Check = {
   id: string
@@ -29,7 +30,6 @@ type Check = {
 
 type Template = { id: string; name: string; checkType: string }
 type Site = { id: string; name: string }
-type User = { id: string; email: string }
 
 const CHECK_STATUSES = ["DRAFT", "SCHEDULED", "ASSIGNED", "IN_PROGRESS", "PENDING_REVIEW", "COMPLETED", "ALL"]
 
@@ -92,10 +92,9 @@ export default function ChecksPage() {
     queryFn: async () => (await api.get<Site[]>("/sites")).data
   })
 
-  const { data: users } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data
-  })
+  // Assignee picker source ("Assign engineer") — operational-callable &
+  // client-scoped, replacing admin-only GET /users. value = id, label = displayName.
+  const { data: users } = useAssignableUsers()
 
   const all = data ?? []
   const filtered = filterStatus === "ALL" ? all : all.filter(c => c.status === filterStatus)
@@ -275,7 +274,7 @@ export default function ChecksPage() {
               onChange={(e) => setAssigneeId(e.target.value)} fullWidth>
               <MenuItem value="">Unassigned</MenuItem>
               {(users ?? []).map(u => (
-                <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>
+                <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>
               ))}
             </TextField>
             <TextField type="date" label="Scheduled date (optional)"

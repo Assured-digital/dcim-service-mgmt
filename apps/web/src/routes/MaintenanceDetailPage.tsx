@@ -48,6 +48,7 @@ import {
   type StatusOption,
 } from "../components/detail"
 import { useBreadcrumb } from "./Shell"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -73,7 +74,6 @@ type MaintenanceRecord = {
 }
 
 type AssetOption = { id: string; assetTag: string; name: string }
-type UserOption = { id: string; email: string }
 
 type FeedEventType = "status" | "comment" | "assignment" | "link"
 
@@ -1055,10 +1055,11 @@ export default function MaintenanceDetailPage() {
     queryFn: async () => (await api.get<AssetOption[]>("/assets")).data,
   })
 
-  const users = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<UserOption[]>("/users")).data,
-  })
+  // Assignee picker source ("Performed by") — operational-callable &
+  // client-scoped, replacing admin-only GET /users. value = id, label = displayName.
+  // performedByLabel below still reads the embedded performedBy first and only
+  // falls back to this list, so existing records resolve regardless.
+  const users = useAssignableUsers()
 
   const attachments: Attachment[] = React.useMemo(() => [], [])
 
@@ -1173,7 +1174,7 @@ export default function MaintenanceDetailPage() {
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
     const list: PopoverOption[] = (users.data ?? []).map((u) => ({
       value: u.id,
-      label: u.email,
+      label: u.displayName,
       iconBg: "#eaf3de",
       iconColor: "#3b6d11",
       icon: <PersonIcon sx={{ fontSize: 14 }} />,

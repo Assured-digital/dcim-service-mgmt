@@ -52,6 +52,7 @@ import {
 } from "../components/detail"
 import { transitions as taskTransitions } from "../config/transitions/taskTransitions"
 import { useBreadcrumb } from "./Shell"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -101,8 +102,6 @@ type Attachment = {
   createdAt: string
   url?: string
 }
-
-type User = { id: string; email: string }
 
 type FeedEventType = "status" | "comment" | "assignment" | "link"
 
@@ -998,10 +997,7 @@ export default function TaskDetailPage() {
     enabled: !!id,
   })
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data,
-  })
+  const { data: users = [] } = useAssignableUsers()
 
   const { data: auditEvents } = useQuery({
     queryKey: ["audit-task", id],
@@ -1195,7 +1191,7 @@ export default function TaskDetailPage() {
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
     const list: PopoverOption[] = users.map((u) => ({
       value: u.id,
-      label: u.email,
+      label: u.displayName,
       iconBg: "#eaf3de",
       iconColor: "#3b6d11",
       icon: <PersonIcon sx={{ fontSize: 14 }} />,

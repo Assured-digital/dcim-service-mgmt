@@ -4,7 +4,7 @@ import { Box, Chip, Stack, Typography } from "@mui/material"
 export interface DialogField {
   key: string
   label: string
-  type: "text" | "textarea" | "select"
+  type: "text" | "textarea" | "select" | "assignee"
   options?: string[]
   required: boolean
 }

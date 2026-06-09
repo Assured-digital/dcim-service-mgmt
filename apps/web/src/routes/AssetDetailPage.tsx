@@ -14,9 +14,10 @@ import { useNotification } from "../components/NotificationProvider"
 import { chipSx } from "../components/shared"
 import { useBreadcrumb } from "./Shell"
 import {
-  Asset, AuditEvent, Cabinet, LinkedIssue, LinkedRisk, LinkedServiceRequest, LinkedTask, UserOption,
+  Asset, AuditEvent, Cabinet, LinkedIssue, LinkedRisk, LinkedServiceRequest, LinkedTask,
   ASSET_LIFECYCLE_OPTIONS, HEADER_HEIGHT, lifecycleSx, getApiErrorMessage
 } from "../lib/infrastructure"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 import {
   ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog
 } from "./InfraDialogs"
@@ -257,11 +258,9 @@ export default function AssetDetailPage({
     enabled: linkedEnabled
   })
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<UserOption[]>("/users")).data,
-    enabled: tab === "linked"
-  })
+  // Assignee picker source (feeds the linked-task quick-detail modal) —
+  // operational-callable & client-scoped, replacing admin-only GET /users.
+  const { data: users = [] } = useAssignableUsers()
 
   const { data: siteCabinets = [] } = useQuery({
     queryKey: ["site-cabinets", siteId],

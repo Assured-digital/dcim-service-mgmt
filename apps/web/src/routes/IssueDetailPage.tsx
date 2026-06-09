@@ -55,6 +55,7 @@ import {
   type Transition,
 } from "../components/detail"
 import { transitions as issueTransitions } from "../config/transitions/issueTransitions"
+import { useAssignableUsers, type AssignableUser } from "../lib/useAssignableUsers"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -102,7 +103,6 @@ type Attachment = {
   url?: string
 }
 
-type User = { id: string; email: string }
 
 type LinkedTaskWithAssignee = LinkedTask & {
   assigneeId?: string | null
@@ -685,7 +685,7 @@ const AssigneeCell = React.memo(function AssigneeCell({
 
 interface TasksSectionContentProps {
   tasks: LinkedTaskWithAssignee[]
-  users: User[]
+  users: AssignableUser[]
   canManage: boolean
   onCreate: () => void
   onSelectTask: (taskId: string) => void
@@ -755,7 +755,7 @@ const TasksSectionContent = React.memo(function TasksSectionContent({
   const assigneeOptions = React.useMemo<PopoverOption[]>(() => {
     const list: PopoverOption[] = users.map((u) => ({
       value: u.id,
-      label: u.email,
+      label: u.displayName,
       iconBg: "#eaf3de",
       iconColor: "#3b6d11",
       icon: (
@@ -1314,10 +1314,7 @@ export default function IssueDetailPage() {
     enabled: !!id,
   })
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data,
-  })
+  const { data: users = [] } = useAssignableUsers()
 
   const { data: auditEvents } = useQuery({
     queryKey: ["audit-issue", id],

@@ -20,6 +20,7 @@ import BuildCircleIcon from "@mui/icons-material/BuildCircle"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 type MaintenanceRecord = {
   id: string
@@ -38,7 +39,6 @@ type MaintenanceRecord = {
 }
 
 type AssetOption = { id: string; assetTag: string; name: string }
-type UserOption = { id: string; email: string }
 
 const WORK_TYPES = [
   "INSPECTION",
@@ -123,10 +123,9 @@ export default function MaintenancePage() {
     queryFn: async () => (await api.get<AssetOption[]>("/assets")).data
   })
 
-  const users = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<UserOption[]>("/users")).data
-  })
+  // Assignee picker source ("Performed by") — operational-callable &
+  // client-scoped, replacing admin-only GET /users. value = id, label = displayName.
+  const users = useAssignableUsers()
 
   async function handleCreate() {
     if (!assetId || !performedAt) return
@@ -274,7 +273,7 @@ export default function MaintenancePage() {
               <MenuItem value="">Use current user</MenuItem>
               {(users.data ?? []).map((user) => (
                 <MenuItem key={user.id} value={user.id}>
-                  {user.email}
+                  {user.displayName}
                 </MenuItem>
               ))}
             </TextField>

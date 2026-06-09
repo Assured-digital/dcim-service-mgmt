@@ -24,6 +24,7 @@ import { useNotification } from "../components/NotificationProvider"
 import { chipSx } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
+import { useAssignableUsers, type AssignableUser } from "../lib/useAssignableUsers"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Task = {
@@ -43,7 +44,6 @@ type Task = {
   incident: { id: string; reference: string; title: string } | null
 }
 
-type User = { id: string; email: string }
 type TaskAuditEvent = {
   id: string
   action: string
@@ -194,7 +194,7 @@ function OptionPopover({ anchorEl, onClose, options, current, onSelect, headerLa
 function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect, headerLabel }: {
   anchorEl: HTMLElement | null; onClose: () => void
   // eslint-disable-next-line no-unused-vars
-  users: User[]; currentId: string | null; onSelect: (assigneeId: string | null) => void
+  users: AssignableUser[]; currentId: string | null; onSelect: (assigneeId: string | null) => void
   headerLabel?: string
 }) {
   return (
@@ -228,7 +228,7 @@ function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect, header
             <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {initials(u.email)}
             </Box>
-            <Typography sx={{ fontSize: 13, color: "#0f172a", flex: 1 }}>{u.email.split("@")[0]}</Typography>
+            <Typography sx={{ fontSize: 13, color: "#0f172a", flex: 1 }}>{u.displayName}</Typography>
             {u.id === currentId ? <CheckIcon sx={{ fontSize: 13, color: "#1d4ed8" }} /> : null}
           </Box>
         ))}
@@ -279,7 +279,7 @@ function DueDatePopover({ anchorEl, onClose, current, onSelect, headerLabel }: {
 // ── Inline create row ─────────────────────────────────────────────────────
 function InlineCreateRow({ users, onCreate, onCancel, visibleColumns }: {
   // eslint-disable-next-line no-unused-vars
-  users: User[]; onCreate: (newTask: Partial<Task>) => void; onCancel: () => void
+  users: AssignableUser[]; onCreate: (newTask: Partial<Task>) => void; onCancel: () => void
   visibleColumns: ListColumnId[]
 }) {
   const [title, setTitle] = React.useState("")
@@ -361,7 +361,7 @@ function InlineCreateRow({ users, onCreate, onCancel, visibleColumns }: {
                 {assignee ? initials(assignee.email) : ""}
               </Box>
               <Typography sx={{ fontSize: 12, color: assignee ? "#0f172a" : "#94a3b8" }}>
-                {assignee ? assignee.email.split("@")[0] : "Assign"}
+                {assignee ? assignee.displayName : "Assign"}
               </Typography>
             </Box>
           </TableCell>
@@ -533,11 +533,9 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
   const [assigneeId, setAssigneeId] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
-  const { data: users } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data,
-    enabled: open
-  })
+  // Assignee picker source — operational-callable & client-scoped, replacing the
+  // admin-only GET /users that 403'd for operational roles. value = id, label = displayName.
+  const { data: users } = useAssignableUsers()
 
   async function handleCreate() {
     if (!title.trim()) return
@@ -580,7 +578,7 @@ export function CreateTaskModal({ open, onClose, linkedEntityType, linkedEntityI
           </Stack>
           <TextField select label="Assignee" value={assigneeId} onChange={e => setAssigneeId(e.target.value)} fullWidth>
             <MenuItem value="">Unassigned</MenuItem>
-            {(users ?? []).map(u => <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>)}
+            {(users ?? []).map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
           </TextField>
         </Stack>
       </DialogContent>
@@ -606,7 +604,7 @@ export function TaskQuickDetailModal({
 }: {
   open: boolean
   taskId: string | null
-  users: { id: string; email: string }[]
+  users: AssignableUser[]
   canManage: boolean
   onClose: () => void
   // eslint-disable-next-line no-unused-vars
@@ -779,7 +777,7 @@ export function TaskQuickDetailModal({
                   disabled={!canManage}
                 >
                   <MenuItem value="">Unassigned</MenuItem>
-                  {users.map((u) => <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>)}
+                  {users.map((u) => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
                 </TextField>
                 <TextField
                   type="date"
@@ -924,10 +922,10 @@ export default function TasksPage() {
     queryKey: ["tasks"],
     queryFn: async () => (await api.get<Task[]>("/tasks")).data
   })
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data
-  })
+  // Assignee picker source (popovers, inline-create row, filter avatars,
+  // quick-detail modal) — operational-callable & client-scoped, replacing the
+  // admin-only GET /users that 403'd for operational roles.
+  const { data: users = [] } = useAssignableUsers()
 
   const tasks = React.useMemo(() => data ?? [], [data])
   const tasksById = React.useMemo(() => {
@@ -1147,7 +1145,7 @@ export default function TasksPage() {
               {users.slice(0, 6).map(u => {
                 const active = filterAssignee === u.id
                 return (
-                  <Tooltip key={u.id} title={u.email}>
+                  <Tooltip key={u.id} title={u.displayName}>
                     <Box
                       onClick={() => setFilterAssignee(active ? null : u.id)}
                       sx={{

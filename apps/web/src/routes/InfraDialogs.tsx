@@ -9,7 +9,8 @@ import StorageIcon from "@mui/icons-material/Storage"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
-import { Room, ROOM_TYPE_LABELS, ASSET_LIFECYCLE_OPTIONS, ElevationSide, Cabinet, Site, UserOption } from "../lib/infrastructure"
+import { Room, ROOM_TYPE_LABELS, ASSET_LIFECYCLE_OPTIONS, ElevationSide, Cabinet, Site } from "../lib/infrastructure"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 // User-friendly labels for the MaintenanceWorkType prisma enum
 const MAINTENANCE_WORK_TYPES: { value: string; label: string }[] = [
@@ -609,10 +610,9 @@ export function LogMaintenanceDialog({ onClose, onSave }: {
   const [nextDueAt, setNextDueAt] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: async () => (await api.get<UserOption[]>("/users")).data
-  })
+  // Assignee picker source ("Performed by") — operational-callable &
+  // client-scoped, replacing admin-only GET /users. value = id, label = displayName.
+  const { data: users = [] } = useAssignableUsers()
 
   async function handleSave() {
     if (!performedAt) return
@@ -648,7 +648,7 @@ export function LogMaintenanceDialog({ onClose, onSave }: {
           </Stack>
           <TextField select label="Performed by" value={performedById} onChange={e => setPerformedById(e.target.value)} fullWidth>
             <MenuItem value="">(current user)</MenuItem>
-            {users.map(u => <MenuItem key={u.id} value={u.id}>{u.email}</MenuItem>)}
+            {users.map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
           </TextField>
           <TextField label="Notes" value={notes} onChange={e => setNotes(e.target.value)} multiline rows={3} fullWidth />
         </Stack>

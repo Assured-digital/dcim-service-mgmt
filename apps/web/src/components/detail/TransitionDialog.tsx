@@ -10,6 +10,7 @@ import {
   TextField,
 } from "@mui/material"
 import type { Transition } from "./WorkflowStrip"
+import { useAssignableUsers } from "../../lib/useAssignableUsers"
 
 interface TransitionDialogProps {
   open: boolean
@@ -25,6 +26,11 @@ function TransitionDialogImpl({
   onClose,
 }: TransitionDialogProps) {
   const [values, setValues] = React.useState<Record<string, string>>({})
+
+  // Shared assignable-users source for any "assignee" field. Cheap to call on
+  // every render — cached and scoped to the current client by the hook.
+  const assignableQuery = useAssignableUsers()
+  const assignableUsers = assignableQuery.data ?? []
 
   React.useEffect(() => {
     if (open) setValues({})
@@ -63,6 +69,28 @@ function TransitionDialogImpl({
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {fields.map((field) => {
+            if (field.type === "assignee") {
+              return (
+                <TextField
+                  key={field.key}
+                  select
+                  fullWidth
+                  label={field.label}
+                  required={field.required}
+                  value={values[field.key] ?? ""}
+                  onChange={handleChange(field.key)}
+                >
+                  {!field.required && (
+                    <MenuItem value="">Unassigned</MenuItem>
+                  )}
+                  {assignableUsers.map((user) => (
+                    <MenuItem key={user.id} value={user.id}>
+                      {user.displayName}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )
+            }
             if (field.type === "select") {
               return (
                 <TextField
