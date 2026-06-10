@@ -10,12 +10,13 @@ Date: 2026-03-05
 - [ ] Disabled user cannot log in.
 
 ## 2) RBAC + Tenant Scope
-- [ ] `ADMIN` can access all pages including Users.
-- [ ] `SERVICE_MANAGER` can access Users but cannot assign admin/service-manager roles.
+- [ ] Org-super roles (`ORG_OWNER`, `ORG_ADMIN`, `ADMIN`) can access all pages including Users and Clients.
+- [ ] `SERVICE_MANAGER` cannot access the Users or Clients routes (org-super only).
 - [ ] `SERVICE_DESK_ANALYST` cannot access Users route.
 - [ ] `ENGINEER` cannot access Triage or Users.
 - [ ] `CLIENT_VIEWER` can view allowed lists but cannot perform create/update actions.
-- [ ] Cross-tenant data access is blocked for non-admin users.
+- [ ] Cross-tenant data access is blocked: a client-scoped user sending another client's `x-client-id`
+      gets `403`; control returns their own data.
 
 ## 3) Module Regression
 - [ ] Dashboard loads all cards without console errors.
@@ -24,8 +25,8 @@ Date: 2026-03-05
 - [ ] Incidents list/create/status update works.
 - [ ] Tasks list/create/status update + incident linking works.
 - [ ] Assets list/create works with owner validation.
-- [ ] Surveys list, detail, response updates, and completion rules work.
-- [ ] Users list/create/update works for allowed roles.
+- [ ] Checks list, detail, item responses, and submit/approve flow work.
+- [ ] Users list/create/update works for allowed roles (org-super only).
 
 ## 4) UX States
 - [ ] Every page shows loading state while queries run.
@@ -39,7 +40,10 @@ Date: 2026-03-05
 - [ ] Data tables are usable on narrow viewports (horizontal scroll).
 
 ## 6) Suggested Test Accounts
-Create these in Users page for validation:
+Create these in Users page for validation (org-super accounts must be seeded or created by an
+existing org-super user):
+- `owner@dcm.local` (`ORG_OWNER`)
+- `orgadmin@dcm.local` (`ORG_ADMIN`)
 - `manager@dcm.local` (`SERVICE_MANAGER`)
 - `analyst@dcm.local` (`SERVICE_DESK_ANALYST`)
 - `engineer@dcm.local` (`ENGINEER`)
@@ -50,4 +54,4 @@ Create these in Users page for validation:
 docker compose up --build
 ```
 - Web: `http://localhost:5173`
-- API docs: `http://localhost:3001/docs`
+- API docs (Swagger UI): `http://localhost:3001/api` (JSON spec at `/api-json`)
