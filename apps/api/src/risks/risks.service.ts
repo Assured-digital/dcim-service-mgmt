@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
+import { resolveLinkedRecords } from "../record-links/resolve-links"
+import { resolveAttachments } from "../attachments/resolve-attachments"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -58,7 +60,9 @@ export class RisksService {
       where: { id, clientId }
     })
     if (!risk) throw new NotFoundException("Risk not found")
-    return risk
+    const links = await resolveLinkedRecords(this.prisma, clientId, "risk", risk.id)
+    const attachments = await resolveAttachments(this.prisma, clientId, "risk", risk.id)
+    return { ...risk, links, attachments }
   }
 
   async createForClient(clientId: string, actorUserId: string, dto: {

@@ -1,6 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { TaskStatus } from "@prisma/client";
+import { resolveLinkedRecords } from "../record-links/resolve-links";
+import { resolveAttachments } from "../attachments/resolve-attachments";
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -71,7 +73,9 @@ export class TasksService {
       }
     });
     if (!task) throw new NotFoundException("Task not found");
-    return task;
+    const links = await resolveLinkedRecords(this.prisma, clientId, "task", task.id);
+    const attachments = await resolveAttachments(this.prisma, clientId, "task", task.id);
+    return { ...task, links, attachments };
   }
 
   async createForClient(

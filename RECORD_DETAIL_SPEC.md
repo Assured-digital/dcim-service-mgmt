@@ -202,6 +202,12 @@ Inline editing behaviour for both title and description:
 
 Wrap both in `Box sx={{ mb: 2.5 }}`.
 
+**Backend contract:** any inline-editable centre field (title/description — `subject` for SR — plus
+Change's implementation fields) must be accepted by that record's `PUT /:id` update DTO **and** persisted
+in its `updateForClient`. The global `ValidationPipe({ whitelist: true })` strips properties not declared
+on a typed DTO, so a field missing from the DTO (or from the Prisma `data` block) makes the UI commit
+silently no-op even though the affordance works.
+
 ### 5.2 Centre sections
 
 Each section is a `Box sx={{ mb: 2.5 }}` with a collapsible header and a `Divider` above it (except the first section directly after the title block).
@@ -393,32 +399,60 @@ Updated         [formatted date]
 
 Rendered as `Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.375 }}` with `variant="caption"` — label in `text.disabled`, value in `text.secondary`. Not interactive.
 
+**"Submitted by" sources from the read response's server-resolved `createdBy.displayName` projection** (`{ id, displayName }`, attached by `resolveCreator` in `apps/api/src/users/creator.ts`) — NOT a client-side `GET /users` lookup. The old approach resolved `createdById` against the admin-only `/users` directory, which 403s for operational/customer viewers and excludes customer creators, so "Submitted by" rendered blank for them. Pages now read `record.createdBy?.displayName ?? null` directly.
+
 ### 7.4 Linked records panel
 
 Collapsible section, default open. Sits below Attachments in the right panel. **Linked records do not appear in the centre column** — they live exclusively here.
+
+**Data model — join table, not a scalar.** Links are stored in the `RecordLink` join table
+(`apps/api/prisma/schema.prisma`), NOT in the old `linkedEntityType`/`linkedEntityId` scalars
+(those are now dead and slated for removal). A link connects any two of the six work-item types
+(`incident`, `service_request`, `change`, `task`, `risk`, `issue`) within ONE client, and is
+**bidirectional/symmetric**: a link created on record A appears on record B with no extra write;
+unlinking from either side removes the single edge. A record may have **many** links. Endpoints
+are stored in a canonical order (`canonicalLinkEndpoints` in
+`apps/api/src/record-links/resolve-links.ts`) so the uniqueness constraint collapses duplicates.
+
+**Linked records source from the read response's server-resolved `links` projection**
+(`{ linkId, type, id, reference, title, status }[]`, attached by `resolveLinkedRecords` in
+`apps/api/src/record-links/resolve-links.ts`) — clientId-scoped on every lookup, so a link can
+never resolve a record from another client. The page reads `record.links ?? []` directly — NOT a
+client-side lookup, mirroring the `createdBy` projection (§7.3). The shared
+`apps/web/src/components/LinkedRecordsContent.tsx` renders the rows; `apps/web/src/lib/linkedRecords.ts`
+is the single source of truth for per-type visuals, routing, and the link/search/unlink API helpers.
+
+Mutations go through the `record-links` module: `POST /record-links` (validates BOTH endpoints
+belong to the scoped client before writing — the cross-tenant guard), `DELETE /record-links/:id`
+(clientId-scoped), `GET /record-links/search?type=&q=` (powers the picker dialog,
+`apps/web/src/components/LinkRecordDialog.tsx`).
 
 Each linked record row — same style as attachment rows:
 ```tsx
 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.625,
            borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
   {/* Coloured icon box — 26×26px, borderRadius: 1 */}
-  {/* rp-info: name (12px) above, ref (10px muted) below */}
-  {/* Status badge — 10px coloured pill, right-aligned, flex-shrink: 0 */}
+  {/* rp-info: title (12px) above, reference (10px muted) below */}
+  {/* Status badge — 10px coloured pill, right-aligned, flex-shrink: 0 (omitted when status empty) */}
+  {/* Unlink button — appears on row hover; omitted for hard-relation rows with empty linkId */}
 </Box>
 ```
+Row click navigates to the linked record's detail route (`routeForLink`). A Task's parent-incident
+FK relation is also surfaced here as a row with an empty `linkId` (shown, but not unlinkable).
 
-Icon and colour per `linkedEntityType`:
+Icon and colour per link type (`LINKED_RECORD_VISUALS`):
 
 | Type | Icon | Background | Icon colour |
 |---|---|---|---|
-| `risk` | `WarningAmberIcon` | `#faeeda` | `#854f0b` |
+| `incident` | `ErrorOutlineIcon` | `#fdecea` | `#b71c1c` |
+| `service_request` | `AssignmentOutlinedIcon` | `#eef2ff` | `#3538cd` |
 | `change` | `BuildIcon` | `#e6f1fb` | `#185fa5` |
-| `asset` | `StorageIcon` | `#e6f1fb` | `#185fa5` |
-| `site` | `LocationOnIcon` | `#eaf3de` | `#3b6d11` |
-| `issue` | `ErrorOutlineIcon` | `#fbeaf0` | `#993556` |
-| default | `LinkIcon` | `action.hover` | `text.tertiary` |
+| `task` | `TaskAltIcon` | `#eaf3de` | `#3b6d11` |
+| `risk` | `WarningAmberIcon` | `#faeeda` | `#854f0b` |
+| `issue` | `ReportProblemOutlinedIcon` | `#fbeaf0` | `#993556` |
+| default | `LinkIcon` | `#eef2f6` | `#475569` |
 
-If no linked entities: `Typography variant="caption" color="text.tertiary"` — "No linked records"
+If no linked records: `Typography variant="caption" color="text.tertiary"` — "No linked records"
 
 "Link record" `Button variant="text" size="small" startIcon={<AddIcon />}` always shown below.
 
@@ -435,9 +469,41 @@ Each attachment row: `Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p
 
 "Attach file" button: `Button variant="text" size="small" startIcon={<AttachFileIcon />}`
 
-If no attachments: render nothing (not even the button — the section still shows but body is empty)
+Empty state: show a muted "No attachments" caption and STILL render the "Attach file" button (a way
+to add the first file is needed — this supersedes the earlier "render nothing" note, and matches how
+`LinkedRecordsContent` always shows its add button).
 
-All attachments wiring: `// TODO: wire attachments API` — scaffold only for now.
+Attachments — frontend implemented for the six work-item pages (Incident, SR, Change, Task, Risk,
+Issue). **Backend** also supports **Maintenance and Check** (their `getForClient` reads return
+`attachments[]`; uploads/downloads/deletes accept `recordType` `maintenance`/`check`) — their detail
+panels are still scaffolded pending the frontend wiring. Maintenance/Check are **attachable but
+intentionally NOT linkable**: the attachment record-type list (`ATTACHMENT_RECORD_TYPES`, eight
+types) is decoupled from the link list (`LINK_RECORD_TYPES`, the six). Maintenance has no
+`clientId`/`reference`/`title`/`status`, so the resolver scopes it through `asset.clientId` and
+synthesises its summary.
+
+- API: `POST /attachments` (multipart `file` + `recordType` + `recordId`), `GET /attachments/:id`
+  (stream/download), `DELETE /attachments/:id`. All clientId-scoped via `resolveClientScope`; the
+  target record is validated in-scope before an upload is stored, and every read/delete re-checks
+  `where: { id, clientId }`.
+- Storage: bytes live in object storage (S3/MinIO locally) via the storage abstraction — never the
+  DB; the `Attachment` row holds metadata + `storageKey`. No pre-signed URLs — bytes stream through
+  the API.
+- Security: uploads are validated by **magic bytes** (not the client `Content-Type`); allow-list is
+  **PDF + PNG/JPEG/GIF/WebP only** (SVG rejected). Downloads serve `Content-Disposition: inline`
+  ONLY for that allow-list (everything else `attachment`) and always send
+  `X-Content-Type-Options: nosniff`.
+- Read-back: each `getForClient` returns an `attachments[]` array of
+  `{ id, filename, contentType, size, uploadedAt, inline }`, beside `createdBy`/`links`.
+- Frontend: a single shared `AttachmentsContent` (panel) + `AttachmentPreviewModal`, consumed by all
+  six pages via the shell's `rightSections` (replacing the old per-page scaffold), backed by
+  `lib/attachments.ts`. Upload uses a file-picker → `POST` then invalidates the page's detail query.
+  Clicking a row opens an in-app preview: the bytes are fetched **through the authenticated api
+  client as a blob** (NOT a raw `<img>`/`<iframe>` src — the GET needs auth + `x-client-id`), shown
+  via an object URL (PDF in an `<iframe>`, images in an `<img>`) that is **revoked on close**;
+  non-previewable types fall back to a download button. Download and delete also fetch/act through
+  the api client. Backend rejections surface as friendly toasts (413 → "file too large", 415 →
+  "only PDF and images allowed"), never a raw status.
 
 ---
 

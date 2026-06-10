@@ -69,6 +69,34 @@ export class AddApprovalDto {
 
 export class UpdateChangeDto {
   @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  @IsString()
+  description?: string
+
+  @IsOptional()
+  @IsString()
+  reason?: string
+
+  @IsOptional()
+  @IsString()
+  impactAssessment?: string
+
+  @IsOptional()
+  @IsString()
+  rollbackPlan?: string
+
+  @IsOptional()
+  @IsString()
+  implementationNotes?: string
+
+  @IsOptional()
+  @IsString()
+  postImplReview?: string
+
+  @IsOptional()
   @IsIn(["low", "medium", "high", "critical"])
   priority?: string
 

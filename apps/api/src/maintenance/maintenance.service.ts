@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { CreateMaintenanceDto, ListMaintenanceQueryDto, UpdateMaintenanceDto } from "./dto"
+import { resolveAttachments } from "../attachments/resolve-attachments"
 
 @Injectable()
 export class MaintenanceService {
@@ -88,7 +89,8 @@ export class MaintenanceService {
       }
     })
     if (!record) throw new NotFoundException("Maintenance record not found")
-    return record
+    const attachments = await resolveAttachments(this.prisma, clientId, "maintenance", record.id)
+    return { ...record, attachments }
   }
 
   async createForClient(clientId: string, actorUserId: string | null, dto: CreateMaintenanceDto) {

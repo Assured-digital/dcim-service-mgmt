@@ -1,5 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
+import { resolveCreator } from "../users/creator"
+import { resolveLinkedRecords } from "../record-links/resolve-links"
+import { resolveAttachments } from "../attachments/resolve-attachments"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -40,7 +43,10 @@ export class ChangesService {
       }
     })
     if (!change) throw new NotFoundException("Change request not found")
-    return change
+    const createdBy = await resolveCreator(this.prisma, change.createdById)
+    const links = await resolveLinkedRecords(this.prisma, clientId, "change", change.id)
+    const attachments = await resolveAttachments(this.prisma, clientId, "change", change.id)
+    return { ...change, createdBy, links, attachments }
   }
 
   async createForClient(clientId: string, actorUserId: string, dto: {
@@ -169,6 +175,13 @@ export class ChangesService {
   }
 
   async updateForClient(clientId: string, id: string, actorUserId: string, dto: {
+    title?: string
+    description?: string
+    reason?: string
+    impactAssessment?: string
+    rollbackPlan?: string
+    implementationNotes?: string
+    postImplReview?: string
     priority?: string
     assigneeId?: string
     scheduledStart?: string
@@ -179,6 +192,13 @@ export class ChangesService {
     return this.prisma.changeRequest.update({
       where: { id: change.id },
       data: {
+        title: dto.title,
+        description: dto.description,
+        reason: dto.reason,
+        impactAssessment: dto.impactAssessment,
+        rollbackPlan: dto.rollbackPlan,
+        implementationNotes: dto.implementationNotes,
+        postImplReview: dto.postImplReview,
         priority: dto.priority,
         assigneeId: dto.assigneeId,
         scheduledStart: dto.scheduledStart ? new Date(dto.scheduledStart) : undefined,

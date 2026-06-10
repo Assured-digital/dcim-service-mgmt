@@ -18,9 +18,6 @@ import AddIcon from "@mui/icons-material/Add"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import LinkIcon from "@mui/icons-material/Link"
 import AttachFileIcon from "@mui/icons-material/AttachFile"
-import DescriptionIcon from "@mui/icons-material/Description"
-import ImageIcon from "@mui/icons-material/Image"
-import FileDownloadIcon from "@mui/icons-material/FileDownload"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
@@ -53,6 +50,11 @@ import {
 import { transitions as taskTransitions } from "../config/transitions/taskTransitions"
 import { useBreadcrumb } from "./Shell"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
+import { AttachmentsContent } from "../components/AttachmentsContent"
+import type { AttachmentSummary } from "../lib/attachments"
+import { LinkRecordDialog } from "../components/LinkRecordDialog"
+import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -71,6 +73,8 @@ type Task = {
   linkedEntityType: string | null
   linkedEntityId: string | null
   incident: { id: string; reference: string; title: string } | null
+  links?: ResolvedLink[]
+  attachments?: AttachmentSummary[]
   createdAt: string
   updatedAt: string
 }
@@ -94,14 +98,6 @@ type TaskComment = {
   author: { id: string; email: string }
 }
 
-type Attachment = {
-  id: string
-  fileName: string
-  fileSize: number
-  mimeType: string
-  createdAt: string
-  url?: string
-}
 
 type FeedEventType = "status" | "comment" | "assignment" | "link"
 
@@ -113,12 +109,6 @@ type FeedEvent = {
   note?: string
   time: string
   createdAt: string
-}
-
-interface LinkedEntity {
-  type: string
-  id: string
-  display?: string
 }
 
 const FILTER_VALUES = ["all", "comment", "status", "assignment", "link"] as const
@@ -214,38 +204,6 @@ const TASK_TYPE_BADGE = (
   </Box>
 )
 
-// Linked record kind visuals — mirrors incident page
-type LinkedEntityKind = "asset" | "risk" | "site" | "change" | "issue" | "incident" | "default"
-
-interface LinkedEntityVisual {
-  Icon: React.ComponentType<{ sx?: object }>
-  bg: string
-  fg: string
-  label: string
-}
-
-const LINKED_ENTITY_VISUALS: Record<LinkedEntityKind, LinkedEntityVisual> = {
-  asset: { Icon: StorageIcon, bg: "#e6f1fb", fg: "#185fa5", label: "Asset" },
-  risk: { Icon: WarningAmberIcon, bg: "#faeeda", fg: "#854f0b", label: "Risk" },
-  site: { Icon: LocationOnIcon, bg: "#eaf3de", fg: "#3b6d11", label: "Site" },
-  change: { Icon: BuildIcon, bg: "#e6f1fb", fg: "#185fa5", label: "Change" },
-  issue: { Icon: ErrorOutlineIcon, bg: "#fbeaf0", fg: "#993556", label: "Issue" },
-  incident: { Icon: ErrorOutlineIcon, bg: "#fcebeb", fg: "#a32d2d", label: "Incident" },
-  default: { Icon: LinkIcon, bg: "#eef2f6", fg: "#475569", label: "Linked" },
-}
-
-function entityKindFromType(value?: string | null): LinkedEntityKind {
-  if (!value) return "default"
-  const v = value.toLowerCase()
-  if (v === "asset") return "asset"
-  if (v === "risk") return "risk"
-  if (v === "site") return "site"
-  if (v === "change" || v === "changerequest") return "change"
-  if (v === "issue") return "issue"
-  if (v === "incident") return "incident"
-  return "default"
-}
-
 function entityPath(type: string | null, id: string | null): string | null {
   if (!type || !id) return null
   const paths: Record<string, string> = {
@@ -283,13 +241,6 @@ function formatDate(value: string | null): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 }
 
-function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB"]
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  const value = bytes / Math.pow(1024, i)
-  return `${value < 10 && i > 0 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
-}
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null && "message" in error) {
@@ -565,106 +516,6 @@ const TaskTitleCard = React.memo(function TaskTitleCard({
   )
 })
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Linked records section (right panel — spec 7.4)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface LinkedRecordsContentProps {
-  entities: LinkedEntity[]
-  onAddLink: () => void
-  onOpenLinked: (entity: LinkedEntity) => void
-}
-
-const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
-  entities,
-  onAddLink,
-  onOpenLinked,
-}: LinkedRecordsContentProps) {
-  const handleClick = React.useCallback(
-    (entity: LinkedEntity) => () => onOpenLinked(entity),
-    [onOpenLinked]
-  )
-
-  return (
-    <Box>
-      {entities.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
-          No linked records
-        </Typography>
-      ) : (
-        entities.map((entity) => {
-          const visual = LINKED_ENTITY_VISUALS[entityKindFromType(entity.type)]
-          const Icon = visual.Icon
-          return (
-            <Box
-              key={`${entity.type}-${entity.id}`}
-              onClick={handleClick(entity)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                py: 0.625,
-                borderRadius: 1,
-                cursor: "pointer",
-                "&:hover": { bgcolor: "action.hover" },
-              }}
-            >
-              <Box
-                sx={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 1,
-                  bgcolor: visual.bg,
-                  color: visual.fg,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <Icon sx={{ fontSize: 14 }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  sx={{
-                    fontSize: 12,
-                    display: "block",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    color: "text.primary",
-                  }}
-                >
-                  {visual.label}
-                </Typography>
-                <Typography
-                  sx={{
-                    fontSize: 10,
-                    color: "var(--color-text-tertiary)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {entity.display ?? entity.id}
-                </Typography>
-              </Box>
-            </Box>
-          )
-        })
-      )}
-      <Button
-        variant="text"
-        size="small"
-        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-        onClick={onAddLink}
-        sx={{ textTransform: "none", mt: 0.25 }}
-      >
-        Link record
-      </Button>
-    </Box>
-  )
-})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity section (spec section 6)
@@ -850,89 +701,7 @@ const ActivityContent = React.memo(function ActivityContent({
 // Attachments section (spec 7.3)
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface AttachmentsContentProps {
-  attachments: Attachment[]
-  onAttach: () => void
-  onDownload: (attachment: Attachment) => void
-}
-
-const AttachmentsContent = React.memo(function AttachmentsContent({
-  attachments,
-  onAttach,
-  onDownload,
-}: AttachmentsContentProps) {
-  const handleDownload = React.useCallback(
-    (attachment: Attachment) => () => onDownload(attachment),
-    [onDownload]
-  )
-
-  // TODO: wire attachments API
-  return (
-    <Box>
-      {attachments.map((attachment) => {
-        const isImage = attachment.mimeType.startsWith("image/")
-        const Icon = isImage ? ImageIcon : DescriptionIcon
-        return (
-          <Box
-            key={attachment.id}
-            onClick={handleDownload(attachment)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              py: 0.625,
-              borderRadius: 1,
-              cursor: "pointer",
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <Box
-              sx={{
-                width: 26,
-                height: 26,
-                borderRadius: 1,
-                bgcolor: "action.hover",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Icon sx={{ fontSize: 14, color: "text.secondary" }} />
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  display: "block",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {attachment.fileName}
-              </Typography>
-              <Typography sx={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
-                {formatFileSize(attachment.fileSize)} ·{" "}
-                {new Date(attachment.createdAt).toLocaleDateString("en-GB")}
-              </Typography>
-            </Box>
-            <FileDownloadIcon sx={{ fontSize: 12, color: "var(--color-text-tertiary)" }} />
-          </Box>
-        )
-      })}
-      <Button
-        variant="text"
-        size="small"
-        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-        onClick={onAttach}
-        sx={{ textTransform: "none", mt: 0.25 }}
-      >
-        Attach file
-      </Button>
-    </Box>
-  )
-})
+// Attachments panel is provided by the shared AttachmentsContent component.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -1012,7 +781,6 @@ export default function TaskDetailPage() {
     enabled: !!id,
   })
 
-  const attachments: Attachment[] = React.useMemo(() => [], [])
 
   // ── Mutations (preserved exactly) ──────────────────────────────────────────
 
@@ -1107,51 +875,41 @@ export default function TaskDetailPage() {
     setTransitionTarget(null)
   }, [])
 
-  const handleAttach = React.useCallback(() => {
-    // TODO: wire attachments API
-  }, [])
-  const handleDownloadAttachment = React.useCallback((_attachment: Attachment) => {
-    // TODO: wire attachments API
-  }, [])
 
-  const handleAddLink = React.useCallback(() => {
-    // TODO: link entity dialog
-  }, [])
-
-  const handleOpenLinked = React.useCallback(
-    (entity: LinkedEntity) => {
-      const path = entityPath(entity.type, entity.id)
-      if (path && task) {
-        navigate(path, {
-          state: { fromTask: task.id, fromTaskRef: task.reference },
-        })
-      }
-    },
-    [navigate, task]
+  const [linkDialogOpen, setLinkDialogOpen] = React.useState(false)
+  const handleAddLink = React.useCallback(() => setLinkDialogOpen(true), [])
+  const unlinkMutation = useMutation({
+    mutationFn: (linkId: string) => deleteRecordLink(linkId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["task-detail", id] }),
+  })
+  const handleUnlink = React.useCallback(
+    (linkId: string) => unlinkMutation.mutate(linkId),
+    [unlinkMutation]
   )
 
   const handleBack = React.useCallback(() => navigate(-1), [navigate])
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const linkedEntities = React.useMemo<LinkedEntity[]>(() => {
-    if (!task) return []
-    const list: LinkedEntity[] = []
-    if (task.incident) {
-      list.push({
-        type: "Incident",
-        id: task.incident.id,
-        display: task.incident.reference,
-      })
-    }
+  // Soft-links resolved by the backend, plus the Task's parent-incident FK
+  // relation (shown for context but not unlinkable here — empty linkId).
+  const links = React.useMemo<ResolvedLink[]>(() => {
+    const soft = task?.links ?? []
     if (
-      task.linkedEntityType &&
-      task.linkedEntityId &&
-      !(task.incident && task.linkedEntityType === "Incident" && task.linkedEntityId === task.incident.id)
+      task?.incident &&
+      !soft.some((l) => l.type === "incident" && l.id === task.incident!.id)
     ) {
-      list.push({ type: task.linkedEntityType, id: task.linkedEntityId })
+      const incidentRow: ResolvedLink = {
+        linkId: "",
+        type: "incident",
+        id: task.incident.id,
+        reference: task.incident.reference,
+        title: task.incident.title || task.incident.reference,
+        status: "",
+      }
+      return [incidentRow, ...soft]
     }
-    return list
+    return soft
   }, [task])
 
   const allFeedEvents = React.useMemo<FeedEvent[]>(() => {
@@ -1454,9 +1212,10 @@ export default function TaskDetailPage() {
         defaultOpen: false,
         content: (
           <AttachmentsContent
-            attachments={attachments}
-            onAttach={handleAttach}
-            onDownload={handleDownloadAttachment}
+            attachments={task?.attachments ?? []}
+            recordType="task"
+            recordId={task?.id ?? ""}
+            onChanged={() => qc.invalidateQueries({ queryKey: ["task-detail", id] })}
           />
         ),
       },
@@ -1466,21 +1225,17 @@ export default function TaskDetailPage() {
         icon: <LinkIcon sx={{ fontSize: 12 }} />,
         defaultOpen: true,
         content: (
-          <LinkedRecordsContent
-            entities={linkedEntities}
-            onAddLink={handleAddLink}
-            onOpenLinked={handleOpenLinked}
-          />
+          <LinkedRecordsContent links={links} onAddLink={handleAddLink} onUnlink={handleUnlink} />
         ),
       },
     ]
   }, [
-    attachments,
-    handleAttach,
-    handleDownloadAttachment,
-    linkedEntities,
+    task,
+    qc,
+    id,
+    links,
     handleAddLink,
-    handleOpenLinked,
+    handleUnlink,
   ])
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1538,6 +1293,14 @@ export default function TaskDetailPage() {
         onClose={handleLinkSnackbarClose}
         message="Link copied"
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
+
+      <LinkRecordDialog
+        open={linkDialogOpen}
+        onClose={() => setLinkDialogOpen(false)}
+        sourceType="task"
+        sourceId={task.id}
+        onLinked={() => qc.invalidateQueries({ queryKey: ["task-detail", id] })}
       />
     </>
   )

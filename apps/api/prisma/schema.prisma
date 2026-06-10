@@ -130,6 +130,8 @@ model Client {
   requestIntakes RequestIntake[]
   connections Connection[]
   userAssignments UserClientAssignment[]
+  recordLinks RecordLink[]
+  attachments Attachment[]
 }
 
 model Site {
@@ -641,6 +643,54 @@ model Issue {
   linkedEntityId   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// Soft-link join table — connects any two work-item records (Incident, Service
+// Request, Change, Task, Risk, Issue) within a single client. Polymorphic: the two
+// endpoints are stored as opaque (type, id) pairs rather than FK relations, so a
+// link can span types without 12 back-relations across 6 models. Tenant integrity
+// is enforced in application code (the established where:{id,clientId} pattern) —
+// every endpoint is validated against clientId before a row is written.
+//
+// A link is bidirectional/symmetric: (A,B) == (B,A). The service writes endpoints
+// in a canonical order (the smaller "type:id" string as endpoint A) so the unique
+// constraint actually collapses duplicates. Lookups must therefore query BOTH
+// endpoint positions (hence the two indexes).
+model RecordLink {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  aType       String
+  aId         String
+  bType       String
+  bId         String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([clientId, aType, aId, bType, bId])
+  @@index([clientId, aType, aId])
+  @@index([clientId, bType, bId])
+}
+
+// File attachments on the six work-item record types. Like RecordLink, the
+// (recordType, recordId) pair is a polymorphic, clientId-scoped pointer — tenant
+// integrity is enforced in app code via where: { id, clientId }. The bytes live in
+// object storage (storageKey); the DB holds metadata only. contentType is the
+// SERVER-validated (magic-byte) MIME, never the raw upload header.
+model Attachment {
+  id           String   @id @default(uuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id])
+  recordType   String   // incident | service_request | change | task | risk | issue | maintenance | check
+  recordId     String
+  filename     String   // original client filename (display only — never trusted for type)
+  contentType  String   // server-validated canonical MIME (magic-byte verified)
+  size         Int      // bytes
+  storageKey   String   // object key in the bucket
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([clientId, recordType, recordId])
 }
 
 model Comment {
