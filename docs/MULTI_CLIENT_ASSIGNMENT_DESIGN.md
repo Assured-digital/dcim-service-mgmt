@@ -1,8 +1,9 @@
 # Multi-Client Assignment (Card A) — Design & Build Spec
 
-**Status:** Design complete, build pending (phased)
-**Significance:** Foundational. Touches the tenant-isolation core. Highest-risk change in the project to date.
-**Author/decisions:** Jake, designed 2026-06.
+Status: ✅ BUILT & DEPLOYED — all 5 phases live on test + prod (completed 2026-06-09). This is the original design record, kept for the rationale (why per-request resolution, why phased, the isolation re-verification approach). For the current implemented state, see CLAUDE.md.
+Significance: Foundational. Touched the tenant-isolation core. Highest-risk change in the project to date — shipped behaviour-preserving and isolation-re-verified (code review + empirical walkthrough).
+Author/decisions: Jake, designed & built 2026-06.
+Note: §4 below says "ALL ~14 services call resolveClientScope" — this reflects the original mental model. The implemented reality is that controllers call it and pass clientId to services (see CLAUDE.md Architecture). The isolation guarantee is unchanged; only the layer differs.
 
 ---
 
