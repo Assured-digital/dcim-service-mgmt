@@ -26,6 +26,8 @@ import { MyWorkModule } from "./my-work/my-work.module"
 import { OverviewModule } from "./overview/overview.module"
 import { MaintenanceModule } from "./maintenance/maintenance.module"
 import { ConnectionsModule } from "./connections/connections.module"
+import { RecordLinksModule } from "./record-links/record-links.module"
+import { AttachmentsModule } from "./attachments/attachments.module"
 
 @Module({
   imports: [
@@ -54,7 +56,9 @@ import { ConnectionsModule } from "./connections/connections.module"
     OverviewModule,
     UsersModule,
     MaintenanceModule,
-    ConnectionsModule
+    ConnectionsModule,
+    RecordLinksModule,
+    AttachmentsModule
   ],
   controllers: [HealthController]
 })

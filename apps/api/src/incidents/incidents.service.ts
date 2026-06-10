@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { IncidentSeverity, IncidentStatus } from "@prisma/client";
+import { resolveCreator } from "../users/creator";
+import { resolveLinkedRecords } from "../record-links/resolve-links";
+import { resolveAttachments } from "../attachments/resolve-attachments";
 
 type ListFilters = {
   dateFrom?: string;
@@ -65,7 +68,10 @@ export class IncidentsService {
       }
     });
     if (!incident) throw new NotFoundException("Incident not found");
-    return incident;
+    const createdBy = await resolveCreator(this.prisma, incident.createdById);
+    const links = await resolveLinkedRecords(this.prisma, clientId, "incident", incident.id);
+    const attachments = await resolveAttachments(this.prisma, clientId, "incident", incident.id);
+    return { ...incident, createdBy, links, attachments };
   }
 
   async createForClient(

@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ServiceRequestStatus } from "@prisma/client";
+import { resolveCreator } from "../users/creator";
+import { resolveLinkedRecords } from "../record-links/resolve-links";
+import { resolveAttachments } from "../attachments/resolve-attachments";
 
 type ListFilters = {
   dateFrom?: string;
@@ -102,7 +105,10 @@ export class ServiceRequestsService {
     }
   });
   if (!sr) throw new NotFoundException("Service Request not found");
-  return sr;
+  const createdBy = await resolveCreator(this.prisma, sr.createdById);
+  const links = await resolveLinkedRecords(this.prisma, clientId, "service_request", sr.id);
+  const attachments = await resolveAttachments(this.prisma, clientId, "service_request", sr.id);
+  return { ...sr, createdBy, links, attachments };
 }
 
 async updateStatusForClient(
@@ -151,7 +157,7 @@ async updateForClient(
   clientId: string,
   id: string,
   actorUserId: string,
-  dto: { assigneeId?: string; priority?: string; linkedEntityType?: string; linkedEntityId?: string }
+  dto: { subject?: string; description?: string; assigneeId?: string; priority?: string; linkedEntityType?: string; linkedEntityId?: string }
 ) {
   this.assertClientScope(clientId);
   const sr = await this.getForClient(clientId, id);
@@ -159,6 +165,8 @@ async updateForClient(
   const updated = await this.prisma.serviceRequest.update({
     where: { id: sr.id },
     data: {
+      subject: dto.subject,
+      description: dto.description,
       assigneeId: dto.assigneeId,
       priority: dto.priority,
       linkedEntityType: dto.linkedEntityType,

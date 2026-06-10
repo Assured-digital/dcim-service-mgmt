@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { CheckStatus } from "@prisma/client"
+import { resolveAttachments } from "../attachments/resolve-attachments"
 
 function makeRef(prefix: string) {
   const y = new Date().getFullYear()
@@ -168,7 +169,8 @@ export class ChecksService {
       }
     })
     if (!check) throw new NotFoundException("Check not found")
-    return check
+    const attachments = await resolveAttachments(this.prisma, clientId, "check", check.id)
+    return { ...check, attachments }
   }
 
   async createForClient(clientId: string, actorUserId: string | null, dto: any) {
