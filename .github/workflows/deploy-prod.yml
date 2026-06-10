@@ -70,6 +70,7 @@ jobs:
             --registry ${{ env.ACR_NAME }} \
             --image dcms-web:$TAG \
             --file apps/web/Dockerfile \
+            --build-arg REGISTRY=${{ env.ACR_LOGIN_SERVER }} \
             --build-arg VITE_API_BASE_URL=${{ env.API_PUBLIC_URL }} \
             --output none \
             .

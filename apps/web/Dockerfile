@@ -2,7 +2,8 @@
 # Build stage: install deps, run Vite build, produce static assets.
 # VITE_API_BASE_URL is baked in at this point because Vite reads VITE_* env
 # vars at build time and compiles them into the JavaScript bundle.
-FROM node:20-alpine AS build
+ARG REGISTRY=docker.io/library
+FROM ${REGISTRY}/node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json apps/web/package.json
@@ -21,7 +22,8 @@ RUN npm run build
 # ---- runtime ----
 # Runtime stage: tiny nginx image serving the compiled static files.
 # No node, no source code, no dev dependencies. ~25MB instead of ~1GB.
-FROM nginx:alpine AS runtime
+ARG REGISTRY=docker.io/library
+FROM ${REGISTRY}/nginx:alpine AS runtime
 
 # SPA-friendly nginx config (COPY'd in rather than heredoc — heredoc-in-RUN
 # is unreliable across Docker contexts and produced an empty file).
