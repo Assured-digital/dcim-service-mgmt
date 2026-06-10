@@ -1,1 +1,0 @@
-{"nodes": [{"id": "postgres_db", "label": "PostgreSQL Database", "file_type": "code", "source_file": "docker-compose.yml"}, {"id": "minio_storage", "label": "MinIO Object Storage", "file_type": "code", "source_file": "docker-compose.yml"}], "edges": [], "hyperedges": []}

@@ -9,6 +9,12 @@ dist/
 build/
 coverage/
 
+# graphify code-graph output (regenerated locally; never commit)
+graphify-out/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # Env files
 .env
 .env.*

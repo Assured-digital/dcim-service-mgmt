@@ -20,8 +20,6 @@ const ChangeDetailPage         = React.lazy(() => import("./ChangeDetailPage"))
 const IncidentDetailPage       = React.lazy(() => import("./IncidentDetailPage"))
 const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
 const AssetRegisterPage        = React.lazy(() => import("./AssetRegisterPage"))
-const SiteDetailPage           = React.lazy(() => import("./SiteDetailPage"))
-const RoomDetailPage           = React.lazy(() => import("./RoomDetailPage"))
 const ChecksPage               = React.lazy(() => import("./ChecksPage"))
 const CheckDetailPage          = React.lazy(() => import("./CheckDetailPage"))
 const CheckTemplatesPage       = React.lazy(() => import("./CheckTemplatesPage"))
@@ -198,9 +196,6 @@ export default function App() {
           <Route path="asset-management/:siteId/rooms/:roomId" element={<LegacyHierarchyRoomRedirect />} />
           <Route path="asset-management/:siteId/cabinets/:cabinetId" element={<LegacyHierarchyCabinetRedirect />} />
           <Route path="asset-management/:siteId/assets/:assetId" element={<LegacyHierarchyAssetRedirect />} />
-          {/* Legacy rollback paths */}
-          <Route path="asset-management-legacy/:siteId" element={<SiteDetailPage />} />
-          <Route path="asset-management-legacy/:siteId/rooms/:roomId" element={<RoomDetailPage />} />
 
           {/* DCIM — Maintenance & Connections */}
           <Route path="maintenance" element={<MaintenancePage />} />
