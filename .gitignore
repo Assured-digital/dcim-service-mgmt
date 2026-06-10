@@ -38,6 +38,6 @@ miniadata/
 
 # Prisma
 prisma/dev.db
-.claude
-.claude
-CLAUDE.md
+
+# Claude Code local working dir (CLAUDE.md itself is committed — see below)
+.claude/
