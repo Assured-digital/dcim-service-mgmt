@@ -18,9 +18,6 @@ import AddIcon from "@mui/icons-material/Add"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import LinkIcon from "@mui/icons-material/Link"
 import AttachFileIcon from "@mui/icons-material/AttachFile"
-import DescriptionIcon from "@mui/icons-material/Description"
-import ImageIcon from "@mui/icons-material/Image"
-import FileDownloadIcon from "@mui/icons-material/FileDownload"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
@@ -49,6 +46,8 @@ import {
 } from "../components/detail"
 import { useBreadcrumb } from "./Shell"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { AttachmentsContent } from "../components/AttachmentsContent"
+import type { AttachmentSummary } from "../lib/attachments"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -71,6 +70,7 @@ type MaintenanceRecord = {
   }
   createdAt?: string
   updatedAt?: string
+  attachments?: AttachmentSummary[]
 }
 
 type AssetOption = { id: string; assetTag: string; name: string }
@@ -250,14 +250,6 @@ function formatDate(value: string | null | undefined): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 }
 
-function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB"]
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  const value = bytes / Math.pow(1024, i)
-  return `${value < 10 && i > 0 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
-}
-
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null && "message" in error) {
     const message = (error as { message?: unknown }).message
@@ -284,14 +276,6 @@ const FEED_VISUALS: Record<FeedEventType, FeedVisual> = {
   comment: { Icon: ChatBubbleOutlineIcon, bg: "#eaf3de", fg: "#3b6d11" },
   assignment: { Icon: PersonIcon, bg: "#faeeda", fg: "#854f0b" },
   link: { Icon: LinkIcon, bg: "#fbeaf0", fg: "#993556" },
-}
-
-type Attachment = {
-  id: string
-  fileName: string
-  fileSize: number
-  mimeType: string
-  createdAt: string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -898,94 +882,6 @@ const ActivityContent = React.memo(function ActivityContent({
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Attachments section (spec 7.3)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface AttachmentsContentProps {
-  attachments: Attachment[]
-  onAttach: () => void
-  onDownload: (attachment: Attachment) => void
-}
-
-const AttachmentsContent = React.memo(function AttachmentsContent({
-  attachments,
-  onAttach,
-  onDownload,
-}: AttachmentsContentProps) {
-  const handleDownload = React.useCallback(
-    (attachment: Attachment) => () => onDownload(attachment),
-    [onDownload]
-  )
-
-  // TODO: wire attachments API
-  return (
-    <Box>
-      {attachments.map((attachment) => {
-        const isImage = attachment.mimeType.startsWith("image/")
-        const Icon = isImage ? ImageIcon : DescriptionIcon
-        return (
-          <Box
-            key={attachment.id}
-            onClick={handleDownload(attachment)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              py: 0.625,
-              borderRadius: 1,
-              cursor: "pointer",
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <Box
-              sx={{
-                width: 26,
-                height: 26,
-                borderRadius: 1,
-                bgcolor: "action.hover",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Icon sx={{ fontSize: 14, color: "text.secondary" }} />
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  display: "block",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {attachment.fileName}
-              </Typography>
-              <Typography sx={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
-                {formatFileSize(attachment.fileSize)} ·{" "}
-                {new Date(attachment.createdAt).toLocaleDateString("en-GB")}
-              </Typography>
-            </Box>
-            <FileDownloadIcon sx={{ fontSize: 12, color: "var(--color-text-tertiary)" }} />
-          </Box>
-        )
-      })}
-      <Button
-        variant="text"
-        size="small"
-        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-        onClick={onAttach}
-        sx={{ textTransform: "none", mt: 0.25 }}
-      >
-        Attach file
-      </Button>
-    </Box>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1060,8 +956,6 @@ export default function MaintenanceDetailPage() {
   // performedByLabel below still reads the embedded performedBy first and only
   // falls back to this list, so existing records resolve regardless.
   const users = useAssignableUsers()
-
-  const attachments: Attachment[] = React.useMemo(() => [], [])
 
   // ── Mutations (preserved exactly) ──────────────────────────────────────────
 
@@ -1145,13 +1039,6 @@ export default function MaintenanceDetailPage() {
   }, [])
 
   const handleLinkSnackbarClose = React.useCallback(() => setLinkCopied(false), [])
-
-  const handleAttach = React.useCallback(() => {
-    // TODO: wire attachments API
-  }, [])
-  const handleDownloadAttachment = React.useCallback((_attachment: Attachment) => {
-    // TODO: wire attachments API
-  }, [])
 
   const handleAddLink = React.useCallback(() => {
     // TODO: link entity dialog
@@ -1461,9 +1348,10 @@ export default function MaintenanceDetailPage() {
         defaultOpen: false,
         content: (
           <AttachmentsContent
-            attachments={attachments}
-            onAttach={handleAttach}
-            onDownload={handleDownloadAttachment}
+            attachments={recordData?.attachments ?? []}
+            recordType="maintenance"
+            recordId={recordData?.id ?? ""}
+            onChanged={() => qc.invalidateQueries({ queryKey: ["maintenance", id] })}
           />
         ),
       },
@@ -1478,9 +1366,9 @@ export default function MaintenanceDetailPage() {
       },
     ]
   }, [
-    attachments,
-    handleAttach,
-    handleDownloadAttachment,
+    recordData,
+    qc,
+    id,
     linkedEntities,
     handleAddLink,
   ])
