@@ -1,4 +1,4 @@
-export { RecordDetailShell } from "./RecordDetailShell"
+export { RecordDetailShell, CollapsibleRightPanel } from "./RecordDetailShell"
 export type {
   RecordDetailShellProps,
   StatusOption,

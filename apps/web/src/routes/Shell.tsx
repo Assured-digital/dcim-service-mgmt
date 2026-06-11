@@ -560,18 +560,23 @@ export default function Shell() {
 
   const recordLabel = breadcrumbs.length > 0 ? breadcrumbs[breadcrumbs.length - 1].label : null
 
-  function setRecordLabel(l: string | null) {
+  const setRecordLabel = React.useCallback((l: string | null) => {
     setBreadcrumbsState(l ? [{ label: l }] : [])
-  }
-  function setBreadcrumbs(crumbs: Crumb[]) {
+  }, [])
+  const setBreadcrumbs = React.useCallback((crumbs: Crumb[]) => {
     setBreadcrumbsState(crumbs)
-  }
-  function setHideModuleLabel(hide: boolean) {
+  }, [])
+  const setHideModuleLabel = React.useCallback((hide: boolean) => {
     setHideModuleLabelState(hide)
-  }
-  function setPageFullBleed(fullBleed: boolean) {
+  }, [])
+  const setPageFullBleed = React.useCallback((fullBleed: boolean) => {
     setPageFullBleedState(fullBleed)
-  }
+  }, [])
+
+  const breadcrumbValue = React.useMemo(
+    () => ({ setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed }),
+    [setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed]
+  )
 
   // Auto-reset breadcrumbs, module-label hide, and full-bleed whenever the route changes
   React.useEffect(() => {
@@ -1028,7 +1033,7 @@ export default function Shell() {
             minHeight: 0,
           }}
         >
-          <BreadcrumbCtx.Provider value={{ setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed }}>
+          <BreadcrumbCtx.Provider value={breadcrumbValue}>
             <Suspense fallback={<LoadingState />}>
               <Outlet />
             </Suspense>

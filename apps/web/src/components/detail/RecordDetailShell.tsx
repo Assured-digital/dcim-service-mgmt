@@ -104,7 +104,7 @@ interface CollapsibleRightPanelProps {
   children: React.ReactNode
 }
 
-const CollapsibleRightPanel = React.memo(function CollapsibleRightPanel({
+export const CollapsibleRightPanel = React.memo(function CollapsibleRightPanel({
   title,
   icon,
   defaultOpen = true,

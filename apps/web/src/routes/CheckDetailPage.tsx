@@ -12,9 +12,13 @@ import AddIcon from "@mui/icons-material/Add"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import CameraAltIcon from "@mui/icons-material/CameraAlt"
+import AttachFileIcon from "@mui/icons-material/AttachFile"
 import {
   PropertiesPanel, chipSx, WorkflowStrip
 } from "../components/shared"
+import { CollapsibleRightPanel } from "../components/detail"
+import { AttachmentsContent } from "../components/AttachmentsContent"
+import type { AttachmentSummary } from "../lib/attachments"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -48,6 +52,7 @@ type Check = {
   reviewer: { id: string; email: string } | null
   template: { id: string; name: string; checkType: string; estimatedMinutes: number | null }
   items: CheckItem[]
+  attachments?: AttachmentSummary[]
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -1311,6 +1316,21 @@ export default function CheckDetailPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          <Card>
+            <CollapsibleRightPanel
+              title="Attachments"
+              icon={<AttachFileIcon sx={{ fontSize: 12 }} />}
+              defaultOpen={false}
+            >
+              <AttachmentsContent
+                attachments={check?.attachments ?? []}
+                recordType="check"
+                recordId={check?.id ?? ""}
+                onChanged={() => qc.invalidateQueries({ queryKey: ["check-detail", id] })}
+              />
+            </CollapsibleRightPanel>
+          </Card>
         </Stack>
       </Box>
 

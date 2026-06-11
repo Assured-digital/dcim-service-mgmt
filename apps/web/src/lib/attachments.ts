@@ -14,9 +14,10 @@ export interface AttachmentSummary {
   inline: boolean
 }
 
-// The record an attachment hangs off — the same six work-item types as linking, so
-// we reuse that union (the on-the-wire `recordType` contract).
-export type AttachmentRecordType = LinkRecordType
+// The record an attachment hangs off — the six work-item link types PLUS `maintenance`
+// and `check`, which are attachable but NOT linkable (decoupled from the link union).
+// Mirrors the backend `ATTACHMENT_RECORD_TYPES` contract (the on-the-wire `recordType`).
+export type AttachmentRecordType = LinkRecordType | "maintenance" | "check"
 
 export function isImageType(contentType: string): boolean {
   return contentType.startsWith("image/")
