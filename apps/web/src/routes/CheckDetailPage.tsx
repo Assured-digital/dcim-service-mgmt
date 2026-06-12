@@ -16,7 +16,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile"
 import {
   PropertiesPanel, chipSx, WorkflowStrip
 } from "../components/shared"
-import { CollapsibleRightPanel } from "../components/detail"
+import { RightPanelSection } from "../components/detail"
 import { AttachmentsContent } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
 import { ErrorState, LoadingState } from "../components/PageState"
@@ -1318,10 +1318,9 @@ export default function CheckDetailPage() {
           ) : null}
 
           <Card>
-            <CollapsibleRightPanel
+            <RightPanelSection
               title="Attachments"
               icon={<AttachFileIcon sx={{ fontSize: 12 }} />}
-              defaultOpen={false}
             >
               <AttachmentsContent
                 attachments={check?.attachments ?? []}
@@ -1329,7 +1328,7 @@ export default function CheckDetailPage() {
                 recordId={check?.id ?? ""}
                 onChanged={() => qc.invalidateQueries({ queryKey: ["check-detail", id] })}
               />
-            </CollapsibleRightPanel>
+            </RightPanelSection>
           </Card>
         </Stack>
       </Box>

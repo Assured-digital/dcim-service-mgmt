@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom"
 import { Box, Button, IconButton, Tooltip, Typography } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import LinkOffIcon from "@mui/icons-material/LinkOff"
-import { ResolvedLink, routeForLink, visualForType } from "../lib/linkedRecords"
+import { ResolvedLink, routeForLink, navSegmentForType, visualForType } from "../lib/linkedRecords"
+import { useDrillNav } from "../lib/drillNav"
 
 interface LinkedRecordsContentProps {
   links: ResolvedLink[]
@@ -28,6 +29,9 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   onUnlink,
 }: LinkedRecordsContentProps) {
   const navigate = useNavigate()
+  // Inside the Service Desk navigator, a row drills to depth 2 (in place);
+  // standalone (no provider) it navigates to the record's own detail route.
+  const drill = useDrillNav()
 
   return (
     <Box>
@@ -43,7 +47,9 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
           return (
             <Box
               key={link.linkId}
-              onClick={() => navigate(routeForLink(link))}
+              onClick={() =>
+                drill ? drill(navSegmentForType(link.type), link.id) : navigate(routeForLink(link))
+              }
               sx={{
                 display: "flex",
                 alignItems: "center",

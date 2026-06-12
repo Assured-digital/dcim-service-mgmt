@@ -14,6 +14,10 @@ export { PriorityDot } from "./primitives/PriorityDot"
 export { Avatar } from "./primitives/Avatar"
 export type { AvatarVariant, AvatarSize } from "./primitives/Avatar"
 
+// Layout
+export { DrillDownNavigator } from "./layout/DrillDownNavigator"
+export type { DrillDownPanel, DrillDownNavigatorProps } from "./layout/DrillDownNavigator"
+
 // Composites
 export { DetailHeader } from "./composites/DetailHeader"
 export { PropertiesPanel } from "./composites/PropertiesPanel"
