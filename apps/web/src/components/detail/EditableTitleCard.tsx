@@ -176,7 +176,7 @@ export const EditableTitleCard = React.memo(function EditableTitleCard({
 }: EditableTitleCardProps) {
   return (
     <Box>
-      <SectionPanel title="Subject">
+      <SectionPanel>
         <EditableField
           value={title}
           onSave={onCommitTitle}

@@ -23,13 +23,18 @@ export const uiBorder = {
   strong: "#cbd5e1",
 } as const
 
+// Status is the deliberate LOUD exception to the otherwise-quiet aesthetic:
+// deeper, saturated fills with white text so state is scannable at a glance,
+// and identical everywhere status appears (detail pill, queue table, rail,
+// Risks/Issues). This is the single source of truth — every status indicator
+// reads from here via resolveIntent / chipSx / statusColors.
 export const semanticTokens: Record<SemanticIntent, { bg: string; text: string }> = {
-  success: { bg: "#dcfce7", text: "#15803d" },
-  active:  { bg: "#e8f1ff", text: "#1d4ed8" },
-  warning: { bg: "#fef3c7", text: "#b45309" },
-  danger:  { bg: "#fee2e2", text: "#b91c1c" },
-  neutral: { bg: "#eef2f7", text: "#334155" },
-  info:    { bg: "#e8f1ff", text: "#1d4ed8" },
+  success: { bg: "#15803d", text: "#ffffff" }, // green — resolved / done / completed
+  active:  { bg: "#1d4ed8", text: "#ffffff" }, // blue  — in progress / assigned
+  warning: { bg: "#b45309", text: "#ffffff" }, // amber — waiting / pending
+  danger:  { bg: "#b91c1c", text: "#ffffff" }, // red   — blocked / cancelled / overdue
+  neutral: { bg: "#475569", text: "#ffffff" }, // slate — new / open / closed (terminal)
+  info:    { bg: "#1d4ed8", text: "#ffffff" },
 }
 
 export type RAGLevel = "RED" | "AMBER" | "GREEN"
@@ -47,16 +52,27 @@ export const priorityDots: Record<string, string> = {
   critical: "#7c3aed"
 }
 
+// Semantic status -> intent. First match wins, so order matters:
+//  - danger before success/active so CANCELLED/REJECTED/BLOCKED win.
+//  - success keys are terminal-good (RESOLVED/COMPLETED/DONE/MITIGATED/ACCEPTED);
+//    CLOSED is intentionally NOT here -> falls through to neutral (terminal, not "good").
+//  - warning = waiting/paused (WAITING/PENDING/ASSESSED).
+//  - active = being worked (IN_PROGRESS/ASSIGNED/INVESTIGATING/MITIGATING/SUBMITTED/APPROVED).
+//  - neutral = not started / terminal-closed (NEW/DRAFT/OPEN/IDENTIFIED/PLANNED/SCHEDULED/CLOSED).
+// RAG/priority keywords (RED/AMBER/GREEN/HIGH/MEDIUM/CRITICAL) are kept as a safety net
+// so any chipSx call on those still resolves sensibly.
 export function resolveIntent(value: string): SemanticIntent {
   const v = value.toUpperCase()
-  if (["OVERDUE","FAIL","CANCELLED","REJECTED","RED","HIGH","BLOCKED","CRITICAL"].some(k => v.includes(k)))
+  if (["OVERDUE","FAIL","CANCELLED","REJECTED","BLOCKED","RED","CRITICAL","HIGH"].some(k => v.includes(k)))
     return "danger"
-  if (["CLOSED","COMPLETED","RESOLVED","GREEN","PASS","DONE"].some(k => v.includes(k)))
+  if (["RESOLVED","COMPLETED","DONE","MITIGATED","ACCEPTED","PASS","GREEN"].some(k => v.includes(k)))
     return "success"
-  if (["IN_PROGRESS","ASSIGNED","OPEN","ACTIVE","MITIGATING","INVESTIGATING"].some(k => v.includes(k)))
-    return "active"
-  if (["NEW","DRAFT","AMBER","MEDIUM","WAITING","IDENTIFIED","ASSESSED","ACCEPTED","PENDING"].some(k => v.includes(k)))
+  if (["WAITING","PENDING","ASSESSED","ON_HOLD","AMBER","MEDIUM"].some(k => v.includes(k)))
     return "warning"
+  if (["IN_PROGRESS","ASSIGNED","INVESTIGATING","MITIGATING","ACTIVE","SUBMITTED","APPROVED"].some(k => v.includes(k)))
+    return "active"
+  if (["NEW","DRAFT","OPEN","IDENTIFIED","PLANNED","SCHEDULED","CLOSED"].some(k => v.includes(k)))
+    return "neutral"
   return "neutral"
 }
 
@@ -106,6 +122,13 @@ export const typeBadgeTokens = {
 export function chipSx(value: string) {
   const { bg, text } = semanticTokens[resolveIntent(value)]
   return { bgcolor: bg, color: text, fontWeight: 700 }
+}
+
+// Status fill + text for non-chip status indicators (e.g. the detail status pill
+// and StatusPopover icon squares). Resolves to the same deepened tokens as chipSx,
+// so a given status is the same colour everywhere it appears.
+export function statusColors(value: string): { bg: string; text: string } {
+  return semanticTokens[resolveIntent(value)]
 }
 
 export function priorityDot(priority: string): string {

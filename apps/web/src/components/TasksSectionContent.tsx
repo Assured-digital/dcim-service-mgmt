@@ -5,7 +5,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import PersonIcon from "@mui/icons-material/Person"
 import { StatusPopover, type PopoverOption } from "./detail"
 import { useDrillNav } from "../lib/drillNav"
-import { type LinkedTask } from "./shared"
+import { statusColors, type LinkedTask } from "./shared"
 import { type AssignableUser } from "../lib/useAssignableUsers"
 
 // Shared Tasks panel — used by the work-item detail pages (Incident, Service
@@ -27,18 +27,11 @@ const TASK_STATUS_LABELS: Record<string, string> = {
   DONE: "Done",
 }
 
-const TASK_STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
-  OPEN: { bg: "#f1efe8", text: "#5f5e5a" },
-  IN_PROGRESS: { bg: "#e6f1fb", text: "#185fa5" },
-  BLOCKED: { bg: "#fcebeb", text: "#a32d2d" },
-  DONE: { bg: "#eaf3de", text: "#3b6d11" },
-}
-
 const TASK_STATUS_OPTIONS: PopoverOption[] = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map((value) => ({
   value,
   label: TASK_STATUS_LABELS[value],
-  iconBg: TASK_STATUS_COLOURS[value].bg,
-  iconColor: TASK_STATUS_COLOURS[value].text,
+  iconBg: statusColors(value).bg,
+  iconColor: statusColors(value).text,
   icon: <AssignmentIcon sx={{ fontSize: 14 }} />,
 }))
 
@@ -60,7 +53,7 @@ const TaskStatusBadge = React.memo(function TaskStatusBadge({
   status,
   onClick,
 }: TaskStatusBadgeProps) {
-  const colours = TASK_STATUS_COLOURS[status] ?? TASK_STATUS_COLOURS.OPEN
+  const colours = statusColors(status)
   const label = TASK_STATUS_LABELS[status] ?? status
   const handleClick = React.useCallback(
     (e: React.MouseEvent<HTMLElement>) => {

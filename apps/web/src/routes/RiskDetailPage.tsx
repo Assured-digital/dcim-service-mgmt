@@ -14,7 +14,6 @@ import {
 import AddIcon from "@mui/icons-material/Add"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import LinkIcon from "@mui/icons-material/Link"
-import AttachFileIcon from "@mui/icons-material/AttachFile"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
@@ -23,13 +22,12 @@ import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
 import LockIcon from "@mui/icons-material/Lock"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import CloseIcon from "@mui/icons-material/Close"
-import AssignmentIcon from "@mui/icons-material/Assignment"
 import StorageIcon from "@mui/icons-material/Storage"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
-import { type LinkedTask } from "../components/shared"
+import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
@@ -140,14 +138,6 @@ const STATUS_LABELS: Record<string, string> = {
   CLOSED: "Closed",
 }
 
-const STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
-  IDENTIFIED: { bg: "#f1efe8", text: "#5f5e5a" },
-  ASSESSED: { bg: "#e6f1fb", text: "#185fa5" },
-  MITIGATING: { bg: "#e6f1fb", text: "#185fa5" },
-  ACCEPTED: { bg: "#faeeda", text: "#854f0b" },
-  CLOSED: { bg: "#f1efe8", text: "#5f5e5a" },
-}
-
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   IDENTIFIED: <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />,
   ASSESSED: <PlayArrowIcon sx={{ fontSize: 14 }} />,
@@ -162,8 +152,8 @@ const RISK_STATUS_CONFIG: StatusConfig = {
       value,
       label: STATUS_LABELS[value],
       badgeClass: `b-${value.toLowerCase()}`,
-      bg: STATUS_COLOURS[value].bg,
-      iconColor: STATUS_COLOURS[value].text,
+      bg: statusColors(value).bg,
+      iconColor: statusColors(value).text,
       icon: STATUS_ICONS[value],
       buttonIcon: STATUS_ICONS[value],
     })
@@ -1165,7 +1155,6 @@ export default function RiskDetailPage() {
       {
         id: "tasks",
         title: "Tasks",
-        icon: <AssignmentIcon sx={{ fontSize: 12 }} />,
         headerAdd: canManage
           ? { onClick: handleOpenCreateTask, tooltip: "Add task" }
           : undefined,
@@ -1185,7 +1174,6 @@ export default function RiskDetailPage() {
       {
         id: "attachments",
         title: "Attachments",
-        icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
         headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
           <AttachmentsContent
@@ -1201,7 +1189,6 @@ export default function RiskDetailPage() {
       {
         id: "linked",
         title: "Linked records",
-        icon: <LinkIcon sx={{ fontSize: 12 }} />,
         headerAdd: { onClick: handleAddLink, tooltip: "Link record" },
         content: (
           <LinkedRecordsContent

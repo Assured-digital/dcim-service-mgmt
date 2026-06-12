@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { Box, Stack, Typography } from "@mui/material"
+import { Box, Chip, Stack, Typography } from "@mui/material"
+import { chipSx } from "../components/shared/tokens/colors"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { getCurrentUser } from "../lib/auth"
 import { useTickets, type Ticket, STATUS_LABELS } from "../lib/tickets"
@@ -101,9 +102,9 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                 component="span"
                 sx={{ mt: "5px", width: 8, height: 8, borderRadius: "50%", bgcolor: dotColor, flexShrink: 0 }}
               />
-              <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-                {/* Primary: title. Secondary: status text. Reference dropped — it
-                    lives in the breadcrumb + the Details panel now. */}
+              <Stack spacing={0.25} sx={{ minWidth: 0, flex: 1 }}>
+                {/* Primary: title. Secondary: type (left) + status (right). Reference
+                    dropped — it lives in the breadcrumb + the Details panel now. */}
                 <Typography
                   title={t.subject}
                   sx={{
@@ -115,15 +116,22 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                 >
                   {t.subject}
                 </Typography>
-                <Typography
-                  sx={{
-                    fontSize: 11,
-                    color: "#64748b",
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}
-                >
-                  {statusText}
-                </Typography>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 11, color: "#64748b", flexShrink: 0 }}>
+                    {t.kind}
+                  </Typography>
+                  <Chip
+                    size="small"
+                    label={statusText}
+                    sx={{
+                      ...chipSx(t.status),
+                      height: 18,
+                      fontSize: 10,
+                      flexShrink: 0,
+                      "& .MuiChip-label": { px: 0.75 },
+                    }}
+                  />
+                </Box>
               </Stack>
             </Box>
           )

@@ -15,7 +15,6 @@ import {
 import AddIcon from "@mui/icons-material/Add"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import LinkIcon from "@mui/icons-material/Link"
-import AttachFileIcon from "@mui/icons-material/AttachFile"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
@@ -51,6 +50,7 @@ import { useBreadcrumb } from "./Shell"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
+import { statusColors } from "../components/shared"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -117,15 +117,6 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled",
 }
 
-const STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
-  PLANNED: { bg: "#f1efe8", text: "#5f5e5a" },
-  SCHEDULED: { bg: "#faeeda", text: "#854f0b" },
-  IN_PROGRESS: { bg: "#e6f1fb", text: "#185fa5" },
-  COMPLETED: { bg: "#eaf3de", text: "#3b6d11" },
-  CLOSED: { bg: "#f1efe8", text: "#5f5e5a" },
-  CANCELLED: { bg: "#fcebeb", text: "#a32d2d" },
-}
-
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   PLANNED: <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />,
   SCHEDULED: <EventIcon sx={{ fontSize: 14 }} />,
@@ -141,8 +132,8 @@ const MAINTENANCE_STATUS_CONFIG: StatusConfig = {
       value,
       label: STATUS_LABELS[value],
       badgeClass: `b-${value.toLowerCase()}`,
-      bg: STATUS_COLOURS[value].bg,
-      iconColor: STATUS_COLOURS[value].text,
+      bg: statusColors(value).bg,
+      iconColor: statusColors(value).text,
       icon: STATUS_ICONS[value],
       buttonIcon: STATUS_ICONS[value],
     })
@@ -1239,7 +1230,6 @@ export default function MaintenanceDetailPage() {
       {
         id: "attachments",
         title: "Attachments",
-        icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
         defaultOpen: false,
         headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
@@ -1256,7 +1246,6 @@ export default function MaintenanceDetailPage() {
       {
         id: "linked",
         title: "Linked records",
-        icon: <LinkIcon sx={{ fontSize: 12 }} />,
         defaultOpen: false,
         headerAdd: { onClick: handleAddLink, tooltip: "Link record" },
         content: (

@@ -60,7 +60,6 @@ export interface DetailField {
 export interface CentreSection {
   id: string
   title: string
-  icon?: React.ReactNode
   headerExtra?: React.ReactNode
   content: React.ReactNode
   flush?: boolean
@@ -69,7 +68,6 @@ export interface CentreSection {
 export interface RightSection {
   id: string
   title: string
-  icon?: React.ReactNode
   defaultOpen?: boolean
   // When set, a Jira-style "+" icon button is rendered right-aligned on the
   // section header row (next to the title) and fires onClick — replacing the
@@ -200,7 +198,6 @@ const SectionAddButton = React.memo(function SectionAddButton({
 
 interface SectionPanelProps {
   title?: string
-  icon?: React.ReactNode
   headerExtra?: React.ReactNode
   children: React.ReactNode
 }
@@ -211,7 +208,6 @@ interface SectionPanelProps {
 // Details panel, so they read consistently. Omit `title` for a header-less panel.
 export const SectionPanel = React.memo(function SectionPanel({
   title,
-  icon,
   headerExtra,
   children,
 }: SectionPanelProps) {
@@ -234,22 +230,7 @@ export const SectionPanel = React.memo(function SectionPanel({
             justifyContent="space-between"
             sx={{ px: 1.75, py: 1.25 }}
           >
-            <Stack direction="row" alignItems="center" spacing={0.75}>
-              {icon ? (
-                <Box
-                  component="span"
-                  sx={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    fontSize: 14,
-                    color: "var(--color-text-tertiary)",
-                  }}
-                >
-                  {icon}
-                </Box>
-              ) : null}
-              <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{title}</Typography>
-            </Stack>
+            <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{title}</Typography>
             {headerExtra ? <Box>{headerExtra}</Box> : null}
           </Stack>
           <Divider sx={{ borderColor: "divider" }} />
@@ -345,24 +326,9 @@ const CentreSectionView = React.memo(function CentreSectionView({
         justifyContent="space-between"
         sx={{ mb: 1 }}
       >
-        <Stack direction="row" alignItems="center" spacing={0.75}>
-          {section.icon ? (
-            <Box
-              component="span"
-              sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                fontSize: 14,
-                color: "var(--color-text-tertiary)",
-              }}
-            >
-              {section.icon}
-            </Box>
-          ) : null}
-          <Typography sx={{ fontSize: 12, fontWeight: 500 }}>
-            {section.title}
-          </Typography>
-        </Stack>
+        <Typography sx={{ fontSize: 12, fontWeight: 500 }}>
+          {section.title}
+        </Typography>
         {section.headerExtra ? <Box>{section.headerExtra}</Box> : null}
       </Stack>
       <Box>{section.content}</Box>
@@ -700,7 +666,6 @@ function RecordDetailShellImpl({
         <SectionPanel
           key={section.id}
           title={section.title}
-          icon={section.icon}
           headerExtra={section.headerAdd ? <SectionAddButton {...section.headerAdd} /> : undefined}
         >
           {section.content}

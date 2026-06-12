@@ -14,7 +14,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import CameraAltIcon from "@mui/icons-material/CameraAlt"
 import AttachFileIcon from "@mui/icons-material/AttachFile"
 import {
-  PropertiesPanel, chipSx, WorkflowStrip
+  PropertiesPanel, chipSx, ragTokens, WorkflowStrip
 } from "../components/shared"
 import { RightPanelSection } from "../components/detail"
 import { AttachmentsContent } from "../components/AttachmentsContent"
@@ -1089,9 +1089,12 @@ export default function CheckDetailPage() {
     { label: "Assignee", value: <Typography variant="caption">{check.assignee?.email.split("@")[0] ?? "Unassigned"}</Typography> },
   ]
   if (check.passRate !== null) {
+    // Pass rate is a RAG metric, not a record status — keep it on the quiet RAG palette
+    // so the deepened status colours stay the loud exception.
+    const passRag = check.passRate >= 80 ? ragTokens.GREEN : check.passRate >= 60 ? ragTokens.AMBER : ragTokens.RED
     propertiesRows.push({
       label: "Pass rate",
-      value: <Chip size="small" sx={chipSx(check.passRate >= 80 ? "COMPLETED" : check.passRate >= 60 ? "AMBER" : "FAIL")} label={`${check.passRate}%`} />
+      value: <Chip size="small" sx={{ bgcolor: passRag.bg, color: passRag.text, fontWeight: 700 }} label={`${check.passRate}%`} />
     })
   }
   if (failedItems.length > 0) {

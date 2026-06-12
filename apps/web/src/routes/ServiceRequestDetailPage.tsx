@@ -11,7 +11,6 @@ import {
   Typography,
 } from "@mui/material"
 import LinkIcon from "@mui/icons-material/Link"
-import AttachFileIcon from "@mui/icons-material/AttachFile"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
@@ -22,14 +21,13 @@ import LockIcon from "@mui/icons-material/Lock"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import CloseIcon from "@mui/icons-material/Close"
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined"
-import AssignmentIcon from "@mui/icons-material/Assignment"
 import StorageIcon from "@mui/icons-material/Storage"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import { type LinkedTask } from "../components/shared"
+import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
@@ -136,16 +134,6 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled",
 }
 
-const STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
-  NEW: { bg: "#f1efe8", text: "#5f5e5a" },
-  ASSIGNED: { bg: "#e6f1fb", text: "#185fa5" },
-  IN_PROGRESS: { bg: "#e6f1fb", text: "#185fa5" },
-  WAITING_CUSTOMER: { bg: "#faeeda", text: "#854f0b" },
-  COMPLETED: { bg: "#eaf3de", text: "#3b6d11" },
-  CLOSED: { bg: "#f1efe8", text: "#5f5e5a" },
-  CANCELLED: { bg: "#f1efe8", text: "#5f5e5a" },
-}
-
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   NEW: <RadioButtonUncheckedIcon sx={{ fontSize: 14 }} />,
   ASSIGNED: <PersonIcon sx={{ fontSize: 14 }} />,
@@ -171,8 +159,8 @@ const SR_STATUS_CONFIG: StatusConfig = {
     value,
     label: STATUS_LABELS[value],
     badgeClass: `b-${value.toLowerCase()}`,
-    bg: STATUS_COLOURS[value].bg,
-    iconColor: STATUS_COLOURS[value].text,
+    bg: statusColors(value).bg,
+    iconColor: statusColors(value).text,
     icon: STATUS_ICONS[value],
     buttonIcon: STATUS_ICONS[value],
   })),
@@ -1024,7 +1012,6 @@ export default function ServiceRequestDetailPage() {
       {
         id: "tasks",
         title: "Tasks",
-        icon: <AssignmentIcon sx={{ fontSize: 12 }} />,
         headerAdd: canManage
           ? { onClick: handleOpenCreateTask, tooltip: "Add task" }
           : undefined,
@@ -1044,7 +1031,6 @@ export default function ServiceRequestDetailPage() {
       {
         id: "attachments",
         title: "Attachments",
-        icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
         headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
           <AttachmentsContent
@@ -1060,7 +1046,6 @@ export default function ServiceRequestDetailPage() {
       {
         id: "linked",
         title: "Linked records",
-        icon: <LinkIcon sx={{ fontSize: 12 }} />,
         headerAdd: { onClick: handleAddLink, tooltip: "Link record" },
         content: (
           <LinkedRecordsContent
