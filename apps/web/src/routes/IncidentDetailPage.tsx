@@ -1,5 +1,5 @@
 import React from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -7,17 +7,12 @@ import {
   Box,
   Button,
   Chip,
-  Divider,
   IconButton,
-  Paper,
   Snackbar,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material"
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import LinkIcon from "@mui/icons-material/Link"
-import AttachFileIcon from "@mui/icons-material/AttachFile"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
@@ -28,20 +23,25 @@ import LockIcon from "@mui/icons-material/Lock"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import CloseIcon from "@mui/icons-material/Close"
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined"
-import AssignmentIcon from "@mui/icons-material/Assignment"
 import StorageIcon from "@mui/icons-material/Storage"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import { type LinkedTask } from "../components/shared"
+import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import {
+  EditableTitleCard,
+  ActivityTabs,
+  ActivityCommentBox,
   RecordDetailShell,
+  SectionPanel,
   TransitionDialog,
+  type ActivityFilter,
   type CentreSection,
   type DetailField,
   type MoreMenuItem,
@@ -56,7 +56,7 @@ import { transitions as incidentTransitions } from "../config/transitions/incide
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
 import { TasksSectionContent } from "../components/TasksSectionContent"
-import { AttachmentsContent } from "../components/AttachmentsContent"
+import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
@@ -119,17 +119,6 @@ type FeedEvent = {
   createdAt: string
 }
 
-const FILTER_VALUES = ["all", "comment", "status", "assignment", "link"] as const
-type ActivityFilter = typeof FILTER_VALUES[number]
-
-const FILTER_OPTIONS: { value: ActivityFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "comment", label: "Comments" },
-  { value: "status", label: "Status" },
-  { value: "assignment", label: "Assignments" },
-  { value: "link", label: "Links" },
-]
-
 type EditableField = "severity" | "priority" | "assigneeId" | "title" | "description"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,14 +131,6 @@ const STATUS_LABELS: Record<string, string> = {
   MITIGATED: "Mitigated",
   RESOLVED: "Resolved",
   CLOSED: "Closed",
-}
-
-const STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
-  NEW: { bg: "#f1efe8", text: "#5f5e5a" },
-  INVESTIGATING: { bg: "#e6f1fb", text: "#185fa5" },
-  MITIGATED: { bg: "#faeeda", text: "#854f0b" },
-  RESOLVED: { bg: "#eaf3de", text: "#3b6d11" },
-  CLOSED: { bg: "#f1efe8", text: "#5f5e5a" },
 }
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -165,8 +146,8 @@ const INCIDENT_STATUS_CONFIG: StatusConfig = {
     value,
     label: STATUS_LABELS[value],
     badgeClass: `b-${value.toLowerCase()}`,
-    bg: STATUS_COLOURS[value].bg,
-    iconColor: STATUS_COLOURS[value].text,
+    bg: statusColors(value).bg,
+    iconColor: statusColors(value).text,
     icon: STATUS_ICONS[value],
     buttonIcon: STATUS_ICONS[value],
   })),
@@ -358,179 +339,6 @@ const FEED_VISUALS: Record<FeedEventType, FeedVisual> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Inline editable text (spec section 5.1)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface InlineEditableProps {
-  value: string
-  placeholder?: string
-  multiline?: boolean
-  ariaLabel: string
-  onCommit: (next: string) => void
-  textSx?: object
-}
-
-const InlineEditable = React.memo(function InlineEditable({
-  value,
-  placeholder,
-  multiline = false,
-  ariaLabel,
-  onCommit,
-  textSx,
-}: InlineEditableProps) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const [editing, setEditing] = React.useState(false)
-
-  React.useLayoutEffect(() => {
-    if (!editing && ref.current && ref.current.innerText !== value) {
-      ref.current.innerText = value
-    }
-  }, [value, editing])
-
-  const handleClick = React.useCallback(() => {
-    if (editing) return
-    setEditing(true)
-    requestAnimationFrame(() => {
-      const el = ref.current
-      if (!el) return
-      el.focus()
-      const sel = window.getSelection()
-      if (sel) {
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        sel.removeAllRanges()
-        sel.addRange(range)
-      }
-    })
-  }, [editing])
-
-  const commit = React.useCallback(() => {
-    const el = ref.current
-    const next = (el?.innerText ?? "").trim()
-    if (!next) {
-      if (el) el.innerText = value
-    } else if (next !== value) {
-      onCommit(next)
-    }
-    setEditing(false)
-  }, [value, onCommit])
-
-  const handleKey = React.useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        if (ref.current) ref.current.innerText = value
-        setEditing(false)
-        ref.current?.blur()
-      }
-      if (!multiline && e.key === "Enter") {
-        e.preventDefault()
-        ref.current?.blur()
-      }
-    },
-    [value, multiline]
-  )
-
-  const isEmpty = !value && !editing
-
-  return (
-    <Box
-      ref={ref}
-      role="textbox"
-      aria-label={ariaLabel}
-      contentEditable={editing}
-      suppressContentEditableWarning
-      onClick={handleClick}
-      onBlur={commit}
-      onKeyDown={handleKey}
-      sx={{
-        outline: "none",
-        cursor: editing ? "text" : "pointer",
-        borderRadius: 1,
-        px: 0.75,
-        py: 0.5,
-        whiteSpace: multiline ? "pre-wrap" : "normal",
-        border: "1.5px solid",
-        borderColor: editing ? "primary.main" : "transparent",
-        bgcolor: "transparent",
-        color: isEmpty ? "text.disabled" : "text.primary",
-        "&:hover": editing
-          ? undefined
-          : { bgcolor: "action.hover" },
-        ...textSx,
-      }}
-    >
-      {isEmpty ? placeholder ?? "" : null}
-    </Box>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Title card (spec section 5.1)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface IncidentTitleCardProps {
-  title: string
-  description: string
-  onCommitTitle: (next: string) => void
-  onCommitDescription: (next: string) => void
-}
-
-const IncidentTitleCard = React.memo(function IncidentTitleCard({
-  title,
-  description,
-  onCommitTitle,
-  onCommitDescription,
-}: IncidentTitleCardProps) {
-  return (
-    <Box>
-      <Typography
-        variant="caption"
-        color="text.tertiary"
-        sx={{ fontWeight: 500, display: "block", mb: 0.5 }}
-      >
-        Subject
-      </Typography>
-      <InlineEditable
-        value={title}
-        ariaLabel="Incident title"
-        onCommit={onCommitTitle}
-        textSx={{
-          fontSize: "1.25rem",
-          fontWeight: 500,
-          lineHeight: 1.6,
-          fontFamily: "'Space Grotesk', sans-serif",
-          px: 0,
-          mx: 0,
-        }}
-      />
-
-      <Typography
-        variant="caption"
-        color="text.tertiary"
-        sx={{ fontWeight: 500, display: "block", mt: 1.5, mb: 0.5 }}
-      >
-        Description
-      </Typography>
-      <InlineEditable
-        value={description}
-        placeholder="Add a description"
-        multiline
-        ariaLabel="Incident description"
-        onCommit={onCommitDescription}
-        textSx={{
-          fontSize: "0.8125rem",
-          lineHeight: 1.5,
-          color: "text.secondary",
-          px: 0,
-          mx: 0,
-        }}
-      />
-    </Box>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Activity section (spec section 6)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -629,8 +437,8 @@ const ActivityContent = React.memo(function ActivityContent({
 }: ActivityContentProps) {
   const [visibleCount, setVisibleCount] = React.useState(10)
 
-  const handleFilterClick = React.useCallback(
-    (filter: ActivityFilter) => () => {
+  const handleFilterChange = React.useCallback(
+    (filter: ActivityFilter) => {
       setVisibleCount(10)
       onFilterChange(filter)
     },
@@ -642,69 +450,19 @@ const ActivityContent = React.memo(function ActivityContent({
     []
   )
 
-  const handleNoteFieldChange = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => onNoteChange(e.target.value),
-    [onNoteChange]
-  )
-
   const visibleEvents = events.slice(0, visibleCount)
 
   return (
     <Box>
-      <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: "wrap" }}>
-        {FILTER_OPTIONS.map((opt) => {
-          const isActive = activeFilter === opt.value
-          return (
-            <Chip
-              key={opt.value}
-              size="small"
-              label={opt.label}
-              onClick={handleFilterClick(opt.value)}
-              variant={isActive ? "filled" : "outlined"}
-              color={isActive ? "primary" : "default"}
-            />
-          )
-        })}
-      </Stack>
+      <ActivityTabs value={activeFilter} onChange={handleFilterChange} />
 
       {activeFilter === "comment" ? (
-        <Paper variant="outlined" sx={{ overflow: "hidden", mb: 1.75 }}>
-          <TextField
-            multiline
-            minRows={2}
-            fullWidth
-            placeholder="Add a work note..."
-            variant="outlined"
-            size="small"
-            value={noteValue}
-            onChange={handleNoteFieldChange}
-            sx={{
-              "& .MuiOutlinedInput-root": {
-                "& fieldset": { border: 0 },
-                "&:hover fieldset": { border: 0 },
-                "&.Mui-focused fieldset": { border: 0 },
-              },
-            }}
-          />
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "flex-end",
-              p: 0.75,
-              borderTop: "0.5px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Button
-              variant="contained"
-              size="small"
-              disabled={!noteValue.trim() || savingNote}
-              onClick={onPostNote}
-            >
-              Post note
-            </Button>
-          </Box>
-        </Paper>
+        <ActivityCommentBox
+          value={noteValue}
+          onChange={onNoteChange}
+          saving={savingNote}
+          onPost={onPostNote}
+        />
       ) : null}
 
       {events.length === 0 ? (
@@ -754,7 +512,6 @@ export default function IncidentDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -763,28 +520,8 @@ export default function IncidentDetailPage() {
     ROLES.ENGINEER,
   ])
 
-  const activityParam = searchParams.get("activity")
-  const activeFilter: ActivityFilter = React.useMemo(() => {
-    if (activityParam && (FILTER_VALUES as readonly string[]).includes(activityParam)) {
-      return activityParam as ActivityFilter
-    }
-    return "all"
-  }, [activityParam])
-
-  const handleFilterChange = React.useCallback(
-    (filter: ActivityFilter) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          if (filter === "all") next.delete("activity")
-          else next.set("activity", filter)
-          return next
-        },
-        { replace: true }
-      )
-    },
-    [setSearchParams]
-  )
+  const { activeFilter, handleFilterChange, resetFilterAfterComment } =
+    useActivityFilter()
 
   const [error, setError] = React.useState("")
   const [taskOpen, setTaskOpen] = React.useState(false)
@@ -793,7 +530,6 @@ export default function IncidentDetailPage() {
   const [savingNote, setSavingNote] = React.useState(false)
   const [transitionTarget, setTransitionTarget] = React.useState<Transition | null>(null)
   const [linkCopied, setLinkCopied] = React.useState(false)
-  const [activityOpen, setActivityOpen] = React.useState(true)
 
   // ── Queries (preserved exactly) ────────────────────────────────────────────
 
@@ -861,20 +597,11 @@ export default function IncidentDetailPage() {
       setWorkNoteBody("")
       qc.invalidateQueries({ queryKey: ["work-notes-incident", id] })
       qc.invalidateQueries({ queryKey: ["audit-incident", id] })
-      if (activeFilter !== "all") {
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.delete("activity")
-            return next
-          },
-          { replace: true }
-        )
-      }
+      resetFilterAfterComment()
     } finally {
       setSavingNote(false)
     }
-  }, [activeFilter, id, qc, setSearchParams, workNoteBody])
+  }, [id, qc, resetFilterAfterComment, workNoteBody])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, comment }: { to: string; comment?: string }) =>
@@ -976,6 +703,8 @@ export default function IncidentDetailPage() {
 
   const [linkDialogOpen, setLinkDialogOpen] = React.useState(false)
   const handleAddLink = React.useCallback(() => setLinkDialogOpen(true), [])
+  // Lets the Attachments section-header "+" open the (encapsulated) file picker.
+  const attachRef = React.useRef<AttachmentsHandle>(null)
   const unlinkMutation = useMutation({
     mutationFn: (linkId: string) => deleteRecordLink(linkId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["incident-detail", id] }),
@@ -1229,45 +958,17 @@ export default function IncidentDetailPage() {
         title: "",
         flush: true,
         content: (
-          <Box sx={{ mb: 0 }}>
-            <Divider sx={{ my: 2.5 }} />
-            <Box
-              onClick={() => setActivityOpen((o) => !o)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                cursor: "pointer",
-                mb: 1.5,
-                userSelect: "none",
-              }}
-            >
-              <ExpandMoreIcon
-                sx={{
-                  fontSize: 16,
-                  color: "text.secondary",
-                  transform: activityOpen ? "none" : "rotate(-90deg)",
-                  transition: "transform .15s",
-                }}
-              />
-              <Typography variant="caption" fontWeight={500} color="text.secondary">
-                Activity
-              </Typography>
-            </Box>
-            {activityOpen && (
-              <Box>
-                <ActivityContent
-                  events={visibleFeedEvents}
-                  activeFilter={activeFilter}
-                  onFilterChange={handleFilterChange}
-                  noteValue={workNoteBody}
-                  onNoteChange={setWorkNoteBody}
-                  savingNote={savingNote}
-                  onPostNote={handleAddNote}
-                />
-              </Box>
-            )}
-          </Box>
+          <SectionPanel title="Activity">
+            <ActivityContent
+              events={visibleFeedEvents}
+              activeFilter={activeFilter}
+              onFilterChange={handleFilterChange}
+              noteValue={workNoteBody}
+              onNoteChange={setWorkNoteBody}
+              savingNote={savingNote}
+              onPostNote={handleAddNote}
+            />
+          </SectionPanel>
         ),
       },
     ]
@@ -1279,7 +980,6 @@ export default function IncidentDetailPage() {
     workNoteBody,
     savingNote,
     handleAddNote,
-    activityOpen,
   ])
 
   // ── Right sections ─────────────────────────────────────────────────────────
@@ -1298,7 +998,9 @@ export default function IncidentDetailPage() {
       {
         id: "tasks",
         title: "Tasks",
-        icon: <AssignmentIcon sx={{ fontSize: 12 }} />,
+        headerAdd: canManage
+          ? { onClick: handleOpenCreateTask, tooltip: "Add task" }
+          : undefined,
         content: (
           <TasksSectionContent
             tasks={linkedTasks ?? []}
@@ -1308,28 +1010,36 @@ export default function IncidentDetailPage() {
             onSelectTask={handleSelectTask}
             onChangeTaskStatus={updateLinkedTaskStatus}
             onChangeTaskAssignee={updateLinkedTaskAssignee}
+            showAddButton={false}
           />
         ),
       },
       {
         id: "attachments",
         title: "Attachments",
-        icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
+        headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
           <AttachmentsContent
+            ref={attachRef}
             attachments={incident?.attachments ?? []}
             recordType="incident"
             recordId={incident?.id ?? ""}
             onChanged={() => qc.invalidateQueries({ queryKey: ["incident-detail", id] })}
+            showAddButton={false}
           />
         ),
       },
       {
         id: "linked",
         title: "Linked records",
-        icon: <LinkIcon sx={{ fontSize: 12 }} />,
+        headerAdd: { onClick: handleAddLink, tooltip: "Link record" },
         content: (
-          <LinkedRecordsContent links={links} onAddLink={handleAddLink} onUnlink={handleUnlink} />
+          <LinkedRecordsContent
+            links={links}
+            onAddLink={handleAddLink}
+            onUnlink={handleUnlink}
+            showAddButton={false}
+          />
         ),
       },
     ]
@@ -1374,7 +1084,7 @@ export default function IncidentDetailPage() {
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={
-          <IncidentTitleCard
+          <EditableTitleCard
             title={incident.title}
             description={incident.description}
             onCommitTitle={handleCommitTitle}

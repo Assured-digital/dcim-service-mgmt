@@ -25,6 +25,16 @@ interface AttachmentsContentProps {
   recordId: string
   // Invalidate the page's detail query so a new/removed row reflects without reload.
   onChanged: () => void
+  // Inline "Attach file" button below the list. Shell pages hoist the add action
+  // to the section header "+" (via the imperative openPicker handle below), so they
+  // pass false; non-shell consumers (e.g. CheckDetailPage) keep the default.
+  showAddButton?: boolean
+}
+
+// Imperative handle so a host (the section-header "+") can trigger the file picker
+// while the hidden <input> + upload mutation stay encapsulated here.
+export interface AttachmentsHandle {
+  openPicker: () => void
 }
 
 // File-picker accept list — mirrors the backend allow-list (PDF + raster images).
@@ -34,15 +44,16 @@ const ACCEPT = ".pdf,image/png,image/jpeg,image/gif,image/webp"
 // Shared attachments panel for the six work-item detail pages. Mirrors
 // LinkedRecordsContent: presentational list + an always-visible add control, owning
 // its own upload/delete mutations and the in-app preview modal.
-export const AttachmentsContent = React.memo(function AttachmentsContent({
-  attachments,
-  recordType,
-  recordId,
-  onChanged,
-}: AttachmentsContentProps) {
+export const AttachmentsContent = React.memo(
+  React.forwardRef<AttachmentsHandle, AttachmentsContentProps>(function AttachmentsContent(
+    { attachments, recordType, recordId, onChanged, showAddButton = true },
+    ref
+  ) {
   const { notify } = useNotification()
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [preview, setPreview] = React.useState<AttachmentSummary | null>(null)
+
+  React.useImperativeHandle(ref, () => ({ openPicker: () => inputRef.current?.click() }), [])
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadAttachment(recordType, recordId, file),
@@ -160,20 +171,32 @@ export const AttachmentsContent = React.memo(function AttachmentsContent({
       )}
 
       <input ref={inputRef} type="file" accept={ACCEPT} hidden onChange={handlePick} />
-      <Button
-        variant="text"
-        size="small"
-        disabled={uploadMutation.isPending}
-        startIcon={
-          uploadMutation.isPending ? <CircularProgress size={14} /> : <AddIcon sx={{ fontSize: 14 }} />
-        }
-        onClick={() => inputRef.current?.click()}
-        sx={{ textTransform: "none", mt: 0.25 }}
-      >
-        {uploadMutation.isPending ? "Uploading…" : "Attach file"}
-      </Button>
+      {showAddButton ? (
+        <Button
+          variant="text"
+          size="small"
+          disabled={uploadMutation.isPending}
+          startIcon={
+            uploadMutation.isPending ? <CircularProgress size={14} /> : <AddIcon sx={{ fontSize: 14 }} />
+          }
+          onClick={() => inputRef.current?.click()}
+          sx={{ textTransform: "none", mt: 0.25 }}
+        >
+          {uploadMutation.isPending ? "Uploading…" : "Attach file"}
+        </Button>
+      ) : uploadMutation.isPending ? (
+        // Inline add button is hidden (the header "+" hosts it), so surface upload
+        // progress here instead.
+        <Typography
+          variant="caption"
+          sx={{ display: "flex", alignItems: "center", gap: 0.75, color: "text.secondary", mt: 0.5 }}
+        >
+          <CircularProgress size={12} /> Uploading…
+        </Typography>
+      ) : null}
 
       <AttachmentPreviewModal open={!!preview} attachment={preview} onClose={() => setPreview(null)} />
     </Box>
   )
-})
+  })
+)

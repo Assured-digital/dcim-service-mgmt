@@ -35,7 +35,7 @@ const theme = createTheme({
     text: { primary: "#0f172a", secondary: "#475569" },
     divider: "#e2e8f0"
   },
-  shape: { borderRadius: 12 },
+  shape: { borderRadius: 6 },
   typography: {
     fontFamily: "'Manrope', sans-serif",
     h3: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, letterSpacing: "-0.01em", fontSize: "2rem", lineHeight: 1.2 },
@@ -77,7 +77,7 @@ const theme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 8
+          borderRadius: 6
         },
         sizeSmall: {
           fontSize: "0.75rem",

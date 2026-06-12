@@ -1,6 +1,6 @@
 import React from "react"
 import { Routes, Route, useParams, useNavigate, useSearchParams } from "react-router-dom"
-import { Drawer, Box, IconButton, Button } from "@mui/material"
+import { Drawer, Box, IconButton } from "@mui/material"
 import CloseIcon from "@mui/icons-material/Close"
 import { DrillDownNavigator, type DrillDownPanel } from "../components/shared"
 import { ServiceDeskQueueBody } from "./ServiceDeskPage"
@@ -12,6 +12,7 @@ import TaskDetailPage from "./TaskDetailPage"
 import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
 import { DrillNavContext, type DrillFn } from "../lib/drillNav"
+import { DetailNarrowProvider, DetailDrawerChromeProvider } from "../components/detail"
 import { routeForSegment } from "../lib/linkedRecords"
 
 // ── Service Desk drill-down adopter ────────────────────────────────────────
@@ -58,6 +59,19 @@ export default function ServiceDeskNavigator() {
   const closeDrawer = React.useCallback(
     () => navigate({ pathname: `/service-desk/${type}/${id}`, search }),
     [navigate, type, id, search]
+  )
+
+  // The drawer's detail shell portals its status control into this header slot, and
+  // folds "Open full" into its overflow menu (see DetailDrawerChrome). The slot is a
+  // DOM node published via state so the shell re-renders the portal once it mounts.
+  const [headerSlot, setHeaderSlot] = React.useState<HTMLElement | null>(null)
+  const onOpenFull = React.useCallback(
+    () => navigate({ pathname: routeForSegment(assocType, assocId), search }),
+    [navigate, assocType, assocId, search]
+  )
+  const drawerChrome = React.useMemo(
+    () => ({ headerSlot, onOpenFull }),
+    [headerSlot, onOpenFull]
   )
 
   const panels: DrillDownPanel[] = [
@@ -115,6 +129,9 @@ export default function ServiceDeskNavigator() {
       >
         {depth === 2 && (
           <>
+            {/* Drawer header: X (left) … status + ⋯ (right). The status cluster is
+                portaled in by the detail shell via the headerSlot below; "Open full"
+                is folded into that ⋯ overflow menu (no standalone button). */}
             <Box
               sx={{
                 display: "flex",
@@ -123,29 +140,33 @@ export default function ServiceDeskNavigator() {
                 p: 1,
                 borderBottom: "1px solid #e2e8f0",
                 flexShrink: 0,
+                minHeight: 48,
               }}
             >
               <IconButton aria-label="Close" size="small" onClick={closeDrawer}>
                 <CloseIcon fontSize="small" />
               </IconButton>
               <Box sx={{ flex: 1 }} />
-              <Button
-                size="small"
-                onClick={() => navigate({ pathname: routeForSegment(assocType, assocId), search })}
-              >
-                Open full
-              </Button>
+              <Box ref={setHeaderSlot} sx={{ display: "flex", alignItems: "center" }} />
             </Box>
-            <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              <Routes>
-                <Route path=":t/:tid/sr/:id/*" element={<ServiceRequestDetailPage />} />
-                <Route path=":t/:tid/inc/:id/*" element={<IncidentDetailPage />} />
-                <Route path=":t/:tid/chg/:id/*" element={<ChangeDetailPage />} />
-                <Route path=":t/:tid/task/:id/*" element={<TaskDetailPage />} />
-                <Route path=":t/:tid/risk/:id/*" element={<RiskDetailPage />} />
-                <Route path=":t/:tid/issue/:id/*" element={<IssueDetailPage />} />
-              </Routes>
-            </Box>
+            {/* The drawer is half-width, so the detail shell stacks to a single
+                column and drops its redundant inner top row. DetailNarrowProvider
+                signals this; DetailDrawerChromeProvider bridges the status control up
+                to the header slot. The main depth-1 panel is NOT wrapped → stays wide. */}
+            <DetailNarrowProvider value={true}>
+              <DetailDrawerChromeProvider value={drawerChrome}>
+                <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                  <Routes>
+                    <Route path=":t/:tid/sr/:id/*" element={<ServiceRequestDetailPage />} />
+                    <Route path=":t/:tid/inc/:id/*" element={<IncidentDetailPage />} />
+                    <Route path=":t/:tid/chg/:id/*" element={<ChangeDetailPage />} />
+                    <Route path=":t/:tid/task/:id/*" element={<TaskDetailPage />} />
+                    <Route path=":t/:tid/risk/:id/*" element={<RiskDetailPage />} />
+                    <Route path=":t/:tid/issue/:id/*" element={<IssueDetailPage />} />
+                  </Routes>
+                </Box>
+              </DetailDrawerChromeProvider>
+            </DetailNarrowProvider>
           </>
         )}
       </Drawer>

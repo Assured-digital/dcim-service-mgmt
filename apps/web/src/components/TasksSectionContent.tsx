@@ -5,7 +5,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import PersonIcon from "@mui/icons-material/Person"
 import { StatusPopover, type PopoverOption } from "./detail"
 import { useDrillNav } from "../lib/drillNav"
-import { type LinkedTask } from "./shared"
+import { statusColors, type LinkedTask } from "./shared"
 import { type AssignableUser } from "../lib/useAssignableUsers"
 
 // Shared Tasks panel — used by the work-item detail pages (Incident, Service
@@ -27,18 +27,11 @@ const TASK_STATUS_LABELS: Record<string, string> = {
   DONE: "Done",
 }
 
-const TASK_STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
-  OPEN: { bg: "#f1efe8", text: "#5f5e5a" },
-  IN_PROGRESS: { bg: "#e6f1fb", text: "#185fa5" },
-  BLOCKED: { bg: "#fcebeb", text: "#a32d2d" },
-  DONE: { bg: "#eaf3de", text: "#3b6d11" },
-}
-
 const TASK_STATUS_OPTIONS: PopoverOption[] = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map((value) => ({
   value,
   label: TASK_STATUS_LABELS[value],
-  iconBg: TASK_STATUS_COLOURS[value].bg,
-  iconColor: TASK_STATUS_COLOURS[value].text,
+  iconBg: statusColors(value).bg,
+  iconColor: statusColors(value).text,
   icon: <AssignmentIcon sx={{ fontSize: 14 }} />,
 }))
 
@@ -60,7 +53,7 @@ const TaskStatusBadge = React.memo(function TaskStatusBadge({
   status,
   onClick,
 }: TaskStatusBadgeProps) {
-  const colours = TASK_STATUS_COLOURS[status] ?? TASK_STATUS_COLOURS.OPEN
+  const colours = statusColors(status)
   const label = TASK_STATUS_LABELS[status] ?? status
   const handleClick = React.useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
@@ -156,6 +149,9 @@ export interface TasksSectionContentProps {
   onSelectTask: (taskId: string) => void
   onChangeTaskStatus: (taskId: string, nextStatus: string) => void
   onChangeTaskAssignee: (taskId: string, nextAssigneeId: string) => void
+  // Inline "Add task" button below the list. Shell pages hoist the add action to
+  // the section header "+", so they pass false; non-shell consumers keep the default.
+  showAddButton?: boolean
 }
 
 export const TasksSectionContent = React.memo(function TasksSectionContent({
@@ -166,6 +162,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
   onSelectTask,
   onChangeTaskStatus,
   onChangeTaskAssignee,
+  showAddButton = true,
 }: TasksSectionContentProps) {
   const [activePopover, setActivePopover] = React.useState<{
     taskId: string
@@ -267,16 +264,6 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
           >
             <Typography
               sx={{
-                fontFamily: "monospace",
-                fontSize: 11,
-                color: "text.secondary",
-                flexShrink: 0,
-              }}
-            >
-              {task.reference}
-            </Typography>
-            <Typography
-              sx={{
                 flex: 1,
                 fontSize: 12,
                 minWidth: 0,
@@ -284,6 +271,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 color: "text.primary",
+                textDecoration: task.status === "DONE" ? "line-through" : "none",
               }}
             >
               {task.title}
@@ -297,7 +285,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
         ))
       )}
 
-      {canManage ? (
+      {showAddButton && canManage ? (
         <Button
           variant="text"
           size="small"

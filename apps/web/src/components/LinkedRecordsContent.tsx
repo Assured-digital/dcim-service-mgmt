@@ -10,6 +10,9 @@ interface LinkedRecordsContentProps {
   links: ResolvedLink[]
   onAddLink: () => void
   onUnlink: (linkId: string) => void
+  // Inline "Link record" button below the list. Shell pages hoist the add action
+  // to the section header "+", so they pass false; non-shell consumers keep default.
+  showAddButton?: boolean
 }
 
 // Coarse semantic tone for a status pill — terminal states read as "done" (slate),
@@ -27,6 +30,7 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   links,
   onAddLink,
   onUnlink,
+  showAddButton = true,
 }: LinkedRecordsContentProps) {
   const navigate = useNavigate()
   // Inside the Service Desk navigator, a row drills to depth 2 (in place);
@@ -140,15 +144,17 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
           )
         })
       )}
-      <Button
-        variant="text"
-        size="small"
-        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-        onClick={onAddLink}
-        sx={{ textTransform: "none", mt: 0.25 }}
-      >
-        Link record
-      </Button>
+      {showAddButton ? (
+        <Button
+          variant="text"
+          size="small"
+          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+          onClick={onAddLink}
+          sx={{ textTransform: "none", mt: 0.25 }}
+        >
+          Link record
+        </Button>
+      ) : null}
     </Box>
   )
 })
