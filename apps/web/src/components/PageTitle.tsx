@@ -26,6 +26,7 @@ const TITLE_MAP: { prefix: string; title: string }[] = [
   { prefix: "/audit", title: "Audit Trail" },
   { prefix: "/clients", title: "Clients" },
   { prefix: "/users", title: "Users" },
+  { prefix: "/settings", title: "Settings" },
   // Longest prefix wins so e.g. /service-management/dashboard beats /service-desk.
 ].sort((a, b) => b.prefix.length - a.prefix.length)
 
