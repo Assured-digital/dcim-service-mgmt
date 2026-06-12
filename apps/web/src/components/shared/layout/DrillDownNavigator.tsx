@@ -49,6 +49,46 @@ export interface DrillDownNavigatorProps {
 const DrillDownNavigatorContext = React.createContext(false)
 export const useInDrillDownNavigator = () => React.useContext(DrillDownNavigatorContext)
 
+// ── Enter-on-mount transition ──────────────────────────────────────────────
+// Fades (and optionally slides) the wrapped content in over ~180ms when it
+// mounts. ENTER-ONLY: outgoing content is replaced underneath with no exit
+// animation. Re-fires whenever React remounts it via a changing `key` — the
+// navigator keys the full panel on the depth boundary, so a drill-in/out
+// re-triggers the enter while a same-depth param change (e.g. switching tickets
+// or filters) does NOT remount it, keeping the warm component mounted and
+// flash-free. `slideFrom` is the px x-offset to slide in from (+ = from the
+// right / drilling in, − = from the left / drilling out, 0 = fade only).
+// Honours prefers-reduced-motion (instant, no slide).
+function PanelEnter({ slideFrom, children }: { slideFrom: number; children: React.ReactNode }) {
+  const [entered, setEntered] = React.useState(false)
+  React.useEffect(() => {
+    // Double rAF: guarantees one painted frame at the initial (offset/transparent)
+    // state before flipping, so the transition actually runs rather than snapping.
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setEntered(true))
+    })
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2) }
+  }, [])
+  return (
+    <Box
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        opacity: entered ? 1 : 0,
+        transform: entered ? "translateX(0)" : `translateX(${slideFrom}px)`,
+        transition: "opacity 180ms ease-out, transform 180ms ease-out",
+        "@media (prefers-reduced-motion: reduce)": { transition: "none", transform: "none" },
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
 export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigatorProps) {
   const navigate = useNavigate()
   const theme = useTheme()
@@ -58,6 +98,18 @@ export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigato
   const isNarrow = useMediaQuery(theme.breakpoints.down("md"))
 
   const depth = panels.length - 1
+
+  // Enter-transition wiring. Key the full panel on the depth BOUNDARY (queue vs
+  // record), not raw depth or the panel id: this fires the enter on 0→1 / 1→0
+  // (which remount anyway — table and detail are different component types) but
+  // not on a same-depth param change (ticket switch keeps the warm detail page
+  // mounted → no flash) nor on opening the depth-2 drawer (which slides itself).
+  const enterKey = depth >= 1 ? "rec" : "queue"
+  // Direction from the depth delta: drilling in slides from the right, drilling
+  // back from the left. Tracked across renders via a ref.
+  const prevDepthRef = React.useRef(depth)
+  const slideFrom = depth >= prevDepthRef.current ? 10 : -10
+  React.useEffect(() => { prevDepthRef.current = depth }, [depth])
 
   // Own the shell chrome: full-bleed while mounted, restored on unmount. The
   // Shell no longer resets full-bleed on pathname changes, so this mount-once
@@ -84,7 +136,7 @@ export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigato
     return (
       <DrillDownNavigatorContext.Provider value={true}>
         <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {last?.content}
+          <PanelEnter key={enterKey} slideFrom={slideFrom}>{last?.content}</PanelEnter>
         </Box>
       </DrillDownNavigatorContext.Provider>
     )
@@ -109,7 +161,10 @@ export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigato
               overflow: "hidden",
             }}
           >
-            {rail.railContent}
+            {/* Fade-only (slideFrom 0): the narrow strip shouldn't shift sideways.
+                No key → mounts once when the rail first appears (0→1) and stays
+                mounted across 1→2, so it animates in once and doesn't re-fire. */}
+            <PanelEnter slideFrom={0}>{rail.railContent}</PanelEnter>
           </Box>
         ) : (
           // Title-only rail: the whole strip is a back button.
@@ -149,9 +204,9 @@ export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigato
           </Box>
         )
       )}
-      <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <PanelEnter key={enterKey} slideFrom={slideFrom}>
         {last?.content}
-      </Box>
+      </PanelEnter>
     </Box>
     </DrillDownNavigatorContext.Provider>
   )
