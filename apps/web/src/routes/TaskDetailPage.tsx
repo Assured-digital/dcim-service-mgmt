@@ -35,6 +35,7 @@ import {
   useDetailNarrow,
   ActivityTabs,
   ActivityCommentBox,
+  type CommentDraft,
   RecordDetailShell,
   SectionPanel,
   TransitionDialog,
@@ -415,18 +416,14 @@ interface ActivityContentProps {
   events: FeedEvent[]
   activeFilter: ActivityFilter
   onFilterChange: (filter: ActivityFilter) => void
-  noteValue: string
-  onNoteChange: (value: string) => void
   savingNote: boolean
-  onPostNote: () => void
+  onPostNote: (draft: CommentDraft) => void | Promise<void>
 }
 
 const ActivityContent = React.memo(function ActivityContent({
   events,
   activeFilter,
   onFilterChange,
-  noteValue,
-  onNoteChange,
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
@@ -435,12 +432,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox
-          value={noteValue}
-          onChange={onNoteChange}
-          saving={savingNote}
-          onPost={onPostNote}
-        />
+        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
@@ -496,7 +488,6 @@ export default function TaskDetailPage() {
     useActivityFilter()
 
   const [error, setError] = React.useState("")
-  const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
   const [transitionTarget, setTransitionTarget] = React.useState<Transition | null>(null)
   const [linkCopied, setLinkCopied] = React.useState(false)
@@ -547,16 +538,17 @@ export default function TaskDetailPage() {
     [id, task, qc, notify]
   )
 
-  const handleAddNote = React.useCallback(async () => {
-    if (!workNoteBody.trim()) return
+  const handleAddNote = React.useCallback(async (draft: CommentDraft) => {
+    if (!draft.body.trim()) return
     setSavingNote(true)
     try {
       await api.post("/comments/work-note", {
         entityType: "Task",
         entityId: id,
-        body: workNoteBody.trim(),
+        body: draft.body,
+        bodyJson: draft.bodyJson,
+        mentions: draft.mentions,
       })
-      setWorkNoteBody("")
       qc.invalidateQueries({ queryKey: ["work-notes-task", id] })
       qc.invalidateQueries({ queryKey: ["audit-task", id] })
       resetFilterAfterComment()
@@ -564,7 +556,7 @@ export default function TaskDetailPage() {
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
+  }, [id, qc, resetFilterAfterComment, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, comment }: { to: string; comment?: string }) =>
@@ -885,8 +877,6 @@ export default function TaskDetailPage() {
               events={visibleFeedEvents}
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
-              noteValue={workNoteBody}
-              onNoteChange={setWorkNoteBody}
               savingNote={savingNote}
               onPostNote={handleAddNote}
             />
@@ -899,7 +889,6 @@ export default function TaskDetailPage() {
     visibleFeedEvents,
     activeFilter,
     handleFilterChange,
-    workNoteBody,
     savingNote,
     handleAddNote,
   ])

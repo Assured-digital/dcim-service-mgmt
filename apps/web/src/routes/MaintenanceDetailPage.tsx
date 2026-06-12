@@ -37,6 +37,7 @@ import {
   SectionPanel,
   StatusPopover,
   type ActivityFilter,
+  type CommentDraft,
   type CentreSection,
   type DetailField,
   type MoreMenuItem,
@@ -774,10 +775,8 @@ interface ActivityContentProps {
   activeFilter: ActivityFilter
   onFilterChange: (filter: ActivityFilter) => void
   composeEnabled: boolean
-  noteValue: string
-  onNoteChange: (value: string) => void
   savingNote: boolean
-  onPostNote: () => void
+  onPostNote: (draft: CommentDraft) => void | Promise<void>
 }
 
 const ActivityContent = React.memo(function ActivityContent({
@@ -785,8 +784,6 @@ const ActivityContent = React.memo(function ActivityContent({
   activeFilter,
   onFilterChange,
   composeEnabled,
-  noteValue,
-  onNoteChange,
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
@@ -795,12 +792,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {composeEnabled && activeFilter === "comment" ? (
-        <ActivityCommentBox
-          value={noteValue}
-          onChange={onNoteChange}
-          saving={savingNote}
-          onPost={onPostNote}
-        />
+        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
@@ -847,7 +839,6 @@ export default function MaintenanceDetailPage() {
   const [deleting, setDeleting] = React.useState(false)
   const [linkCopied, setLinkCopied] = React.useState(false)
   const [workDetailsOpen, setWorkDetailsOpen] = React.useState(true)
-  const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote] = React.useState(false)
 
   // ── Queries (preserved exactly) ────────────────────────────────────────────
@@ -929,7 +920,7 @@ export default function MaintenanceDetailPage() {
 
   // ── Activity (no audit/comments query for maintenance — empty feed) ────────
 
-  const handleAddNote = React.useCallback(() => {
+  const handleAddNote = React.useCallback((_draft: CommentDraft) => {
     // No comments mutation wired for maintenance; compose is hidden.
   }, [])
 
@@ -1191,8 +1182,6 @@ export default function MaintenanceDetailPage() {
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
               composeEnabled={false}
-              noteValue={workNoteBody}
-              onNoteChange={setWorkNoteBody}
               savingNote={savingNote}
               onPostNote={handleAddNote}
             />
@@ -1210,7 +1199,6 @@ export default function MaintenanceDetailPage() {
     visibleFeedEvents,
     activeFilter,
     handleFilterChange,
-    workNoteBody,
     savingNote,
     handleAddNote,
   ])

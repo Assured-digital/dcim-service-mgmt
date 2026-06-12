@@ -36,6 +36,7 @@ import {
   useDetailNarrow,
   ActivityTabs,
   ActivityCommentBox,
+  type CommentDraft,
   SectionPanel,
   RecordDetailShell,
   TransitionDialog,
@@ -397,18 +398,14 @@ interface ActivityContentProps {
   events: FeedEvent[]
   activeFilter: ActivityFilter
   onFilterChange: (filter: ActivityFilter) => void
-  noteValue: string
-  onNoteChange: (value: string) => void
   savingNote: boolean
-  onPostNote: () => void
+  onPostNote: (draft: CommentDraft) => void | Promise<void>
 }
 
 const ActivityContent = React.memo(function ActivityContent({
   events,
   activeFilter,
   onFilterChange,
-  noteValue,
-  onNoteChange,
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
@@ -417,12 +414,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox
-          value={noteValue}
-          onChange={onNoteChange}
-          saving={savingNote}
-          onPost={onPostNote}
-        />
+        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
@@ -479,7 +471,6 @@ export default function IssueDetailPage() {
   const [error, setError] = React.useState("")
   const [taskOpen, setTaskOpen] = React.useState(false)
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
-  const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
   const [transitionTarget, setTransitionTarget] = React.useState<Transition | null>(null)
   const [linkCopied, setLinkCopied] = React.useState(false)
@@ -542,16 +533,17 @@ export default function IssueDetailPage() {
     [id, issue, qc, notify]
   )
 
-  const handleAddNote = React.useCallback(async () => {
-    if (!workNoteBody.trim()) return
+  const handleAddNote = React.useCallback(async (draft: CommentDraft) => {
+    if (!draft.body.trim()) return
     setSavingNote(true)
     try {
       await api.post("/comments/work-note", {
         entityType: "Issue",
         entityId: id,
-        body: workNoteBody.trim(),
+        body: draft.body,
+        bodyJson: draft.bodyJson,
+        mentions: draft.mentions,
       })
-      setWorkNoteBody("")
       qc.invalidateQueries({ queryKey: ["work-notes-issue", id] })
       qc.invalidateQueries({ queryKey: ["audit-issue", id] })
       resetFilterAfterComment()
@@ -559,7 +551,7 @@ export default function IssueDetailPage() {
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
+  }, [id, qc, resetFilterAfterComment, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, resolution }: { to: string; resolution?: string }) =>
@@ -833,8 +825,6 @@ export default function IssueDetailPage() {
               events={visibleFeedEvents}
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
-              noteValue={workNoteBody}
-              onNoteChange={setWorkNoteBody}
               savingNote={savingNote}
               onPostNote={handleAddNote}
             />
@@ -847,7 +837,6 @@ export default function IssueDetailPage() {
     visibleFeedEvents,
     activeFilter,
     handleFilterChange,
-    workNoteBody,
     savingNote,
     handleAddNote,
   ])
