@@ -181,11 +181,9 @@ const SectionAddButton = React.memo(function SectionAddButton({
             p: 0.5,
             color: "var(--color-text-tertiary)",
             transition: "background-color 0.12s, color 0.12s",
-            "& svg": { transition: "font-size 0.12s" },
             "&:hover": {
               bgcolor: "action.selected",
               color: "text.primary",
-              "& svg": { fontSize: 20 },
             },
           }}
         >

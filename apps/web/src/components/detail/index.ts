@@ -28,3 +28,5 @@ export { ActivityTabs, FILTER_VALUES, DEFAULT_ACTIVITY_FILTER, FILTER_OPTIONS } 
 export type { ActivityFilter } from "./activityTabs"
 export { ActivityCommentBox } from "./activityCommentBox"
 export type { CommentDraft, CommentMentionTarget } from "./activityCommentBox"
+export { CommentBody } from "./CommentBody"
+export type { ResolvedMention } from "./CommentBody"

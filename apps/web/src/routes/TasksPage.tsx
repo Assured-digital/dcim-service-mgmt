@@ -22,6 +22,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { chipSx } from "../components/shared"
+import { CommentBody, type ResolvedMention } from "../components/detail"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
 import { useAssignableUsers, type AssignableUser } from "../lib/useAssignableUsers"
@@ -54,6 +55,8 @@ type TaskAuditEvent = {
 type TaskComment = {
   id: string
   body: string
+  bodyJson?: Record<string, unknown> | null
+  mentions?: ResolvedMention[]
   createdAt: string
   author: { id: string; displayName: string }
 }
@@ -834,7 +837,9 @@ export function TaskQuickDetailModal({
                     <Typography variant="caption" sx={{ color: "#64748b" }}>
                       {note.author.displayName} · {new Date(note.createdAt).toLocaleString("en-GB")}
                     </Typography>
-                    <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}>{note.body}</Typography>
+                    <Box sx={{ mt: 0.5 }}>
+                      <CommentBody note={note.body} bodyJson={note.bodyJson} mentions={note.mentions} />
+                    </Box>
                   </Box>
                 ))
               )}

@@ -42,6 +42,8 @@ import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import {
   ActivityCommentBox,
+  CommentBody,
+  type ResolvedMention,
   type CommentDraft,
   ActivityTabs,
   EditableTitleCard,
@@ -126,6 +128,8 @@ type ChangeComment = {
   body?: string
   content?: string
   message?: string
+  bodyJson?: Record<string, unknown> | null
+  mentions?: ResolvedMention[]
   type: string
   createdAt: string
   author: { id: string; displayName: string }
@@ -146,6 +150,8 @@ type FeedEvent = {
   actor: string
   text: React.ReactNode
   note?: string
+  bodyJson?: Record<string, unknown> | null
+  mentions?: ResolvedMention[]
   time: string
   createdAt: string
 }
@@ -765,16 +771,7 @@ const FeedItem = React.memo(function FeedItem({ event, isLast }: FeedItemProps) 
               fontSize: 12,
             }}
           >
-            <Typography
-              sx={{
-                fontSize: 12,
-                color: "text.primary",
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.5,
-              }}
-            >
-              {event.note}
-            </Typography>
+            <CommentBody note={event.note} bodyJson={event.bodyJson} mentions={event.mentions} />
           </Box>
         ) : null}
       </Box>
@@ -1078,6 +1075,8 @@ export default function ChangeDetailPage() {
       actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body ?? n.content ?? n.message ?? "",
+      bodyJson: n.bodyJson,
+      mentions: n.mentions,
       time: formatDateTime(n.createdAt),
       createdAt: n.createdAt,
     }))

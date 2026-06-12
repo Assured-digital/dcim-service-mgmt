@@ -35,6 +35,8 @@ import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import {
   ActivityCommentBox,
+  CommentBody,
+  type ResolvedMention,
   type CommentDraft,
   EditableTitleCard,
   ActivityTabs,
@@ -96,6 +98,8 @@ type AuditEvent = {
 type SRComment = {
   id: string
   body: string
+  bodyJson?: Record<string, unknown> | null
+  mentions?: ResolvedMention[]
   type: string
   visibleToCustomer: boolean
   fromCustomer: boolean
@@ -117,6 +121,8 @@ type FeedEvent = {
   actor: string
   text: React.ReactNode
   note?: string
+  bodyJson?: Record<string, unknown> | null
+  mentions?: ResolvedMention[]
   time: string
   createdAt: string
 }
@@ -404,9 +410,7 @@ const FeedItem = React.memo(function FeedItem({ event, isLast }: FeedItemProps) 
               fontSize: 12,
             }}
           >
-            <Typography sx={{ fontSize: 12, color: "text.primary", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-              {event.note}
-            </Typography>
+            <CommentBody note={event.note} bodyJson={event.bodyJson} mentions={event.mentions} />
           </Box>
         ) : null}
       </Box>
@@ -751,6 +755,8 @@ export default function ServiceRequestDetailPage() {
       actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body,
+      bodyJson: n.bodyJson,
+      mentions: n.mentions,
       time: formatDateTime(n.createdAt),
       createdAt: n.createdAt,
     }))
@@ -760,6 +766,8 @@ export default function ServiceRequestDetailPage() {
       actor: c.author.displayName,
       text: <>sent a customer update</>,
       note: c.body,
+      bodyJson: c.bodyJson,
+      mentions: c.mentions,
       time: formatDateTime(c.createdAt),
       createdAt: c.createdAt,
     }))
