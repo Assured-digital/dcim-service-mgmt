@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { toUserDisplay, userDisplaySelect, type UserDisplayPick } from "../users/display"
+import { assertEntityInScope } from "./resolve-comment-scope"
 
 // Every comment read includes the author via this select; mapComment swaps it to { id, displayName }.
 const authorInclude = { author: { select: userDisplaySelect } } as const
@@ -13,7 +14,8 @@ function mapComment<T extends { author: UserDisplayPick | null }>(comment: T) {
 export class CommentsService {
   constructor(private prisma: PrismaService) {}
 
-  async listForEntity(entityType: string, entityId: string) {
+  async listForEntity(clientId: string, entityType: string, entityId: string) {
+    await assertEntityInScope(this.prisma, clientId, entityType, entityId)
     const rows = await this.prisma.comment.findMany({
       where: { entityType, entityId },
       orderBy: { createdAt: "asc" },
@@ -22,12 +24,13 @@ export class CommentsService {
     return rows.map(mapComment)
   }
 
-  async createWorkNote(authorId: string, dto: {
+  async createWorkNote(clientId: string, authorId: string, dto: {
     entityType: string
     entityId: string
     body: string
     serviceRequestId?: string
   }) {
+    await assertEntityInScope(this.prisma, clientId, dto.entityType, dto.entityId)
     const comment = await this.prisma.comment.create({
       data: {
         authorId,
@@ -44,13 +47,14 @@ export class CommentsService {
     return mapComment(comment)
   }
 
-  async createCustomerUpdate(authorId: string, dto: {
+  async createCustomerUpdate(clientId: string, authorId: string, dto: {
     entityType: string
     entityId: string
     body: string
     fromCustomer?: boolean
     serviceRequestId?: string
   }) {
+    await assertEntityInScope(this.prisma, clientId, dto.entityType, dto.entityId)
     const comment = await this.prisma.comment.create({
       data: {
         authorId,
@@ -67,7 +71,8 @@ export class CommentsService {
     return mapComment(comment)
   }
 
-  async listWorkNotes(entityType: string, entityId: string) {
+  async listWorkNotes(clientId: string, entityType: string, entityId: string) {
+    await assertEntityInScope(this.prisma, clientId, entityType, entityId)
     const rows = await this.prisma.comment.findMany({
       where: { entityType, entityId, type: "WORK_NOTE" },
       orderBy: { createdAt: "asc" },
@@ -76,7 +81,8 @@ export class CommentsService {
     return rows.map(mapComment)
   }
 
-  async listCustomerUpdates(entityType: string, entityId: string) {
+  async listCustomerUpdates(clientId: string, entityType: string, entityId: string) {
+    await assertEntityInScope(this.prisma, clientId, entityType, entityId)
     const rows = await this.prisma.comment.findMany({
       where: { entityType, entityId, type: "CUSTOMER_UPDATE" },
       orderBy: { createdAt: "asc" },
