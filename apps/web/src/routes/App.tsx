@@ -34,6 +34,7 @@ const MaintenanceDetailPage    = React.lazy(() => import("./MaintenanceDetailPag
 const ConnectionsPage          = React.lazy(() => import("./ConnectionsPage"))
 const ConnectionDetailPage     = React.lazy(() => import("./ConnectionDetailPage"))
 const RisksIssuesPage          = React.lazy(() => import("./RisksIssuesPage"))
+const SettingsPage             = React.lazy(() => import("./SettingsPage"))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -134,6 +135,9 @@ export default function App() {
               </RequireRoles>
             }
           />
+
+          {/* Account settings */}
+          <Route path="settings" element={<SettingsPage />} />
 
           {/* Service desk — unified surface. The drill-down navigator owns the
               whole /service-desk/* subtree (queue → record → association), driven

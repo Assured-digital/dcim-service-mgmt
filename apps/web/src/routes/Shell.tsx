@@ -24,6 +24,7 @@ import AutorenewIcon from "@mui/icons-material/Autorenew"
 import NotificationImportantIcon from "@mui/icons-material/NotificationImportant"
 import NotificationsIcon from "@mui/icons-material/Notifications"
 import LogoutIcon from "@mui/icons-material/Logout"
+import SettingsIcon from "@mui/icons-material/Settings"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline"
 import SupportAgentIcon from "@mui/icons-material/SupportAgent"
@@ -523,6 +524,10 @@ function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
             <Box sx={{ px: "12px", py: "8px", borderBottom: "1px solid #f1f5f9" }}>
               <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#0f172a" }}>{email}</Typography>
               <Typography sx={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize", mt: "2px" }}>{roleLabel}</Typography>
+            </Box>
+            <Box onClick={() => { setOpen(false); nav("/settings") }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: "#64748b", "&:hover": { bgcolor: "#f8fafc", color: "#0f172a" } }}>
+              <SettingsIcon sx={{ fontSize: 14 }} />
+              <Typography sx={{ fontSize: 13 }}>Settings</Typography>
             </Box>
             <Box onClick={() => { setOpen(false); onLogout() }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: "#64748b", "&:hover": { bgcolor: "#f8fafc", color: "#0f172a" } }}>
               <LogoutIcon sx={{ fontSize: 14 }} />
