@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Chip, Dialog, DialogActions,
+  Box, Button, Dialog, DialogActions,
   DialogContent, DialogTitle, ListItemIcon, Menu, MenuItem, Stack,
   TextField, Tooltip, Typography
 } from "@mui/material"
@@ -30,7 +30,7 @@ import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
 import { TypeBadge, PriorityDot, Avatar as TicketAvatar } from "../components/shared"
-import { chipSx } from "../components/shared/tokens/colors"
+import { statusColors } from "../components/shared/tokens/colors"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -242,19 +242,29 @@ function UnifiedFooter() {
   )
 }
 
-// ── Unified queue: status pill ────────────────────────────────────────────
-// Filled status chip reading the single source of truth (chipSx -> deepened
-// semanticTokens), so a given status is the same colour here, in the rail, on
-// the detail pill, and in the Risks/Issues table.
+// ── Unified queue: status dot + text ──────────────────────────────────────
+// Softened in the dense table only: a coloured dot + plain text, matching the
+// Priority cell's treatment. The dot colour reads the SAME single source of
+// truth as the pills (statusColors -> semanticTokens), so the colour is
+// identical to the detail pill / rail dot — just rendered as a dot here.
 function StatusCell({ ticket }: { ticket: Ticket }) {
   const value = ticket.overdue ? "OVERDUE" : ticket.status
   const label = ticket.overdue ? "overdue" : ticket.status.toLowerCase().replaceAll("_", " ")
   return (
-    <Chip
-      size="small"
-      sx={{ ...chipSx(value), height: 22, fontSize: 12, "& .MuiChip-label": { px: 1 } }}
-      label={label.charAt(0).toUpperCase() + label.slice(1)}
-    />
+    <Stack direction="row" alignItems="center" spacing={0.75}>
+      <Box
+        component="span"
+        sx={{
+          display: "inline-block",
+          width: 8, height: 8, borderRadius: "50%",
+          bgcolor: statusColors(value).bg,
+          flexShrink: 0,
+        }}
+      />
+      <Typography sx={{ fontSize: 12.5 }}>
+        {label.charAt(0).toUpperCase() + label.slice(1)}
+      </Typography>
+    </Stack>
   )
 }
 

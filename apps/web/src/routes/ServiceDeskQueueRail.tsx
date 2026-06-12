@@ -1,23 +1,19 @@
 import * as React from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { Box, Chip, Stack, Typography } from "@mui/material"
-import { chipSx } from "../components/shared/tokens/colors"
+import { Box, Stack, Typography } from "@mui/material"
+import { statusColors } from "../components/shared/tokens/colors"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { getCurrentUser } from "../lib/auth"
-import { useTickets, type Ticket, STATUS_LABELS } from "../lib/tickets"
+import { useTickets, type Ticket, KIND_LABELS } from "../lib/tickets"
 import { parseQueueParams, filterTickets, sortTickets } from "../lib/serviceDeskQueue"
 
-// Rail dot encodes DUE-PROXIMITY (urgency), not status: overdue/past-due red, fading
-// through orange (≤24h) and amber (≤72h) to neutral when further out or no due date.
-const DUE_NEUTRAL = "#cbd5e1"
-function dueProximityColor(t: Ticket): string {
-  if (t.overdue) return "#dc2626"
-  if (!t.dueAt) return DUE_NEUTRAL
-  const hoursUntilDue = (new Date(t.dueAt).getTime() - Date.now()) / (1000 * 60 * 60)
-  if (hoursUntilDue <= 0) return "#dc2626"
-  if (hoursUntilDue <= 24) return "#f97316"
-  if (hoursUntilDue <= 72) return "#f59e0b"
-  return DUE_NEUTRAL
+// Created date, DD/MM/YY, for the rail row's secondary line.
+function formatCreated(iso: string): string {
+  const d = new Date(iso)
+  const dd = String(d.getDate()).padStart(2, "0")
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const yy = String(d.getFullYear()).slice(-2)
+  return `${dd}/${mm}/${yy}`
 }
 
 // ── Service Desk working-queue rail (depth-1 ticket selector) ──────────────
@@ -77,8 +73,10 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {items.map(t => {
           const active = t.id === activeId
-          const dotColor = dueProximityColor(t)
-          const statusText = STATUS_LABELS[t.kind][t.status] ?? t.status
+          // Dot reads the SAME status→colour source the detail/queue pills use
+          // (statusColors → resolveIntent → semanticTokens), so a "New" record's
+          // dot matches its "New" pill. NOT due-proximity.
+          const dotColor = statusColors(t.status).bg
           return (
             <Box
               key={t.id}
@@ -103,8 +101,9 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                 sx={{ mt: "5px", width: 8, height: 8, borderRadius: "50%", bgcolor: dotColor, flexShrink: 0 }}
               />
               <Stack spacing={0.25} sx={{ minWidth: 0, flex: 1 }}>
-                {/* Primary: title. Secondary: type (left) + status (right). Reference
-                    dropped — it lives in the breadcrumb + the Details panel now. */}
+                {/* Primary: title. Secondary: full type (left, truncates) + created
+                    date (right). Status is carried by the dot now; reference lives in
+                    the breadcrumb + the Details panel. */}
                 <Typography
                   title={t.subject}
                   sx={{
@@ -117,20 +116,18 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                   {t.subject}
                 </Typography>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 11, color: "#64748b", flexShrink: 0 }}>
-                    {t.kind}
-                  </Typography>
-                  <Chip
-                    size="small"
-                    label={statusText}
+                  <Typography
+                    title={KIND_LABELS[t.kind]}
                     sx={{
-                      ...chipSx(t.status),
-                      height: 18,
-                      fontSize: 10,
-                      flexShrink: 0,
-                      "& .MuiChip-label": { px: 0.75 },
+                      fontSize: 11, color: "#64748b", minWidth: 0,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}
-                  />
+                  >
+                    {KIND_LABELS[t.kind]}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>
+                    {formatCreated(t.createdAt)}
+                  </Typography>
                 </Box>
               </Stack>
             </Box>
