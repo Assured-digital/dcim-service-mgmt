@@ -67,6 +67,7 @@ import { AttachmentsContent, type AttachmentsHandle } from "../components/Attach
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
+import { userLabel } from "../lib/userDisplay"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -77,7 +78,7 @@ type ChangeApproval = {
   decision: string
   notes: string | null
   decidedAt: string
-  approver: { id: string; email: string }
+  approver: { id: string; displayName: string }
 }
 
 type ChangeRequest = {
@@ -99,7 +100,7 @@ type ChangeRequest = {
   actualEnd: string | null
   closedAt: string | null
   assigneeId: string | null
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
   createdById?: string | null
   createdBy?: { id: string; displayName: string } | null
   links?: ResolvedLink[]
@@ -113,7 +114,7 @@ type AuditEvent = {
   id: string
   action: string
   actorUserId: string | null
-  actorEmail?: string | null
+  actorDisplayName?: string | null
   data?: Record<string, unknown> | null
   createdAt: string
 }
@@ -125,14 +126,14 @@ type ChangeComment = {
   message?: string
   type: string
   createdAt: string
-  author: { id: string; email: string }
+  author: { id: string; displayName: string }
 }
 
 
 
 type LinkedTaskWithAssignee = LinkedTask & {
   assigneeId?: string | null
-  assignee?: { id: string; email: string } | null
+  assignee?: { id: string; displayName: string } | null
 }
 
 type FeedEventType = "status" | "comment" | "assignment" | "link"
@@ -666,7 +667,7 @@ const ApprovalsSectionContent = React.memo(function ApprovalsSectionContent({
                 rowGap={0.25}
               >
                 <Typography sx={{ fontSize: 12, fontWeight: 500, color: "text.primary" }}>
-                  {approval.approver.email}
+                  {userLabel(approval.approver)}
                 </Typography>
                 <Typography sx={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
                   {formatDateTime(approval.decidedAt)}
@@ -1065,7 +1066,7 @@ export default function ChangeDetailPage() {
       return {
         id: `audit-${e.id}`,
         type,
-        actor: e.actorEmail ?? "System",
+        actor: e.actorDisplayName ?? "System",
         text,
         note: transitionComment ?? undefined,
         time: formatDateTime(e.createdAt),
@@ -1075,7 +1076,7 @@ export default function ChangeDetailPage() {
     const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
       id: `note-${n.id}`,
       type: "comment",
-      actor: n.author.email,
+      actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body ?? n.content ?? n.message ?? "",
       time: formatDateTime(n.createdAt),
@@ -1245,7 +1246,7 @@ export default function ChangeDetailPage() {
           <Box sx={valueWrapperSx}>
             {change.assignee ? (
               <Typography variant="body2" color="text.secondary">
-                {change.assignee.email}
+                {userLabel(change.assignee)}
               </Typography>
             ) : (
               <Typography

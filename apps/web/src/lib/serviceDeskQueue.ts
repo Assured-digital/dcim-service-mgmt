@@ -67,7 +67,7 @@ export function filterTickets(
     if (p.savedView === "closed" && !done) return false
 
     if (q) {
-      const haystack = `${t.subject} ${t.reference} ${t.assignee?.email ?? ""}`.toLowerCase()
+      const haystack = `${t.subject} ${t.reference} ${t.assignee?.displayName ?? ""}`.toLowerCase()
       if (!haystack.includes(q)) return false
     }
 
@@ -85,7 +85,7 @@ function sortValue(t: Ticket, field: string): string | number | null {
     case "updatedAt": return t.updatedAt ? new Date(t.updatedAt).getTime() : null
     case "dueAt":     return t.dueAt ? new Date(t.dueAt).getTime() : null
     case "chipIntent": return t.overdue ? "overdue" : t.status
-    case "assignee":  return t.assignee?.email.split("@")[0] ?? "Unassigned"
+    case "assignee":  return t.assignee?.displayName ?? "Unassigned"
     case "kind":      return t.kind
     case "reference": return t.reference
     case "subject":   return t.subject

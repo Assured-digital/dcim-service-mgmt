@@ -83,7 +83,7 @@ type AuditEvent = {
   id: string
   action: string
   actorUserId: string | null
-  actorEmail?: string | null
+  actorDisplayName?: string | null
   data?: Record<string, unknown> | null
   createdAt: string
 }
@@ -95,14 +95,14 @@ type IssueComment = {
   message?: string
   type: string
   createdAt: string
-  author: { id: string; email: string }
+  author: { id: string; displayName: string }
 }
 
 
 
 type LinkedTaskWithAssignee = LinkedTask & {
   assigneeId?: string | null
-  assignee?: { id: string; email: string } | null
+  assignee?: { id: string; displayName: string } | null
 }
 
 type FeedEventType = "status" | "comment" | "assignment" | "link"
@@ -680,7 +680,7 @@ export default function IssueDetailPage() {
       return {
         id: `audit-${e.id}`,
         type,
-        actor: e.actorEmail ?? "System",
+        actor: e.actorDisplayName ?? "System",
         text,
         note: transitionComment ?? undefined,
         time: formatDateTime(e.createdAt),
@@ -690,7 +690,7 @@ export default function IssueDetailPage() {
     const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
       id: `note-${n.id}`,
       type: "comment",
-      actor: n.author.email,
+      actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body ?? n.content ?? n.message ?? "",
       time: formatDateTime(n.createdAt),

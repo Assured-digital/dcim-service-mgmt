@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service"
 import { CreateMaintenanceDto, ListMaintenanceQueryDto, UpdateMaintenanceDto } from "./dto"
 import { resolveAttachments } from "../attachments/resolve-attachments"
+import { toUserDisplay, userDisplaySelect } from "../users/display"
 
 @Injectable()
 export class MaintenanceService {
@@ -39,7 +40,7 @@ export class MaintenanceService {
   async listForClient(clientId: string, query: ListMaintenanceQueryDto) {
     this.assertClientScope(clientId)
 
-    return this.prisma.maintenanceLog.findMany({
+    const rows = await this.prisma.maintenanceLog.findMany({
       where: {
         asset: {
           clientId,
@@ -65,10 +66,11 @@ export class MaintenanceService {
             cabinet: { select: { id: true, name: true } }
           }
         },
-        performedBy: { select: { id: true, email: true } }
+        performedBy: { select: userDisplaySelect }
       },
       orderBy: { performedAt: "desc" }
     })
+    return rows.map((r) => ({ ...r, performedBy: toUserDisplay(r.performedBy) }))
   }
 
   async getForClient(clientId: string, id: string) {
@@ -85,12 +87,12 @@ export class MaintenanceService {
             cabinet: { select: { id: true, name: true } }
           }
         },
-        performedBy: { select: { id: true, email: true } }
+        performedBy: { select: userDisplaySelect }
       }
     })
     if (!record) throw new NotFoundException("Maintenance record not found")
     const attachments = await resolveAttachments(this.prisma, clientId, "maintenance", record.id)
-    return { ...record, attachments }
+    return { ...record, performedBy: toUserDisplay(record.performedBy), attachments }
   }
 
   async createForClient(clientId: string, actorUserId: string | null, dto: CreateMaintenanceDto) {
@@ -118,7 +120,7 @@ export class MaintenanceService {
             cabinet: { select: { id: true, name: true } }
           }
         },
-        performedBy: { select: { id: true, email: true } }
+        performedBy: { select: userDisplaySelect }
       }
     })
 
@@ -142,7 +144,7 @@ export class MaintenanceService {
       })
     }
 
-    return created
+    return { ...created, performedBy: toUserDisplay(created.performedBy) }
   }
 
   async updateForClient(clientId: string, id: string, dto: UpdateMaintenanceDto) {
@@ -178,7 +180,7 @@ export class MaintenanceService {
             cabinet: { select: { id: true, name: true } }
           }
         },
-        performedBy: { select: { id: true, email: true } }
+        performedBy: { select: userDisplaySelect }
       }
     })
 
@@ -186,7 +188,7 @@ export class MaintenanceService {
     if (updated.assetId !== existing.assetId) {
       await this.refreshLastMaintenance(updated.assetId)
     }
-    return updated
+    return { ...updated, performedBy: toUserDisplay(updated.performedBy) }
   }
 
   async removeForClient(clientId: string, id: string) {

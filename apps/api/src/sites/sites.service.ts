@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { GeocodingService } from "./geocoding.service"
+import { toUserDisplay, userDisplaySelect } from "../users/display"
 
 @Injectable()
 export class SitesService {
@@ -33,13 +34,16 @@ export class SitesService {
           orderBy: { createdAt: "desc" },
           take: 20,
           include: {
-            assignee: { select: { id: true, email: true } }
+            assignee: { select: userDisplaySelect }
           }
         }
       }
     })
     if (!site) throw new NotFoundException("Site not found")
-    return site
+    return {
+      ...site,
+      checks: site.checks.map((c) => ({ ...c, assignee: toUserDisplay(c.assignee) }))
+    }
   }
 
   async createForClient(clientId: string, actorUserId: string, dto: {

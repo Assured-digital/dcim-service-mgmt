@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service"
 import { CheckStatus } from "@prisma/client"
 import { resolveAttachments } from "../attachments/resolve-attachments"
+import { toUserDisplay, userDisplaySelect } from "../users/display"
 
 function makeRef(prefix: string) {
   const y = new Date().getFullYear()
@@ -136,7 +137,7 @@ export class ChecksService {
 
   async listForClient(clientId: string, filters: any = {}) {
     this.assertClientScope(clientId)
-    return this.prisma.check.findMany({
+    const rows = await this.prisma.check.findMany({
       where: {
         clientId,
         status: filters.status ? filters.status : undefined,
@@ -145,12 +146,13 @@ export class ChecksService {
       },
       include: {
         site: { select: { id: true, name: true } },
-        assignee: { select: { id: true, email: true } },
+        assignee: { select: userDisplaySelect },
         template: { select: { id: true, name: true, checkType: true } },
         items: { select: { id: true, response: true, isRequired: true, isCritical: true } }
       },
       orderBy: { updatedAt: "desc" }
     })
+    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
   }
 
   async getForClient(clientId: string, id: string) {
@@ -159,8 +161,8 @@ export class ChecksService {
       where: { id, clientId },
       include: {
         site: { select: { id: true, name: true } },
-        assignee: { select: { id: true, email: true } },
-        reviewer: { select: { id: true, email: true } },
+        assignee: { select: userDisplaySelect },
+        reviewer: { select: userDisplaySelect },
         template: { select: { id: true, name: true, checkType: true, estimatedMinutes: true } },
         items: {
           orderBy: { sortOrder: "asc" },
@@ -170,7 +172,12 @@ export class ChecksService {
     })
     if (!check) throw new NotFoundException("Check not found")
     const attachments = await resolveAttachments(this.prisma, clientId, "check", check.id)
-    return { ...check, attachments }
+    return {
+      ...check,
+      assignee: toUserDisplay(check.assignee),
+      reviewer: toUserDisplay(check.reviewer),
+      attachments
+    }
   }
 
   async createForClient(clientId: string, actorUserId: string | null, dto: any) {
@@ -210,12 +217,12 @@ export class ChecksService {
       include: {
         items: { orderBy: { sortOrder: "asc" } },
         site: { select: { id: true, name: true } },
-        assignee: { select: { id: true, email: true } },
+        assignee: { select: userDisplaySelect },
         template: { select: { id: true, name: true } }
       }
     })
 
-    return check
+    return { ...check, assignee: toUserDisplay(check.assignee) }
   }
 
   async startCheck(clientId: string, id: string, actorUserId: string) {

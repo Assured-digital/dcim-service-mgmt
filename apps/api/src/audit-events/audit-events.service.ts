@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { computeDisplayName, userDisplaySelect } from "../users/display";
 
 type ListFilters = {
   page: number;
@@ -56,7 +57,7 @@ export class AuditEventsService {
       this.prisma.auditEvent.count({ where })
     ]);
 
-    const withActor = await this.attachActorEmails(items);
+    const withActor = await this.attachActor(items);
     return {
       items: withActor,
       total,
@@ -75,7 +76,7 @@ export class AuditEventsService {
       orderBy: { createdAt: "desc" },
       take: limit
     });
-    return this.attachActorEmails(items);
+    return this.attachActor(items);
   }
 
   async listActorsForClient(clientId: string) {
@@ -92,12 +93,16 @@ export class AuditEventsService {
 
     const users = await this.prisma.user.findMany({
       where: { id: { in: ids } },
-      select: { id: true, email: true }
+      select: userDisplaySelect
     });
-    return users.sort((a, b) => a.email.localeCompare(b.email));
+    return users
+      .map((u) => ({ id: u.id, displayName: computeDisplayName(u) }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
-  private async attachActorEmails(
+  // Resolves each event's actorUserId to a displayName (knownAs -> "First Last" -> email).
+  // Exposes actorDisplayName ONLY — the raw actor email never reaches the client.
+  private async attachActor(
     items: Array<{
       id: string;
       entityType: string;
@@ -114,14 +119,14 @@ export class AuditEventsService {
     const users = ids.length
       ? await this.prisma.user.findMany({
           where: { id: { in: ids } },
-          select: { id: true, email: true }
+          select: userDisplaySelect
         })
       : [];
-    const emailById = new Map(users.map((u) => [u.id, u.email]));
+    const displayNameById = new Map(users.map((u) => [u.id, computeDisplayName(u)]));
 
     return items.map((item) => ({
       ...item,
-      actorEmail: item.actorUserId ? emailById.get(item.actorUserId) ?? null : null
+      actorDisplayName: item.actorUserId ? displayNameById.get(item.actorUserId) ?? null : null
     }));
   }
 }

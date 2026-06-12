@@ -35,7 +35,7 @@ type MaintenanceRecord = {
     name: string
     site: { id: string; name: string } | null
   }
-  performedBy: { id: string; email: string } | null
+  performedBy: { id: string; displayName: string } | null
 }
 
 type AssetOption = { id: string; assetTag: string; name: string }
@@ -82,7 +82,7 @@ const maintenanceColumns: GridColDef<MaintenanceRecord>[] = [
   },
   {
     field: "performedBy", headerName: "By", width: 150,
-    valueGetter: (_v, row) => row.performedBy?.email.split("@")[0] ?? "—",
+    valueGetter: (_v, row) => row.performedBy?.displayName ?? "—",
     renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>{p.value as string}</Typography>,
   },
   {

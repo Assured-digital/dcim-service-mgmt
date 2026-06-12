@@ -48,6 +48,7 @@ import {
 } from "../components/detail"
 import { useBreadcrumb } from "./Shell"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { userLabel } from "../lib/userDisplay"
 import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
 import { statusColors } from "../components/shared"
@@ -64,7 +65,7 @@ type MaintenanceRecord = {
   nextDueAt: string | null
   notes: string | null
   performedById: string | null
-  performedBy: { id: string; email: string } | null
+  performedBy: { id: string; displayName: string } | null
   asset: {
     id: string
     assetTag: string
@@ -963,10 +964,10 @@ export default function MaintenanceDetailPage() {
 
   const performedByLabel = React.useMemo(() => {
     if (!recordData) return "—"
-    if (recordData.performedBy?.email) return recordData.performedBy.email
+    if (recordData.performedBy?.displayName) return recordData.performedBy.displayName
     if (recordData.performedById && users.data) {
       const match = users.data.find((u) => u.id === recordData.performedById)
-      if (match) return match.email
+      if (match) return match.displayName
     }
     return "Unassigned"
   }, [recordData, users.data])
@@ -1115,7 +1116,7 @@ export default function MaintenanceDetailPage() {
         value: (
           <Box sx={valueWrapperSx}>
             {recordData.performedBy ? (
-              <Typography sx={{ fontSize: 12 }}>{recordData.performedBy.email}</Typography>
+              <Typography sx={{ fontSize: 12 }}>{userLabel(recordData.performedBy)}</Typography>
             ) : (
               <Typography sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}>
                 Unassigned
@@ -1219,7 +1220,7 @@ export default function MaintenanceDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!recordData) return undefined
     return {
-      submittedBy: recordData.performedBy?.email ?? null,
+      submittedBy: recordData.performedBy?.displayName ?? null,
       createdAt: recordData.createdAt ?? recordData.performedAt,
       updatedAt: recordData.updatedAt ?? recordData.performedAt,
     }

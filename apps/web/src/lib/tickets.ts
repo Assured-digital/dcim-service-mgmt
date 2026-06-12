@@ -16,7 +16,7 @@ export interface Ticket {
   /** Derived from status + overdue for chip rendering. */
   chipIntent: ChipIntent
   priority: string
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
   createdAt: string
   updatedAt: string
   overdue: boolean
@@ -42,7 +42,7 @@ interface RawSR {
   priority: string
   updatedAt: string
   createdAt: string
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
 }
 
 interface RawIncident {
@@ -54,7 +54,7 @@ interface RawIncident {
   priority: string
   createdAt: string
   updatedAt: string
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
 }
 
 interface RawChange {
@@ -68,7 +68,7 @@ interface RawChange {
   scheduledEnd: string | null
   createdAt: string
   updatedAt: string
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
 }
 
 // ── Status → chipIntent mappers ────────────────────────────────────────────

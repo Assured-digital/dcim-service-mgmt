@@ -21,7 +21,7 @@ type AuditItem = {
   entityId: string;
   action: string;
   actorUserId: string | null;
-  actorEmail?: string | null;
+  actorDisplayName?: string | null;
   data: Record<string, unknown> | null;
   createdAt: string;
 };
@@ -60,7 +60,7 @@ export function EntityHistoryDialog({ open, onClose, entityType, entityId, title
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Chip size="small" sx={statusChipSx(event.action)} label={event.action.toLowerCase()} />
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {event.actorEmail ?? "system"}
+                        {event.actorDisplayName ?? "system"}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {new Date(event.createdAt).toLocaleString()}

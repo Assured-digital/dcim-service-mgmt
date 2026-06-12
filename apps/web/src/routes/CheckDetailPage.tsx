@@ -48,8 +48,8 @@ type Check = {
   reviewerNotes: string | null; cancellationReason: string | null
   createdAt: string; updatedAt: string
   site: { id: string; name: string }
-  assignee: { id: string; email: string } | null
-  reviewer: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
+  reviewer: { id: string; displayName: string } | null
   template: { id: string; name: string; checkType: string; estimatedMinutes: number | null }
   items: CheckItem[]
   attachments?: AttachmentSummary[]
@@ -983,7 +983,7 @@ export default function CheckDetailPage() {
               { label: "Template", value: check.template.name },
               check.scheduledAt ? { label: "Scheduled", value: new Date(check.scheduledAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) } : null,
               check.startedAt ? { label: "Elapsed", value: formatElapsed(check.startedAt) } : null,
-              check.assignee ? { label: "Engineer", value: check.assignee.email.split("@")[0] } : null,
+              check.assignee ? { label: "Engineer", value: check.assignee.displayName } : null,
               check.passRate !== null ? { label: "Pass rate", value: `${check.passRate}%` } : null,
             ].filter((row): row is DetailRow => row !== null).map((row) => (
               <Box key={row.label} sx={{ display: "flex", justifyContent: "space-between", py: "6px", fontSize: 12, borderBottom: "1px solid #f1f5f9" }}>
@@ -1086,7 +1086,7 @@ export default function CheckDetailPage() {
   const propertiesRows: { label: string; value: React.ReactNode }[] = [
     { label: "Site", value: <Typography variant="caption" fontWeight={600}>{check.site.name}</Typography> },
     { label: "Template", value: <Typography variant="caption">{check.template.name}</Typography> },
-    { label: "Assignee", value: <Typography variant="caption">{check.assignee?.email.split("@")[0] ?? "Unassigned"}</Typography> },
+    { label: "Assignee", value: <Typography variant="caption">{check.assignee?.displayName ?? "Unassigned"}</Typography> },
   ]
   if (check.passRate !== null) {
     // Pass rate is a RAG metric, not a record status — keep it on the quiet RAG palette

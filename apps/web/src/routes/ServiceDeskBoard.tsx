@@ -69,7 +69,7 @@ function TicketCard({ t, onClick }: { t: Ticket; onClick: () => void }) {
       </Typography>
       <Stack direction="row" alignItems="center" spacing={0.5}>
         <Typography sx={{ fontSize: 11, color: "#64748b", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {t.assignee ? t.assignee.email.split("@")[0] : "Unassigned"}
+          {t.assignee ? t.assignee.displayName : "Unassigned"}
         </Typography>
         <LanguageIcon sx={{ fontSize: 13, color: "#94a3b8" }} />
         {/* Channel icon placeholder — real channel data not yet surfaced by the API */}

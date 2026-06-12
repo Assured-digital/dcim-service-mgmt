@@ -11,6 +11,7 @@ import { Prisma, Role } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { CreateUserDto, UpdateUserDto } from "./dto";
 import { isOrgSuperRole, isOrgOwnerRole, ORG_SUPER_ROLES } from "../auth/role-scope";
+import { computeDisplayName } from "./display";
 
 // AD-staff roles who can be ASSIGNED work (and, broader than admin, who can call
 // the assignable picker). Excludes CLIENT_VIEWER and PUBLIC_USER by design.
@@ -259,9 +260,8 @@ export class UsersService {
   }
 
   private toAssignableView(user: AssignablePick) {
-    const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
-    const displayName = user.knownAs?.trim() || fullName || user.email;
-    return { id: user.id, displayName, email: user.email };
+    // email retained here BY DESIGN — the picker shows it as a disambiguator/secondary line.
+    return { id: user.id, displayName: computeDisplayName(user), email: user.email };
   }
 
   async create(actor: JwtUser, dto: CreateUserDto) {

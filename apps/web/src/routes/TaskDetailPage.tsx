@@ -56,6 +56,7 @@ import { AttachmentsContent, type AttachmentsHandle } from "../components/Attach
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
+import { userLabel } from "../lib/userDisplay"
 import { statusColors } from "../components/shared"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ type Task = {
   priority: string
   dueAt: string | null
   assigneeId: string | null
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
   linkedEntityType: string | null
   linkedEntityId: string | null
   incident: { id: string; reference: string; title: string } | null
@@ -85,7 +86,7 @@ type AuditEvent = {
   id: string
   action: string
   actorUserId: string | null
-  actorEmail?: string | null
+  actorDisplayName?: string | null
   data?: Record<string, unknown> | null
   createdAt: string
 }
@@ -97,7 +98,7 @@ type TaskComment = {
   message?: string
   type: string
   createdAt: string
-  author: { id: string; email: string }
+  author: { id: string; displayName: string }
 }
 
 
@@ -653,7 +654,7 @@ export default function TaskDetailPage() {
       return {
         id: `audit-${e.id}`,
         type,
-        actor: e.actorEmail ?? "System",
+        actor: e.actorDisplayName ?? "System",
         text,
         note: transitionComment ?? undefined,
         time: formatDateTime(e.createdAt),
@@ -663,7 +664,7 @@ export default function TaskDetailPage() {
     const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
       id: `note-${n.id}`,
       type: "comment",
-      actor: n.author.email,
+      actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body ?? n.content ?? n.message ?? "",
       time: formatDateTime(n.createdAt),
@@ -830,7 +831,7 @@ export default function TaskDetailPage() {
         value: (
           <Box sx={valueWrapperSx}>
             {task.assignee ? (
-              <Typography sx={{ fontSize: 12 }}>{task.assignee.email}</Typography>
+              <Typography sx={{ fontSize: 12 }}>{userLabel(task.assignee)}</Typography>
             ) : (
               <Typography
                 sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}
