@@ -87,7 +87,7 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
               onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTicket(t) } }}
               sx={{
                 display: "flex", alignItems: "flex-start", gap: 1,
-                px: 1.5, py: 1,
+                px: 1.5, py: 1.5,
                 cursor: "pointer",
                 borderBottom: "1px solid #f1f5f9",
                 borderLeft: active ? "3px solid #1d4ed8" : "3px solid transparent",
