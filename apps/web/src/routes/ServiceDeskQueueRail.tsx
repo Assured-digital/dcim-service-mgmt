@@ -2,10 +2,22 @@ import * as React from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Box, Stack, Typography } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
-import { resolveIntent, semanticTokens } from "../components/shared/tokens/colors"
 import { getCurrentUser } from "../lib/auth"
-import { useTickets, type Ticket } from "../lib/tickets"
+import { useTickets, type Ticket, STATUS_LABELS } from "../lib/tickets"
 import { parseQueueParams, filterTickets, sortTickets } from "../lib/serviceDeskQueue"
+
+// Rail dot encodes DUE-PROXIMITY (urgency), not status: overdue/past-due red, fading
+// through orange (≤24h) and amber (≤72h) to neutral when further out or no due date.
+const DUE_NEUTRAL = "#cbd5e1"
+function dueProximityColor(t: Ticket): string {
+  if (t.overdue) return "#dc2626"
+  if (!t.dueAt) return DUE_NEUTRAL
+  const hoursUntilDue = (new Date(t.dueAt).getTime() - Date.now()) / (1000 * 60 * 60)
+  if (hoursUntilDue <= 0) return "#dc2626"
+  if (hoursUntilDue <= 24) return "#f97316"
+  if (hoursUntilDue <= 72) return "#f59e0b"
+  return DUE_NEUTRAL
+}
 
 // ── Service Desk working-queue rail (depth-1 ticket selector) ──────────────
 //
@@ -64,7 +76,8 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {items.map(t => {
           const active = t.id === activeId
-          const dotColor = semanticTokens[resolveIntent(t.overdue ? "OVERDUE" : t.status)].text
+          const dotColor = dueProximityColor(t)
+          const statusText = STATUS_LABELS[t.kind][t.status] ?? t.status
           return (
             <Box
               key={t.id}
@@ -89,24 +102,27 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                 sx={{ mt: "5px", width: 8, height: 8, borderRadius: "50%", bgcolor: dotColor, flexShrink: 0 }}
               />
               <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-                <Typography
-                  sx={{
-                    fontFamily: "monospace", fontSize: 11, fontWeight: 700,
-                    color: active ? "#1d4ed8" : "#475569",
-                  }}
-                >
-                  {t.reference}
-                </Typography>
+                {/* Primary: title. Secondary: status text. Reference dropped — it
+                    lives in the breadcrumb + the Details panel now. */}
                 <Typography
                   title={t.subject}
                   sx={{
                     fontSize: 12.5,
-                    color: "#0f172a",
-                    fontWeight: active ? 600 : 400,
+                    color: active ? "#1d4ed8" : "#0f172a",
+                    fontWeight: active ? 600 : 500,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}
                 >
                   {t.subject}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: 11,
+                    color: "#64748b",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}
+                >
+                  {statusText}
                 </Typography>
               </Stack>
             </Box>

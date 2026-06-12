@@ -156,6 +156,9 @@ export interface TasksSectionContentProps {
   onSelectTask: (taskId: string) => void
   onChangeTaskStatus: (taskId: string, nextStatus: string) => void
   onChangeTaskAssignee: (taskId: string, nextAssigneeId: string) => void
+  // Inline "Add task" button below the list. Shell pages hoist the add action to
+  // the section header "+", so they pass false; non-shell consumers keep the default.
+  showAddButton?: boolean
 }
 
 export const TasksSectionContent = React.memo(function TasksSectionContent({
@@ -166,6 +169,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
   onSelectTask,
   onChangeTaskStatus,
   onChangeTaskAssignee,
+  showAddButton = true,
 }: TasksSectionContentProps) {
   const [activePopover, setActivePopover] = React.useState<{
     taskId: string
@@ -267,16 +271,6 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
           >
             <Typography
               sx={{
-                fontFamily: "monospace",
-                fontSize: 11,
-                color: "text.secondary",
-                flexShrink: 0,
-              }}
-            >
-              {task.reference}
-            </Typography>
-            <Typography
-              sx={{
                 flex: 1,
                 fontSize: 12,
                 minWidth: 0,
@@ -284,6 +278,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 color: "text.primary",
+                textDecoration: task.status === "DONE" ? "line-through" : "none",
               }}
             >
               {task.title}
@@ -297,7 +292,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
         ))
       )}
 
-      {canManage ? (
+      {showAddButton && canManage ? (
         <Button
           variant="text"
           size="small"

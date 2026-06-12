@@ -24,6 +24,7 @@ import AutorenewIcon from "@mui/icons-material/Autorenew"
 import NotificationImportantIcon from "@mui/icons-material/NotificationImportant"
 import NotificationsIcon from "@mui/icons-material/Notifications"
 import LogoutIcon from "@mui/icons-material/Logout"
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline"
 import SupportAgentIcon from "@mui/icons-material/SupportAgent"
@@ -48,12 +49,18 @@ import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
 type Crumb = { label: string; path?: string; onClick?: () => void }
 const BreadcrumbCtx = React.createContext<{
   setRecordLabel: (l: string | null) => void
+  // The single record-ref slot for the URL's primary record. Unlike setRecordLabel
+  // (which writes the shared breadcrumbs[] reset on every pathname change), this is
+  // NOT reset on navigation — it's owned by the detail shell via mount/unmount, so a
+  // record kept mounted across a drill (Service Desk navigator) keeps its crumb and a
+  // drawer rendered over it does not overwrite it. Takes precedence over breadcrumbs[].
+  setPrimaryRecordLabel: (l: string | null) => void
   setBreadcrumbs: (crumbs: Crumb[]) => void
   setHideModuleLabel: (hide: boolean) => void
   setPageFullBleed: (fullBleed: boolean) => void
   // Drill-down navigator requests the app sidebar collapse when a record opens.
   setNavCollapsed: (collapsed: boolean) => void
-}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {}, setHideModuleLabel: () => {}, setPageFullBleed: () => {}, setNavCollapsed: () => {} })
+}>({ setRecordLabel: () => {}, setPrimaryRecordLabel: () => {}, setBreadcrumbs: () => {}, setHideModuleLabel: () => {}, setPageFullBleed: () => {}, setNavCollapsed: () => {} })
 export function useBreadcrumb() { return React.useContext(BreadcrumbCtx) }
 
 const RECORD_CRUMB_SEP_SX = { color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none" as const, flexShrink: 0, mx: "2px" }
@@ -503,6 +510,7 @@ function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
   initials: string; email: string; roleLabel: string; loggingOut: boolean; onLogout: () => void
 }) {
   const [open, setOpen] = React.useState(false)
+  const nav = useNavigate()
   return (
     <>
       <Box onClick={() => setOpen(o => !o)} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "10px", py: "4px", borderRadius: "6px", cursor: "pointer", "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
@@ -516,6 +524,10 @@ function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
             <Box sx={{ px: "12px", py: "8px", borderBottom: "1px solid #f1f5f9" }}>
               <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#0f172a" }}>{email}</Typography>
               <Typography sx={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize", mt: "2px" }}>{roleLabel}</Typography>
+            </Box>
+            <Box onClick={() => { setOpen(false); nav("/settings") }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: "#64748b", "&:hover": { bgcolor: "#f8fafc", color: "#0f172a" } }}>
+              <SettingsOutlinedIcon sx={{ fontSize: 14 }} />
+              <Typography sx={{ fontSize: 13 }}>Settings</Typography>
             </Box>
             <Box onClick={() => { setOpen(false); onLogout() }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: "#64748b", "&:hover": { bgcolor: "#f8fafc", color: "#0f172a" } }}>
               <LogoutIcon sx={{ fontSize: 14 }} />
@@ -552,6 +564,8 @@ export default function Shell() {
   const [openSection, setOpenSection] = useState<string | null>(null)
   const [openSubSection, setOpenSubSection] = useState<string | null>(null)
   const [breadcrumbs, setBreadcrumbsState] = useState<Crumb[]>([])
+  // Non-reset primary record ref (see context type). Owned by the detail shell.
+  const [primaryRecordLabel, setPrimaryRecordLabelState] = useState<string | null>(null)
   const [hideModuleLabel, setHideModuleLabelState] = useState(false)
   const [pageFullBleed, setPageFullBleedState] = useState(false)
   const [flyout, setFlyout] = useState<
@@ -560,10 +574,16 @@ export default function Shell() {
     | null
   >(null)
 
-  const recordLabel = breadcrumbs.length > 0 ? breadcrumbs[breadcrumbs.length - 1].label : null
+  // The primary record ref (mount/unmount-owned, not reset) wins over the shared
+  // breadcrumbs[] trail; falls back to breadcrumbs[] when no record shell is mounted.
+  const effectiveBreadcrumbs = primaryRecordLabel ? [{ label: primaryRecordLabel }] : breadcrumbs
+  const recordLabel = effectiveBreadcrumbs.length > 0 ? effectiveBreadcrumbs[effectiveBreadcrumbs.length - 1].label : null
 
   const setRecordLabel = React.useCallback((l: string | null) => {
     setBreadcrumbsState(l ? [{ label: l }] : [])
+  }, [])
+  const setPrimaryRecordLabel = React.useCallback((l: string | null) => {
+    setPrimaryRecordLabelState(l ? l : null)
   }, [])
   const setBreadcrumbs = React.useCallback((crumbs: Crumb[]) => {
     setBreadcrumbsState(crumbs)
@@ -586,8 +606,8 @@ export default function Shell() {
   }, [])
 
   const breadcrumbValue = React.useMemo(
-    () => ({ setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed, setNavCollapsed }),
-    [setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed, setNavCollapsed]
+    () => ({ setRecordLabel, setPrimaryRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed, setNavCollapsed }),
+    [setRecordLabel, setPrimaryRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed, setNavCollapsed]
   )
 
   // Auto-reset breadcrumbs and module-label hide whenever the route changes.
@@ -724,6 +744,11 @@ export default function Shell() {
   }
 
   // ── Sidebar nav ───────────────────────────────────────────────────────
+  // On mobile the menu is a full-width temporary drawer — the desktop collapse
+  // (icon rail + flyouts) has no meaning there, so the nav is always expanded.
+  // This also prevents the navigator's collapse-on-drill (which latches
+  // sidebarExpanded=false) from leaking into the mobile drawer.
+  const navExpanded = isMobile || sidebarExpanded
   const sidebarNav = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", bgcolor: "#0d1526" }}>
 
@@ -735,7 +760,7 @@ export default function Shell() {
         borderBottom: "1px solid rgba(255,255,255,0.06)",
       }}>
         {/* Hamburger — pinned to the left */}
-        <IconButton size="small" onClick={() => setSidebarExpanded(e => !e)} sx={{
+        <IconButton size="small" onClick={isMobile ? () => setMobileOpen(false) : () => setSidebarExpanded(e => !e)} sx={{
           position: "absolute", left: "8px",
           width: 36, height: 36, flexShrink: 0, color: "#64748b", borderRadius: "6px",
           transition: "color 0.15s, background-color 0.12s",
@@ -744,7 +769,7 @@ export default function Shell() {
           <MenuIcon sx={{ fontSize: 20 }} />
         </IconButton>
         {/* Logo — centred in the full sidebar width */}
-        <FadeBox visible={sidebarExpanded} maxW={180}>
+        <FadeBox visible={navExpanded} maxW={180}>
           <img src="/ad-logo-white-new.svg" alt="Assured Digital" style={{ height: 28, width: "auto", objectFit: "contain", maxWidth: 160, display: "block" }} />
         </FadeBox>
       </Box>
@@ -756,7 +781,7 @@ export default function Shell() {
         {personalItems.some(i => hasAnyRole(i.roles)) ? (
           <List dense disablePadding sx={{ px: 1, mb: "4px" }}>
             {personalItems.filter(i => hasAnyRole(i.roles)).map(item => (
-              <NavItem key={item.path} item={item} selected={loc.pathname === item.path} onClick={() => navigateTo(item.path)} expanded={sidebarExpanded} />
+              <NavItem key={item.path} item={item} selected={loc.pathname === item.path} onClick={() => navigateTo(item.path)} expanded={navExpanded} />
             ))}
           </List>
         ) : null}
@@ -771,9 +796,9 @@ export default function Shell() {
 
           return (
             <CollapsibleSection key={section.title} title={section.title} icon={section.icon}
-              isOpen={isOpen} hasActive={hasActive} expanded={sidebarExpanded}
+              isOpen={isOpen} hasActive={hasActive} expanded={navExpanded}
               onToggle={(e) => {
-                if (!sidebarExpanded) {
+                if (!navExpanded) {
                   const target = e.currentTarget as HTMLElement
                   const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
                   setFlyout(prev => prev?.kind === "section" && prev.title === section.title ? null : { kind: "section", title: section.title, items: flyoutItems, anchor: target })
@@ -787,7 +812,7 @@ export default function Shell() {
                 disablePadding
                 sx={{
                   px: 1, pt: "2px", pb: "4px",
-                  ...(sidebarExpanded ? {
+                  ...(navExpanded ? {
                     position: "relative",
                     pl: "18px",
                     ml: "8px",
@@ -807,10 +832,10 @@ export default function Shell() {
                   'kind' in entry
                     ? <NavSubGroup key={entry.label} group={entry} open={openSubSection === entry.label}
                         onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
-                        pathname={loc.pathname} onNavigate={navigateTo} expanded={sidebarExpanded} />
+                        pathname={loc.pathname} onNavigate={navigateTo} expanded={navExpanded} />
                     : <NavItem key={entry.path} item={entry}
                         selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
-                        onClick={() => navigateTo(entry.path)} expanded={sidebarExpanded} />
+                        onClick={() => navigateTo(entry.path)} expanded={navExpanded} />
                 )}
               </List>
             </CollapsibleSection>
@@ -822,21 +847,21 @@ export default function Shell() {
         {/* Client scope — always shown; list source differs by role (see clientList) */}
         <Box sx={{ mx: "6px", mb: "4px" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: "10px", px: "10px", pb: "6px" }}>
-            <Tooltip title={!sidebarExpanded ? (selectedClient ? `Client: ${selectedClient.name}` : "Select client") : ""} placement="right">
+            <Tooltip title={!navExpanded ? (selectedClient ? `Client: ${selectedClient.name}` : "Select client") : ""} placement="right">
               <Box
-                onClick={!sidebarExpanded ? e => { const t = e.currentTarget as HTMLElement; setFlyout(prev => prev?.kind === "client" ? null : { kind: "client", anchor: t }) } : undefined}
-                sx={{ flexShrink: 0, width: ICON_SIZE, height: ICON_SIZE, display: "flex", alignItems: "center", justifyContent: "center", cursor: !sidebarExpanded ? "pointer" : "default", color: selectedClientId ? "#7db4f5" : "#475569" }}
+                onClick={!navExpanded ? e => { const t = e.currentTarget as HTMLElement; setFlyout(prev => prev?.kind === "client" ? null : { kind: "client", anchor: t }) } : undefined}
+                sx={{ flexShrink: 0, width: ICON_SIZE, height: ICON_SIZE, display: "flex", alignItems: "center", justifyContent: "center", cursor: !navExpanded ? "pointer" : "default", color: selectedClientId ? "#7db4f5" : "#475569" }}
               >
                 <BusinessIcon sx={{ fontSize: ICON_SIZE }} />
               </Box>
             </Tooltip>
-            <FadeBox visible={sidebarExpanded} maxW={160}>
+            <FadeBox visible={navExpanded} maxW={160}>
               <Typography sx={{ fontSize: 10.5, fontWeight: 500, letterSpacing: "0.07em", textTransform: "uppercase", color: "#64748b", whiteSpace: "nowrap" }}>
                 Client scope
               </Typography>
             </FadeBox>
           </Box>
-          <Box sx={{ maxHeight: sidebarExpanded ? 56 : 0, opacity: sidebarExpanded ? 1 : 0, overflow: "hidden", transition: "max-height 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease" }}>
+          <Box sx={{ maxHeight: navExpanded ? 56 : 0, opacity: navExpanded ? 1 : 0, overflow: "hidden", transition: "max-height 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease" }}>
             <Select size="small" value={selectedClientId} onChange={e => handleClientChange(e.target.value)} displayEmpty IconComponent={KeyboardArrowDownIcon}
               sx={{ width: "100%", fontSize: 13, color: selectedClientId ? "#e2e8f0" : "#64748b", bgcolor: "rgba(255,255,255,0.04)", borderRadius: "6px", border: selectedClientId ? "1px solid rgba(255,255,255,0.1)" : "1px dashed rgba(255,255,255,0.08)", "& .MuiOutlinedInput-notchedOutline": { border: "none" }, "& .MuiSvgIcon-root": { color: "#64748b", fontSize: 16 }, "& .MuiSelect-select": { py: "7px", px: "10px" }, "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
               <MenuItem value="" sx={{ fontSize: 13, color: "#94a3b8" }}>— Select client —</MenuItem>
@@ -859,7 +884,7 @@ export default function Shell() {
               if (!section.title) {
                 return visible.filter((i): i is NavItem => !('kind' in i)).map(item => (
                   <List key={item.path} dense disablePadding sx={{ px: 1, pt: "2px" }}>
-                    <NavItem item={item} selected={loc.pathname === "/dashboard"} onClick={() => navigateTo(item.path)} expanded={sidebarExpanded} />
+                    <NavItem item={item} selected={loc.pathname === "/dashboard"} onClick={() => navigateTo(item.path)} expanded={navExpanded} />
                   </List>
                 ))
               }
@@ -869,9 +894,9 @@ export default function Shell() {
 
               return (
                 <CollapsibleSection key={section.title} title={section.title} icon={section.icon}
-                  isOpen={isOpen} hasActive={hasActive} expanded={sidebarExpanded}
+                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded}
                   onToggle={(e) => {
-                    if (!sidebarExpanded) {
+                    if (!navExpanded) {
                       const target = e.currentTarget as HTMLElement
                       const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
                       setFlyout(prev => prev?.kind === "section" && prev.title === section.title ? null : { kind: "section", title: section.title, items: flyoutItems, anchor: target })
@@ -885,7 +910,7 @@ export default function Shell() {
                     disablePadding
                     sx={{
                       px: 1, pt: "2px", pb: "4px",
-                      ...(sidebarExpanded ? {
+                      ...(navExpanded ? {
                         position: "relative",
                         pl: "18px",
                         ml: "8px",
@@ -905,17 +930,17 @@ export default function Shell() {
                       'kind' in entry
                         ? <NavSubGroup key={entry.label} group={entry} open={openSubSection === entry.label}
                             onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
-                            pathname={loc.pathname} onNavigate={navigateTo} expanded={sidebarExpanded} />
+                            pathname={loc.pathname} onNavigate={navigateTo} expanded={navExpanded} />
                         : <NavItem key={entry.path} item={entry}
                             selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
-                            onClick={() => navigateTo(entry.path)} expanded={sidebarExpanded} />
+                            onClick={() => navigateTo(entry.path)} expanded={navExpanded} />
                     )}
                   </List>
                 </CollapsibleSection>
               )
             })}
           </>
-        ) : !sidebarExpanded ? null : (
+        ) : !navExpanded ? null : (
           <Box sx={{ px: "16px", py: "12px" }}>
             <Typography sx={{ fontSize: 12, color: "#334155", lineHeight: 1.6 }}>Select a client above to view their service data.</Typography>
           </Box>
@@ -1017,7 +1042,7 @@ export default function Shell() {
               >
                 <Typography sx={{
                   fontSize: 14,
-                  color: breadcrumbs.length > 0 ? "#a3b4c9" : "#e2e8f0",
+                  color: effectiveBreadcrumbs.length > 0 ? "#a3b4c9" : "#e2e8f0",
                   fontWeight: 500,
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                 }}>
@@ -1027,7 +1052,7 @@ export default function Shell() {
             ) : null}
 
             {/* Record reference — one or more segments after the nav label */}
-            <RecordBreadcrumbTrail breadcrumbs={breadcrumbs} nav={nav} />
+            <RecordBreadcrumbTrail breadcrumbs={effectiveBreadcrumbs} nav={nav} />
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
             <IconButton size="small" sx={{ width: 36, height: 36, color: "#64748b", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" } }}><HelpOutlineIcon sx={{ fontSize: 18 }} /></IconButton>

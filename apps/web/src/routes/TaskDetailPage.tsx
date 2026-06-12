@@ -1,21 +1,16 @@
 import React from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert,
   Box,
-  Button,
   Chip,
-  Divider,
-  Paper,
   Snackbar,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import LinkIcon from "@mui/icons-material/Link"
 import AttachFileIcon from "@mui/icons-material/AttachFile"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
@@ -34,9 +29,16 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { useActivityFilter } from "../lib/useActivityFilter"
 import {
+  EditableTitleCard,
+  useDetailNarrow,
+  ActivityTabs,
+  ActivityCommentBox,
   RecordDetailShell,
+  SectionPanel,
   TransitionDialog,
+  type ActivityFilter,
   type CentreSection,
   type DetailField,
   type MoreMenuItem,
@@ -51,7 +53,7 @@ import { transitions as taskTransitions } from "../config/transitions/taskTransi
 import { useBreadcrumb } from "./Shell"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
-import { AttachmentsContent } from "../components/AttachmentsContent"
+import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
@@ -110,17 +112,6 @@ type FeedEvent = {
   time: string
   createdAt: string
 }
-
-const FILTER_VALUES = ["all", "comment", "status", "assignment", "link"] as const
-type ActivityFilter = typeof FILTER_VALUES[number]
-
-const FILTER_OPTIONS: { value: ActivityFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "comment", label: "Comments" },
-  { value: "status", label: "Status" },
-  { value: "assignment", label: "Assignments" },
-  { value: "link", label: "Links" },
-]
 
 type EditableField = "priority" | "assigneeId" | "title" | "description"
 
@@ -346,178 +337,6 @@ const FEED_VISUALS: Record<FeedEventType, FeedVisual> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Inline editable text (spec section 5.1)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface InlineEditableProps {
-  value: string
-  placeholder?: string
-  multiline?: boolean
-  ariaLabel: string
-  onCommit: (next: string) => void
-  textSx?: object
-}
-
-const InlineEditable = React.memo(function InlineEditable({
-  value,
-  placeholder,
-  multiline = false,
-  ariaLabel,
-  onCommit,
-  textSx,
-}: InlineEditableProps) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const [editing, setEditing] = React.useState(false)
-
-  React.useLayoutEffect(() => {
-    if (!editing && ref.current && ref.current.innerText !== value) {
-      ref.current.innerText = value
-    }
-  }, [value, editing])
-
-  const handleClick = React.useCallback(() => {
-    if (editing) return
-    setEditing(true)
-    requestAnimationFrame(() => {
-      const el = ref.current
-      if (!el) return
-      el.focus()
-      const sel = window.getSelection()
-      if (sel) {
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        sel.removeAllRanges()
-        sel.addRange(range)
-      }
-    })
-  }, [editing])
-
-  const commit = React.useCallback(() => {
-    const el = ref.current
-    const next = (el?.innerText ?? "").trim()
-    if (!next) {
-      if (el) el.innerText = value
-    } else if (next !== value) {
-      onCommit(next)
-    }
-    setEditing(false)
-  }, [value, onCommit])
-
-  const handleKey = React.useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        if (ref.current) ref.current.innerText = value
-        setEditing(false)
-        ref.current?.blur()
-      }
-      if (!multiline && e.key === "Enter") {
-        e.preventDefault()
-        ref.current?.blur()
-      }
-    },
-    [value, multiline]
-  )
-
-  const isEmpty = !value && !editing
-
-  return (
-    <Box
-      ref={ref}
-      role="textbox"
-      aria-label={ariaLabel}
-      contentEditable={editing}
-      suppressContentEditableWarning
-      onClick={handleClick}
-      onBlur={commit}
-      onKeyDown={handleKey}
-      sx={{
-        outline: "none",
-        cursor: editing ? "text" : "pointer",
-        borderRadius: 1,
-        px: 0.75,
-        py: 0.5,
-        whiteSpace: multiline ? "pre-wrap" : "normal",
-        border: "1.5px solid",
-        borderColor: editing ? "primary.main" : "transparent",
-        bgcolor: "transparent",
-        color: isEmpty ? "text.disabled" : "text.primary",
-        "&:hover": editing ? undefined : { bgcolor: "action.hover" },
-        ...textSx,
-      }}
-    >
-      {isEmpty ? placeholder ?? "" : null}
-    </Box>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Title card (spec section 5.1)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface TaskTitleCardProps {
-  title: string
-  description: string
-  onCommitTitle: (next: string) => void
-  onCommitDescription: (next: string) => void
-}
-
-const TaskTitleCard = React.memo(function TaskTitleCard({
-  title,
-  description,
-  onCommitTitle,
-  onCommitDescription,
-}: TaskTitleCardProps) {
-  return (
-    <Box sx={{ mb: 2.5 }}>
-      <Typography
-        variant="caption"
-        color="text.tertiary"
-        sx={{ fontWeight: 500, display: "block", mb: 0.5 }}
-      >
-        Subject
-      </Typography>
-      <InlineEditable
-        value={title}
-        ariaLabel="Task title"
-        onCommit={onCommitTitle}
-        textSx={{
-          fontSize: "1.25rem",
-          fontWeight: 500,
-          lineHeight: 1.6,
-          fontFamily: "'Space Grotesk', sans-serif",
-          px: 0,
-          mx: 0,
-        }}
-      />
-
-      <Typography
-        variant="caption"
-        color="text.tertiary"
-        sx={{ fontWeight: 500, display: "block", mt: 1.5, mb: 0.5 }}
-      >
-        Description
-      </Typography>
-      <InlineEditable
-        value={description}
-        placeholder="Add a description"
-        multiline
-        ariaLabel="Task description"
-        onCommit={onCommitDescription}
-        textSx={{
-          fontSize: "0.8125rem",
-          lineHeight: 1.5,
-          color: "text.secondary",
-          px: 0,
-          mx: 0,
-        }}
-      />
-    </Box>
-  )
-})
-
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Activity section (spec section 6)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -616,72 +435,17 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
-  const handleFilterClick = React.useCallback(
-    (filter: ActivityFilter) => () => onFilterChange(filter),
-    [onFilterChange]
-  )
-
-  const handleNoteFieldChange = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => onNoteChange(e.target.value),
-    [onNoteChange]
-  )
-
   return (
     <Box>
-      <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: "wrap" }}>
-        {FILTER_OPTIONS.map((opt) => {
-          const isActive = activeFilter === opt.value
-          return (
-            <Chip
-              key={opt.value}
-              size="small"
-              label={opt.label}
-              onClick={handleFilterClick(opt.value)}
-              variant={isActive ? "filled" : "outlined"}
-              color={isActive ? "primary" : "default"}
-            />
-          )
-        })}
-      </Stack>
+      <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {activeFilter === "comment" ? (
-        <Paper variant="outlined" sx={{ overflow: "hidden", mb: 1.75 }}>
-          <TextField
-            multiline
-            minRows={2}
-            fullWidth
-            placeholder="Add a work note..."
-            variant="outlined"
-            size="small"
-            value={noteValue}
-            onChange={handleNoteFieldChange}
-            sx={{
-              "& .MuiOutlinedInput-root": {
-                "& fieldset": { border: 0 },
-                "&:hover fieldset": { border: 0 },
-                "&.Mui-focused fieldset": { border: 0 },
-              },
-            }}
-          />
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "flex-end",
-              p: 0.75,
-              borderTop: "0.5px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Button
-              variant="contained"
-              size="small"
-              disabled={!noteValue.trim() || savingNote}
-              onClick={onPostNote}
-            >
-              Post note
-            </Button>
-          </Box>
-        </Paper>
+        <ActivityCommentBox
+          value={noteValue}
+          onChange={onNoteChange}
+          saving={savingNote}
+          onPost={onPostNote}
+        />
       ) : null}
 
       {events.length === 0 ? (
@@ -711,15 +475,19 @@ export default function TaskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
   const { setPageFullBleed } = useBreadcrumb()
+  const narrow = useDetailNarrow()
 
   // Render flush in the Shell content area (no surrounding padding/frame), matching
   // the Service Request detail page, whose ServiceDeskPage wrapper sets this.
+  // In the narrow association-peek drawer the main ticket page behind owns full-bleed;
+  // the drawer instance must NOT touch it, else its unmount on close clobbers the main
+  // page's state (same rule as the breadcrumb label — see RecordDetailShell).
   React.useEffect(() => {
+    if (narrow) return
     setPageFullBleed(true)
     return () => setPageFullBleed(false)
-  }, [setPageFullBleed])
+  }, [narrow, setPageFullBleed])
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -728,35 +496,14 @@ export default function TaskDetailPage() {
     ROLES.ENGINEER,
   ])
 
-  const activityParam = searchParams.get("activity")
-  const activeFilter: ActivityFilter = React.useMemo(() => {
-    if (activityParam && (FILTER_VALUES as readonly string[]).includes(activityParam)) {
-      return activityParam as ActivityFilter
-    }
-    return "all"
-  }, [activityParam])
-
-  const handleFilterChange = React.useCallback(
-    (filter: ActivityFilter) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          if (filter === "all") next.delete("activity")
-          else next.set("activity", filter)
-          return next
-        },
-        { replace: true }
-      )
-    },
-    [setSearchParams]
-  )
+  const { activeFilter, handleFilterChange, resetFilterAfterComment } =
+    useActivityFilter()
 
   const [error, setError] = React.useState("")
   const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
   const [transitionTarget, setTransitionTarget] = React.useState<Transition | null>(null)
   const [linkCopied, setLinkCopied] = React.useState(false)
-  const [activityOpen, setActivityOpen] = React.useState(true)
 
   // ── Queries (preserved exactly) ────────────────────────────────────────────
 
@@ -812,20 +559,11 @@ export default function TaskDetailPage() {
       setWorkNoteBody("")
       qc.invalidateQueries({ queryKey: ["work-notes-task", id] })
       qc.invalidateQueries({ queryKey: ["audit-task", id] })
-      if (activeFilter !== "all") {
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.delete("activity")
-            return next
-          },
-          { replace: true }
-        )
-      }
+      resetFilterAfterComment()
     } finally {
       setSavingNote(false)
     }
-  }, [activeFilter, id, qc, setSearchParams, workNoteBody])
+  }, [id, qc, resetFilterAfterComment, workNoteBody])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, comment }: { to: string; comment?: string }) =>
@@ -878,6 +616,8 @@ export default function TaskDetailPage() {
 
   const [linkDialogOpen, setLinkDialogOpen] = React.useState(false)
   const handleAddLink = React.useCallback(() => setLinkDialogOpen(true), [])
+  // Lets the Attachments section-header "+" open the (encapsulated) file picker.
+  const attachRef = React.useRef<AttachmentsHandle>(null)
   const unlinkMutation = useMutation({
     mutationFn: (linkId: string) => deleteRecordLink(linkId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["task-detail", id] }),
@@ -1121,7 +861,7 @@ export default function TaskDetailPage() {
                 fontWeight: isOverdue ? 600 : 400,
               }}
             >
-              {formatDate(task.dueAt)}
+              {task.dueAt ? formatDate(task.dueAt) : "N/A"}
             </Typography>
           </Box>
         ),
@@ -1139,45 +879,17 @@ export default function TaskDetailPage() {
         title: "",
         flush: true,
         content: (
-          <Box sx={{ mb: 0 }}>
-            <Divider sx={{ my: 2.5 }} />
-            <Box
-              onClick={() => setActivityOpen((o) => !o)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                cursor: "pointer",
-                mb: 1.5,
-                userSelect: "none",
-              }}
-            >
-              <ExpandMoreIcon
-                sx={{
-                  fontSize: 16,
-                  color: "text.secondary",
-                  transform: activityOpen ? "none" : "rotate(-90deg)",
-                  transition: "transform .15s",
-                }}
-              />
-              <Typography variant="caption" fontWeight={500} color="text.secondary">
-                Activity
-              </Typography>
-            </Box>
-            {activityOpen && (
-              <Box>
-                <ActivityContent
-                  events={visibleFeedEvents}
-                  activeFilter={activeFilter}
-                  onFilterChange={handleFilterChange}
-                  noteValue={workNoteBody}
-                  onNoteChange={setWorkNoteBody}
-                  savingNote={savingNote}
-                  onPostNote={handleAddNote}
-                />
-              </Box>
-            )}
-          </Box>
+          <SectionPanel title="Activity">
+            <ActivityContent
+              events={visibleFeedEvents}
+              activeFilter={activeFilter}
+              onFilterChange={handleFilterChange}
+              noteValue={workNoteBody}
+              onNoteChange={setWorkNoteBody}
+              savingNote={savingNote}
+              onPostNote={handleAddNote}
+            />
+          </SectionPanel>
         ),
       },
     ]
@@ -1189,7 +901,6 @@ export default function TaskDetailPage() {
     workNoteBody,
     savingNote,
     handleAddNote,
-    activityOpen,
   ])
 
   // ── Right sections ─────────────────────────────────────────────────────────
@@ -1210,12 +921,15 @@ export default function TaskDetailPage() {
         title: "Attachments",
         icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
         defaultOpen: false,
+        headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
           <AttachmentsContent
+            ref={attachRef}
             attachments={task?.attachments ?? []}
             recordType="task"
             recordId={task?.id ?? ""}
             onChanged={() => qc.invalidateQueries({ queryKey: ["task-detail", id] })}
+            showAddButton={false}
           />
         ),
       },
@@ -1224,8 +938,14 @@ export default function TaskDetailPage() {
         title: "Linked records",
         icon: <LinkIcon sx={{ fontSize: 12 }} />,
         defaultOpen: true,
+        headerAdd: { onClick: handleAddLink, tooltip: "Link record" },
         content: (
-          <LinkedRecordsContent links={links} onAddLink={handleAddLink} onUnlink={handleUnlink} />
+          <LinkedRecordsContent
+            links={links}
+            onAddLink={handleAddLink}
+            onUnlink={handleUnlink}
+            showAddButton={false}
+          />
         ),
       },
     ]
@@ -1267,7 +987,7 @@ export default function TaskDetailPage() {
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={
-          <TaskTitleCard
+          <EditableTitleCard
             title={task.title}
             description={task.description ?? ""}
             onCommitTitle={handleCommitTitle}

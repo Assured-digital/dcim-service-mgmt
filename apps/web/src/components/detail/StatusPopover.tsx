@@ -74,7 +74,7 @@ function StatusPopoverImpl({
           sx={{
             border: "0.5px solid",
             borderColor: "divider",
-            borderRadius: "10px",
+            borderRadius: 1,
             padding: "6px",
             minWidth: 220,
           }}

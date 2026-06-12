@@ -1,5 +1,5 @@
 import React from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -8,10 +8,8 @@ import {
   Button,
   Chip,
   Divider,
-  Paper,
   Snackbar,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
@@ -32,9 +30,14 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { useActivityFilter } from "../lib/useActivityFilter"
 import {
+  ActivityCommentBox,
+  ActivityTabs,
   RecordDetailShell,
+  SectionPanel,
   StatusPopover,
+  type ActivityFilter,
   type CentreSection,
   type DetailField,
   type MoreMenuItem,
@@ -46,7 +49,7 @@ import {
 } from "../components/detail"
 import { useBreadcrumb } from "./Shell"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
-import { AttachmentsContent } from "../components/AttachmentsContent"
+import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,17 +95,6 @@ interface LinkedEntity {
   id: string
   label: string
 }
-
-const FILTER_VALUES = ["all", "comment", "status", "assignment", "link"] as const
-type ActivityFilter = typeof FILTER_VALUES[number]
-
-const FILTER_OPTIONS: { value: ActivityFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "comment", label: "Comments" },
-  { value: "status", label: "Status" },
-  { value: "assignment", label: "Assignments" },
-  { value: "link", label: "Links" },
-]
 
 type EditableField =
   | "workType"
@@ -611,11 +603,15 @@ const WorkDetailsContent = React.memo(function WorkDetailsContent({
 interface LinkedRecordsContentProps {
   entities: LinkedEntity[]
   onAddLink: () => void
+  // Inline "Link record" button below the list. The shell page hoists the add
+  // action to the section header "+", so it passes false.
+  showAddButton?: boolean
 }
 
 const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   entities,
   onAddLink,
+  showAddButton = true,
 }: LinkedRecordsContentProps) {
   return (
     <Box>
@@ -684,15 +680,17 @@ const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
           )
         })
       )}
-      <Button
-        variant="text"
-        size="small"
-        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-        onClick={onAddLink}
-        sx={{ textTransform: "none", mt: 0.25 }}
-      >
-        Link record
-      </Button>
+      {showAddButton ? (
+        <Button
+          variant="text"
+          size="small"
+          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+          onClick={onAddLink}
+          sx={{ textTransform: "none", mt: 0.25 }}
+        >
+          Link record
+        </Button>
+      ) : null}
     </Box>
   )
 })
@@ -800,72 +798,17 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
-  const handleFilterClick = React.useCallback(
-    (filter: ActivityFilter) => () => onFilterChange(filter),
-    [onFilterChange]
-  )
-
-  const handleNoteFieldChange = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => onNoteChange(e.target.value),
-    [onNoteChange]
-  )
-
   return (
     <Box>
-      <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: "wrap" }}>
-        {FILTER_OPTIONS.map((opt) => {
-          const isActive = activeFilter === opt.value
-          return (
-            <Chip
-              key={opt.value}
-              size="small"
-              label={opt.label}
-              onClick={handleFilterClick(opt.value)}
-              variant={isActive ? "filled" : "outlined"}
-              color={isActive ? "primary" : "default"}
-            />
-          )
-        })}
-      </Stack>
+      <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {composeEnabled && activeFilter === "comment" ? (
-        <Paper variant="outlined" sx={{ overflow: "hidden", mb: 1.75 }}>
-          <TextField
-            multiline
-            minRows={2}
-            fullWidth
-            placeholder="Add a work note..."
-            variant="outlined"
-            size="small"
-            value={noteValue}
-            onChange={handleNoteFieldChange}
-            sx={{
-              "& .MuiOutlinedInput-root": {
-                "& fieldset": { border: 0 },
-                "&:hover fieldset": { border: 0 },
-                "&.Mui-focused fieldset": { border: 0 },
-              },
-            }}
-          />
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "flex-end",
-              p: 0.75,
-              borderTop: "0.5px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Button
-              variant="contained"
-              size="small"
-              disabled={!noteValue.trim() || savingNote}
-              onClick={onPostNote}
-            >
-              Post note
-            </Button>
-          </Box>
-        </Paper>
+        <ActivityCommentBox
+          value={noteValue}
+          onChange={onNoteChange}
+          saving={savingNote}
+          onPost={onPostNote}
+        />
       ) : null}
 
       {events.length === 0 ? (
@@ -889,7 +832,6 @@ export default function MaintenanceDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
   const { setPageFullBleed } = useBreadcrumb()
 
   // Render flush in the Shell content area (no surrounding padding/frame), matching
@@ -907,34 +849,12 @@ export default function MaintenanceDetailPage() {
   ])
   const canDelete = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
 
-  const activityParam = searchParams.get("activity")
-  const activeFilter: ActivityFilter = React.useMemo(() => {
-    if (activityParam && (FILTER_VALUES as readonly string[]).includes(activityParam)) {
-      return activityParam as ActivityFilter
-    }
-    return "all"
-  }, [activityParam])
-
-  const handleFilterChange = React.useCallback(
-    (filter: ActivityFilter) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          if (filter === "all") next.delete("activity")
-          else next.set("activity", filter)
-          return next
-        },
-        { replace: true }
-      )
-    },
-    [setSearchParams]
-  )
+  const { activeFilter, handleFilterChange } = useActivityFilter()
 
   const [error, setError] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
   const [linkCopied, setLinkCopied] = React.useState(false)
   const [workDetailsOpen, setWorkDetailsOpen] = React.useState(true)
-  const [activityOpen, setActivityOpen] = React.useState(true)
   const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote] = React.useState(false)
 
@@ -1043,6 +963,8 @@ export default function MaintenanceDetailPage() {
   const handleAddLink = React.useCallback(() => {
     // TODO: link entity dialog
   }, [])
+  // Lets the Attachments section-header "+" open the (encapsulated) file picker.
+  const attachRef = React.useRef<AttachmentsHandle>(null)
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -1271,51 +1193,24 @@ export default function MaintenanceDetailPage() {
         title: "",
         flush: true,
         content: (
-          <Box sx={{ mb: 0 }}>
-            <Divider sx={{ my: 2.5 }} />
-            <Box
-              onClick={() => setActivityOpen((o) => !o)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                cursor: "pointer",
-                mb: 1.5,
-                userSelect: "none",
-              }}
-            >
-              <ExpandMoreIcon
-                sx={{
-                  fontSize: 16,
-                  color: "text.secondary",
-                  transform: activityOpen ? "none" : "rotate(-90deg)",
-                  transition: "transform .15s",
-                }}
-              />
-              <Typography variant="caption" fontWeight={500} color="text.secondary">
-                Activity
-              </Typography>
-            </Box>
-            {activityOpen && (
-              <ActivityContent
-                events={visibleFeedEvents}
-                activeFilter={activeFilter}
-                onFilterChange={handleFilterChange}
-                composeEnabled={false}
-                noteValue={workNoteBody}
-                onNoteChange={setWorkNoteBody}
-                savingNote={savingNote}
-                onPostNote={handleAddNote}
-              />
-            )}
-          </Box>
+          <SectionPanel title="Activity">
+            <ActivityContent
+              events={visibleFeedEvents}
+              activeFilter={activeFilter}
+              onFilterChange={handleFilterChange}
+              composeEnabled={false}
+              noteValue={workNoteBody}
+              onNoteChange={setWorkNoteBody}
+              savingNote={savingNote}
+              onPostNote={handleAddNote}
+            />
+          </SectionPanel>
         ),
       },
     ]
   }, [
     recordData,
     workDetailsOpen,
-    activityOpen,
     performedByLabel,
     handleSelectWorkType,
     handleCommitWorkTypeOther,
@@ -1346,12 +1241,15 @@ export default function MaintenanceDetailPage() {
         title: "Attachments",
         icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
         defaultOpen: false,
+        headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
           <AttachmentsContent
+            ref={attachRef}
             attachments={recordData?.attachments ?? []}
             recordType="maintenance"
             recordId={recordData?.id ?? ""}
             onChanged={() => qc.invalidateQueries({ queryKey: ["maintenance", id] })}
+            showAddButton={false}
           />
         ),
       },
@@ -1360,8 +1258,13 @@ export default function MaintenanceDetailPage() {
         title: "Linked records",
         icon: <LinkIcon sx={{ fontSize: 12 }} />,
         defaultOpen: false,
+        headerAdd: { onClick: handleAddLink, tooltip: "Link record" },
         content: (
-          <LinkedRecordsContent entities={linkedEntities} onAddLink={handleAddLink} />
+          <LinkedRecordsContent
+            entities={linkedEntities}
+            onAddLink={handleAddLink}
+            showAddButton={false}
+          />
         ),
       },
     ]

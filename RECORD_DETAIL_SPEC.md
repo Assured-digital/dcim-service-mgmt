@@ -13,8 +13,13 @@ Read this entire document before writing any code.
 
 All detail pages render `RecordDetailShell` as their root element. The shell owns:
 
-- The top bar (back button, ref pill, type badge, status button, ... menu)
-- The two-column layout (scrollable centre, fixed right panel)
+- The two-column layout (scrollable centre, fixed right panel). **There is no top bar** — it was
+  removed; its contents were relocated (see §2/§3): the **status cluster** (status button + `…` menu)
+  sits at the **top of the right column**, and the **Reference** (and Type, via the page's own field)
+  live in the Details panel.
+- The `statusCluster` (status button + `…` overflow) — a single control rendered at the right-column
+  top on the main page, or **portaled into the drawer header** when the shell renders inside the narrow
+  association-peek drawer (see §2.2).
 - The `StatusPopover` component (shared, reusable)
 - Global click-outside handling to close any open popover
 
@@ -25,8 +30,10 @@ interface RecordDetailShellProps {
   // Top bar
   backLabel?: string                    // defaults to "Back"
   onBack?: () => void                   // defaults to navigate(-1)
-  recordRef: string                     // e.g. "IN-2026-6620"
-  typeBadge: React.ReactNode            // coloured badge chip e.g. "INC"
+  recordRef: string                     // e.g. "IN-2026-6620" — shown in the Details panel + breadcrumb
+  typeBadge: React.ReactNode            // RETAINED for API compatibility but no longer rendered by the
+                                        // shell (the type reads from the page's own "Type" detailField;
+                                        // a relocated chip would duplicate it)
   currentStatus: string                 // e.g. "INVESTIGATING"
   statusConfig: StatusConfig            // defines all statuses and their appearance
   onStatusChange: (to: string, dialogData?: Record<string, string>) => void
@@ -34,12 +41,12 @@ interface RecordDetailShellProps {
 
   // Centre column slots
   titleCard: React.ReactNode            // subject + description (always present)
-  detailFields: DetailField[]           // the "Details" key-value list — rendered in the CENTRE, after the title card and before `sections`
-  metadata?: RecordMetadata             // Submitted by / Created / Updated — rendered under the Details list
-  sections: CentreSection[]            // ordered centre sections after Details (Activity, plus type-specific ones like Implementation/Assessment)
+  rightSections?: RightSection[]        // the associations — rendered in the CENTRE as Jira panels, reordered Linked → Tasks → Attachments (legacy prop name; pre-dates the move from the right column)
+  sections: CentreSection[]            // ordered centre sections after the associations (Activity, plus type-specific ones like Implementation/Assessment)
 
-  // Right panel slots — always-visible (non-collapsible) sections
-  rightSections?: RightSection[]        // the associations: Tasks, Attachments, Linked records
+  // Right panel slots — the Details fields only (always-visible, non-collapsible)
+  detailFields: DetailField[]           // the "Details" key-value list — rendered in the RIGHT column
+  metadata?: RecordMetadata             // Submitted by / Created / Updated — rendered under the Details list
 
   // State
   loading?: boolean
@@ -62,62 +69,93 @@ Page files should be thin. Heavy logic lives in the shell and shared components.
 
 ## 2. Layout
 
+**No top bar.** The shell is two columns; the status cluster sits at the top of the right column.
+
 ```
-┌─ Top bar (full width, 44px) ─────────────────────────────────────────────┐
-│  ← Back   REF-PILL   TYPE-BADGE         [Status▾]  [...]                │
-├─────────────────────────────────────────┬────────────────────────────────┤
-│  CENTRE (flex:1, scrollable)            │  RIGHT (280px, scrollable)     │
-│  = the record itself                    │  = its associations            │
-│                                         │                                │
-│  Subject                                │  Tasks            (no chevron) │
-│  [Title]                                │    [task rows]                 │
-│  Description                            │    + Add task                  │
-│  [Description text]                     │  ──────────────────────────    │
-│  ─ divider ─                            │  Attachments                   │
-│  Details        (≤420px, no chevron)    │    file.pcap                   │
-│    Type       Incident                  │    + Attach file               │
-│    Severity   MEDIUM ▾                  │  ──────────────────────────    │
-│    Priority   Medium ▾                  │  Linked records                │
-│    Assignee   Unassigned ▾              │    [record rows]               │
-│    ───────────────────                  │    + Link record               │
-│    Submitted by  —                      │                                │
-│    Created    29 Apr, 11:36             │                                │
-│    Updated    29 Apr, 20:52             │                                │
-│  ─ divider ─                            │                                │
+┌─────────────────────────────────────────┬────────────────────────────────┐
+│  CENTRE (flex:1, scrollable)            │  RIGHT (300px, scrollable)     │
+│  = the record + its associations        │  [Status▾] [...]      [← Back] │ ← status cluster (left),
+│                                         │                                │   Back only on standalone
+│  Subject                                │ ┌ Details ──────────────────┐  │   routes (right)
+│  [Title]                                │ │ Reference   IN-2026-6620  │  │
+│  Description                            │ │ Type        Incident      │  │
+│  [Description text]                     │ │ Severity    MEDIUM ▾      │  │
+│ ┌ Linked records ────────────── + ─┐    │ │ Priority    Medium ▾      │  │
+│ │  [record rows]                    │   │ │ Assignee    Unassigned ▾  │  │
+│ └───────────────────────────────────┘   │ │ ───────────────────────   │  │
+│ ┌ Tasks ─────────────────────── + ─┐    │ │ Submitted by  —           │  │
+│ │  [task rows]                      │   │ │ Created    29 Apr, 11:36  │  │
+│ └───────────────────────────────────┘   │ │ Updated    29 Apr, 20:52  │  │
+│ ┌ Attachments ───────────────── + ─┐    │ └───────────────────────────┘  │
+│ │  file.pcap                        │   │  (always visible, no chevron)  │
+│ └───────────────────────────────────┘   │                                │
 │  ▾ Activity   11 events                 │                                │
-│  [feed]                                 │                                │
 └─────────────────────────────────────────┴────────────────────────────────┘
 ```
 
-The split is clean: **centre = the record itself** (subject → description → Details → Activity);
-**right = the associations** (Tasks, Attachments, Linked records).
+The split (Jira model): **centre = the record + its associations**
+(subject → description → Linked records → Tasks → Attachments → Activity);
+**right = the status cluster + the Details fields**.
 
 - Centre column: `flex: 1`, `overflow-y: auto`, `padding: 24px`. Order: title card (subject +
-  description) → **Details** (the key-value list, constrained to `maxWidth: 420` so it reads as a list
-  and doesn't stretch) → the `sections` (Activity, plus any type-specific centre sections).
-- Right panel: `width: 280px`, `flex-shrink: 0`, `border-left`, `overflow-y: auto`. Holds the
-  `rightSections` only — Tasks, Attachments, Linked records — each an **always-visible** section
-  (header with no chevron/toggle; body always rendered). Sections size to their content; the column
-  scrolls if tall.
+  description) → the `rightSections` rendered as **association panels** in the fixed order
+  **Linked records → Tasks → Attachments** → the `sections` (Activity, plus any type-specific
+  centre sections). Each association is a **Jira-style `SectionPanel`** (bordered, header + thin
+  divider, squarer corner — see §2.1) with a **`+` add button on its header row** (see §5.1b).
+- Right panel: `width: 300px`, `flex-shrink: 0`, `border-left`, `overflow-y: auto`, `p: 2`. Holds the
+  **status cluster** at the top (status pill + `…` overflow, **left-aligned**; a Back icon on the right
+  for standalone routes only) followed by the **Details key-value list** — a single **always-visible**
+  (no chevron/toggle) Jira-style `SectionPanel`. The shell builds Details from a **Reference** row +
+  `detailFields` + `metadata`.
+- The shell reorders incoming `rightSections` by `CENTRE_ASSOC_ORDER = ["linked","tasks",
+  "attachments"]` (unknown ids fall to the end), so pages may supply them in any order.
 - No left panel — the previous three-column layout is retired.
 - The shell sets `display: flex; height: 100%` on the body container.
 
+### 2.2 Drawer (narrow) layout
+
+When the shell renders inside the Service Desk navigator's **depth-2 association-peek `<Drawer>`**
+(~50vw), it reads a `useDetailNarrow()` flag and stacks to a **single scrolling column** (the right
+column drops inline). The drawer's own header is `X (left) … status + … (right)`, where the status
+cluster is **portaled** out of the shell into the header slot (via `useDetailDrawerChrome()`) and
+**"Open full" is an item inside the `…` overflow menu** (not a standalone button). The stacked order is:
+
+```
+Subject → Description → Details → Linked records → Tasks → Attachments → Activity
+```
+
+The main (non-drawer) page is unaffected — it stays two-column with Details in the right column.
+
+### 2.1 `SectionPanel` (Jira-style container)
+
+Both the centre association sections and the right-column Details panel render inside the shared
+`SectionPanel` (local component in `RecordDetailShell.tsx`), giving a consistent Jira look:
+
+- `border: 1px solid` `divider` (`#e2e8f0`), `bgcolor: background.paper`, no/low shadow (flat).
+- **Squarer corner:** `borderRadius: PANEL_RADIUS` (currently `6px`) — a **local** constant that
+  deliberately overrides the global `shape.borderRadius` (12). The global token is unchanged here;
+  squaring it app-wide is a separate prompt. If the global radius is later squared, drop `PANEL_RADIUS`.
+- **Header:** optional `title` (+ optional `icon`/`headerExtra`) in a `px:1.75 py:1.25` row, followed
+  by a thin `Divider`. Omit `title` for a header-less panel. Body padded `px:1.75 py:1.5`.
+
 ---
 
-## 3. Top bar
+## 3. Status cluster (right-column top)
 
-### 3.1 Back button
-- Outlined small button, arrow left icon + `backLabel` text
-- `onClick`: calls `onBack` prop or `navigate(-1)`
-- MUI: `Button variant="outlined" size="small" startIcon={<ArrowBackIcon />}`
+There is no top bar. The status pill + `…` overflow form the **`statusCluster`** at the top of the
+right column (main page) or in the drawer header (narrow — §2.2). It is **left-aligned**; on standalone
+routes a Back icon sits on the right of the same row.
 
-### 3.2 Ref pill
-- Monospace font, secondary background, subtle border
-- `Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', border: '0.5px solid', borderColor: 'divider', px: 1, py: 0.25, borderRadius: 1 }}`
+### 3.1 Back affordance
+- **In the navigator** (`useInDrillDownNavigator()`): no Back — the rail header is the back path.
+- **Standalone routes**: a small `IconButton` (`ArrowBackIcon`, `borderRadius: PANEL_RADIUS`) on the
+  right of the status-cluster row; `onClick` calls `onBack` prop or `navigate(-1)`.
 
-### 3.3 Type badge
-- Composed by the page — passed as `typeBadge` prop
-- Each type has a fixed colour:
+### 3.2 Reference / Type
+- The Reference (monospace) is a **row in the Details panel** (§7.1), not a top-bar pill.
+- The Type renders via each page's own **"Type" detailField** (§7.2) — full name, e.g. "Incident".
+  The `typeBadge` prop is retained for API compatibility but no longer rendered (would duplicate it).
+  Per-type badge colours (still used elsewhere, e.g. linked-record visuals):
 
 | Type | Label | Background | Text colour |
 |---|---|---|---|
@@ -130,15 +168,16 @@ The split is clean: **centre = the record itself** (subject → description → 
 | Maintenance | MNT | `#f1efe8` | `#5f5e5a` |
 | Check | CHK | `#e6f1fb` | `#185fa5` |
 
-### 3.4 Status button
+### 3.3 Status button (Jira pill)
 - Coloured pill button — background and text match the current status colour from `statusConfig`
+- **Squarer corners: `borderRadius: PANEL_RADIUS` (6px)**, consistent with the panels
 - Left icon (status-specific SVG), label text, right chevron icon
 - On click: opens `StatusPopover` — same popover component as field popovers
 - On status change: calls `onStatusChange(to)`
 
-### 3.5 ... menu button
-- Square icon button, `MoreHorizIcon`
-- Opens a popover with `moreMenuItems`
+### 3.4 ... menu button
+- Icon button, `MoreHorizIcon`, `borderRadius: PANEL_RADIUS`, beside the status pill
+- Opens a popover with `moreMenuItems` (+ **"Open full"** appended when in the drawer — §2.2)
 - Each item: `{ label: string, icon: React.ReactNode, onClick: () => void, danger?: boolean }`
 - Danger items render in `error.main` colour with red hover background
 - Standard items for all record types: Copy link (copies `window.location.href`, shows a brief toast "Link copied"), Close [type], Cancel [type] (danger)
@@ -218,19 +257,27 @@ in its `updateForClient`. The global `ValidationPipe({ whitelist: true })` strip
 on a typed DTO, so a field missing from the DTO (or from the Prisma `data` block) makes the UI commit
 silently no-op even though the affordance works.
 
-### 5.1b Details (key-value list)
+### 5.1b Association panels (Linked records / Tasks / Attachments)
 
-The record's own fields — **rendered by the shell in the centre column**, immediately after the title
-card and before the `sections`. (Previously this lived in a collapsible right-panel "Details" panel; it
-moved to the centre so the centre holds the record and the right holds its associations.)
+The record's associations — **rendered by the shell in the centre column**, immediately after the title
+card and before the `sections`. (Jira layout: the centre holds the record + its associations; the
+**Details** key-value list lives in the right column — see §7.) These were briefly in the right column
+under "Step A"; they moved back to the centre.
 
-- A "Details" caption header (`variant="caption" fontWeight={500} color="text.secondary"`, sentence
-  case, no chevron — it is not collapsible), preceded by a `Divider` separating it from the description.
-- Then each `DetailField` as a `DetailFieldRow` (label left, value right), followed by the read-only
-  metadata rows (Submitted by / Created / Updated) below a `Divider` — see §7.2/§7.3 for field and
-  metadata rules (those styling rules are unchanged; only the location moved).
-- The whole block is constrained to `maxWidth: 420` so a narrow key-value list does not stretch or sit
-  lost in the wide centre column.
+- The shell renders each `rightSection` as a Jira-style `SectionPanel` (§2.1) — its `title`/`icon` form
+  the panel header, its `content` the body. The content components (`LinkedRecordsContent`,
+  `TasksSectionContent`, `AttachmentsContent`) and **all drill/drawer/preview wiring are unchanged** —
+  only the column they live in changed.
+- Fixed order **Linked records → Tasks → Attachments** (the shell sorts by `CENTRE_ASSOC_ORDER`).
+- Pages still supply these via the `rightSections` prop (legacy name; they now render in the centre).
+  See §7.3/§7.4 for the per-association content rules (unchanged).
+- **Add affordance — `+` on the header row.** Each association's add action (Link record / Add task /
+  Attach file) is a **`SectionAddButton` (a `+` `IconButton`) right-aligned on the `SectionPanel` header**
+  (via the panel's `headerExtra` slot), Jira-style — not a text button below the list. Pages pass it as
+  `RightSection.headerAdd = { onClick, tooltip }`; the content components' inline add buttons are
+  suppressed (`showAddButton={false}`) in the shell (non-shell consumers like Check keep theirs). The
+  `+` darkens / enlarges / squares on hover. Attachments exposes an imperative `openPicker()` handle so
+  the header `+` can trigger its (encapsulated) file input.
 
 ### 5.2 Centre sections
 
@@ -264,8 +311,9 @@ The event count for Activity (`11 events`) sits in the header row right-aligned 
 
 The centre sections are defined by the page. They are **Activity** (always, see §6) plus any
 type-specific sections — Change's **Implementation** + **Approvals**, Risk's **Assessment**, etc. (§9).
-**Tasks is NOT a centre section** — it moved to the right column (§7.3). Centre sections keep their own
-collapsible chevron header; this is independent of the right column (which is non-collapsible).
+These `sections` render **after** the association panels (§5.1b). They keep their own collapsible
+chevron header and are NOT wrapped in a `SectionPanel` (Activity in particular owns its collapse UX);
+this is independent of the right Details panel (which is non-collapsible).
 
 #### Activity section
 
@@ -336,36 +384,29 @@ Comment note body box:
 
 ## 7. Right panel
 
-The right panel holds **the record's associations only** — **Tasks**, **Attachments**, **Linked
-records**, in that order. (The Details key-value list moved out to the centre — see §5.1b.) Every right
-section is **always visible** — there is no collapse/expand affordance. Sections size to their content
-and the column scrolls if tall. The shared `RightPanelSection` component (in `RecordDetailShell.tsx`)
-renders them; pages supply `rightSections` (with `id`, `title`, optional `icon`, `content`).
+The right panel holds the **status cluster** at the top (§3) followed by **the Details key-value list**
+(Jira layout). Details is a single **always-visible** (no collapse/expand) Jira-style `SectionPanel`
+(§2.1) titled "Details", built by the shell from a **Reference** row + `detailFields` + `metadata`. The
+associations (Tasks, Attachments, Linked records) moved to the centre — see §5.1b. The column is
+`width: 300px`, `border-left`, `overflow-y: auto`, `p: 2`.
 
-### 7.1 Section pattern (non-collapsible)
+(The shared `RightPanelSection` component still exists in `RecordDetailShell.tsx` — it is no longer used
+by the shell's own layout but is retained for the custom `CheckDetailPage`, which composes its own
+right-column sections.)
 
-Each right panel section uses this pattern — a header (no chevron, not clickable) + an always-rendered
-body:
+### 7.1 Details panel (non-collapsible)
 
-```tsx
-<Box sx={{ borderBottom: '0.5px solid', borderColor: 'divider' }}>
-  {/* Header — static, no toggle */}
-  <Box sx={{ display: 'flex', alignItems: 'center', px: 1.75, py: 1.25 }}>
-    <Typography variant="caption" fontWeight={500} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-      <SectionIcon sx={{ fontSize: 12, color: 'text.tertiary' }} />
-      {title}
-    </Typography>
-  </Box>
-  {/* Body — always rendered */}
-  <Box sx={{ px: 1.75, pb: 1.5 }}>{children}</Box>
-</Box>
-```
+The Details panel is the single right-column `SectionPanel`. Its header is the "Details" title row + thin
+divider (§2.1); its body is a **Reference** row (monospace, relocated from the removed top bar), then the
+field rows (§7.2 — Type, Priority, Assignee, type-specific fields), then the read-only metadata rows
+below an inner `Divider`. No chevron, always rendered. Reads as one clean list (no separator between the
+Reference row and the fields). **Type is NOT duplicated** — it comes from the page's own "Type"
+detailField, not a relocated badge chip.
 
-### 7.2 Detail fields (rendered in the CENTRE — see §5.1b)
+### 7.2 Detail fields
 
-The Details key-value list is **not** a right-panel section any more; it renders in the centre column
-(§5.1b). The field-row styling and the standard-field table below still govern how each `DetailField`
-renders, wherever it appears.
+The field-row styling and the standard-field table below govern how each `DetailField` renders inside the
+Details panel.
 
 #### Field rows
 
@@ -410,9 +451,9 @@ Rendered as `Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.3
 
 ### 7.3 Tasks panel
 
-The **first** right-panel section (above Attachments + Linked records) for the work-item types that
-have tasks (Incident, Service Request, Change, Risk, Issue). Standalone Task/Maintenance and the custom
-Check page have no Tasks panel. Implemented by the **shared `apps/web/src/components/TasksSectionContent.tsx`**
+A centre association panel (§5.1b) — sits between Linked records and Attachments — for the work-item
+types that have tasks (Incident, Service Request, Change, Risk, Issue). Standalone Task/Maintenance and
+the custom Check page have no Tasks panel. Implemented by the **shared `apps/web/src/components/TasksSectionContent.tsx`**
 component — one copy consumed by all five pages (it replaced five page-local duplicates). The page wires
 it via `rightSections` with the type's task data + handlers (`tasks`, `users`, `canManage`, `onCreate`,
 `onSelectTask`, `onChangeTaskStatus`, `onChangeTaskAssignee`).
@@ -423,8 +464,8 @@ Each task row: `Paper variant="outlined" sx={{ display: 'flex', alignItems: 'cen
 - Assignee: 22px initials avatar, or italic "Unassigned" — clickable, opens `StatusPopover`
 - Status badge: 10px coloured pill (task status colour map, §10), clickable — opens `StatusPopover`
 
-"Add task" button (`Button variant="text" size="small" startIcon={<AddIcon />}`) below the list when
-`canManage`. Empty state: a muted "No tasks" caption.
+Add task is the header `+` (§5.1b) when `canManage` — not a text button below the list. Empty state: a
+muted "No tasks" caption.
 
 **Row click drills, not navigates** (§2c-i wiring): the component uses `useDrillNav()` — inside the
 Service Desk navigator a row drills the task to depth 2 in place; standalone (no provider) it calls
@@ -433,7 +474,7 @@ this — the wiring lives inside the shared component.
 
 ### 7.4 Linked records panel
 
-Always-visible section. Sits below Attachments in the right panel. **Linked records do not appear in the centre column** — they live exclusively here.
+Always-visible section. The **first** centre association panel (§5.1b) — above Tasks and Attachments.
 
 **Data model — join table, not a scalar.** Links are stored in the `RecordLink` join table
 (`apps/api/prisma/schema.prisma`), NOT in the old `linkedEntityType`/`linkedEntityId` scalars
@@ -484,11 +525,17 @@ Icon and colour per link type (`LINKED_RECORD_VISUALS`):
 
 If no linked records: `Typography variant="caption" color="text.tertiary"` — "No linked records"
 
-"Link record" `Button variant="text" size="small" startIcon={<AddIcon />}` always shown below.
+Link record is the header `+` (§5.1b), not a text button below the list.
 
 ### 7.5 Breadcrumb
 
-The shell calls `useBreadcrumb().setRecordLabel(recordRef)` on mount and clears it on unmount via `useEffect`. This produces the breadcrumb trail: `Client › Module › Record ref`. Import `useBreadcrumb` from the same path used in `Shell.tsx`.
+The breadcrumb shows the **URL's primary record** only. The shell calls
+`useBreadcrumb().setPrimaryRecordLabel(recordRef)` on mount and clears it on unmount — writing a
+**dedicated non-reset slot** (NOT `setRecordLabel`, whose shared `breadcrumbs[]` is reset on every
+pathname change). This keeps the depth-1 record's crumb stable across a drill, and the **drawer
+suppresses it entirely** (`useDetailNarrow()` → no write) so the drawer's record never overwrites the
+main ticket's. The slot takes precedence over `breadcrumbs[]`; when no shell is mounted the trail falls
+back to `breadcrumbs[]`. Produces: `Client › Module › Record ref`. Import `useBreadcrumb` from `Shell.tsx`.
 
 Each attachment row: `Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.625, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}`
 
@@ -497,11 +544,12 @@ Each attachment row: `Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p
 - File name: 12px + size + date in 10px muted below
 - Download icon: `FileDownloadIcon`, 12px, muted, right-aligned
 
-"Attach file" button: `Button variant="text" size="small" startIcon={<AttachFileIcon />}`
+Attach file is the header `+` (§5.1b) — it triggers `AttachmentsContent`'s `openPicker()` handle, not a
+text button below the list.
 
-Empty state: show a muted "No attachments" caption and STILL render the "Attach file" button (a way
-to add the first file is needed — this supersedes the earlier "render nothing" note, and matches how
-`LinkedRecordsContent` always shows its add button).
+Empty state: show a muted "No attachments" caption (the header `+` is always the way to add the first
+file). An inline "Uploading…" caption shows while an upload is in flight (the inline text button is
+suppressed in the shell).
 
 Attachments — frontend implemented for the six work-item pages (Incident, SR, Change, Task, Risk,
 Issue). **Backend** also supports **Maintenance and Check** (their `getForClient` reads return
@@ -574,10 +622,10 @@ interface StatusOption {
 ## 9. Per-record-type configuration
 
 For all types, the **Details** key-value list (the "additional detail fields" below + the standard
-Type/Priority/Assignee + metadata) renders in the **centre** column (§5.1b), not the right. The right
-column lists below are the always-visible association panels. Tasks is the first right panel for the
-five work-item types that have tasks (Incident, SR, Change, Risk, Issue); Task/Maintenance have no
-Tasks panel.
+Type/Priority/Assignee + metadata) renders in the **right** column (§7), not the centre. The centre
+lists below are the always-visible association panels (§5.1b), in order Linked records → Tasks →
+Attachments. Tasks is present for the five work-item types that have tasks (Incident, SR, Change, Risk,
+Issue); Task/Maintenance have no Tasks panel.
 
 ### 9.1 Incident
 
@@ -593,7 +641,7 @@ More menu: Copy link, Close incident, Cancel incident (danger)
 
 ### 9.2 Change
 
-Additional detail fields: `Change type` (read-only), `Scheduled start` (read-only), `Scheduled end` (read-only)
+Additional detail fields: `Change type` (read-only), `Scheduled start` (read-only), `Due date` (read-only — the change's scheduled end; shows the date or "N/A")
 
 Status order: `DRAFT → SUBMITTED → PENDING_APPROVAL → APPROVED → IN_PROGRESS → COMPLETED → CLOSED` (plus `REJECTED`, `CANCELLED` as terminal states)
 
@@ -617,7 +665,7 @@ More menu: Copy link, Close request, Cancel request (danger)
 
 ### 9.4 Task
 
-Additional detail fields: `Due date` (read-only for now)
+Additional detail fields: `Due date` (read-only; shows the date or "N/A" when unset — always rendered)
 
 Status order: `OPEN → IN_PROGRESS → BLOCKED → DONE`
 
