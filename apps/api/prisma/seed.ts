@@ -3,7 +3,11 @@ import {
   Role,
   OwnerType,
   ServiceRequestStatus,
-  TaskStatus
+  TaskStatus,
+  IncidentStatus,
+  IncidentSeverity,
+  CheckStatus,
+  MaintenanceWorkType
 } from "@prisma/client"
 import * as bcrypt from "bcryptjs"
 
@@ -738,6 +742,113 @@ async function seedCheckTemplates() {
   }
 }
 
+// Records that carry a USER foreign key with a NAMED assignee — so the #99
+// display-name resolution (incident/change/check assignee, maintenance performedBy)
+// is empirically testable, not just inferred by code-similarity. Runs AFTER
+// templates/assets/sites/users exist. Assignees are real named users:
+// Priya Sharma (manager), Marcus Bell (analyst), Elena Rodriguez (engineer).
+async function seedAssignedSamples() {
+  const byEmail = (email: string) =>
+    prisma.user.findUnique({ where: { email }, select: { id: true } })
+  const [admin, manager, analyst, engineer] = await Promise.all([
+    byEmail("admin@dcm.local"),
+    byEmail("manager@dcm.local"),
+    byEmail("analyst@dcm.local"),
+    byEmail("engineer@dcm.local")
+  ])
+  const template = await prisma.checkTemplate.findFirst({ orderBy: { reference: "asc" } })
+
+  const clients = await prisma.client.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true }
+  })
+
+  for (const client of clients) {
+    const code = clientCode(client.id)
+
+    // ── Incident (assignee: Priya Sharma) ──────────────────────────────
+    const incRef = `IN-${code}-0001`
+    if (!(await prisma.incident.findUnique({ where: { reference: incRef } }))) {
+      await prisma.incident.create({
+        data: {
+          reference: incRef,
+          clientId: client.id,
+          title: `${client.name}: CRAC-02 high-temperature alarm`,
+          description:
+            "Intermittent high-temperature alarm on CRAC-02 in the main hall. Investigate sensor calibration and airflow.",
+          status: IncidentStatus.INVESTIGATING,
+          severity: IncidentSeverity.HIGH,
+          priority: "high",
+          assigneeId: manager?.id ?? admin?.id,
+          createdById: admin?.id
+        }
+      })
+    }
+
+    // ── Change request (assignee: Marcus Bell) ─────────────────────────
+    const chgRef = `CHG-${code}-0001`
+    if (!(await prisma.changeRequest.findUnique({ where: { reference: chgRef } }))) {
+      await prisma.changeRequest.create({
+        data: {
+          reference: chgRef,
+          clientId: client.id,
+          title: `${client.name}: Firmware upgrade — core switch pair`,
+          description:
+            "Apply vendor firmware update to the core switch pair during the approved maintenance window.",
+          changeType: "NORMAL",
+          status: "PENDING_APPROVAL",
+          priority: "medium",
+          assigneeId: analyst?.id ?? admin?.id,
+          createdById: admin?.id
+        }
+      })
+    }
+
+    // ── Check (assignee: Elena Rodriguez, reviewer: Priya Sharma) ──────
+    const site = await prisma.site.findFirst({
+      where: { clientId: client.id },
+      orderBy: { name: "asc" },
+      select: { id: true }
+    })
+    const chkRef = `CHK-${code}-0001`
+    if (template && site && !(await prisma.check.findUnique({ where: { reference: chkRef } }))) {
+      await prisma.check.create({
+        data: {
+          reference: chkRef,
+          clientId: client.id,
+          siteId: site.id,
+          templateId: template.id,
+          checkType: template.checkType,
+          title: `${template.name} — ${client.name}`,
+          status: CheckStatus.ASSIGNED,
+          priority: "medium",
+          assigneeId: engineer?.id ?? admin?.id,
+          reviewerId: manager?.id ?? admin?.id
+        }
+      })
+    }
+
+    // ── Maintenance log (performedBy: Elena Rodriguez) ─────────────────
+    const asset = await prisma.asset.findFirst({
+      where: { clientId: client.id },
+      orderBy: { assetTag: "asc" },
+      select: { id: true }
+    })
+    const maintMarker = `Seed maintenance — ${client.name}`
+    if (asset && !(await prisma.maintenanceLog.findFirst({ where: { assetId: asset.id, notes: maintMarker } }))) {
+      await prisma.maintenanceLog.create({
+        data: {
+          assetId: asset.id,
+          workType: MaintenanceWorkType.INSPECTION,
+          performedAt: new Date(),
+          performedById: engineer?.id ?? admin?.id,
+          notes: maintMarker
+        }
+      })
+    }
+  }
+}
+
 async function main() {
   if (process.env.APP_ENV === "production") {
     console.error("Refusing to run demo seed in production (APP_ENV=production).")
@@ -932,6 +1043,7 @@ async function main() {
   })
 
   await seedCheckTemplates()
+  await seedAssignedSamples()
 }
 
 main()
