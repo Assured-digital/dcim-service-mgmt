@@ -59,6 +59,8 @@ import {
 import { transitions as changeTransitions } from "../config/transitions/changeTransitions"
 import { useAssignableUsers, type AssignableUser } from "../lib/useAssignableUsers"
 import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
+import { TasksSectionContent } from "../components/TasksSectionContent"
+import { useDrillNav } from "../lib/drillNav"
 import { AttachmentsContent } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
@@ -258,32 +260,6 @@ const PRIORITY_OPTIONS: PopoverOption[] = PRIORITY_VALUES.map((value) => ({
 }))
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task status colour map — spec section 10
-// ─────────────────────────────────────────────────────────────────────────────
-
-const TASK_STATUS_LABELS: Record<string, string> = {
-  OPEN: "Open",
-  IN_PROGRESS: "In progress",
-  BLOCKED: "Blocked",
-  DONE: "Done",
-}
-
-const TASK_STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
-  OPEN: { bg: "#f1efe8", text: "#5f5e5a" },
-  IN_PROGRESS: { bg: "#e6f1fb", text: "#185fa5" },
-  BLOCKED: { bg: "#fcebeb", text: "#a32d2d" },
-  DONE: { bg: "#eaf3de", text: "#3b6d11" },
-}
-
-const TASK_STATUS_OPTIONS: PopoverOption[] = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map((value) => ({
-  value,
-  label: TASK_STATUS_LABELS[value],
-  iconBg: TASK_STATUS_COLOURS[value].bg,
-  iconColor: TASK_STATUS_COLOURS[value].text,
-  icon: <AssignmentIcon sx={{ fontSize: 14 }} />,
-}))
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Type badge — spec section 3.3 (CHG)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -346,15 +322,6 @@ function formatScheduledDate(value: string | null): string {
   })
 }
 
-
-function getInitials(email: string): string {
-  const local = email.split("@")[0] ?? email
-  const parts = local.split(/[._-]/).filter(Boolean)
-  if (parts.length >= 2 && parts[0] && parts[1]) {
-    return (parts[0][0] + parts[1][0]).toUpperCase()
-  }
-  return local.slice(0, 2).toUpperCase()
-}
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null && "message" in error) {
@@ -633,290 +600,6 @@ const ChangeTitleCard = React.memo(function ChangeTitleCard({
           px: 0,
           mx: 0,
         }}
-      />
-    </Box>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tasks section (spec 5.2)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface TaskStatusBadgeProps {
-  status: string
-  onClick: (anchor: HTMLElement) => void
-}
-
-const TaskStatusBadge = React.memo(function TaskStatusBadge({
-  status,
-  onClick,
-}: TaskStatusBadgeProps) {
-  const colours = TASK_STATUS_COLOURS[status] ?? TASK_STATUS_COLOURS.OPEN
-  const label = TASK_STATUS_LABELS[status] ?? status
-  const handleClick = React.useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
-      e.stopPropagation()
-      onClick(e.currentTarget)
-    },
-    [onClick]
-  )
-  return (
-    <Box
-      component="button"
-      onClick={handleClick}
-      sx={{
-        all: "unset",
-        cursor: "pointer",
-        bgcolor: colours.bg,
-        color: colours.text,
-        fontSize: 10,
-        fontWeight: 500,
-        px: 1,
-        py: 0.25,
-        borderRadius: 1,
-        flexShrink: 0,
-      }}
-    >
-      {label}
-    </Box>
-  )
-})
-
-interface AssigneeCellProps {
-  assignee: { id: string; email: string } | null | undefined
-  onClick: (anchor: HTMLElement) => void
-}
-
-const AssigneeCell = React.memo(function AssigneeCell({
-  assignee,
-  onClick,
-}: AssigneeCellProps) {
-  const handleClick = React.useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
-      e.stopPropagation()
-      onClick(e.currentTarget)
-    },
-    [onClick]
-  )
-  return (
-    <Box
-      onClick={handleClick}
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 0.5,
-        flexShrink: 0,
-        cursor: "pointer",
-      }}
-    >
-      {assignee ? (
-        <>
-          <Box
-            sx={{
-              width: 22,
-              height: 22,
-              borderRadius: "50%",
-              bgcolor: "#eaf3de",
-              color: "#3b6d11",
-              fontSize: 9,
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            {getInitials(assignee.email)}
-          </Box>
-          <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
-            {assignee.email}
-          </Typography>
-        </>
-      ) : (
-        <Typography
-          color="text.tertiary"
-          sx={{ fontSize: 11, fontStyle: "italic" }}
-        >
-          Unassigned
-        </Typography>
-      )}
-    </Box>
-  )
-})
-
-interface TasksSectionContentProps {
-  tasks: LinkedTaskWithAssignee[]
-  users: AssignableUser[]
-  canManage: boolean
-  onCreate: () => void
-  onSelectTask: (taskId: string) => void
-  onChangeTaskStatus: (taskId: string, nextStatus: string) => void
-  onChangeTaskAssignee: (taskId: string, nextAssigneeId: string) => void
-}
-
-const TasksSectionContent = React.memo(function TasksSectionContent({
-  tasks,
-  users,
-  canManage,
-  onCreate,
-  onSelectTask,
-  onChangeTaskStatus,
-  onChangeTaskAssignee,
-}: TasksSectionContentProps) {
-  const [activePopover, setActivePopover] = React.useState<{
-    taskId: string
-    type: "status" | "assignee"
-    anchor: HTMLElement
-  } | null>(null)
-
-  const handleStatusClick = React.useCallback(
-    (taskId: string) => (anchor: HTMLElement) => {
-      setActivePopover({ taskId, type: "status", anchor })
-    },
-    []
-  )
-
-  const closeStatusPopover = React.useCallback(() => setActivePopover(null), [])
-
-  const handleStatusSelect = React.useCallback(
-    (next: string) => {
-      if (activePopover?.type !== "status") return
-      onChangeTaskStatus(activePopover.taskId, next)
-      setActivePopover(null)
-    },
-    [activePopover, onChangeTaskStatus]
-  )
-
-  const handleAssigneeClick = React.useCallback(
-    (taskId: string) => (anchor: HTMLElement) => {
-      setActivePopover({ taskId, type: "assignee", anchor })
-    },
-    []
-  )
-
-  const closeAssigneePopover = React.useCallback(
-    () => setActivePopover(null),
-    []
-  )
-
-  const handleAssigneeSelect = React.useCallback(
-    (next: string) => {
-      if (activePopover?.type !== "assignee") return
-      onChangeTaskAssignee(activePopover.taskId, next)
-      setActivePopover(null)
-    },
-    [activePopover, onChangeTaskAssignee]
-  )
-
-  const handleRowClick = React.useCallback(
-    (taskId: string) => () => onSelectTask(taskId),
-    [onSelectTask]
-  )
-
-  const assigneeOptions = React.useMemo<PopoverOption[]>(() => {
-    const list: PopoverOption[] = users.map((u) => ({
-      value: u.id,
-      label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
-      icon: (
-        <Box component="span" sx={{ fontSize: 9, fontWeight: 600 }}>
-          {getInitials(u.email)}
-        </Box>
-      ),
-    }))
-    return [
-      {
-        value: "",
-        label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
-        icon: <PersonIcon sx={{ fontSize: 14 }} />,
-      },
-      ...list,
-    ]
-  }, [users])
-
-  return (
-    <Box>
-      {tasks.map((task) => (
-        <Paper
-          key={task.id}
-          variant="outlined"
-          onClick={handleRowClick(task.id)}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            px: 1.25,
-            py: 0.875,
-            mb: 0.5,
-            borderRadius: 1,
-            cursor: "pointer",
-            "&:hover": { bgcolor: "action.hover" },
-          }}
-        >
-          <Typography
-            sx={{
-              flex: 1,
-              fontSize: 12,
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              color: "text.primary",
-            }}
-          >
-            {task.title}
-          </Typography>
-          <AssigneeCell
-            assignee={task.assignee ?? null}
-            onClick={handleAssigneeClick(task.id)}
-          />
-          <TaskStatusBadge status={task.status} onClick={handleStatusClick(task.id)} />
-        </Paper>
-      ))}
-
-      {canManage ? (
-        <Button
-          variant="text"
-          size="small"
-          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-          onClick={onCreate}
-          sx={{ textTransform: "none", mt: 1 }}
-        >
-          Add task
-        </Button>
-      ) : null}
-
-      <StatusPopover
-        id="task-status-popover"
-        header="Task status"
-        options={TASK_STATUS_OPTIONS}
-        currentValue={
-          activePopover?.type === "status"
-            ? tasks.find((t) => t.id === activePopover.taskId)?.status ?? ""
-            : ""
-        }
-        onSelect={handleStatusSelect}
-        anchorEl={activePopover?.type === "status" ? activePopover.anchor : null}
-        open={activePopover?.type === "status"}
-        onClose={closeStatusPopover}
-      />
-
-      <StatusPopover
-        id="task-assignee-popover"
-        header="Assignee"
-        options={assigneeOptions}
-        currentValue={
-          activePopover?.type === "assignee"
-            ? tasks.find((t) => t.id === activePopover.taskId)?.assigneeId ?? ""
-            : ""
-        }
-        onSelect={handleAssigneeSelect}
-        anchorEl={activePopover?.type === "assignee" ? activePopover.anchor : null}
-        open={activePopover?.type === "assignee"}
-        onClose={closeAssigneePopover}
       />
     </Box>
   )
@@ -1333,7 +1016,6 @@ export default function ChangeDetailPage() {
   const [savingNote, setSavingNote] = React.useState(false)
   const [transitionTarget, setTransitionTarget] = React.useState<Transition | null>(null)
   const [linkCopied, setLinkCopied] = React.useState(false)
-  const [tasksOpen, setTasksOpen] = React.useState(true)
   const [implementationOpen, setImplementationOpen] = React.useState(true)
   const [approvalsOpen, setApprovalsOpen] = React.useState(true)
   const [activityOpen, setActivityOpen] = React.useState(true)
@@ -1778,53 +1460,6 @@ export default function ChangeDetailPage() {
     if (!change) return []
     return [
       {
-        id: "tasks",
-        title: "",
-        flush: true,
-        content: (
-          <Box sx={{ mb: 0 }}>
-            <Divider sx={{ my: 2.5 }} />
-            <Box
-              onClick={() => setTasksOpen((o) => !o)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                cursor: "pointer",
-                mb: 1,
-                userSelect: "none",
-                width: "fit-content",
-              }}
-            >
-              <ExpandMoreIcon
-                sx={{
-                  fontSize: 16,
-                  color: "text.secondary",
-                  transform: tasksOpen ? "none" : "rotate(-90deg)",
-                  transition: "transform .15s",
-                }}
-              />
-              <Typography variant="caption" fontWeight={500} color="text.secondary">
-                Tasks
-              </Typography>
-            </Box>
-            {tasksOpen && (
-              <Box>
-                <TasksSectionContent
-                  tasks={linkedTasks ?? []}
-                  users={assignableUsers}
-                  canManage={canManage}
-                  onCreate={handleOpenCreateTask}
-                  onSelectTask={handleSelectTask}
-                  onChangeTaskStatus={updateLinkedTaskStatus}
-                  onChangeTaskAssignee={updateLinkedTaskAssignee}
-                />
-              </Box>
-            )}
-          </Box>
-        ),
-      },
-      {
         id: "implementation",
         title: "",
         flush: true,
@@ -1960,13 +1595,6 @@ export default function ChangeDetailPage() {
     ]
   }, [
     change,
-    linkedTasks,
-    assignableUsers,
-    canManage,
-    handleOpenCreateTask,
-    handleSelectTask,
-    updateLinkedTaskStatus,
-    updateLinkedTaskAssignee,
     handleCommitImplementation,
     visibleFeedEvents,
     activeFilter,
@@ -1974,7 +1602,6 @@ export default function ChangeDetailPage() {
     workNoteBody,
     savingNote,
     handleAddNote,
-    tasksOpen,
     implementationOpen,
     approvalsOpen,
     activityOpen,
@@ -1994,10 +1621,25 @@ export default function ChangeDetailPage() {
   const rightSections = React.useMemo<RightSection[]>(() => {
     return [
       {
+        id: "tasks",
+        title: "Tasks",
+        icon: <AssignmentIcon sx={{ fontSize: 12 }} />,
+        content: (
+          <TasksSectionContent
+            tasks={linkedTasks ?? []}
+            users={assignableUsers}
+            canManage={canManage}
+            onCreate={handleOpenCreateTask}
+            onSelectTask={handleSelectTask}
+            onChangeTaskStatus={updateLinkedTaskStatus}
+            onChangeTaskAssignee={updateLinkedTaskAssignee}
+          />
+        ),
+      },
+      {
         id: "attachments",
         title: "Attachments",
         icon: <AttachFileIcon sx={{ fontSize: 12 }} />,
-        defaultOpen: false,
         content: (
           <AttachmentsContent
             attachments={change?.attachments ?? []}
@@ -2011,7 +1653,6 @@ export default function ChangeDetailPage() {
         id: "linked",
         title: "Linked records",
         icon: <LinkIcon sx={{ fontSize: 12 }} />,
-        defaultOpen: false,
         content: (
           <LinkedRecordsContent links={links} onAddLink={handleAddLink} onUnlink={handleUnlink} />
         ),
@@ -2024,6 +1665,13 @@ export default function ChangeDetailPage() {
     links,
     handleAddLink,
     handleUnlink,
+    linkedTasks,
+    assignableUsers,
+    canManage,
+    handleOpenCreateTask,
+    handleSelectTask,
+    updateLinkedTaskStatus,
+    updateLinkedTaskAssignee,
   ])
 
   // ── Render ─────────────────────────────────────────────────────────────────

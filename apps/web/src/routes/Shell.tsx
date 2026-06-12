@@ -51,7 +51,9 @@ const BreadcrumbCtx = React.createContext<{
   setBreadcrumbs: (crumbs: Crumb[]) => void
   setHideModuleLabel: (hide: boolean) => void
   setPageFullBleed: (fullBleed: boolean) => void
-}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {}, setHideModuleLabel: () => {}, setPageFullBleed: () => {} })
+  // Drill-down navigator requests the app sidebar collapse when a record opens.
+  setNavCollapsed: (collapsed: boolean) => void
+}>({ setRecordLabel: () => {}, setBreadcrumbs: () => {}, setHideModuleLabel: () => {}, setPageFullBleed: () => {}, setNavCollapsed: () => {} })
 export function useBreadcrumb() { return React.useContext(BreadcrumbCtx) }
 
 const RECORD_CRUMB_SEP_SX = { color: "#64748b", fontSize: 16, lineHeight: 1, userSelect: "none" as const, flexShrink: 0, mx: "2px" }
@@ -573,16 +575,30 @@ export default function Shell() {
     setPageFullBleedState(fullBleed)
   }, [])
 
+  // Drill-down navigator collapse: when a record opens it asks the sidebar to
+  // collapse. The navigator ONLY ever collapses (on drill-in to depth ≥ 1) —
+  // it never expands. Returning to depth 0 leaves the menu collapsed; expanding
+  // again is always the user's explicit choice via the sidebar toggle. So
+  // collapsed=false is a no-op here. Driving sidebarExpanded directly reuses the
+  // existing icon-only rendering + flyouts (no parallel "forced collapse" flag).
+  const setNavCollapsed = React.useCallback((collapsed: boolean) => {
+    if (collapsed) setSidebarExpanded(false)
+  }, [])
+
   const breadcrumbValue = React.useMemo(
-    () => ({ setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed }),
-    [setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed]
+    () => ({ setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed, setNavCollapsed }),
+    [setRecordLabel, setBreadcrumbs, setHideModuleLabel, setPageFullBleed, setNavCollapsed]
   )
 
-  // Auto-reset breadcrumbs, module-label hide, and full-bleed whenever the route changes
+  // Auto-reset breadcrumbs and module-label hide whenever the route changes.
+  // NB: full-bleed is deliberately NOT reset here. It's owned by each full-bleed
+  // page via mount-assert + unmount-cleanup; resetting it on every pathname change
+  // breaks pages that stay mounted across param changes (e.g. the Service Desk
+  // drill-down navigator drilling queue → ticket), which would lose full-bleed and
+  // get wrapped in the default page padding.
   React.useEffect(() => {
     setBreadcrumbsState([])
     setHideModuleLabelState(false)
-    setPageFullBleedState(false)
   }, [loc.pathname])
 
   const sidebarWidth = sidebarExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED

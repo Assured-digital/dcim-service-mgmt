@@ -9,15 +9,12 @@ import Shell from "./Shell"
 
 const LoginPage                = React.lazy(() => import("./LoginPage"))
 const DashboardPage            = React.lazy(() => import("./DashboardPage"))
-const ServiceDeskPage          = React.lazy(() => import("./ServiceDeskPage"))
+const ServiceDeskNavigator     = React.lazy(() => import("./ServiceDeskNavigator"))
 const ServiceDeskDashboard     = React.lazy(() => import("./ServiceDeskDashboard"))
-const ServiceRequestDetailPage = React.lazy(() => import("./ServiceRequestDetailPage"))
 const TasksPage                = React.lazy(() => import("./TasksPage"))
 const TaskDetailPage           = React.lazy(() => import("./TaskDetailPage"))
 const RiskDetailPage           = React.lazy(() => import("./RiskDetailPage"))
 const IssueDetailPage          = React.lazy(() => import("./IssueDetailPage"))
-const ChangeDetailPage         = React.lazy(() => import("./ChangeDetailPage"))
-const IncidentDetailPage       = React.lazy(() => import("./IncidentDetailPage"))
 const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
 const AssetRegisterPage        = React.lazy(() => import("./AssetRegisterPage"))
 const ChecksPage               = React.lazy(() => import("./ChecksPage"))
@@ -138,12 +135,11 @@ export default function App() {
             }
           />
 
-          {/* Service desk — unified surface; detail pages render in the right pane via <Outlet /> */}
-          <Route path="service-desk" element={<ServiceDeskPage />}>
-            <Route path="sr/:id" element={<ServiceRequestDetailPage />} />
-            <Route path="inc/:id" element={<IncidentDetailPage />} />
-            <Route path="chg/:id" element={<ChangeDetailPage />} />
-          </Route>
+          {/* Service desk — unified surface. The drill-down navigator owns the
+              whole /service-desk/* subtree (queue → record → association), driven
+              entirely by the URL. More-specific siblings below still win by RR v6
+              route ranking (static/dynamic outrank the splat). */}
+          <Route path="service-desk/*" element={<ServiceDeskNavigator />} />
           {/* Dashboard is its own Service Management nav item — kept off /service-desk
               so the Service Desk nav doesn't also highlight when the Dashboard is open. */}
           <Route path="service-management/dashboard" element={<ServiceDeskDashboard />} />

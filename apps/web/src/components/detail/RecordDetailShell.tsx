@@ -15,10 +15,10 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import { useNavigate } from "react-router-dom"
 import { StatusPopover, type PopoverOption } from "./StatusPopover"
 import { useBreadcrumb } from "../../routes/Shell"
+import { useInDrillDownNavigator } from "../shared/layout/DrillDownNavigator"
 import { PRODUCT_NAME } from "../../lib/usePageTitle"
 
 export interface StatusOption {
@@ -97,34 +97,27 @@ const STATUS_BUTTON_ID = "record-status"
 const MORE_MENU_ID = "record-more-menu"
 const DETAIL_FIELD_PREFIX = "detail-field-"
 
-interface CollapsibleRightPanelProps {
+interface RightPanelSectionProps {
   title: string
   icon?: React.ReactNode
-  defaultOpen?: boolean
   children: React.ReactNode
 }
 
-export const CollapsibleRightPanel = React.memo(function CollapsibleRightPanel({
+// Always-visible right-column section: a header (no chevron/toggle) + body.
+// Sections size to their content; the right column scrolls if tall.
+export const RightPanelSection = React.memo(function RightPanelSection({
   title,
   icon,
-  defaultOpen = true,
   children,
-}: CollapsibleRightPanelProps) {
-  const [open, setOpen] = React.useState(defaultOpen)
-  const toggle = React.useCallback(() => setOpen((prev) => !prev), [])
-
+}: RightPanelSectionProps) {
   return (
     <Box sx={{ borderBottom: "0.5px solid", borderColor: "divider" }}>
       <Box
-        onClick={toggle}
         sx={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
           px: 1.75,
           py: 1.25,
-          cursor: "pointer",
-          "&:hover": { bgcolor: "action.hover" },
         }}
       >
         <Typography
@@ -146,16 +139,8 @@ export const CollapsibleRightPanel = React.memo(function CollapsibleRightPanel({
           ) : null}
           {title}
         </Typography>
-        <ExpandMoreIcon
-          sx={{
-            fontSize: 16,
-            color: "var(--color-text-tertiary)",
-            transform: open ? "none" : "rotate(-90deg)",
-            transition: "transform .15s",
-          }}
-        />
       </Box>
-      {open ? <Box sx={{ px: 1.75, pb: 1.5 }}>{children}</Box> : null}
+      <Box sx={{ px: 1.75, pb: 1.5 }}>{children}</Box>
     </Box>
   )
 })
@@ -301,6 +286,10 @@ function RecordDetailShellImpl({
 }: RecordDetailShellProps) {
   const navigate = useNavigate()
   const { setRecordLabel } = useBreadcrumb()
+  // Inside the drill-down navigator the rail header is the back path, so the
+  // shell's own Back button is redundant — hide it. Standalone detail routes
+  // (no navigator) keep it.
+  const inNavigator = useInDrillDownNavigator()
 
   React.useEffect(() => {
     setRecordLabel(recordRef)
@@ -466,21 +455,23 @@ function RecordDetailShellImpl({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          px: 2,
+          px: 3,
           gap: 1.5,
           borderBottom: 1,
           borderColor: "divider",
         }}
       >
         <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minWidth: 0 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
-            onClick={handleBack}
-          >
-            {backLabel}
-          </Button>
+          {!inNavigator && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
+              onClick={handleBack}
+            >
+              {backLabel}
+            </Button>
+          )}
           <Typography
             variant="caption"
             sx={{
@@ -567,20 +558,74 @@ function RecordDetailShellImpl({
             minWidth: 0,
             height: "100%",
             overflowY: "auto",
-            px: 3,
-            py: 2.5,
+            p: 3,
           }}
         >
           <Box>{titleCard}</Box>
+
+          {/* Details — the record's own key-value list. Moved here from the
+              right column; constrained so it reads as a list and doesn't
+              stretch across the wide centre column. */}
+          <Box sx={{ mb: 2.5, maxWidth: 420 }}>
+            <Divider sx={{ borderColor: "divider", opacity: 0.6, my: 2 }} />
+            <Typography
+              variant="caption"
+              fontWeight={500}
+              color="text.secondary"
+              sx={{ display: "block", mb: 1 }}
+            >
+              Details
+            </Typography>
+            {detailFields.map((field) => (
+              <DetailFieldRow
+                key={field.key}
+                field={field}
+                popoverOpen={openPopoverId === `${DETAIL_FIELD_PREFIX}${field.key}`}
+                onOpenPopover={openPopover}
+                onClosePopover={closePopover}
+              />
+            ))}
+            {metadata ? (
+              <>
+                <Divider sx={{ my: 1 }} />
+                <Box>
+                  {[
+                    { label: "Submitted by", value: metadata.submittedBy ?? "—" },
+                    { label: "Created", value: formatMetadataDate(metadata.createdAt) },
+                    { label: "Updated", value: formatMetadataDate(metadata.updatedAt) },
+                  ].map((row) => (
+                    <Box
+                      key={row.label}
+                      sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        py: 0.375,
+                        px: 0.75,
+                      }}
+                    >
+                      <Typography variant="caption" color="text.disabled">
+                        {row.label}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {row.value}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </>
+            ) : null}
+          </Box>
+
           {sections.map((section) => (
             <CentreSectionView key={section.id} section={section} />
           ))}
         </Box>
 
-        {/* Right panel */}
+        {/* Right panel — the associations (Tasks, Attachments, Linked records),
+            all always-visible. Sections size to content; column scrolls. */}
         <Box
           sx={{
-            width: 290,
+            width: 280,
             flexShrink: 0,
             height: "100%",
             overflowY: "auto",
@@ -589,58 +634,10 @@ function RecordDetailShellImpl({
             bgcolor: "background.paper",
           }}
         >
-          <CollapsibleRightPanel title="Details" defaultOpen>
-            <Box>
-              {detailFields.map((field) => (
-                <DetailFieldRow
-                  key={field.key}
-                  field={field}
-                  popoverOpen={openPopoverId === `${DETAIL_FIELD_PREFIX}${field.key}`}
-                  onOpenPopover={openPopover}
-                  onClosePopover={closePopover}
-                />
-              ))}
-              {metadata ? (
-                <>
-                  <Divider sx={{ my: 1 }} />
-                  <Box>
-                    {[
-                      { label: "Submitted by", value: metadata.submittedBy ?? "—" },
-                      { label: "Created", value: formatMetadataDate(metadata.createdAt) },
-                      { label: "Updated", value: formatMetadataDate(metadata.updatedAt) },
-                    ].map((row) => (
-                      <Box
-                        key={row.label}
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          py: 0.375,
-                          px: 0.75,
-                        }}
-                      >
-                        <Typography variant="caption" color="text.disabled">
-                          {row.label}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {row.value}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </>
-              ) : null}
-            </Box>
-          </CollapsibleRightPanel>
-
           {(rightSections ?? []).map((section) => (
-            <CollapsibleRightPanel
-              key={section.id}
-              title={section.title}
-              icon={section.icon}
-              defaultOpen={section.defaultOpen ?? true}
-            >
+            <RightPanelSection key={section.id} title={section.title} icon={section.icon}>
               {section.content}
-            </CollapsibleRightPanel>
+            </RightPanelSection>
           ))}
         </Box>
       </Box>

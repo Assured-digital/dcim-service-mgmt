@@ -89,6 +89,50 @@ export function routeForLink(link: { type: string; id: string }): string {
   }
 }
 
+// Standalone detail route for a navigator URL segment (sr|inc|chg|task|risk|issue).
+// Used by the drawer's "Open full" affordance to leave the ticket context. Mirrors
+// routeForLink, but keyed by the nav segment (which is what the depth-2 URL carries).
+export function routeForSegment(seg: string, id: string): string {
+  switch (seg) {
+    case "sr":
+      return `/service-desk/sr/${id}`
+    case "inc":
+      return `/service-desk/inc/${id}`
+    case "chg":
+      return `/service-desk/chg/${id}`
+    case "task":
+      return `/tasks/${id}`
+    case "risk":
+      return `/risks-issues/risks/${id}`
+    case "issue":
+      return `/risks-issues/issues/${id}`
+    default:
+      return "#"
+  }
+}
+
+// The `:assocType` URL segment used by the Service Desk navigator's depth-2 path
+// (/service-desk/:type/:id/:assocType/:assocId). Matches the depth-1 sr|inc|chg
+// prefix and extends it to the remaining work-item types.
+export function navSegmentForType(type: string): string {
+  switch (type) {
+    case "incident":
+      return "inc"
+    case "service_request":
+      return "sr"
+    case "change":
+      return "chg"
+    case "task":
+      return "task"
+    case "risk":
+      return "risk"
+    case "issue":
+      return "issue"
+    default:
+      return type
+  }
+}
+
 // ── API helpers (x-client-id auto-injected by the api interceptor) ────────────
 
 export async function searchLinkRecords(

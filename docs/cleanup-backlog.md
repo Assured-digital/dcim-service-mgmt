@@ -10,7 +10,8 @@ sustained UI work. RECORD_DETAIL_SPEC currently describes a pattern the code has
 each item below needs a deliberate call (spec is authoritative, OR code changed intentionally),
 captured in the spec as the new truth.
 
-- **Right-panel width:** spec says 264px, code is 290px (`RecordDetailShell.tsx`). Pick one, make both agree.
+- ~~**Right-panel width:** spec says 264px, code is 290px (`RecordDetailShell.tsx`). Pick one, make both agree.~~
+  RESOLVED (2026-06-11): standardised to **280px** in both `RecordDetailShell.tsx` and the spec.
 - **Section headers:** spec describes collapsible (chevron/rotation); code's `CentreSectionView` is a
   static header with an icon slot. Decide: collapsible (code is buggy) or static (spec is aspirational, trim it).
 - **Check detail page:** spec lists Check among the `RecordDetailShell` pages; code has `CheckDetailPage`

@@ -33,12 +33,13 @@ interface RecordDetailShellProps {
   moreMenuItems?: MoreMenuItem[]        // items for the ... dropdown
 
   // Centre column slots
-  titleCard: React.ReactNode            // always present
-  sections: CentreSection[]            // ordered list of sections to render
+  titleCard: React.ReactNode            // subject + description (always present)
+  detailFields: DetailField[]           // the "Details" key-value list — rendered in the CENTRE, after the title card and before `sections`
+  metadata?: RecordMetadata             // Submitted by / Created / Updated — rendered under the Details list
+  sections: CentreSection[]            // ordered centre sections after Details (Activity, plus type-specific ones like Implementation/Assessment)
 
-  // Right panel slots
-  detailFields: DetailField[]           // renders in Details collapsible panel
-  rightSections?: RightSection[]        // additional collapsible panels below Details
+  // Right panel slots — always-visible (non-collapsible) sections
+  rightSections?: RightSection[]        // the associations: Tasks, Attachments, Linked records
 
   // State
   loading?: boolean
@@ -65,32 +66,41 @@ Page files should be thin. Heavy logic lives in the shell and shared components.
 ┌─ Top bar (full width, 44px) ─────────────────────────────────────────────┐
 │  ← Back   REF-PILL   TYPE-BADGE         [Status▾]  [...]                │
 ├─────────────────────────────────────────┬────────────────────────────────┤
-│  CENTRE (flex:1, scrollable)            │  RIGHT (264px, scrollable)     │
+│  CENTRE (flex:1, scrollable)            │  RIGHT (280px, scrollable)     │
+│  = the record itself                    │  = its associations            │
 │                                         │                                │
-│  Subject                                │  ▾ Details                     │
-│  [Title]                                │    Type       Incident         │
-│  Description                            │    Severity   MEDIUM ▾         │
-│  [Description text]                     │    Priority   Medium ▾         │
-│  ─ divider ─                            │    Assignee   Unassigned ▾     │
-│  ▾ Tasks                                │    ───────────────────         │
-│  [task rows]                            │    Submitted by  —             │
-│  ─ divider ─                            │    Created    29 Apr, 11:36    │
-│  ▾ Activity   11 events                 │    Updated    29 Apr, 20:52    │
+│  Subject                                │  Tasks            (no chevron) │
+│  [Title]                                │    [task rows]                 │
+│  Description                            │    + Add task                  │
+│  [Description text]                     │  ──────────────────────────    │
+│  ─ divider ─                            │  Attachments                   │
+│  Details        (≤420px, no chevron)    │    file.pcap                   │
+│    Type       Incident                  │    + Attach file               │
+│    Severity   MEDIUM ▾                  │  ──────────────────────────    │
+│    Priority   Medium ▾                  │  Linked records                │
+│    Assignee   Unassigned ▾              │    [record rows]               │
+│    ───────────────────                  │    + Link record               │
+│    Submitted by  —                      │                                │
+│    Created    29 Apr, 11:36             │                                │
+│    Updated    29 Apr, 20:52             │                                │
+│  ─ divider ─                            │                                │
+│  ▾ Activity   11 events                 │                                │
 │  [feed]                                 │                                │
-│                                         │  ▾ Attachments                 │
-│                                         │    file.pcap                   │
-│                                         │    + Attach file               │
-│                                         │                                │
-│                                         │  ▾ Linked records              │
-│                                         │    [record rows]               │
-│                                         │    + Link record               │
 └─────────────────────────────────────────┴────────────────────────────────┘
 ```
 
-- Centre column: `flex: 1`, `overflow-y: auto`, `padding: 20px 24px`
-- Right panel: `width: 264px`, `flex-shrink: 0`, `border-left`, `overflow-y: auto`
-- No left panel — the previous three-column layout is retired
-- The shell sets `display: flex; height: 100%` on the body container
+The split is clean: **centre = the record itself** (subject → description → Details → Activity);
+**right = the associations** (Tasks, Attachments, Linked records).
+
+- Centre column: `flex: 1`, `overflow-y: auto`, `padding: 24px`. Order: title card (subject +
+  description) → **Details** (the key-value list, constrained to `maxWidth: 420` so it reads as a list
+  and doesn't stretch) → the `sections` (Activity, plus any type-specific centre sections).
+- Right panel: `width: 280px`, `flex-shrink: 0`, `border-left`, `overflow-y: auto`. Holds the
+  `rightSections` only — Tasks, Attachments, Linked records — each an **always-visible** section
+  (header with no chevron/toggle; body always rendered). Sections size to their content; the column
+  scrolls if tall.
+- No left panel — the previous three-column layout is retired.
+- The shell sets `display: flex; height: 100%` on the body container.
 
 ---
 
@@ -208,6 +218,20 @@ in its `updateForClient`. The global `ValidationPipe({ whitelist: true })` strip
 on a typed DTO, so a field missing from the DTO (or from the Prisma `data` block) makes the UI commit
 silently no-op even though the affordance works.
 
+### 5.1b Details (key-value list)
+
+The record's own fields — **rendered by the shell in the centre column**, immediately after the title
+card and before the `sections`. (Previously this lived in a collapsible right-panel "Details" panel; it
+moved to the centre so the centre holds the record and the right holds its associations.)
+
+- A "Details" caption header (`variant="caption" fontWeight={500} color="text.secondary"`, sentence
+  case, no chevron — it is not collapsible), preceded by a `Divider` separating it from the description.
+- Then each `DetailField` as a `DetailFieldRow` (label left, value right), followed by the read-only
+  metadata rows (Submitted by / Created / Updated) below a `Divider` — see §7.2/§7.3 for field and
+  metadata rules (those styling rules are unchanged; only the location moved).
+- The whole block is constrained to `maxWidth: 420` so a narrow key-value list does not stretch or sit
+  lost in the wide centre column.
+
 ### 5.2 Centre sections
 
 Each section is a `Box sx={{ mb: 2.5 }}` with a collapsible header and a `Divider` above it (except the first section directly after the title block).
@@ -215,7 +239,7 @@ Each section is a `Box sx={{ mb: 2.5 }}` with a collapsible header and a `Divide
 **Dividers between sections:**
 - `Divider sx={{ borderColor: 'divider', opacity: 0.6, my: 2 }}` between the description block and the first section, and between each subsequent section
 
-**Collapsible section header pattern** — used for Tasks and Activity:
+**Collapsible section header pattern** — used for Activity and the type-specific centre sections (e.g. Implementation, Assessment):
 ```tsx
 <Box onClick={() => setOpen(o => !o)}
   sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer',
@@ -229,7 +253,7 @@ Each section is a `Box sx={{ mb: 2.5 }}` with a collapsible header and a `Divide
 ```
 
 Section label style rules (consistent with Subject/Description labels):
-- Sentence case — "Tasks" not "TASKS", "Activity" not "ACTIVITY"
+- Sentence case — "Activity" not "ACTIVITY"
 - No icon next to the label — chevron only
 - `variant="caption"`, `fontWeight={500}`, `color="text.secondary"`
 - Chevron rotates -90° when collapsed, animates with `transition: transform .15s`
@@ -238,35 +262,10 @@ Wrap section body in `{open && <Box>...</Box>}`. Default open for all sections.
 
 The event count for Activity (`11 events`) sits in the header row right-aligned using a spacer: `<Box sx={{ flex: 1 }} />` then `<Typography variant="caption" color="text.tertiary">{count} events</Typography>`. Visible even when collapsed.
 
-Sections are defined by the page. Standard section types:
-
-#### Tasks section
-
-Each task row: `Paper variant="outlined" sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.875, mb: 0.5, borderRadius: 1 }}`
-
-Row contents (left to right):
-- Ref: monospace 11px muted (`TSK-001`)
-- Title: `flex: 1`, 12px
-- Status badge: plain coloured badge, no chevron, clickable — opens `StatusPopover`
-
-Status badge style (same as Linked Records status):
-- `fontSize: 10px, fontWeight: 500, px: 1, py: 0.25, borderRadius: 1`
-- Background and text from task status colour map (see section 7)
-
-"Add task" button: `Button variant="text" size="small" startIcon={<AddIcon />}` below the list
-
-#### Linked records section
-
-Each linked record row: `Paper variant="outlined" sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.875, mb: 0.5, borderRadius: 1, cursor: 'pointer' }}`
-
-Row contents:
-- Type badge: 10px coloured badge (from type colour map)
-- Title: `flex: 1`, 12px, `overflow: hidden, textOverflow: ellipsis, whiteSpace: nowrap`
-- Status badge: 10px coloured badge (same style as task status badge)
-
-"Link record" button below the list.
-
-If no linked entities: `Typography variant="caption" color="text.tertiary"` — "No linked records"
+The centre sections are defined by the page. They are **Activity** (always, see §6) plus any
+type-specific sections — Change's **Implementation** + **Approvals**, Risk's **Assessment**, etc. (§9).
+**Tasks is NOT a centre section** — it moved to the right column (§7.3). Centre sections keep their own
+collapsible chevron header; this is independent of the right column (which is non-collapsible).
 
 #### Activity section
 
@@ -337,28 +336,36 @@ Comment note body box:
 
 ## 7. Right panel
 
-### 7.1 Collapsible section pattern
+The right panel holds **the record's associations only** — **Tasks**, **Attachments**, **Linked
+records**, in that order. (The Details key-value list moved out to the centre — see §5.1b.) Every right
+section is **always visible** — there is no collapse/expand affordance. Sections size to their content
+and the column scrolls if tall. The shared `RightPanelSection` component (in `RecordDetailShell.tsx`)
+renders them; pages supply `rightSections` (with `id`, `title`, optional `icon`, `content`).
 
-Each right panel section uses this pattern:
+### 7.1 Section pattern (non-collapsible)
+
+Each right panel section uses this pattern — a header (no chevron, not clickable) + an always-rendered
+body:
 
 ```tsx
 <Box sx={{ borderBottom: '0.5px solid', borderColor: 'divider' }}>
-  {/* Header — clickable to collapse */}
-  <Box onClick={toggle} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.75, py: 1.25, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
+  {/* Header — static, no toggle */}
+  <Box sx={{ display: 'flex', alignItems: 'center', px: 1.75, py: 1.25 }}>
     <Typography variant="caption" fontWeight={500} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
       <SectionIcon sx={{ fontSize: 12, color: 'text.tertiary' }} />
       {title}
     </Typography>
-    <ExpandMoreIcon sx={{ fontSize: 16, color: 'text.tertiary', transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform .15s' }} />
   </Box>
-  {/* Body */}
-  {open && <Box sx={{ px: 1.75, pb: 1.5 }}>{children}</Box>}
+  {/* Body — always rendered */}
+  <Box sx={{ px: 1.75, pb: 1.5 }}>{children}</Box>
 </Box>
 ```
 
-### 7.2 Details panel
+### 7.2 Detail fields (rendered in the CENTRE — see §5.1b)
 
-Always the first panel. Default open.
+The Details key-value list is **not** a right-panel section any more; it renders in the centre column
+(§5.1b). The field-row styling and the standard-field table below still govern how each `DetailField`
+renders, wherever it appears.
 
 #### Field rows
 
@@ -401,9 +408,32 @@ Rendered as `Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.3
 
 **"Submitted by" sources from the read response's server-resolved `createdBy.displayName` projection** (`{ id, displayName }`, attached by `resolveCreator` in `apps/api/src/users/creator.ts`) — NOT a client-side `GET /users` lookup. The old approach resolved `createdById` against the admin-only `/users` directory, which 403s for operational/customer viewers and excludes customer creators, so "Submitted by" rendered blank for them. Pages now read `record.createdBy?.displayName ?? null` directly.
 
+### 7.3 Tasks panel
+
+The **first** right-panel section (above Attachments + Linked records) for the work-item types that
+have tasks (Incident, Service Request, Change, Risk, Issue). Standalone Task/Maintenance and the custom
+Check page have no Tasks panel. Implemented by the **shared `apps/web/src/components/TasksSectionContent.tsx`**
+component — one copy consumed by all five pages (it replaced five page-local duplicates). The page wires
+it via `rightSections` with the type's task data + handlers (`tasks`, `users`, `canManage`, `onCreate`,
+`onSelectTask`, `onChangeTaskStatus`, `onChangeTaskAssignee`).
+
+Each task row: `Paper variant="outlined" sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.875, mb: 0.5, borderRadius: 1, cursor: 'pointer' }}`. Row contents (left to right):
+- Ref: monospace 11px muted (`TSK-001`) — always shown
+- Title: `flex: 1`, 12px, ellipsised
+- Assignee: 22px initials avatar, or italic "Unassigned" — clickable, opens `StatusPopover`
+- Status badge: 10px coloured pill (task status colour map, §10), clickable — opens `StatusPopover`
+
+"Add task" button (`Button variant="text" size="small" startIcon={<AddIcon />}`) below the list when
+`canManage`. Empty state: a muted "No tasks" caption.
+
+**Row click drills, not navigates** (§2c-i wiring): the component uses `useDrillNav()` — inside the
+Service Desk navigator a row drills the task to depth 2 in place; standalone (no provider) it calls
+`onSelectTask` (the quick-detail modal). Moving Tasks from the centre to the right column did not change
+this — the wiring lives inside the shared component.
+
 ### 7.4 Linked records panel
 
-Collapsible section, default open. Sits below Attachments in the right panel. **Linked records do not appear in the centre column** — they live exclusively here.
+Always-visible section. Sits below Attachments in the right panel. **Linked records do not appear in the centre column** — they live exclusively here.
 
 **Data model — join table, not a scalar.** Links are stored in the `RecordLink` join table
 (`apps/api/prisma/schema.prisma`), NOT in the old `linkedEntityType`/`linkedEntityId` scalars
@@ -543,15 +573,21 @@ interface StatusOption {
 
 ## 9. Per-record-type configuration
 
+For all types, the **Details** key-value list (the "additional detail fields" below + the standard
+Type/Priority/Assignee + metadata) renders in the **centre** column (§5.1b), not the right. The right
+column lists below are the always-visible association panels. Tasks is the first right panel for the
+five work-item types that have tasks (Incident, SR, Change, Risk, Issue); Task/Maintenance have no
+Tasks panel.
+
 ### 9.1 Incident
 
 Additional detail fields: `Severity` (editable, options: CRITICAL / HIGH / MEDIUM / LOW)
 
 Status order: `NEW → INVESTIGATING → MITIGATED → RESOLVED → CLOSED`
 
-Centre sections: Tasks, Activity
+Centre sections: Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: Tasks, Attachments, Linked records
 
 More menu: Copy link, Close incident, Cancel incident (danger)
 
@@ -563,7 +599,7 @@ Status order: `DRAFT → SUBMITTED → PENDING_APPROVAL → APPROVED → IN_PROG
 
 Centre sections: Implementation (inline-editable text fields: Reason, Impact assessment, Rollback plan, Implementation notes, Post-implementation review), Approvals (read-only list), Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: Tasks, Attachments, Linked records
 
 More menu: Copy link, Cancel change (danger)
 
@@ -573,9 +609,9 @@ Additional detail fields: none beyond standard
 
 Status order: `NEW → ASSIGNED → IN_PROGRESS → WAITING_CUSTOMER → COMPLETED → CLOSED`
 
-Centre sections: Tasks, Activity
+Centre sections: Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: Tasks, Attachments, Linked records
 
 More menu: Copy link, Close request, Cancel request (danger)
 
@@ -587,7 +623,7 @@ Status order: `OPEN → IN_PROGRESS → BLOCKED → DONE`
 
 Centre sections: Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: Attachments, Linked records (no Tasks panel)
 
 More menu: Copy link, Mark done, Cancel task (danger)
 
@@ -599,7 +635,7 @@ Status order: `IDENTIFIED → ASSESSED → MITIGATING → MITIGATED → ACCEPTED
 
 Centre sections: Assessment (inline-editable text fields: Mitigation plan, Acceptance note), Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: Tasks, Attachments, Linked records
 
 More menu: Copy link, Close risk
 
@@ -611,7 +647,7 @@ Status order: `OPEN → IN_PROGRESS → RESOLVED → CLOSED`
 
 Centre sections: Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: Tasks, Attachments, Linked records
 
 More menu: Copy link, Close issue
 
@@ -623,7 +659,7 @@ Status order: `PLANNED → SCHEDULED → IN_PROGRESS → COMPLETED → CLOSED`
 
 Centre sections: Work details (work type, notes as inline-editable), Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: Attachments, Linked records (no Tasks panel)
 
 More menu: Copy link, Cancel maintenance (danger)
 
@@ -635,7 +671,10 @@ Status order: `DRAFT → SCHEDULED → ASSIGNED → IN_PROGRESS → PENDING_REVI
 
 Centre sections: Check items (execution checklist — unique to this type, preserve exactly), Activity
 
-Right panel sections: Details, Attachments, Linked records
+Right panel sections: **Check is a custom page (NOT the shared shell)** — its non-executing "standard
+layout" right column is a Properties panel + Progress card + an **Attachments** section. The Attachments
+section uses the shared non-collapsible `RightPanelSection` (the same always-visible header as the shell),
+matching the de-collapse of the work-item pages. No Linked-records panel.
 
 More menu: Copy link, Cancel check (danger)
 

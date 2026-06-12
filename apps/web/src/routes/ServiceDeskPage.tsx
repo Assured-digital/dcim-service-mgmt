@@ -1,5 +1,5 @@
 import React from "react"
-import { Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -11,6 +11,7 @@ import {
   DataGrid, GridColDef,
   GridFooterContainer, GridPagination,
   GridPreferencePanelsValue,
+  GridSortModel,
   GridToolbarExport, useGridApiRef,
 } from "@mui/x-data-grid"
 import AddIcon from "@mui/icons-material/Add"
@@ -36,10 +37,12 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { dataGridSx } from "../components/DataGridShell"
 import { getCurrentUser } from "../lib/auth"
 import { useTickets, isNewStatus, type Ticket, type TicketKind } from "../lib/tickets"
+import {
+  KIND_TO_TYPE_PARAM, encodeSortParam, parseQueueParams, filterTickets,
+} from "../lib/serviceDeskQueue"
 import { CreateIncidentModal } from "./modals/CreateIncidentModal"
 import { CreateChangeModal } from "./modals/CreateChangeModal"
 import ServiceDeskBoard from "./ServiceDeskBoard"
-import { useBreadcrumb } from "./Shell"
 
 // ── Create Service Request Modal (exported) ───────────────────────────────
 export function CreateServiceRequestModal({
@@ -169,6 +172,11 @@ function NewTicketTypePicker({
 // ── Unified queue: shared types ───────────────────────────────────────────
 type QueueView = "table" | "board"
 
+// ── Unified queue: URL filter/sort/search params ──────────────────────────
+// The queue's filter, type, search and sort state live in the URL query string
+// (mirroring the existing ?view= param) so the depth-0 table and a future
+// depth-1 rail derive the same list from one source, and the state survives
+// refresh / deep-link. Defaults are omitted from the URL to keep it clean.
 // ── Unified queue: View selector ──────────────────────────────────────────
 const VIEW_OPTIONS: Array<{ value: QueueView; label: string; icon: React.ReactNode }> = [
   { value: "table", label: "Table", icon: <ViewListIcon sx={{ fontSize: 16 }} /> },
@@ -502,21 +510,17 @@ const sectionLabelSx = {
 
 function UnifiedServiceDeskView() {
   const navigate = useNavigate()
-  const location = useLocation()
-  const { setPageFullBleed } = useBreadcrumb()
   const [searchParams, setSearchParams] = useSearchParams()
   const rawView = searchParams.get("view")
   const viewParam: QueueView = rawView === "board" ? "board" : "table"
-  const isDetailRoute = /^\/service-desk\/(sr|inc|chg)\//.test(location.pathname)
 
-  React.useEffect(() => {
-    setPageFullBleed(true)
-    return () => setPageFullBleed(false)
-  }, [setPageFullBleed])
+  // Filter/type/search/sort all derive from the URL (single source of truth) —
+  // shared with the depth-1 working-queue rail via lib/serviceDeskQueue.
+  const queueParams = React.useMemo(() => parseQueueParams(searchParams), [searchParams])
+  const { savedView, typeFilter, qParam, sortModel } = queueParams
 
-  const [savedView, setSavedView] = React.useState<string>("open")
-  const [typeFilter, setTypeFilter] = React.useState<TicketKind | "all">("all")
-  const [searchInput, setSearchInput] = React.useState("")
+  // Snappy controlled-input mirror of ?q= — the URL is written debounced below.
+  const [searchText, setSearchText] = React.useState(qParam)
   const currentUser = React.useMemo(() => getCurrentUser(), [])
   const apiRef = useGridApiRef()
   const [pickerOpen, setPickerOpen] = React.useState(false)
@@ -558,34 +562,52 @@ function UnifiedServiceDeskView() {
 
   const unifiedColumns = React.useMemo(() => buildUnifiedColumns(assigneeOptions), [assigneeOptions])
 
-  // Filter tickets by saved view, type filter, and search input.
-  const filtered = React.useMemo(() => {
-    const q = searchInput.trim().toLowerCase()
-    return tickets.filter(t => {
-      if (typeFilter !== "all" && t.kind !== typeFilter) return false
-      const done = t.chipIntent === "done"
+  // Filter via the shared selector (same logic the depth-1 rail uses). The
+  // DataGrid still owns sorting via sortModel, so no sortTickets() here.
+  const filtered = React.useMemo(
+    () => filterTickets(tickets, queueParams, currentUser),
+    [tickets, queueParams, currentUser],
+  )
 
-      if (savedView === "open" && done) return false
-      if (savedView === "new" && (!isNewStatus(t) || done)) return false
-      if (savedView === "mine" && (!currentUser || t.assignee?.id !== currentUser.userId || done)) return false
-      if (savedView === "overdue" && !t.overdue) return false
-      if (savedView === "unassigned" && (t.assignee || done)) return false
-      if (savedView === "awaiting" && (t.chipIntent !== "wait" || done)) return false
-      if (savedView === "closed" && !done) return false
+  // Debounced write of the search box into ?q= (replace, so keystrokes don't
+  // flood history). No-op when already in sync, so it can't loop with the
+  // back/forward sync effect below.
+  React.useEffect(() => {
+    if (searchText === qParam) return
+    const id = setTimeout(() => {
+      const params = new URLSearchParams(searchParams)
+      if (searchText) params.set("q", searchText)
+      else params.delete("q")
+      setSearchParams(params, { replace: true })
+    }, 300)
+    return () => clearTimeout(id)
+  }, [searchText, qParam, searchParams, setSearchParams])
 
-      if (q) {
-        const haystack = `${t.subject} ${t.reference} ${t.assignee?.email ?? ""}`.toLowerCase()
-        if (!haystack.includes(q)) return false
-      }
-
-      return true
-    })
-  }, [tickets, savedView, typeFilter, searchInput, currentUser])
+  // Keep the input in sync when the URL changes externally (back/forward).
+  React.useEffect(() => {
+    setSearchText(qParam)
+  }, [qParam])
 
   function handleNavPick(id: string) {
-    // Leave any open detail route so the right pane can show queue/dashboard.
-    if (isDetailRoute) navigate("/service-desk")
-    setSavedView(id)
+    const params = new URLSearchParams(searchParams)
+    if (id === "open") params.delete("status")
+    else params.set("status", id)
+    setSearchParams(params)   // push — back/forward steps through segments
+  }
+
+  function handleTypeFilterChange(next: TicketKind | "all") {
+    const params = new URLSearchParams(searchParams)
+    if (next === "all") params.delete("type")
+    else params.set("type", KIND_TO_TYPE_PARAM[next])
+    setSearchParams(params)   // push
+  }
+
+  function handleSortChange(model: GridSortModel) {
+    const encoded = encodeSortParam(model)
+    const params = new URLSearchParams(searchParams)
+    if (encoded === null) params.delete("sort")
+    else params.set("sort", encoded)
+    setSearchParams(params)   // push
   }
 
   function handlePickType(kind: TicketKind) {
@@ -595,7 +617,10 @@ function UnifiedServiceDeskView() {
   }
 
   function handleRowClick(t: Ticket) {
-    navigate(t.detailPath)
+    // Preserve the filter query string so the depth-1 working-queue rail can
+    // rebuild the same filtered/sorted set from the URL. Push (not replace) —
+    // browser-back returns to this table, not through each ticket viewed.
+    navigate({ pathname: t.detailPath, search: searchParams.toString() })
   }
 
   function handleViewToggle(next: QueueView) {
@@ -605,36 +630,30 @@ function UnifiedServiceDeskView() {
     setSearchParams(params, { replace: true })
   }
 
-  const showQueueChrome = !isDetailRoute
-
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
-      {/* The NavRail is hidden when a ticket detail is open so the detail
-          page can use the full content width. The detail header renders its
-          own Return button to get back to the queue. */}
-      {!isDetailRoute ? (
-        <NavRail
-          active={savedView}
-          onPick={handleNavPick}
-          counts={counts}
-          typeFilter={typeFilter}
-          onTypeFilterChange={setTypeFilter}
-        />
-      ) : null}
+      {/* Drill-down (record/association) is owned by the DrillDownNavigator; this
+          body is always the depth-0 queue, so the NavRail + chrome always show. */}
+      <NavRail
+        active={savedView}
+        onPick={handleNavPick}
+        counts={counts}
+        typeFilter={typeFilter}
+        onTypeFilterChange={handleTypeFilterChange}
+      />
 
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "#f8fafc" }}>
         {/* Header — Search on the left, View + New ticket on the right. */}
-        {showQueueChrome ? (
-          <Box sx={{
-            px: 2, py: 1.25, bgcolor: "#fff",
-            borderBottom: "1px solid #e2e8f0",
-            display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", flexShrink: 0
-          }}>
+        <Box sx={{
+          px: 2, py: 1.25, bgcolor: "#fff",
+          borderBottom: "1px solid #e2e8f0",
+          display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", flexShrink: 0
+        }}>
             <TextField
               size="small"
               placeholder="Search tickets…"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
               sx={{ flex: 1, maxWidth: 420 }}
               InputProps={{
                 startAdornment: <SearchIcon sx={{ fontSize: 16, color: "#94a3b8", mr: 1 }} />,
@@ -671,20 +690,17 @@ function UnifiedServiceDeskView() {
               ) : null}
             </Stack>
           </Box>
-        ) : null}
 
         {/* Body */}
         <Box sx={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", minHeight: 0 }}>
-          {isDetailRoute ? <Outlet /> : null}
+          {isLoading ? <Box sx={{ p: 3 }}><LoadingState /></Box> : null}
+          {error ? <Box sx={{ p: 3 }}><ErrorState title="Failed to load tickets" /></Box> : null}
 
-          {showQueueChrome && isLoading ? <Box sx={{ p: 3 }}><LoadingState /></Box> : null}
-          {showQueueChrome && error ? <Box sx={{ p: 3 }}><ErrorState title="Failed to load tickets" /></Box> : null}
-
-          {showQueueChrome && !isLoading && !error && viewParam === "board" ? (
+          {!isLoading && !error && viewParam === "board" ? (
             <ServiceDeskBoard tickets={filtered} />
           ) : null}
 
-          {showQueueChrome && !isLoading && !error && viewParam === "table" && filtered.length === 0 ? (
+          {!isLoading && !error && viewParam === "table" && filtered.length === 0 ? (
             <Box sx={{ p: 3 }}>
               <EmptyState
                 title="No tickets match this filter"
@@ -693,7 +709,7 @@ function UnifiedServiceDeskView() {
             </Box>
           ) : null}
 
-          {showQueueChrome && !isLoading && !error && viewParam === "table" && filtered.length > 0 ? (
+          {!isLoading && !error && viewParam === "table" && filtered.length > 0 ? (
             <Box sx={{ flex: 1, minHeight: 0, bgcolor: "#fff" }}>
               <DataGrid
                 apiRef={apiRef}
@@ -701,9 +717,10 @@ function UnifiedServiceDeskView() {
                 columns={unifiedColumns}
                 density="compact"
                 rowHeight={64}
+                sortModel={sortModel}
+                onSortModelChange={handleSortChange}
                 initialState={{
                   pagination: { paginationModel: { pageSize: 50 } },
-                  sorting: { sortModel: [{ field: "updatedAt", sort: "desc" }] },
                 }}
                 pageSizeOptions={[25, 50, 100]}
                 disableRowSelectionOnClick
@@ -737,6 +754,11 @@ function UnifiedServiceDeskView() {
       <CreateChangeModal open={chgOpen} onClose={() => setChgOpen(false)} />
     </Box>
   )
+}
+
+// The depth-0 queue body, consumed by ServiceDeskNavigator as the list panel.
+export function ServiceDeskQueueBody() {
+  return <UnifiedServiceDeskView />
 }
 
 export default function ServiceDeskPage() {
