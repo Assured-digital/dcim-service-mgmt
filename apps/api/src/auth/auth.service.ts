@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { UsersService } from "./users.service";
@@ -115,6 +120,29 @@ export class AuthService {
     await this.rotateRefreshToken(user.id, tokens.refreshToken);
 
     return { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: freshPayload };
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundException("User not found");
+
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) throw new UnauthorizedException("Current password is incorrect");
+
+    if (newPassword === currentPassword) {
+      throw new BadRequestException("New password must be different from the current password");
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.users.setPassword(userId, passwordHash);
+
+    return { success: true };
+  }
+
+  async getMe(userId: string) {
+    const profile = await this.users.getProfileById(userId);
+    if (!profile) throw new NotFoundException("User not found");
+    return profile;
   }
 
   async logout(refreshToken?: string) {

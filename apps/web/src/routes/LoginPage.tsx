@@ -2,12 +2,21 @@ import React, { useState } from "react";
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   TextField,
   Typography,
-  Alert
+  Alert,
+  InputAdornment,
+  IconButton,
+  Link,
+  Divider
 } from "@mui/material";
+import {
+  Mail,
+  Lock,
+  Visibility,
+  VisibilityOff,
+  Microsoft
+} from "@mui/icons-material";
 import { api, setAuthToken, type ApiError, type LoginResponse } from "../lib/api";
 import { setSession } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
@@ -15,10 +24,13 @@ import { useNavigate } from "react-router-dom";
 export default function LoginPage() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("admin@dcm.local");
-  const [password, setPassword] = useState("Admin123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const ssoEnabled = import.meta.env.VITE_SSO_ENABLED === "true";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,19 +69,43 @@ export default function LoginPage() {
       sx={{
         minHeight: "100vh",
         display: "grid",
-        placeItems: "center",
-        p: 2,
-        background:
-          "radial-gradient(circle at 15% 10%, rgba(37,99,235,0.14), transparent 35%), radial-gradient(circle at 85% 80%, rgba(15,118,110,0.12), transparent 40%)"
+        gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }
       }}
     >
-      <Card sx={{ width: 440 }}>
-        <CardContent>
-          <Typography variant="h5" sx={{ mb: 0.5 }}>
-            DC Service Mgmt
+      {/* Left brand panel */}
+      <Box
+        sx={{
+          display: { xs: "none", md: "flex" },
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "#0d1526",
+          p: 4
+        }}
+      >
+        <Box
+          component="img"
+          src="/ad-logo-white-new.svg"
+          alt="AD Service Management"
+          sx={{ width: 400 }}
+        />
+      </Box>
+
+      {/* Right form panel */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "#ffffff",
+          p: { xs: 3, sm: 6 }
+        }}
+      >
+        <Box sx={{ width: "100%", maxWidth: 360 }}>
+          <Typography variant="h5" sx={{ color: "text.primary", mb: 0.5 }}>
+            Sign in
           </Typography>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Sign in to continue to operations control center.
+          <Typography variant="body2" sx={{ color: "text.secondary", mb: 2.5 }}>
+            Use your work email to continue.
           </Typography>
 
           <Box component="form" onSubmit={submit} sx={{ display: "grid", gap: 2 }}>
@@ -77,32 +113,86 @@ export default function LoginPage() {
 
             <TextField
               label="Email"
+              type="email"
               value={email}
               fullWidth
               onChange={(e) => setEmail(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Mail fontSize="small" />
+                  </InputAdornment>
+                )
+              }}
             />
 
             <TextField
               label="Password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               fullWidth
               onChange={(e) => setPassword(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Lock fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword((s) => !s)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showPassword ? (
+                        <VisibilityOff fontSize="small" />
+                      ) : (
+                        <Visibility fontSize="small" />
+                      )}
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
             />
 
-            <Button type="submit" variant="contained" disabled={busy}>
+            <Box sx={{ textAlign: "right", mt: -1 }}>
+              <Link
+                component="button"
+                type="button"
+                onClick={() => {
+                  /* TODO: wire reset flow */
+                }}
+                sx={{ color: "primary.main", fontSize: 12 }}
+              >
+                Forgot password?
+              </Link>
+            </Box>
+
+            <Button type="submit" variant="contained" fullWidth disabled={busy}>
               {busy ? "Signing in..." : "Sign in"}
             </Button>
-          </Box>
 
-          <Typography
-            variant="caption"
-            sx={{ display: "block", mt: 2, color: "text.secondary" }}
-          >
-            SSO (OIDC / Azure AD) can be enabled in the next phase.
-          </Typography>
-        </CardContent>
-      </Card>
+            {ssoEnabled && (
+              <>
+                <Divider sx={{ my: 1 }}>OR</Divider>
+
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<Microsoft />}
+                  onClick={() => {
+                    /* TODO: start OIDC / Azure AD sign-in */
+                  }}
+                >
+                  Continue with Microsoft
+                </Button>
+              </>
+            )}
+          </Box>
+        </Box>
+      </Box>
     </Box>
   );
 }
