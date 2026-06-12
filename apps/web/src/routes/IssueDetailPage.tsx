@@ -26,6 +26,7 @@ import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -451,6 +452,7 @@ export default function IssueDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const { setPageFullBleed } = useBreadcrumb()
   const narrow = useDetailNarrow()
 
@@ -529,11 +531,15 @@ export default function IssueDetailPage() {
         qc.invalidateQueries({ queryKey: ["issue-detail", id] })
         qc.invalidateQueries({ queryKey: ["audit-issue", id] })
         qc.invalidateQueries({ queryKey: ["issues"] })
+        // Confirm only the title/description edits — popover-driven fields patch
+        // through here too and stay silent.
+        if ("title" in patch) notify.success("Title updated")
+        else if ("description" in patch) notify.success("Description updated")
       } catch (e: unknown) {
         setError(getApiErrorMessage(e, "Failed to save issue properties"))
       }
     },
-    [id, issue, qc]
+    [id, issue, qc, notify]
   )
 
   const handleAddNote = React.useCallback(async () => {
@@ -549,10 +555,11 @@ export default function IssueDetailPage() {
       qc.invalidateQueries({ queryKey: ["work-notes-issue", id] })
       qc.invalidateQueries({ queryKey: ["audit-issue", id] })
       resetFilterAfterComment()
+      notify.success("Note added")
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody])
+  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, resolution }: { to: string; resolution?: string }) =>

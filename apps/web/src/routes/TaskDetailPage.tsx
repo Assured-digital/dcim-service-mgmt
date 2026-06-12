@@ -27,6 +27,7 @@ import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import {
@@ -469,6 +470,7 @@ export default function TaskDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const { setPageFullBleed } = useBreadcrumb()
   const narrow = useDetailNarrow()
 
@@ -534,11 +536,15 @@ export default function TaskDetailPage() {
         qc.invalidateQueries({ queryKey: ["task-detail", id] })
         qc.invalidateQueries({ queryKey: ["audit-task", id] })
         qc.invalidateQueries({ queryKey: ["tasks"] })
+        // Confirm only the title/description edits — popover-driven fields
+        // (priority/assignee) flow through here too and stay silent.
+        if (field === "title") notify.success("Title updated")
+        else if (field === "description") notify.success("Description updated")
       } catch (e: unknown) {
         setError(getApiErrorMessage(e, "Failed to save task properties"))
       }
     },
-    [id, task, qc]
+    [id, task, qc, notify]
   )
 
   const handleAddNote = React.useCallback(async () => {
@@ -554,10 +560,11 @@ export default function TaskDetailPage() {
       qc.invalidateQueries({ queryKey: ["work-notes-task", id] })
       qc.invalidateQueries({ queryKey: ["audit-task", id] })
       resetFilterAfterComment()
+      notify.success("Note added")
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody])
+  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, comment }: { to: string; comment?: string }) =>

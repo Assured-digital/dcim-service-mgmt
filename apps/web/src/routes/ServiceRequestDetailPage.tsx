@@ -29,6 +29,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
 import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -474,6 +475,7 @@ export default function ServiceRequestDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { notify } = useNotification()
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -547,11 +549,15 @@ export default function ServiceRequestDetailPage() {
         qc.invalidateQueries({ queryKey: ["sr-detail", id] })
         qc.invalidateQueries({ queryKey: ["audit-sr", id] })
         qc.invalidateQueries({ queryKey: ["tickets"] })
+        // Confirm only the subject/description edits — popover-driven fields
+        // (priority/assignee) flow through here too and stay silent.
+        if (field === "subject") notify.success("Title updated")
+        else if (field === "description") notify.success("Description updated")
       } catch (e: unknown) {
         setError(getApiErrorMessage(e, "Failed to save service request"))
       }
     },
-    [id, sr, qc]
+    [id, sr, qc, notify]
   )
 
   const handleAddNote = React.useCallback(async () => {
@@ -568,10 +574,11 @@ export default function ServiceRequestDetailPage() {
       qc.invalidateQueries({ queryKey: ["work-notes-sr", id] })
       qc.invalidateQueries({ queryKey: ["audit-sr", id] })
       resetFilterAfterComment()
+      notify.success("Note added")
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody])
+  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({
