@@ -23,7 +23,7 @@ type Check = {
   passRate: number | null
   createdAt: string
   site: { id: string; name: string } | null
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
   template: { id: string; name: string; checkType: string } | null
   items: { id: string; response: string | null; isRequired: boolean }[]
 }
@@ -240,7 +240,7 @@ export default function ChecksPage() {
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption" color="text.secondary">
-                        {check.assignee?.email.split("@")[0] ?? "Unassigned"}
+                        {check.assignee?.displayName ?? "Unassigned"}
                       </Typography>
                     </TableCell>
                   </TableRow>

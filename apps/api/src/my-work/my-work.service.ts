@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { Role } from "@prisma/client"
 import { isOrgSuperRole } from "../auth/role-scope"
+import { toUserDisplay, userDisplaySelect } from "../users/display"
 
 @Injectable()
 export class MyWorkService {
@@ -24,7 +25,7 @@ export class MyWorkService {
         include: {
           client: { select: { id: true, name: true } },
           site: { select: { id: true, name: true } },
-          assignee: { select: { id: true, email: true } }
+          assignee: { select: userDisplaySelect }
         },
         orderBy: { scheduledAt: "asc" }
       }),
@@ -36,12 +37,15 @@ export class MyWorkService {
         },
         include: {
           client: { select: { id: true, name: true } },
-          assignee: { select: { id: true, email: true } }
+          assignee: { select: userDisplaySelect }
         },
         orderBy: { dueAt: "asc" }
       })
     ])
 
-    return { checks, tasks }
+    return {
+      checks: checks.map((c) => ({ ...c, assignee: toUserDisplay(c.assignee) })),
+      tasks: tasks.map((t) => ({ ...t, assignee: toUserDisplay(t.assignee) }))
+    }
   }
 }

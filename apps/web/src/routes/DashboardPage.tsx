@@ -18,8 +18,8 @@ import { Chip } from "@mui/material"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type SR = { id: string; status: string; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; email: string } | null }
-type Task = { id: string; reference: string; title: string; status: string; priority: string; dueAt: string | null; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; email: string } | null }
+type SR = { id: string; status: string; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; displayName: string } | null }
+type Task = { id: string; reference: string; title: string; status: string; priority: string; dueAt: string | null; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; displayName: string } | null }
 type Risk = { id: string; status: string; createdAt: string; updatedAt: string }
 type Issue = { id: string; status: string; createdAt: string; updatedAt: string }
 type Check = { id: string; reference: string; title: string; status: string; scheduledAt: string | null; createdAt: string; updatedAt: string; site?: { name: string } | null }
@@ -312,11 +312,11 @@ export default function DashboardPage() {
 
   // ── Assignees ──────────────────────────────────────────────────────────
   const assignees = React.useMemo(() => {
-    const byId = new Map<string, { id: string; email: string }>()
+    const byId = new Map<string, { id: string; displayName: string }>()
     ;[...(srs.data ?? []), ...(tasks.data ?? [])].forEach(item => {
       if (item.assignee?.id) byId.set(item.assignee.id, item.assignee)
     })
-    return Array.from(byId.values()).sort((a, b) => a.email.localeCompare(b.email))
+    return Array.from(byId.values()).sort((a, b) => a.displayName.localeCompare(b.displayName))
   }, [srs.data, tasks.data])
 
   function applyAssignee<T extends { assigneeId?: string | null }>(items: T[]) {
@@ -410,7 +410,7 @@ export default function DashboardPage() {
                   >
                     <MenuItem value="" sx={{ fontSize: 12 }}>All assignees</MenuItem>
                     {assignees.map(a => (
-                      <MenuItem key={a.id} value={a.id} sx={{ fontSize: 12 }}>{a.email}</MenuItem>
+                      <MenuItem key={a.id} value={a.id} sx={{ fontSize: 12 }}>{a.displayName}</MenuItem>
                     ))}
                   </TextField>
                   <ButtonGroup size="small" variant="outlined">

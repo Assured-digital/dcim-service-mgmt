@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service";
 import { IncidentSeverity, IncidentStatus } from "@prisma/client";
 import { resolveCreator } from "../users/creator";
+import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 
@@ -28,7 +29,7 @@ export class IncidentsService {
   async listForClient(clientId: string, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
-    return this.prisma.incident.findMany({
+    const rows = await this.prisma.incident.findMany({
       where: {
         clientId,
         assigneeId: filters.assigneeId || undefined,
@@ -37,10 +38,11 @@ export class IncidentsService {
       orderBy: { updatedAt: "desc" },
       include: {
         assignee: {
-          select: { id: true, email: true }
+          select: userDisplaySelect
         }
       }
     });
+    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }));
   }
 
   async exportCsvForClient(clientId: string, filters: ListFilters = {}) {
@@ -51,7 +53,7 @@ export class IncidentsService {
       status: incident.status,
       severity: incident.severity,
       priority: incident.priority,
-      assignee: incident.assignee?.email ?? "",
+      assignee: incident.assignee?.displayName ?? "",
       createdAt: incident.createdAt.toISOString(),
       updatedAt: incident.updatedAt.toISOString()
     }));
@@ -63,7 +65,7 @@ export class IncidentsService {
       where: { id, clientId },
       include: {
         assignee: {
-          select: { id: true, email: true }
+          select: userDisplaySelect
         }
       }
     });
@@ -71,7 +73,7 @@ export class IncidentsService {
     const createdBy = await resolveCreator(this.prisma, incident.createdById);
     const links = await resolveLinkedRecords(this.prisma, clientId, "incident", incident.id);
     const attachments = await resolveAttachments(this.prisma, clientId, "incident", incident.id);
-    return { ...incident, createdBy, links, attachments };
+    return { ...incident, assignee: toUserDisplay(incident.assignee), createdBy, links, attachments };
   }
 
   async createForClient(
@@ -94,7 +96,7 @@ export class IncidentsService {
       },
       include: {
         assignee: {
-          select: { id: true, email: true }
+          select: userDisplaySelect
         }
       }
     });
@@ -113,7 +115,7 @@ export class IncidentsService {
       }
     });
 
-    return created;
+    return { ...created, assignee: toUserDisplay(created.assignee) };
   }
 
   async updateForClient(
@@ -140,7 +142,7 @@ export class IncidentsService {
       },
       include: {
         assignee: {
-          select: { id: true, email: true }
+          select: userDisplaySelect
         }
       }
     });
@@ -158,7 +160,7 @@ export class IncidentsService {
       }
     });
 
-    return updated;
+    return { ...updated, assignee: toUserDisplay(updated.assignee) };
   }
 
   async updateStatusForClient(

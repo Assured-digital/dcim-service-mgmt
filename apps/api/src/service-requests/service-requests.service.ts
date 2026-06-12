@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service";
 import { ServiceRequestStatus } from "@prisma/client";
 import { resolveCreator } from "../users/creator";
+import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 
@@ -31,7 +32,7 @@ export class ServiceRequestsService {
   async listForClient(clientId: string, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
-    return this.prisma.serviceRequest.findMany({
+    const rows = await this.prisma.serviceRequest.findMany({
       where: {
         clientId,
         assigneeId: filters.assigneeId || undefined,
@@ -42,10 +43,11 @@ export class ServiceRequestsService {
       orderBy: { updatedAt: "desc" },
       include: {
         assignee: {
-          select: { id: true, email: true }
+          select: userDisplaySelect
         }
       }
     });
+    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }));
   }
 
   async exportCsvForClient(clientId: string, filters: ListFilters = {}) {
@@ -55,7 +57,7 @@ export class ServiceRequestsService {
       subject: sr.subject,
       status: sr.status,
       priority: sr.priority,
-      assignee: sr.assignee?.email ?? "",
+      assignee: sr.assignee?.displayName ?? "",
       createdAt: sr.createdAt.toISOString(),
       updatedAt: sr.updatedAt.toISOString(),
       closureSummary: sr.closureSummary ?? ""
@@ -97,7 +99,7 @@ export class ServiceRequestsService {
   const sr = await this.prisma.serviceRequest.findFirst({
     where: { id, clientId },
     include: {
-      assignee: { select: { id: true, email: true } },
+      assignee: { select: userDisplaySelect },
       client: { select: { id: true, name: true } },
       auditEvents: {
         orderBy: { createdAt: "asc" }
@@ -108,7 +110,7 @@ export class ServiceRequestsService {
   const createdBy = await resolveCreator(this.prisma, sr.createdById);
   const links = await resolveLinkedRecords(this.prisma, clientId, "service_request", sr.id);
   const attachments = await resolveAttachments(this.prisma, clientId, "service_request", sr.id);
-  return { ...sr, createdBy, links, attachments };
+  return { ...sr, assignee: toUserDisplay(sr.assignee), createdBy, links, attachments };
 }
 
 async updateStatusForClient(

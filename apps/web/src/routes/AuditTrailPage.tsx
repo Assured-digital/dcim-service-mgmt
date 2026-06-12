@@ -27,7 +27,7 @@ type AuditEvent = {
   entityId: string;
   action: string;
   actorUserId: string | null;
-  actorEmail?: string | null;
+  actorDisplayName?: string | null;
   data: Record<string, unknown> | null;
   createdAt: string;
 };
@@ -41,7 +41,7 @@ type AuditResponse = {
 
 type Actor = {
   id: string;
-  email: string;
+  displayName: string;
 };
 
 export default function AuditTrailPage() {
@@ -112,7 +112,7 @@ export default function AuditTrailPage() {
               <MenuItem value="">All users</MenuItem>
               {(actors.data ?? []).map((actor) => (
                 <MenuItem key={actor.id} value={actor.id}>
-                  {actor.email}
+                  {actor.displayName}
                 </MenuItem>
               ))}
             </TextField>
@@ -207,7 +207,7 @@ export default function AuditTrailPage() {
                 {(audit.data?.items ?? []).map((event) => (
                   <TableRow key={event.id}>
                     <TableCell>{new Date(event.createdAt).toLocaleString()}</TableCell>
-                    <TableCell>{event.actorEmail ?? "system"}</TableCell>
+                    <TableCell>{event.actorDisplayName ?? "system"}</TableCell>
                     <TableCell>{`${event.entityType} / ${event.entityId}`}</TableCell>
                     <TableCell>
                       <Chip size="small" sx={statusChipSx(event.action)} label={event.action.toLowerCase()} />

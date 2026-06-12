@@ -58,6 +58,7 @@ import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
 import { TasksSectionContent } from "../components/TasksSectionContent"
+import { userLabel } from "../lib/userDisplay"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -77,7 +78,7 @@ type SR = {
   attachments?: AttachmentSummary[]
   createdAt: string
   updatedAt: string
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
   client: { id: string; name: string }
 }
 
@@ -85,7 +86,7 @@ type AuditEvent = {
   id: string
   action: string
   actorUserId?: string | null
-  actorEmail?: string | null
+  actorDisplayName?: string | null
   data?: Record<string, unknown> | null
   createdAt: string
 }
@@ -97,13 +98,13 @@ type SRComment = {
   visibleToCustomer: boolean
   fromCustomer: boolean
   createdAt: string
-  author: { id: string; email: string }
+  author: { id: string; displayName: string }
 }
 
 
 type LinkedTaskWithAssignee = LinkedTask & {
   assigneeId?: string | null
-  assignee?: { id: string; email: string } | null
+  assignee?: { id: string; displayName: string } | null
 }
 
 type FeedEventType = "status" | "comment" | "assignment" | "link"
@@ -738,7 +739,7 @@ export default function ServiceRequestDetailPage() {
       return {
         id: `audit-${e.id}`,
         type,
-        actor: e.actorEmail ?? "System",
+        actor: e.actorDisplayName ?? "System",
         text,
         note: transitionComment ?? undefined,
         time: formatDateTime(e.createdAt),
@@ -748,7 +749,7 @@ export default function ServiceRequestDetailPage() {
     const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
       id: `note-${n.id}`,
       type: "comment",
-      actor: n.author.email,
+      actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body,
       time: formatDateTime(n.createdAt),
@@ -757,7 +758,7 @@ export default function ServiceRequestDetailPage() {
     const updates: FeedEvent[] = (customerUpdates ?? []).map((c) => ({
       id: `cu-${c.id}`,
       type: "comment",
-      actor: c.author.email,
+      actor: c.author.displayName,
       text: <>sent a customer update</>,
       note: c.body,
       time: formatDateTime(c.createdAt),
@@ -931,7 +932,7 @@ export default function ServiceRequestDetailPage() {
         value: (
           <Box sx={valueWrapperSx}>
             {sr.assignee ? (
-              <Typography sx={{ fontSize: 12 }}>{sr.assignee.email}</Typography>
+              <Typography sx={{ fontSize: 12 }}>{userLabel(sr.assignee)}</Typography>
             ) : (
               <Typography
                 sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}

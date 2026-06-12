@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { resolveCreator } from "../users/creator"
+import { toUserDisplay, userDisplaySelect } from "../users/display"
 import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 
@@ -20,14 +21,15 @@ export class ChangesService {
 
   async listForClient(clientId: string) {
     this.assertClientScope(clientId)
-    return this.prisma.changeRequest.findMany({
+    const rows = await this.prisma.changeRequest.findMany({
       where: { clientId },
       orderBy: { createdAt: "desc" },
       include: {
-        assignee: { select: { id: true, email: true } },
+        assignee: { select: userDisplaySelect },
         approvals: { orderBy: { decidedAt: "desc" }, take: 1 }
       }
     })
+    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
   }
 
   async getForClient(clientId: string, id: string) {
@@ -35,10 +37,10 @@ export class ChangesService {
     const change = await this.prisma.changeRequest.findFirst({
       where: { id, clientId },
       include: {
-        assignee: { select: { id: true, email: true } },
+        assignee: { select: userDisplaySelect },
         approvals: {
           orderBy: { decidedAt: "desc" },
-          include: { approver: { select: { id: true, email: true } } }
+          include: { approver: { select: userDisplaySelect } }
         }
       }
     })
@@ -46,7 +48,14 @@ export class ChangesService {
     const createdBy = await resolveCreator(this.prisma, change.createdById)
     const links = await resolveLinkedRecords(this.prisma, clientId, "change", change.id)
     const attachments = await resolveAttachments(this.prisma, clientId, "change", change.id)
-    return { ...change, createdBy, links, attachments }
+    return {
+      ...change,
+      assignee: toUserDisplay(change.assignee),
+      approvals: change.approvals.map((a) => ({ ...a, approver: toUserDisplay(a.approver) })),
+      createdBy,
+      links,
+      attachments
+    }
   }
 
   async createForClient(clientId: string, actorUserId: string, dto: {

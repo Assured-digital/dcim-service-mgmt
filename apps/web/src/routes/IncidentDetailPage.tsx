@@ -60,6 +60,7 @@ import { AttachmentsContent, type AttachmentsHandle } from "../components/Attach
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
+import { userLabel } from "../lib/userDisplay"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -74,7 +75,7 @@ type Incident = {
   severity: string
   priority: string
   assigneeId: string | null
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
   createdById?: string | null
   createdBy?: { id: string; displayName: string } | null
   links?: ResolvedLink[]
@@ -87,7 +88,7 @@ type AuditEvent = {
   id: string
   action: string
   actorUserId: string | null
-  actorEmail?: string | null
+  actorDisplayName?: string | null
   data?: Record<string, unknown> | null
   createdAt: string
 }
@@ -99,12 +100,12 @@ type IncidentComment = {
   message?: string
   type: string
   createdAt: string
-  author: { id: string; email: string }
+  author: { id: string; displayName: string }
 }
 
 type LinkedTaskWithAssignee = LinkedTask & {
   assigneeId?: string | null
-  assignee?: { id: string; email: string } | null
+  assignee?: { id: string; displayName: string } | null
 }
 
 type FeedEventType = "status" | "comment" | "assignment" | "link"
@@ -728,7 +729,7 @@ export default function IncidentDetailPage() {
       return {
         id: `audit-${e.id}`,
         type,
-        actor: e.actorEmail ?? "System",
+        actor: e.actorDisplayName ?? "System",
         text,
         note: transitionComment ?? undefined,
         time: formatDateTime(e.createdAt),
@@ -738,7 +739,7 @@ export default function IncidentDetailPage() {
     const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
       id: `note-${n.id}`,
       type: "comment",
-      actor: n.author.email,
+      actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body ?? n.content ?? n.message ?? "",
       time: formatDateTime(n.createdAt),
@@ -928,7 +929,7 @@ export default function IncidentDetailPage() {
         value: (
           <Box sx={valueWrapperSx}>
             {incident.assignee ? (
-              <Typography sx={{ fontSize: 12 }}>{incident.assignee.email}</Typography>
+              <Typography sx={{ fontSize: 12 }}>{userLabel(incident.assignee)}</Typography>
             ) : (
               <Typography
                 sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}

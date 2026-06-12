@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TaskStatus } from "@prisma/client";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
+import { toUserDisplay, userDisplaySelect } from "../users/display";
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -29,7 +30,7 @@ export class TasksService {
   async listForClient(clientId: string, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
-    return this.prisma.task.findMany({
+    const rows = await this.prisma.task.findMany({
       where: {
         clientId,
         assigneeId: filters.assigneeId || undefined,
@@ -40,13 +41,14 @@ export class TasksService {
       orderBy: { updatedAt: "desc" },
       include: {
         assignee: {
-          select: { id: true, email: true }
+          select: userDisplaySelect
         },
         incident: {
           select: { id: true, reference: true, title: true }
         }
       }
     });
+    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }));
   }
 
   async exportCsvForClient(clientId: string, filters: ListFilters = {}) {
@@ -55,7 +57,7 @@ export class TasksService {
       title: task.title,
       status: task.status,
       priority: task.priority,
-      assignee: task.assignee?.email ?? "",
+      assignee: task.assignee?.displayName ?? "",
       incidentReference: task.incident?.reference ?? "",
       dueAt: task.dueAt ? task.dueAt.toISOString() : "",
       createdAt: task.createdAt.toISOString(),
@@ -69,13 +71,13 @@ export class TasksService {
       where: { id, clientId },
       include: {
         incident: true,
-        assignee: { select: { id: true, email: true } }
+        assignee: { select: userDisplaySelect }
       }
     });
     if (!task) throw new NotFoundException("Task not found");
     const links = await resolveLinkedRecords(this.prisma, clientId, "task", task.id);
     const attachments = await resolveAttachments(this.prisma, clientId, "task", task.id);
-    return { ...task, links, attachments };
+    return { ...task, assignee: toUserDisplay(task.assignee), links, attachments };
   }
 
   async createForClient(
@@ -120,7 +122,7 @@ export class TasksService {
             createdById: actorUserId
           },
           include: {
-            assignee: { select: { id: true, email: true } },
+            assignee: { select: userDisplaySelect },
             incident: { select: { id: true, reference: true, title: true } }
           }
         })
@@ -136,7 +138,7 @@ export class TasksService {
           }
         })
 
-        return task
+        return { ...task, assignee: toUserDisplay(task.assignee) }
       }
     }
     throw new BadRequestException("Could not generate unique reference")
@@ -205,7 +207,7 @@ export class TasksService {
     assigneeId?: string
   }) {
     const task = await this.getForClient(clientId, id)
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id: task.id },
       data: {
         title: dto.title,
@@ -215,9 +217,10 @@ export class TasksService {
         assigneeId: dto.assigneeId ?? null
       },
       include: {
-        assignee: { select: { id: true, email: true } },
+        assignee: { select: userDisplaySelect },
         incident: { select: { id: true, reference: true, title: true } }
       }
     })
+    return { ...updated, assignee: toUserDisplay(updated.assignee) }
   }
 }

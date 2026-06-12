@@ -38,7 +38,7 @@ type Task = {
   createdAt: string
   updatedAt: string
   assigneeId: string | null
-  assignee: { id: string; email: string } | null
+  assignee: { id: string; displayName: string } | null
   linkedEntityType: string | null
   linkedEntityId: string | null
   incident: { id: string; reference: string; title: string } | null
@@ -47,7 +47,7 @@ type Task = {
 type TaskAuditEvent = {
   id: string
   action: string
-  actorEmail?: string | null
+  actorDisplayName?: string | null
   createdAt: string
   data?: { from?: string; to?: string; fields?: string[] } | null
 }
@@ -55,7 +55,7 @@ type TaskComment = {
   id: string
   body: string
   createdAt: string
-  author: { id: string; email: string }
+  author: { id: string; displayName: string }
 }
 type ListColumnId = "title" | "ref" | "status" | "priority" | "assignee" | "linked" | "due" | "updated"
 type ListColumnConfig = {
@@ -119,8 +119,12 @@ function statusChipSx(status: string) {
   return chipSx(status)
 }
 
-function initials(email: string) {
-  return email.split("@")[0].slice(0, 2).toUpperCase()
+function initials(label: string) {
+  const base = label.includes("@") ? label.split("@")[0] : label
+  const parts = base.split(/[\s._-]+/).filter(Boolean)
+  if (parts.length === 0) return "?"
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function linkedLabel(task: Task) {
@@ -226,7 +230,7 @@ function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect, header
         {users.map(u => (
           <Box key={u.id} onClick={() => { onSelect(u.id); onClose() }} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "12px", py: "8px", cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}>
             <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              {initials(u.email)}
+              {initials(u.displayName)}
             </Box>
             <Typography sx={{ fontSize: 13, color: "#0f172a", flex: 1 }}>{u.displayName}</Typography>
             {u.id === currentId ? <CheckIcon sx={{ fontSize: 13, color: "#1d4ed8" }} /> : null}
@@ -358,7 +362,7 @@ function InlineCreateRow({ users, onCreate, onCancel, visibleColumns }: {
               sx={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", px: "6px", py: "3px", borderRadius: "6px", "&:hover": { bgcolor: "#f1f5f9" } }}
             >
               <Box sx={{ width: 22, height: 22, borderRadius: "50%", bgcolor: assignee ? "#e8f1ff" : "#f1f5f9", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {assignee ? initials(assignee.email) : ""}
+                {assignee ? initials(assignee.displayName) : ""}
               </Box>
               <Typography sx={{ fontSize: 12, color: assignee ? "#0f172a" : "#94a3b8" }}>
                 {assignee ? assignee.displayName : "Assign"}
@@ -454,9 +458,9 @@ function TaskCardBody({ task, isDragging, onClick }: {
         </Typography>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           {task.assignee ? (
-            <Tooltip title={task.assignee.email}>
+            <Tooltip title={task.assignee.displayName}>
               <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {initials(task.assignee.email)}
+                {initials(task.assignee.displayName)}
               </Box>
             </Tooltip>
           ) : <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#f1f5f9" }} />}
@@ -828,7 +832,7 @@ export function TaskQuickDetailModal({
                 (workNotes ?? []).slice().reverse().map(note => (
                   <Box key={note.id} sx={{ border: "1px solid #e2e8f0", borderRadius: 1.5, p: 1.25 }}>
                     <Typography variant="caption" sx={{ color: "#64748b" }}>
-                      {note.author.email} · {new Date(note.createdAt).toLocaleString("en-GB")}
+                      {note.author.displayName} · {new Date(note.createdAt).toLocaleString("en-GB")}
                     </Typography>
                     <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}>{note.body}</Typography>
                   </Box>
@@ -845,7 +849,7 @@ export function TaskQuickDetailModal({
                 (auditEvents ?? []).map(event => (
                   <Box key={event.id} sx={{ border: "1px solid #e2e8f0", borderRadius: 1.5, p: 1.25 }}>
                     <Typography variant="caption" sx={{ color: "#64748b" }}>
-                      {event.action.toLowerCase().replaceAll("_", " ")} · {event.actorEmail ?? "system"} · {new Date(event.createdAt).toLocaleString("en-GB")}
+                      {event.action.toLowerCase().replaceAll("_", " ")} · {event.actorDisplayName ?? "system"} · {new Date(event.createdAt).toLocaleString("en-GB")}
                     </Typography>
                     {event.data ? (
                       <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: "#475569" }}>
@@ -1159,7 +1163,7 @@ export default function TasksPage() {
                         transition: "all 0.12s"
                       }}
                     >
-                      {initials(u.email)}
+                      {initials(u.displayName)}
                     </Box>
                   </Tooltip>
                 )
@@ -1373,10 +1377,10 @@ export default function TasksPage() {
                               {task.assignee ? (
                                 <>
                                   <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                    {initials(task.assignee.email)}
+                                    {initials(task.assignee.displayName)}
                                   </Box>
                                   <Typography sx={{ fontSize: 12, color: "#475569" }}>
-                                    {task.assignee.email.split("@")[0]}
+                                    {task.assignee.displayName}
                                   </Typography>
                                 </>
                               ) : (

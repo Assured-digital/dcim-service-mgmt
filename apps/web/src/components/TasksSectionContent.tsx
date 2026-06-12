@@ -15,7 +15,7 @@ import { type AssignableUser } from "../lib/useAssignableUsers"
 
 export type TaskRow = LinkedTask & {
   assigneeId?: string | null
-  assignee?: { id: string; email: string } | null
+  assignee?: { id: string; displayName: string } | null
 }
 
 // ── Task status colour map — spec section 10 ────────────────────────────────
@@ -35,11 +35,11 @@ const TASK_STATUS_OPTIONS: PopoverOption[] = ["OPEN", "IN_PROGRESS", "BLOCKED", 
   icon: <AssignmentIcon sx={{ fontSize: 14 }} />,
 }))
 
-function getInitials(email: string): string {
-  const local = email.split("@")[0] ?? email
-  const parts = local.split(/[._-]/).filter(Boolean)
-  if (parts.length >= 2 && parts[0] && parts[1]) {
-    return (parts[0][0] + parts[1][0]).toUpperCase()
+function getInitials(label: string): string {
+  const local = label.includes("@") ? label.split("@")[0] : label
+  const parts = local.split(/[\s._-]/).filter(Boolean)
+  if (parts.length >= 2 && parts[0] && parts[parts.length - 1]) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
   }
   return local.slice(0, 2).toUpperCase()
 }
@@ -88,7 +88,7 @@ const TaskStatusBadge = React.memo(function TaskStatusBadge({
 })
 
 interface AssigneeCellProps {
-  assignee: { id: string; email: string } | null | undefined
+  assignee: { id: string; displayName: string } | null | undefined
   onClick: (anchor: HTMLElement) => void
 }
 
@@ -130,7 +130,7 @@ const AssigneeCell = React.memo(function AssigneeCell({
             flexShrink: 0,
           }}
         >
-          {getInitials(assignee.email)}
+          {getInitials(assignee.displayName)}
         </Box>
       ) : (
         <Typography color="text.tertiary" sx={{ fontSize: 11, fontStyle: "italic" }}>
@@ -222,7 +222,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
       iconColor: "#3b6d11",
       icon: (
         <Box component="span" sx={{ fontSize: 9, fontWeight: 600 }}>
-          {getInitials(u.email)}
+          {getInitials(u.displayName)}
         </Box>
       ),
     }))

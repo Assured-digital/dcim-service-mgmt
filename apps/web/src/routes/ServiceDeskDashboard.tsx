@@ -223,11 +223,11 @@ function CategoryPanel({ tickets }: { tickets: Ticket[] }) {
 
 // ── Team load ─────────────────────────────────────────────────────────────
 function TeamLoad({ tickets }: { tickets: Ticket[] }) {
-  const agg = new Map<string, { open: number; late: number; email: string }>()
+  const agg = new Map<string, { open: number; late: number; id: string; displayName: string }>()
   for (const t of tickets) {
     if (!t.assignee || t.chipIntent === "done") continue
     const key = t.assignee.id
-    const existing = agg.get(key) ?? { open: 0, late: 0, email: t.assignee.email }
+    const existing = agg.get(key) ?? { open: 0, late: 0, id: t.assignee.id, displayName: t.assignee.displayName }
     existing.open++
     if (t.overdue) existing.late++
     agg.set(key, existing)
@@ -245,10 +245,10 @@ function TeamLoad({ tickets }: { tickets: Ticket[] }) {
         ) : (
           <Stack spacing={1}>
             {rows.map(row => {
-              const name = row.email.split("@")[0].replace(/[._-]/g, " ")
+              const name = row.displayName
               return (
-                <Stack key={row.email} direction="row" alignItems="center" spacing={1.25}>
-                  <TicketAvatar name={row.email} size="md" variant="engineer" />
+                <Stack key={row.id} direction="row" alignItems="center" spacing={1.25}>
+                  <TicketAvatar name={row.displayName} size="md" variant="engineer" />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{
                       fontSize: 13, fontWeight: 600, color: "#0f172a",

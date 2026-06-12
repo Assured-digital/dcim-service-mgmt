@@ -342,16 +342,16 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
       field: "assignee", headerName: "Assignee", width: 170,
       type: "singleSelect",
       valueOptions: assigneeOptions,
-      valueGetter: (_v, row) => row.assignee?.email.split("@")[0] ?? "Unassigned",
+      valueGetter: (_v, row) => row.assignee?.displayName ?? "Unassigned",
       renderCell: (p) => {
         const t = p.row as Ticket
         if (!t.assignee) {
           return <Typography sx={{ fontSize: 12.5, fontStyle: "italic", color: "#94a3b8" }}>Unassigned</Typography>
         }
         return (
-          <Tooltip title={t.assignee.email} arrow placement="top">
+          <Tooltip title={t.assignee.displayName} arrow placement="top">
             <Stack direction="row" alignItems="center" spacing={0.75}>
-              <TicketAvatar name={t.assignee.email} size="sm" variant="engineer" />
+              <TicketAvatar name={t.assignee.displayName} size="sm" variant="engineer" />
               <Typography sx={{ fontSize: 12.5 }}>{p.value as string}</Typography>
             </Stack>
           </Tooltip>
@@ -558,7 +558,7 @@ function UnifiedServiceDeskView() {
     const set = new Set<string>()
     let hasUnassigned = false
     for (const t of tickets) {
-      if (t.assignee) set.add(t.assignee.email.split("@")[0])
+      if (t.assignee) set.add(t.assignee.displayName)
       else hasUnassigned = true
     }
     const sorted = Array.from(set).sort((a, b) => a.localeCompare(b))

@@ -39,14 +39,14 @@ type MaintenanceLog = {
   performedAt: string
   notes: string | null
   nextDueAt: string | null
-  performedBy: { id: string; email: string } | null
+  performedBy: { id: string; displayName: string } | null
 }
 
 type AuditEventWithActor = AuditEvent & {
   entityType?: string
   entityId?: string
   actorUserId?: string | null
-  actorEmail?: string | null
+  actorDisplayName?: string | null
   data?: any
 }
 
@@ -104,13 +104,13 @@ function avatarBg(email: string | null | undefined): string {
   return palette[Math.abs(h) % palette.length]
 }
 
-function initialsFrom(email: string | null | undefined): string {
-  if (!email) return "?"
-  const at = email.split("@")[0]
-  const parts = at.split(/[._-]/).filter(Boolean)
-  if (parts.length === 0) return email[0]?.toUpperCase() ?? "?"
+function initialsFrom(label: string | null | undefined): string {
+  if (!label) return "?"
+  const base = label.includes("@") ? label.split("@")[0] : label
+  const parts = base.split(/[\s._-]/).filter(Boolean)
+  if (parts.length === 0) return label[0]?.toUpperCase() ?? "?"
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[1][0]).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function describeAssetAction(action: string): string {
@@ -909,7 +909,7 @@ function MaintenanceTab({
                   </Stack>
                   {log.notes ? <Typography sx={{ fontSize: 12.5, color: "#334155", mb: "4px" }}>{log.notes}</Typography> : null}
                   <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>
-                    Performed by {log.performedBy?.email ?? "—"}
+                    Performed by {log.performedBy?.displayName ?? "—"}
                     {log.nextDueAt ? ` · Next due ${formatDate(log.nextDueAt)}` : ""}
                   </Typography>
                 </Box>
@@ -936,7 +936,7 @@ function HistoryTab({ events }: { events: AuditEventWithActor[] }) {
   return (
     <Box sx={{ maxWidth: 880, bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
       {events.map((event, idx) => {
-        const actor = event.actorEmail ?? "system"
+        const actor = event.actorDisplayName ?? "system"
         const changes: { field: string; from?: string; to?: string }[] =
           Array.isArray(event.data?.changes) ? event.data.changes
           : Array.isArray(event.data?.diff) ? event.data.diff
