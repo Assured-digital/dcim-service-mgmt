@@ -31,6 +31,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
 import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -513,6 +514,7 @@ export default function IncidentDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { notify } = useNotification()
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -579,11 +581,15 @@ export default function IncidentDetailPage() {
         qc.invalidateQueries({ queryKey: ["incident-detail", id] })
         qc.invalidateQueries({ queryKey: ["audit-incident", id] })
         qc.invalidateQueries({ queryKey: ["tickets"] })
+        // Confirm only the title/description edits — popover-driven fields (severity
+        // /priority/assignee) flow through here too and stay silent.
+        if (field === "title") notify.success("Title updated")
+        else if (field === "description") notify.success("Description updated")
       } catch (e: unknown) {
         setError(getApiErrorMessage(e, "Failed to save incident properties"))
       }
     },
-    [id, incident, qc]
+    [id, incident, qc, notify]
   )
 
   const handleAddNote = React.useCallback(async () => {
@@ -599,10 +605,11 @@ export default function IncidentDetailPage() {
       qc.invalidateQueries({ queryKey: ["work-notes-incident", id] })
       qc.invalidateQueries({ queryKey: ["audit-incident", id] })
       resetFilterAfterComment()
+      notify.success("Note added")
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody])
+  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, comment }: { to: string; comment?: string }) =>

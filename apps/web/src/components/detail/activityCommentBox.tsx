@@ -37,6 +37,11 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
         borderColor: "divider",
         bgcolor: "transparent",
         overflow: "hidden",
+        // Shared focus affordance with the editable title/description fields:
+        // idle = divider token, active = accent token. 1px in both states, so
+        // clicking in highlights the edge without resizing or jumping.
+        transition: "border-color 120ms ease",
+        "&:focus-within": { borderColor: "primary.main" },
       }}
     >
       <TextField

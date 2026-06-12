@@ -1,5 +1,5 @@
 import React from "react"
-import { Box, Button, Stack, TextField } from "@mui/material"
+import { Box, Button, InputBase, Stack } from "@mui/material"
 import { SectionPanel } from "./RecordDetailShell"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,10 +36,11 @@ export const EditableField = React.memo(function EditableField({
   const [draft, setDraft] = React.useState(value)
 
   const trimmed = draft.trim()
-  // Dirty only when non-empty AND changed — an empty draft is non-savable and
-  // counts as clean (preserves today's "empty reverts" behaviour: no field can
-  // be cleared via this editor).
-  const dirty = trimmed !== "" && trimmed !== value
+  // Dirty only when editing AND non-empty AND changed — an empty draft is
+  // non-savable and counts as clean (preserves today's "empty reverts"
+  // behaviour: no field can be cleared via this editor). Save/Cancel mount only
+  // while dirty, so merely focusing the field never pushes surrounding content.
+  const dirty = editing && trimmed !== "" && trimmed !== value
 
   const startEditing = React.useCallback(() => {
     setDraft(value)
@@ -69,7 +70,7 @@ export const EditableField = React.memo(function EditableField({
   )
 
   const handleKeyDown = React.useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
+    (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (e.key === "Escape") {
         e.preventDefault()
         cancel()
@@ -84,71 +85,61 @@ export const EditableField = React.memo(function EditableField({
     [multiline, cancel, save]
   )
 
-  if (!editing) {
-    const isEmpty = !value
-    return (
-      <Box
-        role="textbox"
-        aria-label={ariaLabel}
-        tabIndex={0}
-        onClick={startEditing}
-        onFocus={startEditing}
-        sx={{
-          cursor: "pointer",
-          borderRadius: 1,
-          px: 0.75,
-          py: 0.5,
-          whiteSpace: multiline ? "pre-wrap" : "normal",
-          border: "1.5px solid transparent",
-          color: isEmpty ? "text.disabled" : "text.primary",
-          "&:hover": { bgcolor: "action.hover" },
-          ...textSx,
-        }}
-      >
-        {isEmpty ? placeholder ?? "" : value}
-      </Box>
-    )
-  }
-
+  // One always-present auto-sizing field (a textarea). Idle = `readOnly` with a
+  // transparent border so it reads as plain text; focus/edit flips the border to
+  // the accent token. Because the SAME element renders in both states (same
+  // padding, same border width, content-autosized height), the footprint is
+  // identical idle↔editing — no enlarge, no layout shift on focus (VS Code style).
+  const isEmpty = !editing && !value
   return (
     <Box onBlur={handleBlur}>
-      <TextField
-        autoFocus
+      <InputBase
         fullWidth
-        multiline={multiline}
-        minRows={multiline ? 3 : undefined}
-        value={draft}
+        multiline
+        minRows={multiline ? 3 : 1}
+        value={editing ? draft : value}
+        readOnly={!editing}
         placeholder={placeholder}
-        aria-label={ariaLabel}
+        inputProps={{ "aria-label": ariaLabel }}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={handleKeyDown}
         onFocus={(e) => {
-          if (!multiline) e.currentTarget.select()
+          if (!editing) startEditing()
+          // Single-line (Subject): select-all on entry, as before.
+          if (!multiline) (e.target as HTMLTextAreaElement).select()
         }}
         sx={{
-          "& .MuiOutlinedInput-root": {
-            // Match the squarer SectionPanel corner (global radius token) so the
-            // inner edit area doesn't read rounder than its container.
-            borderRadius: 1,
-            "& fieldset": { borderColor: "primary.main" },
-          },
-          "& .MuiInputBase-input": { ...textSx, px: 0, mx: 0 },
+          // Match the squarer SectionPanel corner (global radius token).
+          borderRadius: 1,
+          px: 0.75,
+          py: 0.5,
+          // 1px border, transparent when idle → accent token on focus/edit. Same
+          // width in both states, so the box never grows on focus.
+          border: "1px solid",
+          borderColor: editing ? "primary.main" : "transparent",
+          color: isEmpty ? "text.disabled" : "text.primary",
+          cursor: editing ? "text" : "pointer",
+          transition: "border-color 120ms ease, background-color 120ms ease",
+          "&:hover": { bgcolor: editing ? "transparent" : "action.hover" },
+          ...textSx,
+          "& .MuiInputBase-input": { p: 0, cursor: "inherit" },
         }}
       />
-      <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1 }}>
-        <Button
-          size="small"
-          variant="contained"
-          disableElevation
-          disabled={!dirty}
-          onClick={save}
-        >
-          Save
-        </Button>
-        <Button size="small" color="inherit" onClick={cancel}>
-          Cancel
-        </Button>
-      </Stack>
+      {dirty && (
+        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1 }}>
+          <Button
+            size="small"
+            variant="contained"
+            disableElevation
+            onClick={save}
+          >
+            Save
+          </Button>
+          <Button size="small" color="inherit" onClick={cancel}>
+            Cancel
+          </Button>
+        </Stack>
+      )}
     </Box>
   )
 })

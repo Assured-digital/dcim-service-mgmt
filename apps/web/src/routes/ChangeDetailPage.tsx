@@ -36,6 +36,7 @@ import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined"
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined"
 import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -839,6 +840,7 @@ export default function ChangeDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { notify } = useNotification()
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -907,11 +909,15 @@ export default function ChangeDetailPage() {
         qc.invalidateQueries({ queryKey: ["change-detail", id] })
         qc.invalidateQueries({ queryKey: ["audit-change", id] })
         qc.invalidateQueries({ queryKey: ["tickets"] })
+        // Confirm only the title/description edits — implementation/popover fields
+        // flow through here too and stay silent.
+        if (field === "title") notify.success("Title updated")
+        else if (field === "description") notify.success("Description updated")
       } catch (e: unknown) {
         setError(getApiErrorMessage(e, "Failed to save change properties"))
       }
     },
-    [id, change, qc]
+    [id, change, qc, notify]
   )
 
   const handleAddNote = React.useCallback(async () => {
@@ -927,10 +933,11 @@ export default function ChangeDetailPage() {
       qc.invalidateQueries({ queryKey: ["work-notes-change", id] })
       qc.invalidateQueries({ queryKey: ["audit-change", id] })
       resetFilterAfterComment()
+      notify.success("Note added")
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody])
+  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, comment }: { to: string; comment?: string }) => {
