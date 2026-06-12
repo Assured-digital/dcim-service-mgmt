@@ -34,7 +34,6 @@ const MaintenanceDetailPage    = React.lazy(() => import("./MaintenanceDetailPag
 const ConnectionsPage          = React.lazy(() => import("./ConnectionsPage"))
 const ConnectionDetailPage     = React.lazy(() => import("./ConnectionDetailPage"))
 const RisksIssuesPage          = React.lazy(() => import("./RisksIssuesPage"))
-const SettingsPage             = React.lazy(() => import("./SettingsPage"))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = getToken()
@@ -124,9 +123,6 @@ export default function App() {
           <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />
           <Route path="triage" element={<Navigate to="/service-desk" replace />} />
           <Route path="service-requests" element={<Navigate to="/service-desk" replace />} />
-
-          {/* Self-service settings — any authenticated user (own password) */}
-          <Route path="settings" element={<SettingsPage />} />
 
           {/* My Work and Overview */}
           <Route path="my-work" element={<MyWorkPage />} />

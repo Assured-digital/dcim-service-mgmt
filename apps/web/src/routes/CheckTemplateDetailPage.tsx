@@ -317,7 +317,7 @@ export default function CheckTemplateDetailPage() {
               {template.reference}
             </Typography>
             <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
-            <Chip size="small" sx={chipSx("active")} label={template.checkType} />
+            <Chip size="small" sx={{ bgcolor: "#e8f1ff", color: "#1d4ed8", fontWeight: 600 }} label={template.checkType} />
             <Chip size="small"
               label={`${template.items.length} items`}
               sx={{ bgcolor: "#f1f5f9", color: "#475569" }} />

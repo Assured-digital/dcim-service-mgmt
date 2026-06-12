@@ -141,7 +141,7 @@ export default function CheckTemplatesPage() {
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      <Chip size="small" sx={chipSx("active")} label={t.checkType} />
+                      <Chip size="small" sx={{ bgcolor: "#e8f1ff", color: "#1d4ed8", fontWeight: 600 }} label={t.checkType} />
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2">{t.items.length} items</Typography>

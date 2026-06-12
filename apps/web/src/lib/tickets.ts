@@ -291,6 +291,14 @@ export const STATUS_FLOW: Record<TicketKind, Record<string, string[]>> = {
   },
 }
 
+// Full human-readable type label per kind (e.g. the working-queue rail row).
+// Canonical source — prefer this over ad-hoc per-call-site labels.
+export const KIND_LABELS: Record<TicketKind, string> = {
+  SR:  "Service Request",
+  INC: "Incident",
+  CHG: "Change Request",
+}
+
 export const STATUS_LABELS: Record<TicketKind, Record<string, string>> = {
   SR: {
     NEW: "New",

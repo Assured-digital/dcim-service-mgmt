@@ -30,7 +30,7 @@ import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
 import { TypeBadge, PriorityDot, Avatar as TicketAvatar } from "../components/shared"
-import { resolveIntent, semanticTokens } from "../components/shared/tokens/colors"
+import { statusColors } from "../components/shared/tokens/colors"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -242,21 +242,26 @@ function UnifiedFooter() {
   )
 }
 
-// ── Unified queue: status pill ────────────────────────────────────────────
+// ── Unified queue: status dot + text ──────────────────────────────────────
+// Softened in the dense table only: a coloured dot + plain text, matching the
+// Priority cell's treatment. The dot colour reads the SAME single source of
+// truth as the pills (statusColors -> semanticTokens), so the colour is
+// identical to the detail pill / rail dot — just rendered as a dot here.
 function StatusCell({ ticket }: { ticket: Ticket }) {
   const value = ticket.overdue ? "OVERDUE" : ticket.status
   const label = ticket.overdue ? "overdue" : ticket.status.toLowerCase().replaceAll("_", " ")
-  const dotColor = semanticTokens[resolveIntent(value)].text
   return (
     <Stack direction="row" alignItems="center" spacing={0.75}>
       <Box
         component="span"
         sx={{
+          display: "inline-block",
           width: 8, height: 8, borderRadius: "50%",
-          bgcolor: dotColor, flexShrink: 0,
+          bgcolor: statusColors(value).bg,
+          flexShrink: 0,
         }}
       />
-      <Typography sx={{ fontSize: 12.5, color: "#0f172a" }}>
+      <Typography sx={{ fontSize: 12.5 }}>
         {label.charAt(0).toUpperCase() + label.slice(1)}
       </Typography>
     </Stack>
