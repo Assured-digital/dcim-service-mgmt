@@ -797,14 +797,20 @@ async function main() {
     where: { email: adminEmail },
     update: {
       role: Role.ORG_OWNER,
-      organizationId: organization.id
+      organizationId: organization.id,
+      firstName: "Jonathan",
+      lastName: "Hale",
+      knownAs: "Jake"
     },
     create: {
       email: adminEmail,
       passwordHash: await bcrypt.hash("Admin123!", 10),
       role: Role.ORG_OWNER,
       organizationId: organization.id,
-      isActive: true
+      isActive: true,
+      firstName: "Jonathan",
+      lastName: "Hale",
+      knownAs: "Jake"
     }
   })
 
@@ -821,35 +827,56 @@ async function main() {
     {
       email: "manager@dcm.local",
       role: Role.SERVICE_MANAGER,
-      clientId: clientA.id
+      clientId: clientA.id,
+      firstName: "Priya",
+      lastName: "Sharma",
+      knownAs: null
     },
     {
       email: "analyst@dcm.local",
       role: Role.SERVICE_DESK_ANALYST,
-      clientId: clientA.id
+      clientId: clientA.id,
+      firstName: "Marcus",
+      lastName: "Bell",
+      knownAs: "Marc"
     },
     {
       email: "engineer@dcm.local",
       role: Role.ENGINEER,
-      clientId: clientA.id
+      clientId: clientA.id,
+      firstName: "Elena",
+      lastName: "Rodriguez",
+      knownAs: null
     },
     {
       email: "viewer@dcm.local",
       role: Role.CLIENT_VIEWER,
-      clientId: clientA.id
+      clientId: clientA.id,
+      firstName: "Tom",
+      lastName: "Whitfield",
+      knownAs: "Tommy"
     }
   ]
 
   for (const u of internalUsers) {
     const internalUser = await prisma.user.upsert({
       where: { email: u.email },
-      update: { role: u.role, organizationId: organization.id },
+      update: {
+        role: u.role,
+        organizationId: organization.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        knownAs: u.knownAs
+      },
       create: {
         email: u.email,
         passwordHash: await bcrypt.hash("Admin123!", 10),
         role: u.role,
         organizationId: organization.id,
-        isActive: true
+        isActive: true,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        knownAs: u.knownAs
       }
     })
 
