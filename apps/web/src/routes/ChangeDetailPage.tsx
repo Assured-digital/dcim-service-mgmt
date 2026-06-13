@@ -51,6 +51,7 @@ import {
   SectionPanel,
   StatusPopover,
   TransitionDialog,
+  filterFeedEvents,
   type ActivityFilter,
   type CentreSection,
   type DetailField,
@@ -133,6 +134,8 @@ type ChangeComment = {
   type: string
   createdAt: string
   author: { id: string; displayName: string }
+  // Two-level threading: a post's replies are themselves comments (same shape).
+  replies?: ChangeComment[]
 }
 
 
@@ -974,21 +977,30 @@ export default function ChangeDetailPage() {
       id: `note-${n.id}`,
       type: "comment",
       actor: n.author.displayName,
-      text: <>added a work note</>,
+      text: null,
       note: n.body ?? n.content ?? n.message ?? "",
       bodyJson: n.bodyJson,
       mentions: n.mentions,
+      commentId: n.id,
+      entityId: id,
+      replies: (n.replies ?? []).map((r) => ({
+        id: r.id,
+        actor: r.author.displayName,
+        note: r.body ?? r.content ?? r.message ?? "",
+        bodyJson: r.bodyJson,
+        mentions: r.mentions,
+        time: formatDateTime(r.createdAt),
+      })),
       time: formatDateTime(n.createdAt),
       createdAt: n.createdAt,
     }))
     return [...audit, ...notes].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
-  }, [auditEvents, workNotes])
+  }, [auditEvents, workNotes, id])
 
   const visibleFeedEvents = React.useMemo<FeedEvent[]>(() => {
-    if (activeFilter === "all") return allFeedEvents
-    return allFeedEvents.filter((e) => e.type === activeFilter)
+    return filterFeedEvents(allFeedEvents, activeFilter)
   }, [allFeedEvents, activeFilter])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {

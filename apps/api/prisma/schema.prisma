@@ -109,6 +109,7 @@ enum ConnectionStatus {
 // future kinds (ASSIGNED, STATUS_CHANGED, …) — adding a value is a one-line migration.
 enum NotificationType {
   MENTION
+  REPLY
 }
 
 model Client {
@@ -721,6 +722,18 @@ model Comment {
   serviceRequestId  String?
   serviceRequest    ServiceRequest?  @relation("ServiceRequestComments", fields: [serviceRequestId], references: [id])
   mentions          CommentMention[]
+  // Two-level (Slack-style) threading, additive. NULL = top-level comment (a
+  // "post"); set = a reply to that top-level comment. Two-level ONLY: a reply's
+  // parentCommentId must point at a top-level comment (one whose own
+  // parentCommentId is NULL) — "no reply to a reply" is enforced in the create
+  // logic (later stage), not the schema. Self-relation below. On-delete CASCADE:
+  // deleting a top-level comment drops its whole thread of replies (mirrors how
+  // CommentMention cascades off Comment). Existing comments get NULL = top-level.
+  parentCommentId   String?
+  parent            Comment?         @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies           Comment[]        @relation("CommentReplies")
+
+  @@index([parentCommentId])
 }
 
 // Polymorphic mention join table: a comment mentions one or more targets, each an

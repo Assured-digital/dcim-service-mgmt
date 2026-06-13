@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Tab, Tabs } from "@mui/material"
+import type { FeedEvent } from "./ActivityFeedItem"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity filter — shared config + tab bar.
@@ -28,6 +29,22 @@ export const FILTER_OPTIONS: { value: ActivityFilter; label: string }[] = [
   { value: "status", label: "Status" },
   { value: "assignment", label: "Assignments" },
 ]
+
+// Single source of truth for mapping the selected tab → the visible feed slice.
+// Every detail page routes its feed through this so the tabs stay consistent.
+//
+// "History" (internal value "all") shows system/audit events ONLY — it deliberately
+// EXCLUDES comment posts. Comment events carry their own threads + inline reply
+// fields (see ActivityFeedItem threading), so dropping `type === "comment"` here
+// removes comments, replies AND reply fields from History in one cut. Comments live
+// solely on the Comments tab. The other tabs match their event type directly.
+export function filterFeedEvents(
+  events: FeedEvent[],
+  filter: ActivityFilter
+): FeedEvent[] {
+  if (filter === "all") return events.filter((e) => e.type !== "comment")
+  return events.filter((e) => e.type === filter)
+}
 
 interface ActivityTabsProps {
   value: ActivityFilter

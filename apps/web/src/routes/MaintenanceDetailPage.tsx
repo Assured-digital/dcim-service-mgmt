@@ -36,6 +36,7 @@ import {
   RecordDetailShell,
   SectionPanel,
   StatusPopover,
+  filterFeedEvents,
   type ActivityFilter,
   type CommentDraft,
   type CentreSection,
@@ -826,8 +827,7 @@ export default function MaintenanceDetailPage() {
 
   const allFeedEvents = React.useMemo<FeedEvent[]>(() => [], [])
   const visibleFeedEvents = React.useMemo<FeedEvent[]>(() => {
-    if (activeFilter === "all") return allFeedEvents
-    return allFeedEvents.filter((e) => e.type === activeFilter)
+    return filterFeedEvents(allFeedEvents, activeFilter)
   }, [allFeedEvents, activeFilter])
 
   // ── Link copy ──────────────────────────────────────────────────────────────
