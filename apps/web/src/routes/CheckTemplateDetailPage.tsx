@@ -317,7 +317,7 @@ export default function CheckTemplateDetailPage() {
               {template.reference}
             </Typography>
             <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
-            <Chip size="small" sx={{ bgcolor: "#e8f1ff", color: "#1d4ed8", fontWeight: 600 }} label={template.checkType} />
+            <Chip size="small" sx={{ bgcolor: "#e8f1ff", color: "primary.main", fontWeight: 600 }} label={template.checkType} />
             <Chip size="small"
               label={`${template.items.length} items`}
               sx={{ bgcolor: "#f1f5f9", color: "#475569" }} />
@@ -398,7 +398,7 @@ export default function CheckTemplateDetailPage() {
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
               <Typography sx={{
                 fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                color: "var(--color-text-tertiary)"
+                color: "text.tertiary"
               }}>
                 CHECKLIST ITEMS — {template.items.length}
               </Typography>
@@ -434,7 +434,7 @@ export default function CheckTemplateDetailPage() {
                     {sections.length > 1 || sectionName !== "General" ? (
                       <Typography sx={{
                         fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                        color: "var(--color-text-tertiary)", mb: 1
+                        color: "text.tertiary", mb: 1
                       }}>
                         {sectionName.toUpperCase()}
                       </Typography>
@@ -486,7 +486,7 @@ export default function CheckTemplateDetailPage() {
                                 <Chip size="small"
                                   label={item.isRequired ? "Yes" : "No"}
                                   sx={item.isRequired
-                                    ? { bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 10 }
+                                    ? { bgcolor: "#e8f1ff", color: "primary.main", fontSize: 10 }
                                     : { bgcolor: "#f1f5f9", color: "#64748b", fontSize: 10 }} />
                               </TableCell>
                               <TableCell>

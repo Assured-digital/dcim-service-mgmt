@@ -71,10 +71,10 @@ export function AttachmentPreviewModal({ open, attachment, onClose }: Attachment
       return (
         <Box sx={{ textAlign: "center", py: 6 }}>
           <Typography sx={{ fontSize: 14, mb: 0.5 }}>{attachment.filename}</Typography>
-          <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)", display: "block", mb: 2 }}>
+          <Typography variant="caption" sx={{ color: "text.tertiary", display: "block", mb: 2 }}>
             {formatFileSize(attachment.size)} · {attachment.contentType}
           </Typography>
-          <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
+          <Typography variant="caption" sx={{ color: "text.tertiary" }}>
             This file type can't be previewed. Download it to view.
           </Typography>
         </Box>

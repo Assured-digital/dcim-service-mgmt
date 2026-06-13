@@ -880,7 +880,7 @@ export default function CheckDetailPage() {
                     sx={{
                       display: "flex", alignItems: "center", gap: "10px",
                       px: "16px", py: "9px", cursor: "pointer",
-                      borderLeft: isActive ? "2px solid #1d4ed8" : "2px solid transparent",
+                      borderLeft: "2px solid", borderLeftColor: isActive ? "primary.main" : "transparent",
                       bgcolor: isActive ? "#f0f6ff" : "transparent",
                       "&:hover": { bgcolor: isActive ? "#f0f6ff" : "#f8fafc" },
                       transition: "all 0.15s"
@@ -900,7 +900,7 @@ export default function CheckDetailPage() {
                       )}
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, color: isActive ? "#1d4ed8" : "#0f172a", lineHeight: 1.3 }}>
+                      <Typography sx={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, color: isActive ? "primary.main" : "#0f172a", lineHeight: 1.3 }}>
                         {sectionName}
                       </Typography>
                       <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: "1px" }}>
@@ -963,7 +963,7 @@ export default function CheckDetailPage() {
                   border: "1.5px dashed #cbd5e1", borderRadius: "8px",
                   color: "#64748b", fontSize: 12.5, fontWeight: 500, cursor: "pointer",
                   bgcolor: "transparent", transition: "all 0.1s",
-                  "&:hover": { borderColor: "#1d4ed8", color: "#1d4ed8", bgcolor: "#f8fafc" }
+                  "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "#f8fafc" }
                 }}>
                 <AddIcon sx={{ fontSize: 15 }} />
                 Add ad-hoc item
@@ -1165,8 +1165,7 @@ export default function CheckDetailPage() {
         <Card>
           <Box sx={{ borderBottom: "1px solid #e2e8f0" }}>
             <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}
-              sx={{ px: 2, minHeight: 44 }} textColor="inherit"
-              TabIndicatorProps={{ style: { backgroundColor: "#1d4ed8" } }}>
+              sx={{ px: 2, minHeight: 44, "& .MuiTabs-indicator": { backgroundColor: "primary.main" } }} textColor="inherit">
               <Tab label={`Checklist (${totalItems})`} sx={{ fontSize: 13, minHeight: 44 }} />
               {failedItems.length > 0 ? (
                 <Tab label={`Failed (${failedItems.length})`} sx={{ fontSize: 13, minHeight: 44 }} />

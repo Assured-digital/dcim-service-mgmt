@@ -35,7 +35,7 @@ export function WorkflowStrip({
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.75 }}>
         <Typography sx={{
           fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
-          color: "var(--color-text-tertiary)"
+          color: "text.tertiary"
         }}>
           STATUS
         </Typography>
@@ -45,7 +45,7 @@ export function WorkflowStrip({
           arrow
         >
           <InfoOutlinedIcon sx={{
-            fontSize: 11, color: "var(--color-text-tertiary)", cursor: "help"
+            fontSize: 11, color: "text.tertiary", cursor: "help"
           }} />
         </Tooltip>
       </Stack>
@@ -107,7 +107,7 @@ export function WorkflowStrip({
                       fontSize: 11, fontWeight: isCurrent ? 700 : 500,
                       color: isCurrent ? "#fff"
                         : isPast ? "#94a3b8"
-                        : "var(--color-text-tertiary)"
+                        : "text.tertiary"
                     }}>
                       {stage.label}
                     </Typography>

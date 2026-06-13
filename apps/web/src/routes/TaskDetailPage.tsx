@@ -341,7 +341,7 @@ const ActivityContent = React.memo(function ActivityContent({
       ) : null}
 
       {events.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary" }}>
           No activity to show
         </Typography>
       ) : (

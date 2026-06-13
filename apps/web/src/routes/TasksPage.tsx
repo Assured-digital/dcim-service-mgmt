@@ -191,7 +191,7 @@ function OptionPopover({ anchorEl, onClose, options, current, onSelect, headerLa
           }}>
             {opt.dot ? <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: opt.dot, flexShrink: 0 }} /> : null}
             <Typography sx={{ fontSize: 13, color: "#0f172a", flex: 1 }}>{opt.label}</Typography>
-            {opt.value === current ? <CheckIcon sx={{ fontSize: 13, color: "#1d4ed8" }} /> : null}
+            {opt.value === current ? <CheckIcon sx={{ fontSize: 13, color: "primary.main" }} /> : null}
           </Box>
         ))}
       </Box>
@@ -230,15 +230,15 @@ function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect, header
         <Box onClick={() => { onSelect(null); onClose() }} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "12px", py: "8px", cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}>
           <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#f1f5f9", flexShrink: 0 }} />
           <Typography sx={{ fontSize: 13, color: "#94a3b8", flex: 1 }}>Unassigned</Typography>
-          {!currentId ? <CheckIcon sx={{ fontSize: 13, color: "#1d4ed8" }} /> : null}
+          {!currentId ? <CheckIcon sx={{ fontSize: 13, color: "primary.main" }} /> : null}
         </Box>
         {users.map(u => (
           <Box key={u.id} onClick={() => { onSelect(u.id); onClose() }} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "12px", py: "8px", cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}>
-            <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#e8f1ff", color: "primary.main", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {initials(u.displayName)}
             </Box>
             <Typography sx={{ fontSize: 13, color: "#0f172a", flex: 1 }}>{u.displayName}</Typography>
-            {u.id === currentId ? <CheckIcon sx={{ fontSize: 13, color: "#1d4ed8" }} /> : null}
+            {u.id === currentId ? <CheckIcon sx={{ fontSize: 13, color: "primary.main" }} /> : null}
           </Box>
         ))}
       </Box>
@@ -366,7 +366,7 @@ function InlineCreateRow({ users, onCreate, onCancel, visibleColumns }: {
               onClick={e => setAssigneeAnchor(e.currentTarget)}
               sx={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", px: "6px", py: "3px", borderRadius: "6px", "&:hover": { bgcolor: "#f1f5f9" } }}
             >
-              <Box sx={{ width: 22, height: 22, borderRadius: "50%", bgcolor: assignee ? "#e8f1ff" : "#f1f5f9", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Box sx={{ width: 22, height: 22, borderRadius: "50%", bgcolor: assignee ? "#e8f1ff" : "#f1f5f9", color: "primary.main", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 {assignee ? initials(assignee.displayName) : ""}
               </Box>
               <Typography sx={{ fontSize: 12, color: assignee ? "#0f172a" : "#94a3b8" }}>
@@ -464,7 +464,7 @@ function TaskCardBody({ task, isDragging, onClick }: {
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           {task.assignee ? (
             <Tooltip title={task.assignee.displayName}>
-              <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: "#e8f1ff", color: "primary.main", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {initials(task.assignee.displayName)}
               </Box>
             </Tooltip>
@@ -1147,9 +1147,9 @@ export default function TasksPage() {
                 sx={{
                   fontSize: 12, fontWeight: 500, cursor: "pointer", height: 26,
                   bgcolor: filterMine ? "#e8f1ff" : "#f1f5f9",
-                  color: filterMine ? "#1d4ed8" : "#64748b",
+                  color: filterMine ? "primary.main" : "#64748b",
                   border: filterMine ? "1px solid #93c5fd" : "1px solid #e2e8f0",
-                  "&:hover": { bgcolor: "#e8f1ff", color: "#1d4ed8", borderColor: "#93c5fd" }
+                  "&:hover": { bgcolor: "#e8f1ff", color: "primary.main", borderColor: "#93c5fd" }
                 }}
               />
               <Chip label="Overdue" size="small" onClick={() => setFilterOverdue(o => !o)}
@@ -1181,12 +1181,12 @@ export default function TasksPage() {
                       onClick={() => setFilterAssignee(active ? null : u.id)}
                       sx={{
                         width: 28, height: 28, borderRadius: "50%", cursor: "pointer",
-                        bgcolor: active ? "#1d4ed8" : "#e8f1ff",
-                        color: active ? "#fff" : "#1d4ed8",
+                        bgcolor: active ? "primary.main" : "#e8f1ff",
+                        color: active ? "#fff" : "primary.main",
                         fontSize: 10, fontWeight: 700,
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        border: active ? "2px solid #1d4ed8" : "2px solid transparent",
-                        "&:hover": { borderColor: "#1d4ed8" },
+                        border: "2px solid", borderColor: active ? "primary.main" : "transparent",
+                        "&:hover": { borderColor: "primary.main" },
                         transition: "all 0.12s"
                       }}
                     >
@@ -1403,7 +1403,7 @@ export default function TasksPage() {
                             >
                               {task.assignee ? (
                                 <>
-                                  <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#e8f1ff", color: "#1d4ed8", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#e8f1ff", color: "primary.main", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                     {initials(task.assignee.displayName)}
                                   </Box>
                                   <Typography sx={{ fontSize: 12, color: "#475569" }}>
@@ -1547,7 +1547,7 @@ export default function TasksPage() {
                 }}
               >
                 <Box sx={{ width: 14, display: "flex", justifyContent: "center", flexShrink: 0 }}>
-                  {selected ? <CheckIcon sx={{ fontSize: 13, color: "#1d4ed8" }} /> : null}
+                  {selected ? <CheckIcon sx={{ fontSize: 13, color: "primary.main" }} /> : null}
                 </Box>
                 <Typography sx={{ fontSize: 12.5, color: "#0f172a", flex: 1 }}>
                   {column.label}

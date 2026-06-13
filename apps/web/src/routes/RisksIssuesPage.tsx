@@ -194,7 +194,7 @@ function FilterSection({ label, items, selected, onToggle }: {
           <Stack key={item.key} direction="row" alignItems="center" onClick={() => onToggle(item.key)}
             sx={{ px: "12px", py: "1px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
             <Checkbox checked={isActive} size="small" sx={{ p: 0, mr: "8px", "& .MuiSvgIcon-root": { fontSize: 14 } }} />
-            {item.chipSx ? <Chip size="small" label={item.label} sx={{ ...item.chipSx, height: 18 }} /> : <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "#1d4ed8" : "#475569", fontWeight: isActive ? 500 : 400 }}>{item.label}</Typography>}
+            {item.chipSx ? <Chip size="small" label={item.label} sx={{ ...item.chipSx, height: 18 }} /> : <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "primary.main" : "#475569", fontWeight: isActive ? 500 : 400 }}>{item.label}</Typography>}
             <Typography sx={{ fontSize: 10, color: "#94a3b8", ml: "auto" }}>{item.count}</Typography>
           </Stack>
         )
@@ -421,8 +421,8 @@ export default function RisksIssuesPage() {
             const isActive = quickView === v.key
             return (
               <Stack key={v.key} direction="row" alignItems="center" onClick={() => setQuickView(v.key)}
-                sx={{ px: "12px", py: "3px", cursor: "pointer", borderLeft: isActive ? "2px solid #1d4ed8" : "2px solid transparent", bgcolor: isActive ? "rgba(29,78,216,0.07)" : "transparent", "&:hover": { bgcolor: isActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
-                <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "#1d4ed8" : "#475569", fontWeight: isActive ? 600 : 400 }}>{v.label}</Typography>
+                sx={{ px: "12px", py: "3px", cursor: "pointer", borderLeft: "2px solid", borderLeftColor: isActive ? "primary.main" : "transparent", bgcolor: isActive ? "rgba(29,78,216,0.07)" : "transparent", "&:hover": { bgcolor: isActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
+                <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "primary.main" : "#475569", fontWeight: isActive ? 600 : 400 }}>{v.label}</Typography>
                 <Typography sx={{ fontSize: 10, color: "#94a3b8" }}>{quickCounts[v.key] ?? 0}</Typography>
               </Stack>
             )
@@ -492,7 +492,7 @@ export default function RisksIssuesPage() {
                     px: 1.25, py: 0.5, borderRadius: 999, cursor: "pointer",
                     fontSize: 12, fontWeight: isActive ? 600 : 500,
                     bgcolor: isActive ? "#e8f1ff" : "transparent",
-                    color: isActive ? "#1d4ed8" : "#475569",
+                    color: isActive ? "primary.main" : "#475569",
                     border: isActive ? "1px solid #bfdbfe" : "1px solid #e2e8f0",
                     "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc" },
                   }}

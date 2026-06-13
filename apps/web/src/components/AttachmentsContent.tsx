@@ -87,7 +87,7 @@ export const AttachmentsContent = React.memo(
   return (
     <Box>
       {attachments.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)", display: "block", py: 0.5 }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary", display: "block", py: 0.5 }}>
           No attachments
         </Typography>
       ) : (
@@ -135,7 +135,7 @@ export const AttachmentsContent = React.memo(
                 >
                   {att.filename}
                 </Typography>
-                <Typography sx={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
+                <Typography sx={{ fontSize: 10, color: "text.tertiary" }}>
                   {formatFileSize(att.size)} · {new Date(att.uploadedAt).toLocaleDateString("en-GB")}
                 </Typography>
               </Box>

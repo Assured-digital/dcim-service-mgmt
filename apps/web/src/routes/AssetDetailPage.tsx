@@ -411,7 +411,7 @@ export default function AssetDetailPage({
       {onBackToRegister ? (
         <Box sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #f1f5f9", px: "24px", py: "6px", flexShrink: 0 }}>
           <Stack direction="row" alignItems="center" spacing={0.5} onClick={onBackToRegister}
-            sx={{ cursor: "pointer", width: "fit-content", color: "#1d4ed8", "&:hover": { textDecoration: "underline" } }}>
+            sx={{ cursor: "pointer", width: "fit-content", color: "primary.main", "&:hover": { textDecoration: "underline" } }}>
             <ArrowBackIcon sx={{ fontSize: 14 }} />
             <Typography sx={{ fontSize: 12, fontWeight: 500 }}>Back to register</Typography>
           </Stack>
@@ -466,13 +466,13 @@ export default function AssetDetailPage({
               <Box key={t.key} onClick={() => setTab(t.key as TabKey)}
                 sx={{
                   px: "14px", py: "10px", cursor: "pointer", fontSize: 12.5, fontWeight: 500,
-                  color: active ? "#1d4ed8" : "#64748b",
-                  borderBottom: active ? "2px solid #1d4ed8" : "2px solid transparent",
+                  color: active ? "primary.main" : "#64748b",
+                  borderBottom: "2px solid", borderBottomColor: active ? "primary.main" : "transparent",
                   display: "flex", alignItems: "center", gap: "6px", mb: "-1px"
                 }}>
                 {t.label}
                 {t.count != null ? (
-                  <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: active ? "#dbeafe" : "#f1f5f9", color: active ? "#1d4ed8" : "#64748b" }}>
+                  <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: active ? "#dbeafe" : "#f1f5f9", color: active ? "primary.main" : "#64748b" }}>
                     {t.count}
                   </Box>
                 ) : null}
@@ -641,7 +641,7 @@ const OverviewTab = React.memo(function OverviewTab({
             {asset.site && asset.siteId ? (
               <Typography
                 onClick={() => navigate(`/asset-hierarchy/${asset.siteId}`)}
-                sx={{ ...valueSx, cursor: "pointer", color: "#1d4ed8", "&:hover": { textDecoration: "underline" } }}>
+                sx={{ ...valueSx, cursor: "pointer", color: "primary.main", "&:hover": { textDecoration: "underline" } }}>
                 {asset.site.name}
               </Typography>
             ) : <PropertyValue value={null} />}
@@ -650,7 +650,7 @@ const OverviewTab = React.memo(function OverviewTab({
             {asset.cabinet?.room && asset.cabinet.roomId && asset.siteId ? (
               <Typography
                 onClick={() => navigate(`/asset-hierarchy/${asset.siteId}/rooms/${asset.cabinet!.roomId}`)}
-                sx={{ ...valueSx, cursor: "pointer", color: "#1d4ed8", "&:hover": { textDecoration: "underline" } }}>
+                sx={{ ...valueSx, cursor: "pointer", color: "primary.main", "&:hover": { textDecoration: "underline" } }}>
                 {asset.cabinet.room.name}
               </Typography>
             ) : <PropertyValue value={null} />}
@@ -664,7 +664,7 @@ const OverviewTab = React.memo(function OverviewTab({
             ) : asset.cabinet && asset.cabinetId && asset.siteId ? (
               <Typography
                 onClick={() => navigate(`/asset-hierarchy/${asset.siteId}/cabinets/${asset.cabinetId}`)}
-                sx={{ ...valueSx, cursor: "pointer", color: "#1d4ed8", "&:hover": { textDecoration: "underline" } }}>
+                sx={{ ...valueSx, cursor: "pointer", color: "primary.main", "&:hover": { textDecoration: "underline" } }}>
                 {asset.cabinet.name}
               </Typography>
             ) : <PropertyValue value={null} />}
@@ -728,7 +728,7 @@ const OverviewTab = React.memo(function OverviewTab({
       <Box sx={{ mt: "14px", bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
         <Stack direction="row" alignItems="center" sx={{ bgcolor: "#f8fafc", px: "16px", py: "10px", borderBottom: "1px solid #f1f5f9" }}>
           <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Recent linked records</Typography>
-          <Typography onClick={onViewAllLinked} sx={{ fontSize: 11.5, color: "#1d4ed8", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>View all →</Typography>
+          <Typography onClick={onViewAllLinked} sx={{ fontSize: 11.5, color: "primary.main", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>View all →</Typography>
         </Stack>
         {recentLinked.length === 0 ? (
           <Box sx={{ p: "20px", textAlign: "center" }}>
@@ -768,7 +768,7 @@ const ConnectionsTab = React.memo(function ConnectionsTab({ asset }: { asset: As
         {asset.ipAddress ? (
           <Box sx={{ px: "16px", py: "11px", display: "flex", alignItems: "center", gap: 1 }}>
             <Typography sx={{ fontFamily: "monospace", fontSize: 12.5, color: "#0f172a", fontWeight: 500 }}>{asset.ipAddress}</Typography>
-            <Chip size="small" label="Primary" sx={{ bgcolor: "#dbeafe", color: "#1d4ed8", fontSize: 9.5, height: 18, fontWeight: 600 }} />
+            <Chip size="small" label="Primary" sx={{ bgcolor: "#dbeafe", color: "primary.main", fontSize: 9.5, height: 18, fontWeight: 600 }} />
           </Box>
         ) : (
           <Box sx={{ px: "16px", py: "14px" }}>

@@ -118,7 +118,7 @@ export default function NotificationBell({ clientId }: { clientId: string }) {
               sx={{
                 display: "flex", alignItems: "center", gap: "5px",
                 border: "none", bgcolor: "transparent", p: 0, cursor: "pointer",
-                color: "#1d4ed8", fontSize: 12, fontWeight: 500,
+                color: "primary.main", fontSize: 12, fontWeight: 500,
                 "&:hover": { textDecoration: "underline" },
                 "&:disabled": { opacity: 0.5, cursor: "default", textDecoration: "none" },
               }}
@@ -165,7 +165,7 @@ export default function NotificationBell({ clientId }: { clientId: string }) {
                       {formatRelativeTime(n.createdAt)}
                     </Typography>
                   </Box>
-                  {unread ? <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#1d4ed8", flexShrink: 0, mt: "6px" }} /> : null}
+                  {unread ? <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "primary.main", flexShrink: 0, mt: "6px" }} /> : null}
                 </Box>
               )
             })

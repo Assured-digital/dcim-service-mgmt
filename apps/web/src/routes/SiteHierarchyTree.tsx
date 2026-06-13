@@ -133,12 +133,12 @@ const SiteNode = React.memo(function SiteNode(props: SiteNodeProps) {
   return (
     <Box>
       <Stack direction="row" alignItems="center" onClick={() => onSelectSite(site.id)}
-        sx={{ px: "8px", py: "8px", cursor: "pointer", bgcolor: isSiteActive ? "rgba(29,78,216,0.08)" : "transparent", borderLeft: isSiteActive ? "2px solid #1d4ed8" : "2px solid transparent", "&:hover": { bgcolor: "rgba(0,0,0,0.03)" } }}>
+        sx={{ px: "8px", py: "8px", cursor: "pointer", bgcolor: isSiteActive ? "rgba(29,78,216,0.08)" : "transparent", borderLeft: "2px solid", borderLeftColor: isSiteActive ? "primary.main" : "transparent", "&:hover": { bgcolor: "rgba(0,0,0,0.03)" } }}>
         <Box onClick={e => { e.stopPropagation(); onToggleSite(site.id) }} sx={{ display: "flex", color: "#94a3b8", mr: "2px" }}>
           {isSiteOpen ? <ExpandMoreIcon sx={{ fontSize: 14 }} /> : <ChevronRightIcon sx={{ fontSize: 14 }} />}
         </Box>
-        <LocationOnIcon sx={{ fontSize: 12.5, color: isSiteActive ? "#1d4ed8" : "#64748b", mr: "7px" }} />
-        <Typography sx={{ flex: 1, fontSize: 12.5, fontWeight: isSiteActive ? 600 : 500, color: isSiteActive ? "#1d4ed8" : "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{site.name}</Typography>
+        <LocationOnIcon sx={{ fontSize: 12.5, color: isSiteActive ? "primary.main" : "#64748b", mr: "7px" }} />
+        <Typography sx={{ flex: 1, fontSize: 12.5, fontWeight: isSiteActive ? 600 : 500, color: isSiteActive ? "primary.main" : "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{site.name}</Typography>
       </Stack>
 
       {isSiteOpen ? (
@@ -157,12 +157,12 @@ const SiteNode = React.memo(function SiteNode(props: SiteNodeProps) {
             return (
               <Box key={room.id}>
                 <Stack direction="row" alignItems="center" onClick={() => onSelectRoom(room.id)}
-                  sx={{ pl: "20px", pr: "8px", py: "7px", cursor: "pointer", bgcolor: isRoomActive ? "rgba(29,78,216,0.07)" : hasActiveCabinet ? "rgba(0,0,0,0.02)" : "transparent", borderLeft: isRoomActive ? "2px solid #1d4ed8" : "2px solid transparent", "&:hover": { bgcolor: isRoomActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
+                  sx={{ pl: "20px", pr: "8px", py: "7px", cursor: "pointer", bgcolor: isRoomActive ? "rgba(29,78,216,0.07)" : hasActiveCabinet ? "rgba(0,0,0,0.02)" : "transparent", borderLeft: "2px solid", borderLeftColor: isRoomActive ? "primary.main" : "transparent", "&:hover": { bgcolor: isRoomActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
                   <Box onClick={e => { e.stopPropagation(); onToggleRoom(room.id) }} sx={{ display: "flex", alignItems: "center", color: "#94a3b8", mr: "2px", flexShrink: 0 }}>
                     {isExpanded ? <ExpandMoreIcon sx={{ fontSize: 14 }} /> : <ChevronRightIcon sx={{ fontSize: 14 }} />}
                   </Box>
-                  <MemoryIcon sx={{ fontSize: 12, color: isRoomActive ? "#1d4ed8" : "#94a3b8", mr: "7px", flexShrink: 0 }} />
-                  <Typography sx={{ flex: 1, fontSize: 12.5, fontWeight: isRoomActive || hasActiveCabinet ? 600 : 400, color: isRoomActive ? "#1d4ed8" : "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{room.name}</Typography>
+                  <MemoryIcon sx={{ fontSize: 12, color: isRoomActive ? "primary.main" : "#94a3b8", mr: "7px", flexShrink: 0 }} />
+                  <Typography sx={{ flex: 1, fontSize: 12.5, fontWeight: isRoomActive || hasActiveCabinet ? 600 : 400, color: isRoomActive ? "primary.main" : "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{room.name}</Typography>
                   <Typography sx={{ fontSize: 10, color: "#94a3b8", ml: "4px" }}>{roomCabinets.length}</Typography>
                 </Stack>
 
@@ -184,7 +184,7 @@ const SiteNode = React.memo(function SiteNode(props: SiteNodeProps) {
 
           {visibleUnassignedCabs.length > 0 ? (
             <Stack direction="row" alignItems="center" onClick={() => onSelectRoom("unassigned")}
-              sx={{ pl: "20px", pr: "8px", py: "7px", cursor: "pointer", bgcolor: selectedRoomId === "unassigned" && !selectedCabinetId ? "rgba(29,78,216,0.07)" : "transparent", borderLeft: selectedRoomId === "unassigned" && !selectedCabinetId ? "2px solid #1d4ed8" : "2px solid transparent", "&:hover": { bgcolor: "rgba(0,0,0,0.03)" } }}>
+              sx={{ pl: "20px", pr: "8px", py: "7px", cursor: "pointer", bgcolor: selectedRoomId === "unassigned" && !selectedCabinetId ? "rgba(29,78,216,0.07)" : "transparent", borderLeft: "2px solid", borderLeftColor: selectedRoomId === "unassigned" && !selectedCabinetId ? "primary.main" : "transparent", "&:hover": { bgcolor: "rgba(0,0,0,0.03)" } }}>
               <ChevronRightIcon sx={{ fontSize: 14, color: "#94a3b8", mr: "2px" }} />
               <StorageIcon sx={{ fontSize: 12, color: "#94a3b8", mr: "7px" }} />
               <Typography sx={{ flex: 1, fontSize: 12.5, color: "#475569" }}>Unassigned</Typography>
@@ -227,14 +227,14 @@ const CabinetNode = React.memo(function CabinetNode({
     <Box>
       <Stack direction="row" alignItems="center"
         onClick={e => { e.stopPropagation(); onSelectCabinet(cab.id, roomId) }}
-        sx={{ pl: "34px", pr: "8px", py: "6px", cursor: "pointer", bgcolor: isActive ? "rgba(29,78,216,0.1)" : "transparent", borderLeft: isActive ? "2px solid #1d4ed8" : "2px solid transparent", "&:hover": { bgcolor: isActive ? "rgba(29,78,216,0.1)" : "rgba(0,0,0,0.03)" } }}>
+        sx={{ pl: "34px", pr: "8px", py: "6px", cursor: "pointer", bgcolor: isActive ? "rgba(29,78,216,0.1)" : "transparent", borderLeft: "2px solid", borderLeftColor: isActive ? "primary.main" : "transparent", "&:hover": { bgcolor: isActive ? "rgba(29,78,216,0.1)" : "rgba(0,0,0,0.03)" } }}>
         {cab._count.assets > 0 ? (
           <Box onClick={e => { e.stopPropagation(); onToggleCabinet(cab.id) }} sx={{ display: "flex", color: "#94a3b8", mr: "2px" }}>
             {isExpanded ? <ExpandMoreIcon sx={{ fontSize: 13 }} /> : <ChevronRightIcon sx={{ fontSize: 13 }} />}
           </Box>
         ) : <Box sx={{ width: 14 }} />}
-        <StorageIcon sx={{ fontSize: 11, color: isActive ? "#1d4ed8" : "#64748b", mr: "7px" }} />
-        <Typography sx={{ flex: 1, fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? "#1d4ed8" : "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cab.name}</Typography>
+        <StorageIcon sx={{ fontSize: 11, color: isActive ? "primary.main" : "#64748b", mr: "7px" }} />
+        <Typography sx={{ flex: 1, fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? "primary.main" : "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cab.name}</Typography>
         <Typography sx={{ fontSize: 10, color: "#94a3b8", ml: "4px" }}>{cab._count.assets}</Typography>
       </Stack>
 
@@ -243,9 +243,9 @@ const CabinetNode = React.memo(function CabinetNode({
         return (
           <Stack key={asset.id} direction="row" alignItems="center"
             onClick={e => { e.stopPropagation(); onSelectAsset(asset.id, cab.id, roomId) }}
-            sx={{ pl: "58px", pr: "8px", py: "5px", cursor: "pointer", bgcolor: isAssetActive ? "rgba(29,78,216,0.07)" : "transparent", borderLeft: isAssetActive ? "2px solid #1d4ed8" : "2px solid transparent", "&:hover": { bgcolor: isAssetActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
-            <Box sx={{ width: 6, height: 6, borderRadius: "50%", mr: "7px", bgcolor: isAssetActive ? "#1d4ed8" : assetBg(asset.assetType) === "#dbeafe" ? "#93c5fd" : "#cbd5e1" }} />
-            <Typography sx={{ fontSize: 11, color: isAssetActive ? "#1d4ed8" : "#64748b", fontWeight: isAssetActive ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+            sx={{ pl: "58px", pr: "8px", py: "5px", cursor: "pointer", bgcolor: isAssetActive ? "rgba(29,78,216,0.07)" : "transparent", borderLeft: "2px solid", borderLeftColor: isAssetActive ? "primary.main" : "transparent", "&:hover": { bgcolor: isAssetActive ? "rgba(29,78,216,0.07)" : "rgba(0,0,0,0.03)" } }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: "50%", mr: "7px", bgcolor: isAssetActive ? "primary.main" : assetBg(asset.assetType) === "#dbeafe" ? "#93c5fd" : "#cbd5e1" }} />
+            <Typography sx={{ fontSize: 11, color: isAssetActive ? "primary.main" : "#64748b", fontWeight: isAssetActive ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
               {asset.uPosition != null ? `U${asset.uPosition} ` : ""}{asset.name}
             </Typography>
           </Stack>
