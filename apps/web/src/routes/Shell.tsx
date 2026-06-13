@@ -22,7 +22,6 @@ import AssignmentIndIcon from "@mui/icons-material/AssignmentInd"
 import WorkspacesIcon from "@mui/icons-material/Workspaces"
 import AutorenewIcon from "@mui/icons-material/Autorenew"
 import NotificationImportantIcon from "@mui/icons-material/NotificationImportant"
-import NotificationsIcon from "@mui/icons-material/Notifications"
 import LogoutIcon from "@mui/icons-material/Logout"
 import SettingsIcon from "@mui/icons-material/Settings"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
@@ -38,6 +37,7 @@ import AccountTreeIcon from "@mui/icons-material/AccountTree"
 import ViewListIcon from "@mui/icons-material/ViewList"
 import InsightsIcon from "@mui/icons-material/Insights"
 import { api, revokeAndLogout } from "../lib/api"
+import NotificationBell from "../components/NotificationBell"
 import { LoadingState } from "../components/PageState"
 import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -1056,7 +1056,7 @@ export default function Shell() {
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
             <IconButton size="small" sx={{ width: 36, height: 36, color: "#64748b", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" } }}><HelpOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
-            <IconButton size="small" sx={{ width: 36, height: 36, color: "#64748b", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" } }}><NotificationsIcon sx={{ fontSize: 18 }} /></IconButton>
+            <NotificationBell clientId={selectedClientId} />
             <Box sx={{ width: 1, height: 22, bgcolor: "rgba(255,255,255,0.1)", mx: "10px" }} />
             <UserMenu initials={initials} email={currentUser?.email ?? ""} roleLabel={roleLabel} loggingOut={loggingOut} onLogout={onLogout} />
           </Box>
