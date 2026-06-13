@@ -28,6 +28,7 @@ import { MaintenanceModule } from "./maintenance/maintenance.module"
 import { ConnectionsModule } from "./connections/connections.module"
 import { RecordLinksModule } from "./record-links/record-links.module"
 import { AttachmentsModule } from "./attachments/attachments.module"
+import { NotificationsModule } from "./notifications/notifications.module"
 
 @Module({
   imports: [
@@ -58,7 +59,8 @@ import { AttachmentsModule } from "./attachments/attachments.module"
     MaintenanceModule,
     ConnectionsModule,
     RecordLinksModule,
-    AttachmentsModule
+    AttachmentsModule,
+    NotificationsModule
   ],
   controllers: [HealthController]
 })
