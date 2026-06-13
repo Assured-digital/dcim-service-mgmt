@@ -21,7 +21,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, u
 import { CSS } from "@dnd-kit/utilities"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
-import { chipSx } from "../components/shared"
+import { Avatar, chipSx } from "../components/shared"
 import { CommentBody, type ResolvedMention } from "../components/detail"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
@@ -834,10 +834,16 @@ export function TaskQuickDetailModal({
               ) : (
                 (workNotes ?? []).slice().reverse().map(note => (
                   <Box key={note.id} sx={{ border: "1px solid #e2e8f0", borderRadius: 1.5, p: 1.25 }}>
-                    <Typography variant="caption" sx={{ color: "#64748b" }}>
-                      {note.author.displayName} · {new Date(note.createdAt).toLocaleString("en-GB")}
-                    </Typography>
-                    <Box sx={{ mt: 0.5 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Avatar name={note.author.displayName} size="sm" variant="neutral" />
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.primary" }}>
+                        {note.author.displayName}
+                      </Typography>
+                      <Typography sx={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                        {formatDateTime(note.createdAt)}
+                      </Typography>
+                    </Stack>
+                    <Box sx={{ mt: 0.5, pl: 3.5 }}>
                       <CommentBody note={note.body} bodyJson={note.bodyJson} mentions={note.mentions} />
                     </Box>
                   </Box>
