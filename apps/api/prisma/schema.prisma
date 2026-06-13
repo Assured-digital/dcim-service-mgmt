@@ -109,6 +109,7 @@ enum ConnectionStatus {
 // future kinds (ASSIGNED, STATUS_CHANGED, …) — adding a value is a one-line migration.
 enum NotificationType {
   MENTION
+  REPLY
 }
 
 model Client {

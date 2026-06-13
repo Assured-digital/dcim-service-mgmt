@@ -58,6 +58,50 @@ export class NotificationsService {
     }
   }
 
+  // Best-effort emit: one REPLY notification to the author of the parent post when
+  // someone replies to their top-level comment. Mirrors emitMentionNotifications —
+  // try/catch SWALLOWS (the reply is the primary write, already committed), awaiting
+  // is safe (never throws).
+  //
+  // Two skips:
+  //  - self-reply: replying to your own post does not notify you.
+  //  - already-mentioned: if the post author is ALSO @mentioned in this reply, the
+  //    MENTION emit already notifies them about this exact reply (same scroll
+  //    target) — a second REPLY entry would be redundant noise, so suppress it.
+  //    Distinct people (post author vs mentioned users) each still get their own.
+  async emitReplyNotification(params: {
+    clientId: string
+    actorId: string
+    recipientId: string // the parent post's author
+    sourceType: string
+    sourceId: string
+    commentId: string // the reply — the scroll target on arrival
+    mentionedUserIds: string[]
+  }): Promise<void> {
+    try {
+      if (params.recipientId === params.actorId) return // self-reply
+      if (params.mentionedUserIds.includes(params.recipientId)) return // already MENTIONed
+
+      await this.prisma.notification.create({
+        data: {
+          recipientId: params.recipientId,
+          type: NotificationType.REPLY,
+          actorId: params.actorId,
+          clientId: params.clientId,
+          sourceType: params.sourceType,
+          sourceId: params.sourceId,
+          commentId: params.commentId
+        }
+      })
+    } catch (err) {
+      // Best-effort: never propagate — the reply has already been posted.
+      this.logger.error(
+        `Failed to emit reply notification for comment ${params.commentId}`,
+        err instanceof Error ? err.stack : String(err)
+      )
+    }
+  }
+
   // The authenticated user's own notifications under the scoped client, newest first,
   // plus the unread count for the bell badge. Two-axis scoped: recipientId (you only
   // see your own) AND clientId (your current tenant).

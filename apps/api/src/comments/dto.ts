@@ -59,3 +59,28 @@ export class CreateCustomerUpdateDto extends CreateCommentDto {
   @IsBoolean()
   fromCustomer?: boolean
 }
+
+// A reply to a top-level comment. A reply is a full rich comment (bodyJson +
+// mentions) — it just carries a parent. It does NOT take entityType/entityId/type:
+// those are INHERITED from the parent post server-side (a reply belongs to the same
+// record + thread), so the client cannot place a reply on a different record than
+// its parent. Two-level enforcement (parent must itself be top-level) lives in the
+// service.
+export class CreateReplyDto {
+  @IsUUID()
+  parentCommentId!: string
+
+  @IsOptional()
+  @IsString()
+  body?: string
+
+  @IsOptional()
+  @IsObject()
+  bodyJson?: Record<string, unknown>
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CommentMentionInputDto)
+  mentions?: CommentMentionInputDto[]
+}
