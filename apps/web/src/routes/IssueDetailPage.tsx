@@ -31,7 +31,7 @@ import {
   EditableTitleCard,
   useDetailNarrow,
   ActivityTabs,
-  ActivityCommentBox,
+  SlimExpandCommentBox,
   ActivityFeedItem,
   type FeedEvent,
   type FeedEventType,
@@ -312,7 +312,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
+        <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (

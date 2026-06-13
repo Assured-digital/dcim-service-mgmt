@@ -34,7 +34,7 @@ import { useBreadcrumb } from "./Shell"
 import {
   EditableTitleCard,
   useDetailNarrow,
-  ActivityCommentBox,
+  SlimExpandCommentBox,
   ActivityFeedItem,
   type ResolvedMention,
   ActivityTabs,
@@ -500,7 +500,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
+        <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (

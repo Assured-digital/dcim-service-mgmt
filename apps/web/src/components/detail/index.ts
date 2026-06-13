@@ -32,7 +32,7 @@ export {
   filterFeedEvents,
 } from "./activityTabs"
 export type { ActivityFilter } from "./activityTabs"
-export { ActivityCommentBox } from "./activityCommentBox"
+export { ActivityCommentBox, SlimExpandCommentBox } from "./activityCommentBox"
 export type { CommentDraft, CommentMentionTarget } from "./activityCommentBox"
 export { CommentBody } from "./CommentBody"
 export type { ResolvedMention } from "./CommentBody"

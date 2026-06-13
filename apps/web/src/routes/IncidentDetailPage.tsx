@@ -36,7 +36,7 @@ import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import {
   EditableTitleCard,
   ActivityTabs,
-  ActivityCommentBox,
+  SlimExpandCommentBox,
   ActivityFeedItem,
   type ResolvedMention,
   type CommentDraft,
@@ -364,7 +364,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={handleFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
+        <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
