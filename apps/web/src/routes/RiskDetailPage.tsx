@@ -626,6 +626,19 @@ export default function RiskDetailPage() {
     [id, risk, qc, notify]
   )
 
+  // Commit path for the pending-confirm Details popover fields (likelihood/impact).
+  // Unlike handlePutField it does NOT swallow errors or toast — the shell awaits
+  // this on ✓ and owns the success/error toast + pending state.
+  const commitDetailField = React.useCallback(
+    async (patch: Record<string, string>) => {
+      await api.put(`/risks/${id}`, patch)
+      await qc.invalidateQueries({ queryKey: ["risk-detail", id] })
+      qc.invalidateQueries({ queryKey: ["audit-risk", id] })
+      qc.invalidateQueries({ queryKey: ["risks"] })
+    },
+    [id, qc]
+  )
+
   const handleSaveAcceptanceNote = React.useCallback(
     async (next: string) => {
       if (!risk) return
@@ -859,12 +872,12 @@ export default function RiskDetailPage() {
   // ── Field-popover handlers ─────────────────────────────────────────────────
 
   const handleSelectLikelihood = React.useCallback(
-    (v: string) => handlePutField({ likelihood: v }),
-    [handlePutField]
+    (v: string) => commitDetailField({ likelihood: v }),
+    [commitDetailField]
   )
   const handleSelectImpact = React.useCallback(
-    (v: string) => handlePutField({ impact: v }),
-    [handlePutField]
+    (v: string) => commitDetailField({ impact: v }),
+    [commitDetailField]
   )
 
   // ── More menu ──────────────────────────────────────────────────────────────

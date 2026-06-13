@@ -21,6 +21,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import OpenInFullIcon from "@mui/icons-material/OpenInFull"
 import { useNavigate } from "react-router-dom"
 import { StatusPopover, type PopoverOption } from "./StatusPopover"
+import { useNotification } from "../NotificationProvider"
 import { useBreadcrumb } from "../../routes/Shell"
 import { useInDrillDownNavigator } from "../shared/layout/DrillDownNavigator"
 import { useDetailNarrow, useDetailDrawerChrome } from "./detailLayoutContext"
@@ -54,7 +55,10 @@ export interface DetailField {
   editable: boolean
   popoverOptions?: PopoverOption[]
   currentValue?: string
-  onSelect?: (value: string) => void
+  // Commits the chosen value. Returning a promise lets the shell await the commit
+  // (pending-confirm): a resolve shows a success toast and clears the pending state;
+  // a reject shows an error toast and keeps the value pending so the user can retry.
+  onSelect?: (value: string) => void | Promise<void>
 }
 
 export interface CentreSection {
@@ -248,6 +252,11 @@ interface DetailFieldRowProps {
   popoverOpen: boolean
   onOpenPopover: (id: string, anchor: HTMLElement) => void
   onClosePopover: () => void
+  // Batch pending-confirm: the staged value for this field (null = not dirty), a
+  // callback to stage a popover selection, and whether a batch commit is in flight.
+  pendingValue: string | null
+  onStage: (key: string, value: string) => void
+  committing: boolean
 }
 
 const DetailFieldRow = React.memo(function DetailFieldRow({
@@ -255,22 +264,33 @@ const DetailFieldRow = React.memo(function DetailFieldRow({
   popoverOpen,
   onOpenPopover,
   onClosePopover,
+  pendingValue,
+  onStage,
+  committing,
 }: DetailFieldRowProps) {
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const popoverId = `${DETAIL_FIELD_PREFIX}${field.key}`
   const interactive = field.editable && !!field.popoverOptions && !!field.onSelect
+  const isPending = pendingValue !== null
 
   const handleClick = React.useCallback(() => {
-    if (!interactive) return
+    if (!interactive || committing) return
+    // While pending, re-opening the popover lets the user change the staged value
+    // (the popover shows the staged value as selected).
     if (anchorRef.current) onOpenPopover(popoverId, anchorRef.current)
-  }, [interactive, onOpenPopover, popoverId])
+  }, [interactive, committing, onOpenPopover, popoverId])
 
+  // Popover select stages the value in the batch model. The parent owns the
+  // dirty-check: re-selecting the committed value is a no-op and never stages,
+  // and changing back to the original drops the field out of pending.
   const handleSelect = React.useCallback(
-    (value: string) => {
-      if (field.onSelect) field.onSelect(value)
-    },
-    [field]
+    (value: string) => onStage(field.key, value),
+    [onStage, field.key]
   )
+
+  const pendingOption = isPending
+    ? field.popoverOptions?.find((o) => o.value === pendingValue)
+    : undefined
 
   return (
     <>
@@ -283,8 +303,8 @@ const DetailFieldRow = React.memo(function DetailFieldRow({
           px: 0.75,
           py: 0.5,
           borderRadius: 1,
-          cursor: interactive ? "pointer" : "default",
-          "&:hover": interactive ? { bgcolor: "action.hover" } : {},
+          cursor: interactive && !committing ? "pointer" : "default",
+          "&:hover": interactive && !isPending ? { bgcolor: "action.hover" } : {},
         }}
       >
         <Typography
@@ -292,14 +312,53 @@ const DetailFieldRow = React.memo(function DetailFieldRow({
         >
           {field.label}
         </Typography>
-        <Box sx={{ flex: 1, minWidth: 0, fontSize: 12 }}>{field.value}</Box>
+        {isPending ? (
+          // Staged (unsaved) value — dashed primary border marks it pending. No
+          // per-field ✓/✗: the batch Confirm/Cancel bar at the panel foot owns the commit.
+          <Box
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                minWidth: 0,
+                px: 0.75,
+                py: 0.25,
+                borderRadius: 1,
+                border: "1px dashed",
+                borderColor: "primary.main",
+                bgcolor: pendingOption?.iconBg ?? "action.hover",
+              }}
+            >
+              <Typography
+                noWrap
+                sx={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: pendingOption?.iconColor ?? "text.secondary",
+                }}
+              >
+                {pendingOption?.label ?? pendingValue}
+              </Typography>
+            </Box>
+          </Box>
+        ) : (
+          <Box sx={{ flex: 1, minWidth: 0, fontSize: 12 }}>{field.value}</Box>
+        )}
       </Box>
       {field.popoverOptions && field.onSelect ? (
         <StatusPopover
           id={popoverId}
           header={field.label}
           options={field.popoverOptions}
-          currentValue={field.currentValue ?? ""}
+          currentValue={pendingValue ?? field.currentValue ?? ""}
           onSelect={handleSelect}
           anchorEl={anchorRef.current}
           open={popoverOpen}
@@ -408,6 +467,89 @@ function RecordDetailShellImpl({
     setOpenPopoverId(null)
     setPopoverAnchor(null)
   }, [])
+
+  // ── Batch pending-confirm for editable Details fields ──────────────────────
+  // A field stages here only when its selected value DIFFERS from the committed
+  // value (a no-op selection never stages; changing back to the original drops it
+  // out). The bottom Confirm/Cancel bar shows whenever the map is non-empty: Cancel
+  // just clears it (committed values live on the fields, so rows snap back), Confirm
+  // fires each field's own save with honest partial-on-failure.
+  const { notify } = useNotification()
+  const [pendingChanges, setPendingChanges] = React.useState<Record<string, string>>({})
+  const [committingBatch, setCommittingBatch] = React.useState(false)
+
+  // Drawer / drill-down reuse this shell across records — never leak staged edits.
+  React.useEffect(() => {
+    setPendingChanges({})
+  }, [recordRef])
+
+  const detailFieldByKey = React.useMemo(() => {
+    const m: Record<string, DetailField> = {}
+    for (const f of detailFields) m[f.key] = f
+    return m
+  }, [detailFields])
+
+  const handleStageChange = React.useCallback(
+    (key: string, value: string) => {
+      const committed = detailFieldByKey[key]?.currentValue ?? ""
+      setPendingChanges((prev) => {
+        const next = { ...prev }
+        if (value === committed) delete next[key] // no-op / changed-back → not dirty
+        else next[key] = value
+        return next
+      })
+    },
+    [detailFieldByKey]
+  )
+
+  const handleBatchCancel = React.useCallback(() => setPendingChanges({}), [])
+
+  const handleBatchConfirm = React.useCallback(async () => {
+    const entries = Object.entries(pendingChanges)
+    if (entries.length === 0) return
+    setCommittingBatch(true)
+    const succeededKeys: string[] = []
+    const succeededLabels: string[] = []
+    const failedLabels: string[] = []
+    // Honest partial-on-failure: fire each field's own save in turn; a field that
+    // saves clears, a field that throws stays pending so the user can retry it.
+    for (const [key, value] of entries) {
+      const field = detailFieldByKey[key]
+      if (!field?.onSelect) {
+        succeededKeys.push(key)
+        continue
+      }
+      try {
+        await field.onSelect(value)
+        succeededKeys.push(key)
+        succeededLabels.push(field.label)
+      } catch {
+        failedLabels.push(field.label)
+      }
+    }
+    setPendingChanges((prev) => {
+      const next = { ...prev }
+      for (const key of succeededKeys) delete next[key]
+      return next
+    })
+    setCommittingBatch(false)
+    if (succeededLabels.length === 1) notify.success(`${succeededLabels[0]} updated`)
+    else if (succeededLabels.length > 1) notify.success("Changes saved")
+    for (const label of failedLabels) notify.error(`Couldn't save ${label.toLowerCase()}`)
+  }, [pendingChanges, detailFieldByKey, notify])
+
+  // Shell-level Escape: when changes are pending and NO popover is open, Escape
+  // discards all staged edits. If a StatusPopover/menu is open it owns Escape (it
+  // closes itself); openPopoverId is still set at this keydown, so we stand down and
+  // a second Escape (popover now closed) does the discard.
+  React.useEffect(() => {
+    if (Object.keys(pendingChanges).length === 0 || committingBatch) return
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape" && openPopoverId === null) setPendingChanges({})
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [pendingChanges, committingBatch, openPopoverId])
 
   const handleBack = React.useCallback(() => {
     if (onBack) onBack()
@@ -632,6 +774,9 @@ function RecordDetailShellImpl({
           popoverOpen={openPopoverId === `${DETAIL_FIELD_PREFIX}${field.key}`}
           onOpenPopover={openPopover}
           onClosePopover={closePopover}
+          pendingValue={pendingChanges[field.key] ?? null}
+          onStage={handleStageChange}
+          committing={committingBatch}
         />
       ))}
       {metadata ? (
@@ -656,6 +801,39 @@ function RecordDetailShellImpl({
               </Box>
             ))}
           </Box>
+        </>
+      ) : null}
+      {Object.keys(pendingChanges).length > 0 ? (
+        <>
+          <Divider sx={{ my: 1 }} />
+          <Stack
+            direction="row"
+            spacing={1}
+            justifyContent="flex-end"
+            sx={{ px: 0.75, pt: 0.5 }}
+          >
+            <Button
+              size="small"
+              onClick={handleBatchCancel}
+              disabled={committingBatch}
+              sx={{ textTransform: "none", fontSize: 12, color: "text.secondary" }}
+            >
+              Discard
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disableElevation
+              onClick={handleBatchConfirm}
+              disabled={committingBatch}
+              startIcon={
+                committingBatch ? <CircularProgress size={12} color="inherit" /> : undefined
+              }
+              sx={{ textTransform: "none", fontSize: 12 }}
+            >
+              Save changes
+            </Button>
+          </Stack>
         </>
       ) : null}
     </SectionPanel>

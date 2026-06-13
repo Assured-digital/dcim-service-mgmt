@@ -818,6 +818,19 @@ export default function ChangeDetailPage() {
     [id, change, qc, notify]
   )
 
+  // Commit path for the pending-confirm Details popover fields (priority/assignee).
+  // Unlike handleFieldChange it does NOT swallow errors or toast — the shell awaits
+  // this on ✓ and owns the success/error toast + pending state.
+  const commitDetailField = React.useCallback(
+    async (field: EditableField, value: string) => {
+      await api.put(`/changes/${id}`, { [field]: value })
+      await qc.invalidateQueries({ queryKey: ["change-detail", id] })
+      qc.invalidateQueries({ queryKey: ["audit-change", id] })
+      qc.invalidateQueries({ queryKey: ["tickets"] })
+    },
+    [id, qc]
+  )
+
   const handleAddNote = React.useCallback(async (draft: CommentDraft) => {
     if (!draft.body.trim()) return
     setSavingNote(true)
@@ -1048,12 +1061,12 @@ export default function ChangeDetailPage() {
   // ── Field-popover handlers ─────────────────────────────────────────────────
 
   const handleSelectPriority = React.useCallback(
-    (v: string) => handleFieldChange("priority", v),
-    [handleFieldChange]
+    (v: string) => commitDetailField("priority", v),
+    [commitDetailField]
   )
   const handleSelectAssignee = React.useCallback(
-    (v: string) => handleFieldChange("assigneeId", v),
-    [handleFieldChange]
+    (v: string) => commitDetailField("assigneeId", v),
+    [commitDetailField]
   )
 
   // ── More menu ──────────────────────────────────────────────────────────────

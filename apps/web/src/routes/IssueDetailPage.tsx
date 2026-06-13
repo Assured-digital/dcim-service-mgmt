@@ -437,6 +437,19 @@ export default function IssueDetailPage() {
     [id, issue, qc, notify]
   )
 
+  // Commit path for the pending-confirm Details popover field (severity). Unlike
+  // handlePutField it does NOT swallow errors or toast — the shell awaits this on ✓
+  // and owns the success/error toast + pending state.
+  const commitDetailField = React.useCallback(
+    async (patch: Record<string, string>) => {
+      await api.put(`/issues/${id}`, patch)
+      await qc.invalidateQueries({ queryKey: ["issue-detail", id] })
+      qc.invalidateQueries({ queryKey: ["audit-issue", id] })
+      qc.invalidateQueries({ queryKey: ["issues"] })
+    },
+    [id, qc]
+  )
+
   const handleAddNote = React.useCallback(async (draft: CommentDraft) => {
     if (!draft.body.trim()) return
     setSavingNote(true)
@@ -634,8 +647,8 @@ export default function IssueDetailPage() {
   // ── Field-popover handlers ─────────────────────────────────────────────────
 
   const handleSelectSeverity = React.useCallback(
-    (v: string) => handlePutField({ severity: v }),
-    [handlePutField]
+    (v: string) => commitDetailField({ severity: v }),
+    [commitDetailField]
   )
 
   // ── More menu ──────────────────────────────────────────────────────────────
