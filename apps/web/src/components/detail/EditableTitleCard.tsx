@@ -6,7 +6,7 @@ import { SectionPanel } from "./RecordDetailShell"
 // EditableField — explicit click-to-edit with dirty-tracked Save/Cancel.
 //
 // Unlike the per-page `InlineEditable` (contentEditable, commit-on-blur), this
-// editor follows the Jira model: a *dirty* edit must be explicitly Saved or
+// editor requires explicit commit: a *dirty* edit must be explicitly Saved or
 // Cancelled — clicking out does NOT auto-commit. A *clean* edit (no change) is
 // free to exit on click-out / Cancel / Escape. Used only for Subject and
 // Description; the other inline fields (assessment/impl/notes) keep their own
@@ -146,7 +146,7 @@ export const EditableField = React.memo(function EditableField({
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EditableTitleCard — shared title card for the shell-based detail pages.
-// Subject and Description each in their own Jira-style SectionPanel, edited via
+// Subject and Description each in their own SectionPanel, edited via
 // the explicit-Save/Cancel EditableField. Replaces the per-page *TitleCard
 // components. The commit handlers (onCommitTitle/onCommitDescription) are the
 // pages' existing PUT path — unchanged.

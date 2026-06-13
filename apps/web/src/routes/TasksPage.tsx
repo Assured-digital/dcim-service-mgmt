@@ -908,7 +908,7 @@ export default function TasksPage() {
   })
   const [columnsAnchor, setColumnsAnchor] = React.useState<HTMLElement | null>(null)
 
-  // Active filter chips — Jira style multi-select
+  // Active filter chips — multi-select
   const [filterStatuses, setFilterStatuses] = React.useState<string[]>([])
   const [filterPriorities, setFilterPriorities] = React.useState<string[]>([])
   const [filterAssignee, setFilterAssignee] = React.useState<string | null>(null)

@@ -69,7 +69,7 @@ export interface RightSection {
   id: string
   title: string
   defaultOpen?: boolean
-  // When set, a Jira-style "+" icon button is rendered right-aligned on the
+  // When set, a "+" icon button is rendered right-aligned on the
   // section header row (next to the title) and fires onClick — replacing the
   // old text add-button that lived below the section content.
   headerAdd?: { onClick: () => void; tooltip: string; disabled?: boolean }
@@ -156,7 +156,7 @@ export const RightPanelSection = React.memo(function RightPanelSection({
   )
 })
 
-// Jira-style "+" add affordance for an association section header. Rendered into
+// Right-aligned "+" add affordance for an association section header. Rendered into
 // SectionPanel.headerExtra so every association panel reads consistently on both
 // the main detail page and the narrow drawer.
 const SectionAddButton = React.memo(function SectionAddButton({
@@ -200,7 +200,7 @@ interface SectionPanelProps {
   children: React.ReactNode
 }
 
-// Jira-style container: a subtle bordered panel with a header + thin divider and
+// Bordered container: a subtle bordered panel with a header + thin divider and
 // a squarer corner (the global shape.borderRadius token). Used for both the centre
 // association sections (Linked records / Tasks / Attachments) and the right-column
 // Details panel, so they read consistently. Omit `title` for a header-less panel.
@@ -441,7 +441,7 @@ function RecordDetailShellImpl({
     [statusConfig, currentStatus]
   )
 
-  // Associations now live in the CENTRE column (Jira layout). Reorder to
+  // Associations now live in the CENTRE column. Reorder to
   // Linked records → Tasks → Attachments regardless of the prop order.
   const orderedAssociations = React.useMemo(() => {
     const rank = (id: string) => {

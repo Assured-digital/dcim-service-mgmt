@@ -14,7 +14,7 @@ import { useAssignableUsers, type AssignableUser } from "../../lib/useAssignable
 import { MentionList, type MentionListRef } from "./commentMentionList"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Activity comment box — shared, quiet Jira-style work-note editor.
+// Activity comment box — shared, quiet work-note editor.
 //
 // A flat bordered field that blends with the surrounding Activity panel (no white
 // "card" fill), squarer global radius, subtle divider border. Used by every record

@@ -2,7 +2,7 @@ import * as React from "react"
 import { Tab, Tabs } from "@mui/material"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Activity filter — shared config + Jira-style tab bar.
+// Activity filter — shared config + tab bar.
 //
 // Single source of truth for the activity section's filter tabs, used by every
 // record detail page. The internal value "all" is deliberately preserved (it is
