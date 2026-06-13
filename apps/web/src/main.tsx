@@ -26,13 +26,25 @@ const qc = new QueryClient({
     }
   }
 });
+// Register the custom slate `text.tertiary` token so createTheme() type-checks and
+// `color="text.tertiary"` resolves app-wide (it mirrors the --color-text-tertiary CSS var).
+declare module "@mui/material/styles" {
+  interface TypeText {
+    tertiary: string;
+  }
+}
+
 const theme = createTheme({
   palette: {
     mode: "light",
-    primary: { main: "#0b4a9f" },
+    // Accent unified on #1d4ed8 — the value already hardcoded across tabs/queue/nav and
+    // documented as primary; replaces the legacy #0b4a9f so every `color="primary"` matches.
+    primary: { main: "#1d4ed8" },
     secondary: { main: "#0f766e" },
     background: { default: "#f2f6fb", paper: "#ffffff" },
-    text: { primary: "#0f172a", secondary: "#475569" },
+    // tertiary mirrors --color-text-tertiary so MUI + CSS-var muted text resolve identically;
+    // disabled is slate-aligned (was MUI's off-palette rgba(0,0,0,0.38) fallback).
+    text: { primary: "#0f172a", secondary: "#475569", tertiary: "#94a3b8", disabled: "#94a3b8" },
     divider: "#e2e8f0"
   },
   shape: { borderRadius: 6 },
