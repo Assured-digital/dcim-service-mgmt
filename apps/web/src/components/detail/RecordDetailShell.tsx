@@ -108,6 +108,12 @@ const DETAIL_FIELD_PREFIX = "detail-field-"
 // rightSections (any order) are sorted by this; unknown ids fall to the end.
 const CENTRE_ASSOC_ORDER = ["linked", "tasks", "attachments"]
 
+// One section-header token: 0.75rem / 600 / text.primary. Collapses the three former
+// header variants (SectionPanel 600, CentreSection 500, RightPanelSection caption/muted)
+// so every panel header — Details, Activity, Linked records, Tasks, Attachments,
+// Description — renders identically. 12px = the caption rem-size (no new size).
+const SECTION_HEADER_SX = { fontSize: 12, fontWeight: 600, color: "text.primary" } as const
+
 interface RightPanelSectionProps {
   title: string
   icon?: React.ReactNode
@@ -132,9 +138,7 @@ export const RightPanelSection = React.memo(function RightPanelSection({
         }}
       >
         <Typography
-          variant="caption"
-          fontWeight={500}
-          sx={{ display: "flex", alignItems: "center", gap: 0.75 }}
+          sx={{ ...SECTION_HEADER_SX, display: "flex", alignItems: "center", gap: 0.75 }}
         >
           {icon ? (
             <Box
@@ -228,7 +232,7 @@ export const SectionPanel = React.memo(function SectionPanel({
             justifyContent="space-between"
             sx={{ px: 1.75, py: 1.25 }}
           >
-            <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{title}</Typography>
+            <Typography sx={SECTION_HEADER_SX}>{title}</Typography>
             {headerExtra ? <Box>{headerExtra}</Box> : null}
           </Stack>
           <Divider sx={{ borderColor: "divider" }} />
@@ -324,7 +328,7 @@ const CentreSectionView = React.memo(function CentreSectionView({
         justifyContent="space-between"
         sx={{ mb: 1 }}
       >
-        <Typography sx={{ fontSize: 12, fontWeight: 500 }}>
+        <Typography sx={SECTION_HEADER_SX}>
           {section.title}
         </Typography>
         {section.headerExtra ? <Box>{section.headerExtra}</Box> : null}
@@ -643,10 +647,10 @@ function RecordDetailShellImpl({
                 key={row.label}
                 sx={{ display: "flex", justifyContent: "space-between", py: 0.375, px: 0.75 }}
               >
-                <Typography variant="caption" color="text.disabled">
+                <Typography variant="caption" color="text.secondary">
                   {row.label}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.primary">
                   {row.value}
                 </Typography>
               </Box>

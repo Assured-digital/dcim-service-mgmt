@@ -106,8 +106,8 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                     the breadcrumb + the Details panel. */}
                 <Typography
                   title={t.subject}
+                  variant="body2"
                   sx={{
-                    fontSize: 12.5,
                     color: active ? "primary.main" : "#0f172a",
                     fontWeight: active ? 600 : 500,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -119,13 +119,13 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                   <Typography
                     title={KIND_LABELS[t.kind]}
                     sx={{
-                      fontSize: 11, color: "#64748b", minWidth: 0,
+                      fontSize: 11, color: "text.tertiary", minWidth: 0,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}
                   >
                     {KIND_LABELS[t.kind]}
                   </Typography>
-                  <Typography sx={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary", flexShrink: 0 }}>
                     {formatCreated(t.createdAt)}
                   </Typography>
                 </Box>
