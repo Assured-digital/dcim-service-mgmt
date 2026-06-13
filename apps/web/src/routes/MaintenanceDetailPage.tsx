@@ -586,7 +586,7 @@ const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   return (
     <Box>
       {entities.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary" }}>
           No linked records
         </Typography>
       ) : (
@@ -637,7 +637,7 @@ const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
                 <Typography
                   sx={{
                     fontSize: 10,
-                    color: "var(--color-text-tertiary)",
+                    color: "text.tertiary",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -697,7 +697,7 @@ const ActivityContent = React.memo(function ActivityContent({
       ) : null}
 
       {events.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary" }}>
           No activity to show
         </Typography>
       ) : (

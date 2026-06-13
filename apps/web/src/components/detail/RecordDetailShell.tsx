@@ -146,7 +146,7 @@ export const RightPanelSection = React.memo(function RightPanelSection({
               sx={{
                 display: "inline-flex",
                 fontSize: 12,
-                color: "var(--color-text-tertiary)",
+                color: "text.tertiary",
               }}
             >
               {icon}
@@ -183,7 +183,7 @@ const SectionAddButton = React.memo(function SectionAddButton({
           sx={{
             borderRadius: 1,
             p: 0.5,
-            color: "var(--color-text-tertiary)",
+            color: "text.tertiary",
             transition: "background-color 0.12s, color 0.12s",
             "&:hover": {
               bgcolor: "action.selected",

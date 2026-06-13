@@ -21,7 +21,7 @@ export function SectionHeader({ label, action, tooltip }: SectionHeaderProps) {
         {tooltip ? (
           <Tooltip title={tooltip} placement="right" arrow>
             <InfoOutlinedIcon sx={{
-              fontSize: 14, color: "var(--color-text-tertiary)", cursor: "help"
+              fontSize: 14, color: "text.tertiary", cursor: "help"
             }} />
           </Tooltip>
         ) : null}

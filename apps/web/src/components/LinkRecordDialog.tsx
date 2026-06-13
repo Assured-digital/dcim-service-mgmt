@@ -129,7 +129,7 @@ export function LinkRecordDialog({
           ) : visibleResults.length === 0 ? (
             <Typography
               variant="caption"
-              sx={{ color: "var(--color-text-tertiary)", display: "block", py: 2, textAlign: "center" }}
+              sx={{ color: "text.tertiary", display: "block", py: 2, textAlign: "center" }}
             >
               No matching records
             </Typography>
@@ -178,7 +178,7 @@ export function LinkRecordDialog({
                     >
                       {r.title}
                     </Typography>
-                    <Typography sx={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>
+                    <Typography sx={{ fontSize: 10, color: "text.tertiary" }}>
                       {r.reference} · {r.status}
                     </Typography>
                   </Box>

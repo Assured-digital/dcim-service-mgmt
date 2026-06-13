@@ -241,7 +241,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
   return (
     <Box>
       {tasks.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)", display: "block", py: 0.5 }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary", display: "block", py: 0.5 }}>
           No tasks
         </Typography>
       ) : (

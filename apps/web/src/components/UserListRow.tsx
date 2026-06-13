@@ -149,7 +149,7 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
               "& .MuiChip-label": { px: 0.875 }
             }}
           />
-          <Typography sx={{ fontSize: 12, color: "var(--color-text-tertiary, #94a3b8)" }}>·</Typography>
+          <Typography sx={{ fontSize: 12, color: "text.tertiary" }}>·</Typography>
           {/* Assigned client(s) — comma-separated for multi-client assignment. */}
           <Typography
             sx={{

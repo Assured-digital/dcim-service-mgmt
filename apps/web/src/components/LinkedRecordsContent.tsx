@@ -40,7 +40,7 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   return (
     <Box>
       {links.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)", display: "block", py: 0.5 }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary", display: "block", py: 0.5 }}>
           No linked records
         </Typography>
       ) : (
@@ -96,7 +96,7 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
                 <Typography
                   sx={{
                     fontSize: 10,
-                    color: "var(--color-text-tertiary)",
+                    color: "text.tertiary",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",

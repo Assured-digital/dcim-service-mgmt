@@ -601,7 +601,7 @@ const ApprovalsSectionContent = React.memo(function ApprovalsSectionContent({
 }: ApprovalsSectionContentProps) {
   if (approvals.length === 0) {
     return (
-      <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
+      <Typography variant="caption" sx={{ color: "text.tertiary" }}>
         No approvals recorded
       </Typography>
     )
@@ -653,7 +653,7 @@ const ApprovalsSectionContent = React.memo(function ApprovalsSectionContent({
                 <Typography sx={{ fontSize: 12, fontWeight: 500, color: "text.primary" }}>
                   {userLabel(approval.approver)}
                 </Typography>
-                <Typography sx={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>
                   {formatDateTime(approval.decidedAt)}
                 </Typography>
               </Stack>
@@ -707,7 +707,7 @@ const ActivityContent = React.memo(function ActivityContent({
       ) : null}
 
       {events.length === 0 ? (
-        <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary" }}>
           No activity to show
         </Typography>
       ) : (
@@ -1280,7 +1280,7 @@ export default function ChangeDetailPage() {
                 Approvals
               </Typography>
               <Box sx={{ flex: 1 }} />
-              <Typography variant="caption" sx={{ color: "var(--color-text-tertiary)" }}>
+              <Typography variant="caption" sx={{ color: "text.tertiary" }}>
                 {(change.approvals ?? []).length}{" "}
                 {(change.approvals ?? []).length === 1 ? "decision" : "decisions"}
               </Typography>

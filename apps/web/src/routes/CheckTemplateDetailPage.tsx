@@ -398,7 +398,7 @@ export default function CheckTemplateDetailPage() {
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
               <Typography sx={{
                 fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                color: "var(--color-text-tertiary)"
+                color: "text.tertiary"
               }}>
                 CHECKLIST ITEMS — {template.items.length}
               </Typography>
@@ -434,7 +434,7 @@ export default function CheckTemplateDetailPage() {
                     {sections.length > 1 || sectionName !== "General" ? (
                       <Typography sx={{
                         fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-                        color: "var(--color-text-tertiary)", mb: 1
+                        color: "text.tertiary", mb: 1
                       }}>
                         {sectionName.toUpperCase()}
                       </Typography>
