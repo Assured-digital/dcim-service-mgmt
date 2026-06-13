@@ -778,6 +778,18 @@ export default function MaintenanceDetailPage() {
     [id, qc]
   )
 
+  // Commit path for the pending-confirm Details popover field (performed by). Unlike
+  // handleFieldChange it does NOT swallow errors — the shell awaits this on ✓ and
+  // owns the success/error toast + pending state.
+  const commitDetailField = React.useCallback(
+    async (field: EditableField, value: string | null) => {
+      await api.put(`/maintenance/${id}`, { [field]: value })
+      await qc.invalidateQueries({ queryKey: ["maintenance", id] })
+      qc.invalidateQueries({ queryKey: ["maintenance"] })
+    },
+    [id, qc]
+  )
+
   const handleDelete = React.useCallback(async () => {
     if (!id) return
     setDeleting(true)
@@ -815,8 +827,8 @@ export default function MaintenanceDetailPage() {
     [handleFieldChange]
   )
   const handleSelectPerformedBy = React.useCallback(
-    (value: string) => handleFieldChange("performedById", value === "" ? null : value),
-    [handleFieldChange]
+    (value: string) => commitDetailField("performedById", value === "" ? null : value),
+    [commitDetailField]
   )
 
   // ── Activity (no audit/comments query for maintenance — empty feed) ────────
