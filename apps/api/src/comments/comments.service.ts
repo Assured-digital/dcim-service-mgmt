@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
+import { NotificationsService } from "../notifications/notifications.service"
 import { computeDisplayName, toUserDisplay, userDisplaySelect, type UserDisplayPick } from "../users/display"
 import { assertEntityInScope } from "./resolve-comment-scope"
 import { resolveValidMentions, type MentionInput } from "./resolve-mentions"
@@ -21,7 +22,7 @@ type CommentRow = {
 
 @Injectable()
 export class CommentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
 
   // Resolves the final non-empty plain-text body: derived from bodyJson when
   // present (source of truth for rich comments), else the client-sent body.
@@ -103,6 +104,16 @@ export class CommentsService {
       },
       include: commentInclude
     })
+    // Emit one MENTION notification per mentioned user (best-effort — never blocks
+    // the posted comment). Reuses the validated `mentions` list; self-skip in the service.
+    await this.notifications.emitMentionNotifications({
+      clientId,
+      actorId: authorId,
+      sourceType: dto.entityType,
+      sourceId: dto.entityId,
+      commentId: comment.id,
+      mentions
+    })
     return this.presentOne(comment)
   }
 
@@ -132,6 +143,14 @@ export class CommentsService {
         mentions: { create: mentions.map((m) => ({ targetType: m.targetType, targetId: m.targetId })) }
       },
       include: commentInclude
+    })
+    await this.notifications.emitMentionNotifications({
+      clientId,
+      actorId: authorId,
+      sourceType: dto.entityType,
+      sourceId: dto.entityId,
+      commentId: comment.id,
+      mentions
     })
     return this.presentOne(comment)
   }
