@@ -105,33 +105,40 @@ enum ConnectionStatus {
   RETIRED
 }
 
-model Client {
-  id        String   @id @default(uuid())
-  organizationId String?
-  organization Organization? @relation(fields: [organizationId], references: [id])
-  name      String
-  status    String   @default("ACTIVE")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// Notification kinds. Phase 2 emits MENTION only; the enum is the additive seam for
+// future kinds (ASSIGNED, STATUS_CHANGED, …) — adding a value is a one-line migration.
+enum NotificationType {
+  MENTION
+}
 
-  serviceRequests ServiceRequest[]
-  assets    Asset[]
-  checks             Check[]  @relation("ClientChecks")
-  checkTemplates     CheckTemplate[] @relation("ClientCheckTemplates")
-  incidents Incident[]
-  tasks     Task[]
-  sites     Site[]
-  workPackages   WorkPackage[]
-  changeRequests ChangeRequest[]
-  risks          Risk[]
-  issues         Issue[]
+model Client {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  name           String
+  status         String        @default("ACTIVE")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  serviceRequests   ServiceRequest[]
+  assets            Asset[]
+  notifications     Notification[]
+  checks            Check[]                @relation("ClientChecks")
+  checkTemplates    CheckTemplate[]        @relation("ClientCheckTemplates")
+  incidents         Incident[]
+  tasks             Task[]
+  sites             Site[]
+  workPackages      WorkPackage[]
+  changeRequests    ChangeRequest[]
+  risks             Risk[]
+  issues            Issue[]
   publicSubmissions PublicSubmission[]
-  documents DocumentReference[]
-  requestIntakes RequestIntake[]
-  connections Connection[]
-  userAssignments UserClientAssignment[]
-  recordLinks RecordLink[]
-  attachments Attachment[]
+  documents         DocumentReference[]
+  requestIntakes    RequestIntake[]
+  connections       Connection[]
+  userAssignments   UserClientAssignment[]
+  recordLinks       RecordLink[]
+  attachments       Attachment[]
 }
 
 model Site {
@@ -150,11 +157,11 @@ model Site {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  rooms     Room[]
-  cabinets  Cabinet[]
-  assets    Asset[]
-  checks             Check[]  @relation("SiteChecks")
-  checkTemplates     CheckTemplate[] @relation("SiteCheckTemplates")
+  rooms            Room[]
+  cabinets         Cabinet[]
+  assets           Asset[]
+  checks           Check[]           @relation("SiteChecks")
+  checkTemplates   CheckTemplate[]   @relation("SiteCheckTemplates")
   workPackageSites WorkPackageSite[]
 }
 
@@ -168,61 +175,61 @@ model Room {
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
- 
-  cabinets  Cabinet[]
+
+  cabinets Cabinet[]
 }
 
 model CheckTemplate {
-  id                String   @id @default(uuid())
-  reference         String   @unique
-  name              String
-  checkType         String
-  description       String?
-  clientId          String?
-  client            Client?  @relation("ClientCheckTemplates", fields: [clientId], references: [id])
-  siteId            String?
-  site              Site?    @relation("SiteCheckTemplates", fields: [siteId], references: [id])
-  isActive          Boolean  @default(true)
-  estimatedMinutes  Int?
-  createdById       String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(uuid())
+  reference        String   @unique
+  name             String
+  checkType        String
+  description      String?
+  clientId         String?
+  client           Client?  @relation("ClientCheckTemplates", fields: [clientId], references: [id])
+  siteId           String?
+  site             Site?    @relation("SiteCheckTemplates", fields: [siteId], references: [id])
+  isActive         Boolean  @default(true)
+  estimatedMinutes Int?
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  items             CheckTemplateItem[]
-  checks            Check[]
+  items  CheckTemplateItem[]
+  checks Check[]
 }
 
 model CheckTemplateItem {
-  id                  String   @id @default(uuid())
-  templateId          String
-  template            CheckTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  sortOrder           Int
-  section             String?
-  label               String
-  guidance            String?
-  responseType        CheckItemResponseType @default(PASS_FAIL)
-  isRequired          Boolean  @default(true)
-  isCritical          Boolean  @default(false)
-  createdAt           DateTime @default(now())
+  id           String                @id @default(uuid())
+  templateId   String
+  template     CheckTemplate         @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sortOrder    Int
+  section      String?
+  label        String
+  guidance     String?
+  responseType CheckItemResponseType @default(PASS_FAIL)
+  isRequired   Boolean               @default(true)
+  isCritical   Boolean               @default(false)
+  createdAt    DateTime              @default(now())
 }
 
 model Check {
-  id                 String      @id @default(uuid())
-  reference          String      @unique
+  id                 String        @id @default(uuid())
+  reference          String        @unique
   clientId           String
-  client             Client      @relation("ClientChecks", fields: [clientId], references: [id])
+  client             Client        @relation("ClientChecks", fields: [clientId], references: [id])
   siteId             String
-  site               Site        @relation("SiteChecks", fields: [siteId], references: [id])
+  site               Site          @relation("SiteChecks", fields: [siteId], references: [id])
   templateId         String
   template           CheckTemplate @relation(fields: [templateId], references: [id])
   checkType          String
   title              String
-  status             CheckStatus @default(DRAFT)
-  priority           String      @default("medium")
+  status             CheckStatus   @default(DRAFT)
+  priority           String        @default("medium")
   assigneeId         String?
-  assignee           User?       @relation("AssignedCheck", fields: [assigneeId], references: [id])
+  assignee           User?         @relation("AssignedCheck", fields: [assigneeId], references: [id])
   reviewerId         String?
-  reviewer           User?       @relation("CheckReviewer", fields: [reviewerId], references: [id])
+  reviewer           User?         @relation("CheckReviewer", fields: [reviewerId], references: [id])
   scheduledAt        DateTime?
   startedAt          DateTime?
   submittedAt        DateTime?
@@ -234,44 +241,44 @@ model Check {
   reviewerNotes      String?
   passRate           Float?
   createdById        String?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  items              CheckItem[]
+  items CheckItem[]
 }
 
 model CheckItem {
-  id                  String   @id @default(uuid())
-  checkId             String
-  check               Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
-  templateItemId      String?
-  sortOrder           Int
-  section             String?
-  label               String
-  guidance            String?
-  responseType        CheckItemResponseType @default(PASS_FAIL)
-  isRequired          Boolean  @default(true)
-  isCritical          Boolean  @default(false)
-  isAdHoc             Boolean  @default(false)
-  response            String?
-  notes               String?
-  respondedAt         DateTime?
-  respondedById       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id             String                @id @default(uuid())
+  checkId        String
+  check          Check                 @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  templateItemId String?
+  sortOrder      Int
+  section        String?
+  label          String
+  guidance       String?
+  responseType   CheckItemResponseType @default(PASS_FAIL)
+  isRequired     Boolean               @default(true)
+  isCritical     Boolean               @default(false)
+  isAdHoc        Boolean               @default(false)
+  response       String?
+  notes          String?
+  respondedAt    DateTime?
+  respondedById  String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
-  followOns           CheckItemFollowOn[]
+  followOns CheckItemFollowOn[]
 }
 
 model CheckItemFollowOn {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   checkItemId String
   checkItem   CheckItem @relation(fields: [checkItemId], references: [id], onDelete: Cascade)
   entityType  String
   entityId    String
   note        String?
   createdById String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 }
 
 model Cabinet {
@@ -289,7 +296,7 @@ model Cabinet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  assets    Asset[]
+  assets Asset[]
 }
 
 model Organization {
@@ -299,113 +306,115 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  clients   Client[]
-  users     User[]
+  clients Client[]
+  users   User[]
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  refreshTokenHash String?
+  id                    String        @id @default(uuid())
+  email                 String        @unique
+  passwordHash          String
+  refreshTokenHash      String?
   refreshTokenExpiresAt DateTime?
-  firstName    String?
-  lastName     String?
-  knownAs      String?
-  role         Role
-  organizationId String?
-  organization Organization? @relation(fields: [organizationId], references: [id])
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  firstName             String?
+  lastName              String?
+  knownAs               String?
+  role                  Role
+  organizationId        String?
+  organization          Organization? @relation(fields: [organizationId], references: [id])
+  isActive              Boolean       @default(true)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
-  assignedServiceRequests ServiceRequest[] @relation("AssignedSR")
-  assignedIncidents Incident[] @relation("AssignedIncident")
-  assignedTasks Task[] @relation("AssignedTask")
-  requestIntakes RequestIntake[] @relation("RequesterIntake")
-  assignedChanges  ChangeRequest[]  @relation("AssignedChange")
-  changeApprovals  ChangeApproval[] @relation("ChangeApprovals")
-  comments         Comment[]        @relation("UserComments")
-  assignedChecks     Check[]  @relation("AssignedCheck")
-  reviewingChecks    Check[]  @relation("CheckReviewer")
-  performedMaintenance MaintenanceLog[] @relation("PerformedMaintenance")
-  clientAssignments UserClientAssignment[]
+  assignedServiceRequests ServiceRequest[]       @relation("AssignedSR")
+  assignedIncidents       Incident[]             @relation("AssignedIncident")
+  assignedTasks           Task[]                 @relation("AssignedTask")
+  requestIntakes          RequestIntake[]        @relation("RequesterIntake")
+  assignedChanges         ChangeRequest[]        @relation("AssignedChange")
+  changeApprovals         ChangeApproval[]       @relation("ChangeApprovals")
+  comments                Comment[]              @relation("UserComments")
+  assignedChecks          Check[]                @relation("AssignedCheck")
+  reviewingChecks         Check[]                @relation("CheckReviewer")
+  performedMaintenance    MaintenanceLog[]       @relation("PerformedMaintenance")
+  clientAssignments       UserClientAssignment[]
+  receivedNotifications   Notification[]         @relation("ReceivedNotifications")
+  triggeredNotifications  Notification[]         @relation("TriggeredNotifications")
 }
 
 model PublicSubmission {
-  id          String   @id @default(uuid())
-  clientId    String?
-  client      Client?  @relation(fields: [clientId], references: [id])
-  requesterName  String
-  requesterEmail String
-  subject     String
-  description String
-  status      String   @default("NEW") // NEW / CONVERTED / REJECTED
-  triageNotes String?
+  id                        String   @id @default(uuid())
+  clientId                  String?
+  client                    Client?  @relation(fields: [clientId], references: [id])
+  requesterName             String
+  requesterEmail            String
+  subject                   String
+  description               String
+  status                    String   @default("NEW") // NEW / CONVERTED / REJECTED
+  triageNotes               String?
   convertedServiceRequestId String?
-  convertedEntityType String?
-  convertedEntityId   String?
-  createdAt   DateTime @default(now())
+  convertedEntityType       String?
+  convertedEntityId         String?
+  createdAt                 DateTime @default(now())
 }
 
 model ServiceRequest {
-  id          String   @id @default(uuid())
-  reference   String   @unique
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  subject     String
-  description String
-  status      ServiceRequestStatus @default(NEW)
-  priority    String   @default("medium")
-  closureSummary String?
-  assigneeId  String?
-  assignee    User?    @relation("AssignedSR", fields: [assigneeId], references: [id])
+  id               String               @id @default(uuid())
+  reference        String               @unique
+  clientId         String
+  client           Client               @relation(fields: [clientId], references: [id])
+  subject          String
+  description      String
+  status           ServiceRequestStatus @default(NEW)
+  priority         String               @default("medium")
+  closureSummary   String?
+  assigneeId       String?
+  assignee         User?                @relation("AssignedSR", fields: [assigneeId], references: [id])
   linkedEntityType String?
   linkedEntityId   String?
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  comments  Comment[] @relation("ServiceRequestComments")
+  createdById      String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  comments         Comment[]            @relation("ServiceRequestComments")
 
   auditEvents AuditEvent[]
 }
 
 model Asset {
-  id               String    @id @default(uuid())
-  assetTag         String    @unique
-  name             String
-  assetType        String
-  ownerType        OwnerType
-  clientId         String?
-  client           Client?   @relation(fields: [clientId], references: [id])
-  siteId           String?
-  site             Site?     @relation(fields: [siteId], references: [id])
-  cabinetId        String?
-  cabinet          Cabinet?  @relation(fields: [cabinetId], references: [id])
-  status           String    @default("ACTIVE")
-  manufacturer     String?
-  modelNumber      String?
-  serialNumber     String?
-  uHeight          Int?
-  uPosition        Int?
-  powerDrawW       Float?
-  ipAddress        String?
-  warrantyExpiry   DateTime?
-  lifecycleState    AssetLifecycleState @default(ACTIVE)
-  hyperviewAssetId  String?
-  rackSide          String?             @default("FRONT")
-  lastSyncedAt      DateTime?
-  notes            String?
-  locationType     String?
-  locationArea     String?
-  location         String?
-  lastMaintenanceAt DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  installDate       DateTime?
-  maintenanceLogs   MaintenanceLog[]
-  outgoingConnections Connection[] @relation("ConnectionFromAsset")
-  incomingConnections Connection[] @relation("ConnectionToAsset")
+  id                  String              @id @default(uuid())
+  assetTag            String              @unique
+  name                String
+  assetType           String
+  ownerType           OwnerType
+  clientId            String?
+  client              Client?             @relation(fields: [clientId], references: [id])
+  siteId              String?
+  site                Site?               @relation(fields: [siteId], references: [id])
+  cabinetId           String?
+  cabinet             Cabinet?            @relation(fields: [cabinetId], references: [id])
+  status              String              @default("ACTIVE")
+  manufacturer        String?
+  modelNumber         String?
+  serialNumber        String?
+  uHeight             Int?
+  uPosition           Int?
+  powerDrawW          Float?
+  ipAddress           String?
+  warrantyExpiry      DateTime?
+  lifecycleState      AssetLifecycleState @default(ACTIVE)
+  hyperviewAssetId    String?
+  rackSide            String?             @default("FRONT")
+  lastSyncedAt        DateTime?
+  notes               String?
+  locationType        String?
+  locationArea        String?
+  location            String?
+  lastMaintenanceAt   DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  installDate         DateTime?
+  maintenanceLogs     MaintenanceLog[]
+  outgoingConnections Connection[]        @relation("ConnectionFromAsset")
+  incomingConnections Connection[]        @relation("ConnectionToAsset")
 }
 
 model MaintenanceLog {
@@ -447,58 +456,58 @@ model Connection {
 }
 
 model Incident {
-  id          String   @id @default(uuid())
-  reference   String   @unique
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  title       String
-  description String
-  status      IncidentStatus @default(NEW)
-  severity    IncidentSeverity @default(MEDIUM)
-  priority    String   @default("medium")
+  id               String           @id @default(uuid())
+  reference        String           @unique
+  clientId         String
+  client           Client           @relation(fields: [clientId], references: [id])
+  title            String
+  description      String
+  status           IncidentStatus   @default(NEW)
+  severity         IncidentSeverity @default(MEDIUM)
+  priority         String           @default("medium")
   linkedEntityType String?
   linkedEntityId   String?
-  assigneeId  String?
-  assignee    User?    @relation("AssignedIncident", fields: [assigneeId], references: [id])
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  assigneeId       String?
+  assignee         User?            @relation("AssignedIncident", fields: [assigneeId], references: [id])
+  createdById      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
-  tasks       Task[]
+  tasks Task[]
 }
 
 model Task {
-  id          String   @id @default(uuid())
-  reference   String   @unique
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  title       String
-  description String?
-  status      TaskStatus @default(OPEN)
-  priority    String   @default("medium")
-  dueAt       DateTime?
-  assigneeId  String?
-  assignee    User?    @relation("AssignedTask", fields: [assigneeId], references: [id])
-  incidentId  String?
-  incident    Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  id               String     @id @default(uuid())
+  reference        String     @unique
+  clientId         String
+  client           Client     @relation(fields: [clientId], references: [id])
+  title            String
+  description      String?
+  status           TaskStatus @default(OPEN)
+  priority         String     @default("medium")
+  dueAt            DateTime?
+  assigneeId       String?
+  assignee         User?      @relation("AssignedTask", fields: [assigneeId], references: [id])
+  incidentId       String?
+  incident         Incident?  @relation(fields: [incidentId], references: [id], onDelete: SetNull)
   linkedEntityType String?
   linkedEntityId   String?
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdById      String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 }
 
 model DocumentReference {
-  id          String   @id @default(uuid())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  title       String
-  url         String
-  docType     String?
-  version     String?
+  id               String   @id @default(uuid())
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id])
+  title            String
+  url              String
+  docType          String?
+  version          String?
   linkedEntityType String?
   linkedEntityId   String?
-  createdAt   DateTime @default(now())
+  createdAt        DateTime @default(now())
 }
 
 model AuditEvent {
@@ -516,44 +525,44 @@ model AuditEvent {
 }
 
 model RequestIntake {
-  id          String   @id @default(uuid())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  requesterUserId String?
-  requesterUser   User? @relation("RequesterIntake", fields: [requesterUserId], references: [id])
-  requesterName   String
-  requesterEmail  String
-  title       String
-  description String
-  category    String?
-  impact      String?
-  urgency     String?
-  status      RequestIntakeStatus @default(NEW)
-  triageNotes String?
+  id                  String              @id @default(uuid())
+  clientId            String
+  client              Client              @relation(fields: [clientId], references: [id])
+  requesterUserId     String?
+  requesterUser       User?               @relation("RequesterIntake", fields: [requesterUserId], references: [id])
+  requesterName       String
+  requesterEmail      String
+  title               String
+  description         String
+  category            String?
+  impact              String?
+  urgency             String?
+  status              RequestIntakeStatus @default(NEW)
+  triageNotes         String?
   convertedEntityType String?
   convertedEntityId   String?
-  convertedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  convertedAt         DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 }
 
 model WorkPackage {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  reference   String   @unique
+  client      Client    @relation(fields: [clientId], references: [id])
+  reference   String    @unique
   title       String
-  type        String   @default("MANAGED_SERVICE")
-  status      String   @default("ACTIVE")
+  type        String    @default("MANAGED_SERVICE")
+  status      String    @default("ACTIVE")
   description String?
   startDate   DateTime?
   endDate     DateTime?
   value       Float?
   notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  sites       WorkPackageSite[]
+  sites WorkPackageSite[]
 }
 
 model WorkPackageSite {
@@ -565,17 +574,17 @@ model WorkPackageSite {
 }
 
 model ChangeRequest {
-  id                  String   @id @default(uuid())
-  reference           String   @unique
+  id                  String    @id @default(uuid())
+  reference           String    @unique
   clientId            String
-  client              Client   @relation(fields: [clientId], references: [id])
+  client              Client    @relation(fields: [clientId], references: [id])
   assigneeId          String?
-  assignee            User?    @relation("AssignedChange", fields: [assigneeId], references: [id])
-  changeType          String   @default("NORMAL")
-  status              String   @default("DRAFT")
-  priority            String   @default("medium")
-  linkedEntityType String?
-  linkedEntityId   String?
+  assignee            User?     @relation("AssignedChange", fields: [assigneeId], references: [id])
+  changeType          String    @default("NORMAL")
+  status              String    @default("DRAFT")
+  priority            String    @default("medium")
+  linkedEntityType    String?
+  linkedEntityId      String?
   title               String
   description         String
   reason              String?
@@ -589,10 +598,10 @@ model ChangeRequest {
   postImplReview      String?
   closedAt            DateTime?
   createdById         String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  approvals     ChangeApproval[]
+  approvals ChangeApproval[]
 }
 
 model ChangeApproval {
@@ -607,42 +616,42 @@ model ChangeApproval {
 }
 
 model Risk {
-  id             String   @id @default(uuid())
-  reference      String   @unique
-  clientId       String?
-  client         Client?  @relation(fields: [clientId], references: [id])
-  title          String
-  description    String
-  likelihood     String   @default("MEDIUM")
-  impact         String   @default("MEDIUM")
-  status         String   @default("IDENTIFIED")
-  mitigationPlan String?
-  acceptanceNote String?
-  reviewDate     DateTime?
-  closedAt       DateTime?
+  id               String    @id @default(uuid())
+  reference        String    @unique
+  clientId         String?
+  client           Client?   @relation(fields: [clientId], references: [id])
+  title            String
+  description      String
+  likelihood       String    @default("MEDIUM")
+  impact           String    @default("MEDIUM")
+  status           String    @default("IDENTIFIED")
+  mitigationPlan   String?
+  acceptanceNote   String?
+  reviewDate       DateTime?
+  closedAt         DateTime?
   linkedEntityType String?
   linkedEntityId   String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  source         String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  source           String?
 }
 
 model Issue {
-  id          String   @id @default(uuid())
-  reference   String   @unique
-  clientId    String?
-  client      Client?  @relation(fields: [clientId], references: [id])
-  title       String
-  description String
-  severity    String   @default("AMBER")
-  status      String   @default("OPEN")
-  resolution  String?
-  reviewDate  DateTime?
-  closedAt    DateTime?
+  id               String    @id @default(uuid())
+  reference        String    @unique
+  clientId         String?
+  client           Client?   @relation(fields: [clientId], references: [id])
+  title            String
+  description      String
+  severity         String    @default("AMBER")
+  status           String    @default("OPEN")
+  resolution       String?
+  reviewDate       DateTime?
+  closedAt         DateTime?
   linkedEntityType String?
   linkedEntityId   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 // Soft-link join table — connects any two work-item records (Incident, Service
@@ -681,12 +690,12 @@ model Attachment {
   id           String   @id @default(uuid())
   clientId     String
   client       Client   @relation(fields: [clientId], references: [id])
-  recordType   String   // incident | service_request | change | task | risk | issue | maintenance | check
+  recordType   String // incident | service_request | change | task | risk | issue | maintenance | check
   recordId     String
-  filename     String   // original client filename (display only — never trusted for type)
-  contentType  String   // server-validated canonical MIME (magic-byte verified)
-  size         Int      // bytes
-  storageKey   String   // object key in the bucket
+  filename     String // original client filename (display only — never trusted for type)
+  contentType  String // server-validated canonical MIME (magic-byte verified)
+  size         Int // bytes
+  storageKey   String // object key in the bucket
   uploadedById String?
   createdAt    DateTime @default(now())
 
@@ -694,9 +703,9 @@ model Attachment {
 }
 
 model Comment {
-  id                String   @id @default(uuid())
+  id                String           @id @default(uuid())
   authorId          String
-  author            User     @relation("UserComments", fields: [authorId], references: [id])
+  author            User             @relation("UserComments", fields: [authorId], references: [id])
   body              String
   // Rich-text representation (additive, nullable). Existing plain-text comments
   // keep `body` and leave this NULL — `body` stays the plain-text fallback. New
@@ -704,13 +713,13 @@ model Comment {
   bodyJson          Json?
   entityType        String
   entityId          String
-  type              String   @default("WORK_NOTE")
-  visibleToCustomer Boolean  @default(false)
-  fromCustomer      Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  type              String           @default("WORK_NOTE")
+  visibleToCustomer Boolean          @default(false)
+  fromCustomer      Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   serviceRequestId  String?
-  serviceRequest    ServiceRequest? @relation("ServiceRequestComments", fields: [serviceRequestId], references: [id])
+  serviceRequest    ServiceRequest?  @relation("ServiceRequestComments", fields: [serviceRequestId], references: [id])
   mentions          CommentMention[]
 }
 
@@ -724,12 +733,49 @@ model CommentMention {
   id         String   @id @default(uuid())
   commentId  String
   comment    Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  targetType String   // user | asset | record (Phase 1: user only)
+  targetType String // user | asset | record (Phase 1: user only)
   targetId   String
   createdAt  DateTime @default(now())
 
   @@index([commentId])
   @@index([targetType, targetId])
+}
+
+// In-app notification. Generic/polymorphic from day one: Phase 2 writes MENTION
+// only, but the shape (recipient + actor + opaque source pointer + client scope)
+// carries every future kind without reshaping.
+//
+// Source pointer = the NAVIGATION TARGET, not the literal trigger: (sourceType,
+// sourceId) is the record the user clicks through to — a Comment's parent record
+// (entityType/entityId in the Comment vocabulary: Incident, ServiceRequest,
+// ChangeRequest, Task, Risk, Issue, Asset). For a MENTION that's the record whose
+// activity feed holds the comment; for a future ASSIGNED it'd be the assigned
+// record. `commentId` is the mention-specific extra — the comment to scroll/
+// highlight on arrival. Like RecordLink/CommentMention it's an opaque pointer (no
+// FK to Comment), so the generic model stays decoupled from any one source kind;
+// if the comment is gone the click still lands on the record.
+//
+// Unlike comments (which inherit tenant via their parent), a notification carries
+// its OWN clientId — set on emit from the triggering request context — so it is
+// directly scopable with the standard where:{ ..., clientId } pattern.
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  recipient   User             @relation("ReceivedNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  actorId     String?
+  actor       User?            @relation("TriggeredNotifications", fields: [actorId], references: [id], onDelete: SetNull)
+  clientId    String
+  client      Client           @relation(fields: [clientId], references: [id])
+  sourceType  String
+  sourceId    String
+  commentId   String?
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  // "my unread notifications, newest first" — the bell's primary query.
+  @@index([recipientId, readAt, createdAt])
+  @@index([clientId])
 }
 
 model UserClientAssignment {
@@ -738,8 +784,8 @@ model UserClientAssignment {
   clientId  String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientId])
   @@index([userId])
