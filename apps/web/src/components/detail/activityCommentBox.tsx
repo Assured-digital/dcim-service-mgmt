@@ -57,11 +57,30 @@ export function extractMentionTargets(doc: unknown): CommentMentionTarget[] {
 interface ActivityCommentBoxProps {
   saving: boolean
   onPost: (draft: CommentDraft) => Promise<void> | void
+  // Optional copy overrides so the SAME box can serve as the reply composer without
+  // forking it (a reply is a rich comment). Default to the work-note wording.
+  placeholder?: string
+  submitLabel?: string
+  // ── Slim-reply mode (used by the per-thread ReplyField) ────────────────────
+  // autoFocus: focus the editor on mount (the box opened by clicking the slim
+  //   pretext, so the user types straight away).
+  // hideActionsWhenEmpty: keep the Post bar hidden until the field has content —
+  //   the "Post-on-dirty" affordance mirrored from EditableField (quiet when empty).
+  // onBlurEmpty: focus left an EMPTY editor — the caller collapses back to the slim
+  //   pretext. A non-empty field never fires this (unsaved text is preserved).
+  autoFocus?: boolean
+  hideActionsWhenEmpty?: boolean
+  onBlurEmpty?: () => void
 }
 
 export const ActivityCommentBox = React.memo(function ActivityCommentBox({
   saving,
   onPost,
+  placeholder = "Add a work note...",
+  submitLabel = "Post note",
+  autoFocus = false,
+  hideActionsWhenEmpty = false,
+  onBlurEmpty,
 }: ActivityCommentBoxProps) {
   // Tenant-scoped assignable users — the same source (and scope) the backend
   // validates mentions against, so the dropdown can never offer an out-of-tenant
@@ -74,6 +93,7 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
   }, [assignable])
 
   const editor = useEditor({
+    autofocus: autoFocus ? "end" : false,
     extensions: [
       StarterKit.configure({
         // Constrained comment set: drop document-editor nodes/marks.
@@ -91,7 +111,7 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
           HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
         },
       }),
-      Placeholder.configure({ placeholder: "Add a work note..." }),
+      Placeholder.configure({ placeholder }),
       Mention.configure({
         HTMLAttributes: { class: "comment-mention" },
         suggestion: {
@@ -136,7 +156,7 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
       }),
     ],
     editorProps: {
-      attributes: { class: "comment-editor", "aria-label": "Add a work note" },
+      attributes: { class: "comment-editor", "aria-label": placeholder },
     },
   })
 
@@ -165,8 +185,24 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
     const mentions = extractMentionTargets(bodyJson)
     // Only clear on a clean post — if the page's onPost throws, keep the draft.
     await onPost({ body, bodyJson, mentions })
-    editor.commands.clearContent(true)
+    // onPost may unmount this box (e.g. a reply field collapsing on success), which
+    // destroys the editor — only clear if it's still alive.
+    if (!editor.isDestroyed) editor.commands.clearContent(true)
   }, [editor, saving, onPost])
+
+  // Focus left the editor entirely (relatedTarget outside the wrapper). In slim-reply
+  // mode an EMPTY field collapses back to its pretext; a field with unsaved content
+  // stays open. Toolbar buttons preventDefault on mousedown, so toggling a mark never
+  // blurs the editor and never triggers a collapse.
+  const handleWrapperBlur = React.useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      if (!onBlurEmpty || !editor) return
+      const next = e.relatedTarget as Node | null
+      if (next && e.currentTarget.contains(next)) return
+      if (editor.isEmpty) onBlurEmpty()
+    },
+    [onBlurEmpty, editor]
+  )
 
   const handleLink = React.useCallback(() => {
     if (!editor) return
@@ -193,6 +229,7 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
 
   return (
     <Box
+      onBlur={handleWrapperBlur}
       sx={{
         mb: 1.75,
         borderRadius: 1,
@@ -299,24 +336,28 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
         <EditorContent editor={editor} />
       </Box>
 
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "flex-end",
-          p: 0.75,
-          borderTop: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <Button
-          variant="contained"
-          size="small"
-          disabled={disabled}
-          onClick={handlePost}
+      {/* Post bar. In slim-reply mode it stays hidden until the field is dirty
+          (has content) — the quiet "Post-on-dirty" affordance; otherwise always shown. */}
+      {!hideActionsWhenEmpty || !ed?.empty ? (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "flex-end",
+            p: 0.75,
+            borderTop: "1px solid",
+            borderColor: "divider",
+          }}
         >
-          Post note
-        </Button>
-      </Box>
+          <Button
+            variant="contained"
+            size="small"
+            disabled={disabled}
+            onClick={handlePost}
+          >
+            {submitLabel}
+          </Button>
+        </Box>
+      ) : null}
     </Box>
   )
 })

@@ -46,9 +46,12 @@ interface CommentBodyProps {
 // Rich-surface styling — kept in lock-step with the .comment-editor styles in
 // activityCommentBox so a posted comment reads identically to its draft.
 const richSx = {
-  fontSize: 12,
+  // Body-text step (0.875rem / body1) — the same size the editor (.comment-editor)
+  // renders at, so a posted comment reads at the app's primary body size, not the
+  // caption step. Metadata (author/timestamp/label) stays small in ActivityFeedItem.
+  fontSize: "0.875rem",
   color: "text.primary",
-  lineHeight: 1.5,
+  lineHeight: 1.6,
   "& p": { m: 0 },
   "& p + p": { mt: 0.75 },
   "& ul, & ol": { pl: 3, my: 0.5 },
@@ -145,7 +148,7 @@ export const CommentBody = React.memo(function CommentBody({ note, bodyJson, men
   if (!hasRich) {
     // Back-compat: legacy plain-text comment / transition comment — unchanged.
     return (
-      <Typography sx={{ fontSize: 12, color: "text.primary", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+      <Typography sx={{ fontSize: "0.875rem", color: "text.primary", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
         {note}
       </Typography>
     )

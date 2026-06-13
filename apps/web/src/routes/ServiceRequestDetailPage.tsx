@@ -43,6 +43,7 @@ import {
   RecordDetailShell,
   SectionPanel,
   TransitionDialog,
+  filterFeedEvents,
   type ActivityFilter,
   type CentreSection,
   type DetailField,
@@ -105,6 +106,8 @@ type SRComment = {
   fromCustomer: boolean
   createdAt: string
   author: { id: string; displayName: string }
+  // Two-level threading: a post's replies are themselves comments (same shape).
+  replies?: SRComment[]
 }
 
 
@@ -654,10 +657,21 @@ export default function ServiceRequestDetailPage() {
       id: `note-${n.id}`,
       type: "comment",
       actor: n.author.displayName,
-      text: <>added a work note</>,
+      text: null,
+      commentKind: "work_note",
       note: n.body,
       bodyJson: n.bodyJson,
       mentions: n.mentions,
+      commentId: n.id,
+      entityId: id,
+      replies: (n.replies ?? []).map((r) => ({
+        id: r.id,
+        actor: r.author.displayName,
+        note: r.body,
+        bodyJson: r.bodyJson,
+        mentions: r.mentions,
+        time: formatDateTime(r.createdAt),
+      })),
       time: formatDateTime(n.createdAt),
       createdAt: n.createdAt,
     }))
@@ -665,21 +679,31 @@ export default function ServiceRequestDetailPage() {
       id: `cu-${c.id}`,
       type: "comment",
       actor: c.author.displayName,
-      text: <>sent a customer update</>,
+      text: null,
+      commentKind: "customer_update",
       note: c.body,
       bodyJson: c.bodyJson,
       mentions: c.mentions,
+      commentId: c.id,
+      entityId: id,
+      replies: (c.replies ?? []).map((r) => ({
+        id: r.id,
+        actor: r.author.displayName,
+        note: r.body,
+        bodyJson: r.bodyJson,
+        mentions: r.mentions,
+        time: formatDateTime(r.createdAt),
+      })),
       time: formatDateTime(c.createdAt),
       createdAt: c.createdAt,
     }))
     return [...audit, ...notes, ...updates].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
-  }, [auditEvents, workNotes, customerUpdates])
+  }, [auditEvents, workNotes, customerUpdates, id])
 
   const visibleFeedEvents = React.useMemo<FeedEvent[]>(() => {
-    if (activeFilter === "all") return allFeedEvents
-    return allFeedEvents.filter((e) => e.type === activeFilter)
+    return filterFeedEvents(allFeedEvents, activeFilter)
   }, [allFeedEvents, activeFilter])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {

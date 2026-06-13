@@ -21,8 +21,8 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, u
 import { CSS } from "@dnd-kit/utilities"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
-import { Avatar, chipSx } from "../components/shared"
-import { CommentBody, type ResolvedMention } from "../components/detail"
+import { chipSx } from "../components/shared"
+import { ActivityFeedItem, type FeedEvent, type ResolvedMention } from "../components/detail"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
 import { useAssignableUsers, type AssignableUser } from "../lib/useAssignableUsers"
@@ -59,6 +59,8 @@ type TaskComment = {
   mentions?: ResolvedMention[]
   createdAt: string
   author: { id: string; displayName: string }
+  // Two-level threading: a post's replies are themselves comments (same shape).
+  replies?: TaskComment[]
 }
 type ListColumnId = "title" | "ref" | "status" | "priority" | "assignee" | "linked" | "due" | "updated"
 type ListColumnConfig = {
@@ -832,22 +834,36 @@ export function TaskQuickDetailModal({
               {(workNotes ?? []).length === 0 ? (
                 <Typography variant="body2" color="text.secondary">No work notes yet.</Typography>
               ) : (
-                (workNotes ?? []).slice().reverse().map(note => (
-                  <Box key={note.id} sx={{ border: "1px solid #e2e8f0", borderRadius: 1.5, p: 1.25 }}>
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                      <Avatar name={note.author.displayName} size="sm" variant="neutral" />
-                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.primary" }}>
-                        {note.author.displayName}
-                      </Typography>
-                      <Typography sx={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-                        {formatDateTime(note.createdAt)}
-                      </Typography>
-                    </Stack>
-                    <Box sx={{ mt: 0.5, pl: 3.5 }}>
-                      <CommentBody note={note.body} bodyJson={note.bodyJson} mentions={note.mentions} />
-                    </Box>
-                  </Box>
-                ))
+                // Render via the shared ActivityFeedItem so the drawer's notes get the
+                // same rich body + reply threads (Reply affordance opens the rich
+                // composer inline; replies collapse beyond 3) as the detail pages. The
+                // drawer keeps its own plain top-level add-note box above.
+                (workNotes ?? [])
+                  .map<FeedEvent>((note) => ({
+                    id: `note-${note.id}`,
+                    type: "comment",
+                    actor: note.author.displayName,
+                    text: null,
+                    note: note.body,
+                    bodyJson: note.bodyJson,
+                    mentions: note.mentions,
+                    time: formatDateTime(note.createdAt) ?? "",
+                    createdAt: note.createdAt,
+                    commentId: note.id,
+                    entityId: taskId ?? undefined,
+                    replies: (note.replies ?? []).map((r) => ({
+                      id: r.id,
+                      actor: r.author.displayName,
+                      note: r.body,
+                      bodyJson: r.bodyJson,
+                      mentions: r.mentions,
+                      time: formatDateTime(r.createdAt) ?? "",
+                    })),
+                  }))
+                  .reverse()
+                  .map((event, idx, arr) => (
+                    <ActivityFeedItem key={event.id} event={event} isLast={idx === arr.length - 1} />
+                  ))
               )}
             </Stack>
           ) : null}

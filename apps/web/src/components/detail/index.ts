@@ -24,11 +24,18 @@ export { TransitionDialog } from "./TransitionDialog"
 export { PropertiesPanelShell } from "./PropertiesPanelShell"
 export { PropertyRow } from "./PropertyRow"
 export type { Transition, DialogField } from "./WorkflowStrip"
-export { ActivityTabs, FILTER_VALUES, DEFAULT_ACTIVITY_FILTER, FILTER_OPTIONS } from "./activityTabs"
+export {
+  ActivityTabs,
+  FILTER_VALUES,
+  DEFAULT_ACTIVITY_FILTER,
+  FILTER_OPTIONS,
+  filterFeedEvents,
+} from "./activityTabs"
 export type { ActivityFilter } from "./activityTabs"
 export { ActivityCommentBox } from "./activityCommentBox"
 export type { CommentDraft, CommentMentionTarget } from "./activityCommentBox"
 export { CommentBody } from "./CommentBody"
 export type { ResolvedMention } from "./CommentBody"
 export { ActivityFeedItem } from "./ActivityFeedItem"
-export type { FeedEvent, FeedEventType } from "./ActivityFeedItem"
+export type { FeedEvent, FeedEventType, FeedReply } from "./ActivityFeedItem"
+export { useReplyToComment } from "./useReplyToComment"
