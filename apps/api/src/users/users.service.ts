@@ -12,17 +12,7 @@ import * as bcrypt from "bcryptjs";
 import { CreateUserDto, UpdateUserDto } from "./dto";
 import { isOrgSuperRole, isOrgOwnerRole, ORG_SUPER_ROLES } from "../auth/role-scope";
 import { computeDisplayName } from "./display";
-
-// AD-staff roles who can be ASSIGNED work (and, broader than admin, who can call
-// the assignable picker). Excludes CLIENT_VIEWER and PUBLIC_USER by design.
-const ASSIGNABLE_STAFF_ROLES: Role[] = [
-  Role.ORG_OWNER,
-  Role.ORG_ADMIN,
-  Role.ADMIN,
-  Role.SERVICE_MANAGER,
-  Role.SERVICE_DESK_ANALYST,
-  Role.ENGINEER
-];
+import { ASSIGNABLE_STAFF_ROLES, assignableUserWhere } from "./assignable-scope";
 
 // Minimal projection for the assignee picker — name fields + email only. NOT the
 // full userViewSelect: no role, isActive, or client assignments leak here.
@@ -240,17 +230,7 @@ export class UsersService {
     const organizationId = await this.requireOrganizationScope(actor);
 
     const users = await this.prisma.user.findMany({
-      where: {
-        organizationId,
-        isActive: true,
-        role: { in: ASSIGNABLE_STAFF_ROLES },
-        OR: [
-          // Org-super staff span all clients → assignable to the scoped one.
-          { role: { in: ORG_SUPER_ROLES } },
-          // Client-scoped staff: only if assigned to the scoped client.
-          { clientAssignments: { some: { clientId } } }
-        ]
-      },
+      where: assignableUserWhere(organizationId, clientId),
       select: assignablePickSelect
     });
 

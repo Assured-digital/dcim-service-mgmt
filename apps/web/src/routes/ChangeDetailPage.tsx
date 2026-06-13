@@ -14,9 +14,7 @@ import {
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
-import LinkIcon from "@mui/icons-material/Link"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
@@ -42,6 +40,11 @@ import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import {
   ActivityCommentBox,
+  ActivityFeedItem,
+  type ResolvedMention,
+  type CommentDraft,
+  type FeedEvent,
+  type FeedEventType,
   ActivityTabs,
   EditableTitleCard,
   RecordDetailShell,
@@ -125,6 +128,8 @@ type ChangeComment = {
   body?: string
   content?: string
   message?: string
+  bodyJson?: Record<string, unknown> | null
+  mentions?: ResolvedMention[]
   type: string
   createdAt: string
   author: { id: string; displayName: string }
@@ -135,18 +140,6 @@ type ChangeComment = {
 type LinkedTaskWithAssignee = LinkedTask & {
   assigneeId?: string | null
   assignee?: { id: string; displayName: string } | null
-}
-
-type FeedEventType = "status" | "comment" | "assignment" | "link"
-
-type FeedEvent = {
-  id: string
-  type: FeedEventType
-  actor: string
-  text: React.ReactNode
-  note?: string
-  time: string
-  createdAt: string
 }
 
 type EditableField =
@@ -401,19 +394,6 @@ function describeAuditEvent(
   }
 
   return { type: "status", text: <>{label}</> }
-}
-
-interface FeedVisual {
-  Icon: React.ComponentType<{ sx?: object }>
-  bg: string
-  fg: string
-}
-
-const FEED_VISUALS: Record<FeedEventType, FeedVisual> = {
-  status: { Icon: PlayArrowIcon, bg: "#e6f1fb", fg: "#185fa5" },
-  comment: { Icon: ChatBubbleOutlineIcon, bg: "#eaf3de", fg: "#3b6d11" },
-  assignment: { Icon: PersonIcon, bg: "#faeeda", fg: "#854f0b" },
-  link: { Icon: LinkIcon, bg: "#fbeaf0", fg: "#993556" },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -700,103 +680,18 @@ const ApprovalsSectionContent = React.memo(function ApprovalsSectionContent({
 // Activity section (spec section 6)
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface FeedItemProps {
-  event: FeedEvent
-  isLast: boolean
-}
-
-const FeedItem = React.memo(function FeedItem({ event, isLast }: FeedItemProps) {
-  const visual = FEED_VISUALS[event.type]
-  const Icon = visual.Icon
-
-  return (
-    <Box sx={{ display: "flex", gap: 1.5, py: 1, position: "relative" }}>
-      {!isLast ? (
-        <Box
-          sx={{
-            position: "absolute",
-            left: 12,
-            top: 28,
-            bottom: -8,
-            width: "1px",
-            bgcolor: "divider",
-          }}
-        />
-      ) : null}
-      <Box
-        sx={{
-          width: 24,
-          height: 24,
-          borderRadius: "50%",
-          bgcolor: visual.bg,
-          color: visual.fg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          zIndex: 1,
-        }}
-      >
-        <Icon sx={{ fontSize: 14 }} />
-      </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.primary" }}>
-            {event.actor}
-          </Typography>
-          <Typography sx={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-            {event.time}
-          </Typography>
-        </Stack>
-        <Typography sx={{ fontSize: 12, color: "text.secondary", lineHeight: 1.5 }}>
-          {event.text}
-        </Typography>
-        {event.note && event.note.trim().length > 0 ? (
-          <Box
-            sx={{
-              borderLeft: "2px solid",
-              borderColor: "success.light",
-              pl: 1,
-              py: 0.5,
-              bgcolor: "action.hover",
-              borderRadius: "0 4px 4px 0",
-              mt: 0.5,
-              fontSize: 12,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: 12,
-                color: "text.primary",
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.5,
-              }}
-            >
-              {event.note}
-            </Typography>
-          </Box>
-        ) : null}
-      </Box>
-    </Box>
-  )
-})
-
 interface ActivityContentProps {
   events: FeedEvent[]
   activeFilter: ActivityFilter
   onFilterChange: (filter: ActivityFilter) => void
-  noteValue: string
-  onNoteChange: (value: string) => void
   savingNote: boolean
-  onPostNote: () => void
+  onPostNote: (draft: CommentDraft) => void | Promise<void>
 }
 
 const ActivityContent = React.memo(function ActivityContent({
   events,
   activeFilter,
   onFilterChange,
-  noteValue,
-  onNoteChange,
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
@@ -805,12 +700,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox
-          value={noteValue}
-          onChange={onNoteChange}
-          saving={savingNote}
-          onPost={onPostNote}
-        />
+        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
@@ -819,7 +709,7 @@ const ActivityContent = React.memo(function ActivityContent({
         </Typography>
       ) : (
         events.map((event, idx) => (
-          <FeedItem key={event.id} event={event} isLast={idx === events.length - 1} />
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === events.length - 1} />
         ))
       )}
     </Box>
@@ -854,7 +744,6 @@ export default function ChangeDetailPage() {
   const [error, setError] = React.useState("")
   const [taskOpen, setTaskOpen] = React.useState(false)
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
-  const [workNoteBody, setWorkNoteBody] = React.useState("")
   const [savingNote, setSavingNote] = React.useState(false)
   const [transitionTarget, setTransitionTarget] = React.useState<Transition | null>(null)
   const [linkCopied, setLinkCopied] = React.useState(false)
@@ -920,16 +809,17 @@ export default function ChangeDetailPage() {
     [id, change, qc, notify]
   )
 
-  const handleAddNote = React.useCallback(async () => {
-    if (!workNoteBody.trim()) return
+  const handleAddNote = React.useCallback(async (draft: CommentDraft) => {
+    if (!draft.body.trim()) return
     setSavingNote(true)
     try {
       await api.post("/comments/work-note", {
         entityType: "ChangeRequest",
         entityId: id,
-        body: workNoteBody.trim(),
+        body: draft.body,
+        bodyJson: draft.bodyJson,
+        mentions: draft.mentions,
       })
-      setWorkNoteBody("")
       qc.invalidateQueries({ queryKey: ["work-notes-change", id] })
       qc.invalidateQueries({ queryKey: ["audit-change", id] })
       resetFilterAfterComment()
@@ -937,7 +827,7 @@ export default function ChangeDetailPage() {
     } finally {
       setSavingNote(false)
     }
-  }, [id, qc, resetFilterAfterComment, workNoteBody, notify])
+  }, [id, qc, resetFilterAfterComment, notify])
 
   const statusMutation = useMutation({
     mutationFn: async ({ to, comment }: { to: string; comment?: string }) => {
@@ -1086,6 +976,8 @@ export default function ChangeDetailPage() {
       actor: n.author.displayName,
       text: <>added a work note</>,
       note: n.body ?? n.content ?? n.message ?? "",
+      bodyJson: n.bodyJson,
+      mentions: n.mentions,
       time: formatDateTime(n.createdAt),
       createdAt: n.createdAt,
     }))
@@ -1397,8 +1289,6 @@ export default function ChangeDetailPage() {
               events={visibleFeedEvents}
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
-              noteValue={workNoteBody}
-              onNoteChange={setWorkNoteBody}
               savingNote={savingNote}
               onPostNote={handleAddNote}
             />
@@ -1412,7 +1302,6 @@ export default function ChangeDetailPage() {
     visibleFeedEvents,
     activeFilter,
     handleFilterChange,
-    workNoteBody,
     savingNote,
     handleAddNote,
     implementationOpen,

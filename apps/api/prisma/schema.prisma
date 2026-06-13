@@ -698,6 +698,10 @@ model Comment {
   authorId          String
   author            User     @relation("UserComments", fields: [authorId], references: [id])
   body              String
+  // Rich-text representation (additive, nullable). Existing plain-text comments
+  // keep `body` and leave this NULL — `body` stays the plain-text fallback. New
+  // rich comments populate bodyJson (Phase 1 rich comments, later stage). No backfill.
+  bodyJson          Json?
   entityType        String
   entityId          String
   type              String   @default("WORK_NOTE")
@@ -707,6 +711,25 @@ model Comment {
   updatedAt         DateTime @updatedAt
   serviceRequestId  String?
   serviceRequest    ServiceRequest? @relation("ServiceRequestComments", fields: [serviceRequestId], references: [id])
+  mentions          CommentMention[]
+}
+
+// Polymorphic mention join table: a comment mentions one or more targets, each an
+// opaque (targetType, targetId) pair — mirrors RecordLink's philosophy (no typed
+// FK to the target, tenant integrity enforced in app code). Designed generic from
+// day one (user | asset | record); Phase 1 only writes `user`. Mentions store the
+// pointer ONLY — displayName is resolved at read time (the #99 convention), never
+// denormalised here. FK to Comment cascades: deleting a comment drops its mentions.
+model CommentMention {
+  id         String   @id @default(uuid())
+  commentId  String
+  comment    Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  targetType String   // user | asset | record (Phase 1: user only)
+  targetId   String
+  createdAt  DateTime @default(now())
+
+  @@index([commentId])
+  @@index([targetType, targetId])
 }
 
 model UserClientAssignment {
