@@ -36,7 +36,7 @@ import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import {
   EditableTitleCard,
   ActivityTabs,
-  ActivityCommentBox,
+  SlimExpandCommentBox,
   ActivityFeedItem,
   type ResolvedMention,
   type CommentDraft,
@@ -364,7 +364,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={handleFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
+        <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
@@ -485,6 +485,12 @@ export default function IncidentDetailPage() {
         if (field === "title") notify.success("Title updated")
         else if (field === "description") notify.success("Description updated")
       } catch (e: unknown) {
+        // Subject/description surface as a toast and rethrow, so EditableField
+        // keeps the field editable with the draft. Popover fields stay silent.
+        if (field === "title" || field === "description") {
+          notify.error("Couldn't save — please try again")
+          throw e
+        }
         setError(getApiErrorMessage(e, "Failed to save incident properties"))
       }
     },

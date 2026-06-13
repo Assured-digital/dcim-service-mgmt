@@ -7,7 +7,7 @@ import LinkIcon from "@mui/icons-material/Link"
 import { Avatar } from "../shared"
 import { CommentBody } from "./CommentBody"
 import type { ResolvedMention } from "./CommentBody"
-import { ActivityCommentBox, type CommentDraft } from "./activityCommentBox"
+import { SlimExpandCommentBox, type CommentDraft } from "./activityCommentBox"
 import { useReplyToComment } from "./useReplyToComment"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,9 +265,18 @@ export const ActivityFeedItem = React.memo(function ActivityFeedItem({
             ) : null}
 
             {/* Slim per-thread reply field — channel-style, at the bottom of the thread
-                (after any replies). Quiet pretext until clicked; one box per thread. */}
+                (after any replies). Quiet pretext until clicked; one box per thread.
+                The SAME slim→expand wrapper the main work-note box uses, with reply copy
+                + a small top gap (no bottom margin — it sits at the end of the thread). */}
             <Box sx={{ pl: 1.5 }}>
-              <ReplyField saving={savingReply} onPost={handlePostReply} />
+              <SlimExpandCommentBox
+                saving={savingReply}
+                onPost={handlePostReply}
+                placeholder="Reply…"
+                submitLabel="Reply"
+                slimSx={{ mt: 0.75, mb: 0 }}
+                expandedSx={{ mt: 0.75 }}
+              />
             </Box>
           </>
         ) : null}
@@ -275,75 +284,3 @@ export const ActivityFeedItem = React.memo(function ActivityFeedItem({
     </Box>
   )
 })
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ReplyField — slim, quiet per-thread reply affordance (one per top-level post).
-//
-// Collapsed: a single-line, low-footprint "Reply…" pretext that reads as muted
-// placeholder. Clicking (or tabbing) into it expands to the SAME rich composer
-// used everywhere (ActivityCommentBox) — autofocused, with the shared focus-within
-// highlight and the Post-on-dirty bar (Post shows only once there's content).
-//
-// Collapse rules mirror the EditableField blur affordance: losing focus while
-// EMPTY returns to the pretext (no orphaned open box); unsaved content keeps it
-// open. A successful post collapses it back to the pretext (toast fires upstream).
-// ─────────────────────────────────────────────────────────────────────────────
-function ReplyField({
-  saving,
-  onPost,
-}: {
-  saving: boolean
-  onPost: (draft: CommentDraft) => Promise<void> | void
-}) {
-  const [open, setOpen] = React.useState(false)
-
-  const handlePost = React.useCallback(
-    async (draft: CommentDraft) => {
-      await onPost(draft)
-      setOpen(false)
-    },
-    [onPost]
-  )
-
-  if (!open) {
-    return (
-      <Box
-        role="button"
-        tabIndex={0}
-        onClick={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
-        sx={{
-          mt: 0.75,
-          px: 1.5,
-          py: 0.75,
-          fontSize: "0.8125rem",
-          color: "text.disabled",
-          border: "1px solid",
-          borderColor: "divider",
-          borderRadius: 1,
-          cursor: "text",
-          userSelect: "none",
-          transition: "border-color 120ms ease, background-color 120ms ease",
-          "&:hover": { bgcolor: "action.hover" },
-          "&:focus-visible": { outline: "none", borderColor: "primary.main" },
-        }}
-      >
-        Reply…
-      </Box>
-    )
-  }
-
-  return (
-    <Box sx={{ mt: 0.75 }}>
-      <ActivityCommentBox
-        saving={saving}
-        onPost={handlePost}
-        placeholder="Reply…"
-        submitLabel="Reply"
-        autoFocus
-        hideActionsWhenEmpty
-        onBlurEmpty={() => setOpen(false)}
-      />
-    </Box>
-  )
-}

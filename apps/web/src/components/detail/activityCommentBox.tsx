@@ -362,6 +362,95 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
   )
 })
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SlimExpandCommentBox — slim→expand wrapper around ActivityCommentBox.
+//
+// THE single slim-expand mechanism (built first for per-thread replies, now shared
+// by the main work-note box too — there is no second implementation). Collapsed: a
+// quiet single-line pretext that reads as muted placeholder. Clicking (or tabbing)
+// into it expands to the SAME rich composer — autofocused, with the shared
+// focus-within highlight and the Post-on-dirty bar (Post shows only once there's
+// content). Losing focus while EMPTY returns to the pretext (no orphaned open box);
+// unsaved content keeps it open. A successful post collapses it back (the page that
+// owns onPost fires its own toast).
+//
+// Copy defaults to the work-note wording so the main box just renders it bare; the
+// reply composer overrides placeholder/submitLabel + spacing. slimSx/expandedSx tune
+// the outer margins per surface (the main box leans on the editor's own bottom margin
+// when expanded; the reply adds a small top gap in both states).
+// ─────────────────────────────────────────────────────────────────────────────
+export interface SlimExpandCommentBoxProps {
+  saving: boolean
+  onPost: (draft: CommentDraft) => Promise<void> | void
+  placeholder?: string
+  submitLabel?: string
+  slimSx?: object
+  expandedSx?: object
+}
+
+export const SlimExpandCommentBox = React.memo(function SlimExpandCommentBox({
+  saving,
+  onPost,
+  placeholder = "Add a work note...",
+  submitLabel = "Post note",
+  slimSx,
+  expandedSx,
+}: SlimExpandCommentBoxProps) {
+  const [open, setOpen] = React.useState(false)
+
+  // Collapse on a clean post (the editor clears itself in ActivityCommentBox).
+  const handlePost = React.useCallback(
+    async (draft: CommentDraft) => {
+      await onPost(draft)
+      setOpen(false)
+    },
+    [onPost]
+  )
+
+  if (!open) {
+    return (
+      <Box
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        sx={{
+          mb: 1.75,
+          px: 1.5,
+          py: 0.75,
+          fontSize: "0.8125rem",
+          color: "text.disabled",
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 1,
+          cursor: "text",
+          userSelect: "none",
+          transition: "border-color 120ms ease, background-color 120ms ease",
+          "&:hover": { bgcolor: "action.hover" },
+          "&:focus-visible": { outline: "none", borderColor: "primary.main" },
+          ...slimSx,
+        }}
+      >
+        {placeholder}
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={expandedSx}>
+      <ActivityCommentBox
+        saving={saving}
+        onPost={handlePost}
+        placeholder={placeholder}
+        submitLabel={submitLabel}
+        autoFocus
+        hideActionsWhenEmpty
+        onBlurEmpty={() => setOpen(false)}
+      />
+    </Box>
+  )
+})
+
 function ToolbarBtn({
   label,
   active,

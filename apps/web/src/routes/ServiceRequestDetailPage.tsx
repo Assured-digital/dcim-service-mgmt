@@ -32,7 +32,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
 import {
-  ActivityCommentBox,
+  SlimExpandCommentBox,
   ActivityFeedItem,
   type ResolvedMention,
   type CommentDraft,
@@ -342,7 +342,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {activeFilter === "comment" ? (
-        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
+        <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
@@ -453,6 +453,12 @@ export default function ServiceRequestDetailPage() {
         if (field === "subject") notify.success("Title updated")
         else if (field === "description") notify.success("Description updated")
       } catch (e: unknown) {
+        // Subject/description surface as a toast and rethrow, so EditableField
+        // keeps the field editable with the draft. Popover fields stay silent.
+        if (field === "subject" || field === "description") {
+          notify.error("Couldn't save — please try again")
+          throw e
+        }
         setError(getApiErrorMessage(e, "Failed to save service request"))
       }
     },

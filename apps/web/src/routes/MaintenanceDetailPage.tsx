@@ -30,7 +30,7 @@ import { ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import {
-  ActivityCommentBox,
+  SlimExpandCommentBox,
   ActivityFeedItem,
   ActivityTabs,
   RecordDetailShell,
@@ -693,7 +693,7 @@ const ActivityContent = React.memo(function ActivityContent({
       <ActivityTabs value={activeFilter} onChange={onFilterChange} />
 
       {composeEnabled && activeFilter === "comment" ? (
-        <ActivityCommentBox saving={savingNote} onPost={onPostNote} />
+        <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
       {events.length === 0 ? (
