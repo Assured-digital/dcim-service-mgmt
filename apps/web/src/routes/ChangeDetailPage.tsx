@@ -806,6 +806,12 @@ export default function ChangeDetailPage() {
         if (field === "title") notify.success("Title updated")
         else if (field === "description") notify.success("Description updated")
       } catch (e: unknown) {
+        // Subject/description surface as a toast and rethrow, so EditableField
+        // keeps the field editable with the draft. Popover fields stay silent.
+        if (field === "title" || field === "description") {
+          notify.error("Couldn't save — please try again")
+          throw e
+        }
         setError(getApiErrorMessage(e, "Failed to save change properties"))
       }
     },

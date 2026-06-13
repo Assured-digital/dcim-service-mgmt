@@ -425,6 +425,12 @@ export default function IssueDetailPage() {
         if ("title" in patch) notify.success("Title updated")
         else if ("description" in patch) notify.success("Description updated")
       } catch (e: unknown) {
+        // Subject/description surface as a toast and rethrow, so EditableField
+        // keeps the field editable with the draft. Popover fields stay silent.
+        if ("title" in patch || "description" in patch) {
+          notify.error("Couldn't save — please try again")
+          throw e
+        }
         setError(getApiErrorMessage(e, "Failed to save issue properties"))
       }
     },

@@ -15,7 +15,11 @@ import { SectionPanel } from "./RecordDetailShell"
 
 interface EditableFieldProps {
   value: string
-  onSave: (next: string) => void
+  // Returns a promise so we can await persistence: resolve → quiet display,
+  // reject → keep the field editable with the draft intact (mirrors the comment
+  // box, which keeps its draft when onPost throws). The owning page raises the
+  // error toast and rethrows on failure.
+  onSave: (next: string) => void | Promise<void>
   multiline?: boolean
   placeholder?: string
   ariaLabel: string
@@ -47,9 +51,19 @@ export const EditableField = React.memo(function EditableField({
     setEditing(true)
   }, [value])
 
-  const save = React.useCallback(() => {
-    if (trimmed !== "" && trimmed !== value) onSave(trimmed)
-    setEditing(false)
+  const save = React.useCallback(async () => {
+    // Clean (empty or unchanged) → just exit edit mode, nothing to persist.
+    if (trimmed === "" || trimmed === value) {
+      setEditing(false)
+      return
+    }
+    try {
+      await onSave(trimmed)
+      setEditing(false) // success → resolve to quiet display
+    } catch {
+      // Save failed: the owning page surfaced an error toast; keep the field in
+      // edit mode with the draft intact so the user can retry without retyping.
+    }
   }, [trimmed, value, onSave])
 
   const cancel = React.useCallback(() => {
@@ -114,13 +128,17 @@ export const EditableField = React.memo(function EditableField({
           px: 0.75,
           py: 0.5,
           // 1px border, transparent when idle → accent token on focus/edit. Same
-          // width in both states, so the box never grows on focus.
+          // width in both states, so the box never grows on focus. Highlight via
+          // the shared `&:focus-within` affordance (same as the comment box), and
+          // stay lit while dirty so an unsaved edit still reads as active even if
+          // focus has moved to the Save/Cancel buttons.
           border: "1px solid",
-          borderColor: editing ? "primary.main" : "transparent",
+          borderColor: dirty ? "primary.main" : "transparent",
           color: isEmpty ? "text.disabled" : "text.primary",
           cursor: editing ? "text" : "pointer",
           transition: "border-color 120ms ease, background-color 120ms ease",
           "&:hover": { bgcolor: editing ? "transparent" : "action.hover" },
+          "&:focus-within": { borderColor: "primary.main" },
           ...textSx,
           "& .MuiInputBase-input": { p: 0, cursor: "inherit" },
         }}
