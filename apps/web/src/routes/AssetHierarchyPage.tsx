@@ -106,10 +106,10 @@ const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelect
           const totalPowerKw = c.assets.reduce((sum, a) => sum + (a.powerDrawW ?? 0), 0) / 1000
           const powerPct = c.powerKw && c.powerKw > 0 ? Math.min(100, Math.round((totalPowerKw / c.powerKw) * 100)) : 0
           return (
-            <Box key={c.id} onClick={() => onSelectCabinet(c.id)} sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", p: "16px 18px", cursor: "pointer", "&:hover": { borderColor: "#1d4ed8", boxShadow: "0 2px 12px rgba(29,78,216,0.08)" } }}>
+            <Box key={c.id} onClick={() => onSelectCabinet(c.id)} sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", p: "16px 18px", cursor: "pointer", "&:hover": { borderColor: "primary.main", boxShadow: "0 2px 12px rgba(29,78,216,0.08)" } }}>
               <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "14px" }}>
                 <Box sx={{ width: 32, height: 32, borderRadius: "7px", bgcolor: "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <StorageIcon sx={{ fontSize: 15, color: "#1d4ed8" }} />
+                  <StorageIcon sx={{ fontSize: 15, color: "primary.main" }} />
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{c.name}</Typography>
@@ -543,13 +543,13 @@ export default function AssetHierarchyPage() {
             height: HEADER_HEIGHT, px: "10px", cursor: "pointer", flexShrink: 0,
             borderBottom: "1px solid var(--color-border-primary)",
             bgcolor: selectedSiteId === null ? "rgba(29,78,216,0.08)" : "transparent",
-            borderLeft: selectedSiteId === null ? "2px solid #1d4ed8" : "2px solid transparent",
+            borderLeft: "2px solid", borderLeftColor: selectedSiteId === null ? "primary.main" : "transparent",
             display: "flex", alignItems: "center", gap: "7px",
             "&:hover": { bgcolor: selectedSiteId === null ? "rgba(29,78,216,0.08)" : "rgba(0,0,0,0.03)" },
           }}
         >
-          <GridViewOutlinedIcon sx={{ fontSize: 12.5, color: selectedSiteId === null ? "#1d4ed8" : "#64748b" }} />
-          <Typography sx={{ fontSize: 12.5, fontWeight: selectedSiteId === null ? 600 : 500, color: selectedSiteId === null ? "#1d4ed8" : "#0f172a" }}>
+          <GridViewOutlinedIcon sx={{ fontSize: 12.5, color: selectedSiteId === null ? "primary.main" : "#64748b" }} />
+          <Typography sx={{ fontSize: 12.5, fontWeight: selectedSiteId === null ? 600 : 500, color: selectedSiteId === null ? "primary.main" : "#0f172a" }}>
             Overview
           </Typography>
         </Box>

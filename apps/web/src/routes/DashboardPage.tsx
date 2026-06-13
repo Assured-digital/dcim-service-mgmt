@@ -235,7 +235,7 @@ function AttentionRow({ dot, label, detail, onClick }: {
       display: "flex", alignItems: "flex-start", gap: "10px",
       py: "10px", cursor: onClick ? "pointer" : "default",
       borderBottom: "1px solid #f1f5f9", "&:last-child": { borderBottom: "none" },
-      "&:hover .attn-label": onClick ? { color: "#1d4ed8" } : {}
+      "&:hover .attn-label": onClick ? { color: "primary.main" } : {}
     }}>
       <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: dot, flexShrink: 0, mt: "4px" }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -273,7 +273,7 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
       display: "flex", alignItems: "center", gap: "10px",
       py: "9px", cursor: "pointer",
       borderBottom: "1px solid #f1f5f9", "&:last-child": { borderBottom: "none" },
-      "&:hover .recent-title": { color: "#1d4ed8" }
+      "&:hover .recent-title": { color: "primary.main" }
     }}>
       <Chip label={type} size="small" sx={{ fontSize: 10, fontWeight: 600, flexShrink: 0, bgcolor: tc.bg, color: tc.color, borderRadius: "4px", height: 18 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>

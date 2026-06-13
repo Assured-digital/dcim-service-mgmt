@@ -200,7 +200,7 @@ function ViewSelector({
         onClick={e => setAnchor(e.currentTarget)}
         sx={{
           fontSize: 12, fontWeight: 500, textTransform: "none",
-          color: "#1d4ed8", px: 0.75, py: 0.25, minWidth: 0,
+          color: "primary.main", px: 0.75, py: 0.25, minWidth: 0,
           "& .MuiButton-startIcon": { mr: 0.5 },
           "& .MuiButton-endIcon": { ml: 0.25 },
         }}
@@ -438,10 +438,10 @@ function NavRail({
           display: "flex", alignItems: "center", gap: 1.25,
           px: 1.25, py: 0.875, borderRadius: 1, cursor: "pointer",
           bgcolor: isActive ? "#e8f1ff" : "transparent",
-          color: isActive ? "#1d4ed8" : "#475569",
+          color: isActive ? "primary.main" : "#475569",
           fontWeight: isActive ? 600 : 400,
-          "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc", color: isActive ? "#1d4ed8" : "#0f172a" },
-          "& .MuiSvgIcon-root": { color: isActive ? "#1d4ed8" : "#94a3b8" }
+          "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc", color: isActive ? "primary.main" : "#0f172a" },
+          "& .MuiSvgIcon-root": { color: isActive ? "primary.main" : "#94a3b8" }
         }}
       >
         {v.icon}
@@ -449,7 +449,7 @@ function NavRail({
         {typeof v.count === "number" ? (
           <Typography sx={{
             fontSize: 11, fontWeight: isActive ? 700 : 500,
-            color: isActive ? "#1d4ed8" : "#94a3b8",
+            color: isActive ? "primary.main" : "#94a3b8",
             bgcolor: isActive ? "#fff" : "transparent",
             borderRadius: 999, px: isActive ? 0.875 : 0,
           }}>
@@ -470,10 +470,10 @@ function NavRail({
           display: "flex", alignItems: "center", gap: 1.25,
           px: 1.25, py: 0.875, borderRadius: 1, cursor: "pointer",
           bgcolor: isActive ? "#e8f1ff" : "transparent",
-          color: isActive ? "#1d4ed8" : "#475569",
+          color: isActive ? "primary.main" : "#475569",
           fontWeight: isActive ? 600 : 400,
-          "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc", color: isActive ? "#1d4ed8" : "#0f172a" },
-          "& .MuiSvgIcon-root": { color: isActive ? "#1d4ed8" : "#94a3b8" }
+          "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc", color: isActive ? "primary.main" : "#0f172a" },
+          "& .MuiSvgIcon-root": { color: isActive ? "primary.main" : "#94a3b8" }
         }}
       >
         {t.icon}
@@ -674,7 +674,7 @@ function UnifiedServiceDeskView() {
                 disabled={viewParam !== "table"}
                 sx={{
                   fontSize: 12, fontWeight: 500, textTransform: "none",
-                  color: "#1d4ed8", px: 0.75, py: 0.25, minWidth: 0,
+                  color: "primary.main", px: 0.75, py: 0.25, minWidth: 0,
                   "& .MuiButton-startIcon": { mr: 0.5 },
                 }}
               >

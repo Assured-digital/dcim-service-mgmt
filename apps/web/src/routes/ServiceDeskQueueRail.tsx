@@ -90,7 +90,7 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                 px: 1.5, py: 1.5,
                 cursor: "pointer",
                 borderBottom: "1px solid #f1f5f9",
-                borderLeft: active ? "3px solid #1d4ed8" : "3px solid transparent",
+                borderLeft: "3px solid", borderLeftColor: active ? "primary.main" : "transparent",
                 bgcolor: active ? "#eff4ff" : "transparent",
                 transition: "background-color 0.12s",
                 "&:hover": { bgcolor: active ? "#eff4ff" : "#f8fafc" },
@@ -108,7 +108,7 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                   title={t.subject}
                   sx={{
                     fontSize: 12.5,
-                    color: active ? "#1d4ed8" : "#0f172a",
+                    color: active ? "primary.main" : "#0f172a",
                     fontWeight: active ? 600 : 500,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}

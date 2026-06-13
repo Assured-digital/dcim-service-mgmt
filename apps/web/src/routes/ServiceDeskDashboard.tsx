@@ -209,7 +209,7 @@ function CategoryPanel({ tickets }: { tickets: Ticket[] }) {
                 <Box sx={{ height: 6, bgcolor: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
                   <Box sx={{
                     width: `${(n / max) * 100}%`, height: "100%",
-                    bgcolor: "#1d4ed8", borderRadius: 999,
+                    bgcolor: "primary.main", borderRadius: 999,
                   }} />
                 </Box>
               </Box>
@@ -259,7 +259,7 @@ function TeamLoad({ tickets }: { tickets: Ticket[] }) {
                     </Typography>
                     <Typography sx={{ fontSize: 11, color: "#64748b" }}>Analyst</Typography>
                   </Box>
-                  <Chip size="small" label={`${row.open} open`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: "#e8f1ff", color: "#1d4ed8" }} />
+                  <Chip size="small" label={`${row.open} open`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: "#e8f1ff", color: "primary.main" }} />
                   {row.late > 0 ? (
                     <Chip size="small" label={`${row.late} late`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: "#fee2e2", color: "#b91c1c" }} />
                   ) : null}

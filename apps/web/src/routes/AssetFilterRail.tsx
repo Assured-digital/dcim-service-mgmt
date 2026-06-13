@@ -140,7 +140,7 @@ function FilterGroup({ label, items, selected, onToggle }: {
           {label}
         </Typography>
         {activeCount > 0 ? (
-          <Typography sx={{ fontSize: 10, fontWeight: 600, color: "#1d4ed8" }}>
+          <Typography sx={{ fontSize: 10, fontWeight: 600, color: "primary.main" }}>
             {activeCount}
           </Typography>
         ) : null}
@@ -153,7 +153,7 @@ function FilterGroup({ label, items, selected, onToggle }: {
             sx={{ px: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
             <Checkbox checked={isActive} size="small"
               sx={{ p: 0, mr: "8px", "& .MuiSvgIcon-root": { fontSize: 15 } }} />
-            <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "#1d4ed8" : "#475569", fontWeight: isActive ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "primary.main" : "#475569", fontWeight: isActive ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {item.label}
             </Typography>
           </Stack>
@@ -260,7 +260,7 @@ function LocationTree({
           Location
         </Typography>
         {selectedCount > 0 ? (
-          <Typography sx={{ fontSize: 10, fontWeight: 600, color: "#1d4ed8" }}>
+          <Typography sx={{ fontSize: 10, fontWeight: 600, color: "primary.main" }}>
             {selectedCount}
           </Typography>
         ) : null}
@@ -290,7 +290,7 @@ function LocationTree({
                 />
                 <Typography sx={{
                   flex: 1, fontSize: 12,
-                  color: siteState !== "unchecked" ? "#1d4ed8" : "#475569",
+                  color: siteState !== "unchecked" ? "primary.main" : "#475569",
                   fontWeight: siteState !== "unchecked" ? 500 : 400,
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                 }}>
@@ -323,7 +323,7 @@ function LocationTree({
                       />
                       <Typography sx={{
                         flex: 1, fontSize: 12,
-                        color: roomState !== "unchecked" ? "#1d4ed8" : "#475569",
+                        color: roomState !== "unchecked" ? "primary.main" : "#475569",
                         fontWeight: roomState !== "unchecked" ? 500 : 400,
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                       }}>
@@ -344,7 +344,7 @@ function LocationTree({
                         />
                         <Typography sx={{
                           flex: 1, fontSize: 12,
-                          color: selected ? "#1d4ed8" : "#475569",
+                          color: selected ? "primary.main" : "#475569",
                           fontWeight: selected ? 500 : 400,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                         }}>

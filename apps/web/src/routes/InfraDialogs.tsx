@@ -450,7 +450,7 @@ function LocationLevelRow({ icon, label, value, muted = false }: {
   const textColor = muted || !value ? "#94a3b8" : "#0f172a"
   return (
     <Stack direction="row" alignItems="center" spacing={1.25} sx={{ py: "6px" }}>
-      <Box sx={{ width: 24, height: 24, borderRadius: "6px", bgcolor: "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#1d4ed8" }}>
+      <Box sx={{ width: 24, height: 24, borderRadius: "6px", bgcolor: "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "primary.main" }}>
         {icon}
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -545,7 +545,7 @@ export function MoveAssetDialog({ asset, onClose, onSave }: {
               <LocationLevelRow icon={<BusinessIcon sx={{ fontSize: 14 }} />} label="Site" value={asset.siteName ?? null} />
               <LocationLevelRow icon={<MeetingRoomIcon sx={{ fontSize: 14 }} />} label="Room" value={asset.cabinet?.room?.name ?? null} />
               <LocationLevelRow icon={<StorageIcon sx={{ fontSize: 14 }} />} label="Cabinet" value={asset.cabinetName ?? null} />
-              <LocationLevelRow icon={<Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#1d4ed8" }} />} label="Position" value={currentPosition} />
+              <LocationLevelRow icon={<Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "primary.main" }} />} label="Position" value={currentPosition} />
             </Box>
           </Box>
 
@@ -555,7 +555,7 @@ export function MoveAssetDialog({ asset, onClose, onSave }: {
               Move to
             </Typography>
             <Box sx={{ width: 40, height: 40, borderRadius: "50%", bgcolor: "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <ArrowForwardIcon sx={{ fontSize: 22, color: "#1d4ed8" }} />
+              <ArrowForwardIcon sx={{ fontSize: 22, color: "primary.main" }} />
             </Box>
           </Stack>
 

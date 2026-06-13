@@ -13,7 +13,7 @@ export function Badge({ count, max = 99, variant = "default" }: BadgeProps) {
     <Box sx={{
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       minWidth: 18, height: 18, borderRadius: 9, px: 0.75,
-      bgcolor: variant === "active" ? "#1d4ed8" : "var(--color-background-tertiary, #e2e8f0)",
+      bgcolor: variant === "active" ? "primary.main" : "var(--color-background-tertiary, #e2e8f0)",
       ml: 0.75
     }}>
       <Typography sx={{

@@ -70,7 +70,7 @@ export const ActivityTabs = React.memo(function ActivityTabs({
         minHeight: 36,
         borderBottom: "1px solid",
         borderColor: "divider",
-        "& .MuiTabs-indicator": { height: 2, backgroundColor: "#1d4ed8" },
+        "& .MuiTabs-indicator": { height: 2, backgroundColor: "primary.main" },
         "& .MuiTab-root": {
           minHeight: 36,
           minWidth: 0,
@@ -82,7 +82,7 @@ export const ActivityTabs = React.memo(function ActivityTabs({
           textTransform: "none",
           color: "text.secondary",
         },
-        "& .MuiTab-root.Mui-selected": { color: "#1d4ed8" },
+        "& .MuiTab-root.Mui-selected": { color: "primary.main" },
       }}
     >
       {FILTER_OPTIONS.map((opt) => (

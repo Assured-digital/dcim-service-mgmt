@@ -219,9 +219,9 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
             { key: "linked", label: "Linked records" },
           ].map(t => (
             <Box key={t.key} onClick={() => setRackTab(t.key as RackTab)}
-              sx={{ px: "14px", py: "10px", cursor: "pointer", fontSize: 12.5, fontWeight: 500, color: rackTab === t.key ? "#1d4ed8" : "#64748b", borderBottom: rackTab === t.key ? "2px solid #1d4ed8" : "2px solid transparent", display: "flex", alignItems: "center", gap: "6px", mb: "-1px" }}>
+              sx={{ px: "14px", py: "10px", cursor: "pointer", fontSize: 12.5, fontWeight: 500, color: rackTab === t.key ? "primary.main" : "#64748b", borderBottom: "2px solid", borderBottomColor: rackTab === t.key ? "primary.main" : "transparent", display: "flex", alignItems: "center", gap: "6px", mb: "-1px" }}>
               {t.label}
-              {t.count != null ? <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: rackTab === t.key ? "#dbeafe" : "#f1f5f9", color: rackTab === t.key ? "#1d4ed8" : "#64748b" }}>{t.count}</Box> : null}
+              {t.count != null ? <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: rackTab === t.key ? "#dbeafe" : "#f1f5f9", color: rackTab === t.key ? "primary.main" : "#64748b" }}>{t.count}</Box> : null}
             </Box>
           ))}
         </Stack>
