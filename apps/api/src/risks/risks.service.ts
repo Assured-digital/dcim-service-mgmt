@@ -2,11 +2,38 @@ import { ForbiddenException, Injectable, NotFoundException, BadRequestException 
 import { PrismaService } from "../prisma/prisma.service"
 import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
+import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
+import { emitAudit } from "../audit-events/emit-audit"
 
 function makeRef() {
   const y = new Date().getFullYear()
   const n = Math.floor(Math.random() * 9000) + 1000
   return `RSK-${y}-${n}`
+}
+
+const RISK_LEVEL_LABELS: Record<string, string> = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High"
+}
+
+const RISK_STATUS_LABELS: Record<string, string> = {
+  IDENTIFIED: "Identified",
+  ASSESSED: "Assessed",
+  MITIGATING: "Mitigating",
+  ACCEPTED: "Accepted",
+  CLOSED: "Closed"
+}
+
+// Per-field humanisation for Risk updates. likelihood/impact are enum strings (DTO @IsIn
+// LOW/MEDIUM/HIGH). `status` changes via the status endpoint (STATUS_UPDATED). reviewDate
+// (date) is omitted — diffRecord has no date kind. The dead linkedEntity* scalars are omitted
+// (links live in the RecordLink join table now). Risk has no owner/creator column (#87 unshipped),
+// so there are no ref fields.
+const RISK_FIELD_SPEC: FieldSpec = {
+  mitigationPlan: { label: "Mitigation plan", kind: "scalar" },
+  likelihood: { label: "Likelihood", kind: "enum", labels: RISK_LEVEL_LABELS },
+  impact: { label: "Impact", kind: "enum", labels: RISK_LEVEL_LABELS }
 }
 
 @Injectable()
@@ -95,15 +122,14 @@ export class RisksService {
             status: "IDENTIFIED"
           }
         })
-        await this.prisma.auditEvent.create({
-          data: {
-            entityType: "Risk",
-            entityId: risk.id,
-            action: "CREATED",
-            actorUserId,
-            clientId,
-            data: { reference: risk.reference, title: risk.title }
-          }
+        await emitAudit(this.prisma, {
+          entityType: "Risk",
+          entityId: risk.id,
+          action: "CREATED",
+          actorUserId,
+          clientId,
+          reference: risk.reference,
+          title: risk.title
         })
         return risk
       }
@@ -124,15 +150,21 @@ export class RisksService {
         closedAt: dto.status === "CLOSED" ? new Date() : undefined
       }
     })
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "Risk",
-        entityId: risk.id,
-        action: "STATUS_UPDATED",
-        actorUserId,
-        clientId,
-        data: { from: risk.status, to: dto.status }
-      }
+    await emitAudit(this.prisma, {
+      entityType: "Risk",
+      entityId: risk.id,
+      action: "STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "status",
+          label: "Status",
+          from: RISK_STATUS_LABELS[risk.status] ?? risk.status,
+          to: RISK_STATUS_LABELS[dto.status] ?? dto.status
+        }
+      ],
+      comment: dto.acceptanceNote?.trim() || null
     })
     return updated
   }
@@ -157,16 +189,20 @@ export class RisksService {
         linkedEntityId: dto.linkedEntityId
       }
     })
-    await this.prisma.auditEvent.create({
-      data: {
+
+    // No ref fields on Risk — humanise enums/scalars directly (no resolvers needed).
+    const changes = diffRecord(risk, dto, RISK_FIELD_SPEC)
+    if (changes.length) {
+      await emitAudit(this.prisma, {
         entityType: "Risk",
         entityId: risk.id,
         action: "UPDATED",
         actorUserId,
         clientId,
-        data: { fields: Object.keys(dto).filter(k => (dto as any)[k] !== undefined) }
-      }
-    })
+        changes
+      })
+    }
+
     return updated
   }
 }
