@@ -52,7 +52,9 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
             <Box
               key={link.linkId}
               onClick={() =>
-                drill ? drill(navSegmentForType(link.type), link.id) : navigate(routeForLink(link))
+                drill
+                  ? drill(navSegmentForType(link.type), link.id, link.linkId)
+                  : navigate(routeForLink(link))
               }
               sx={{
                 display: "flex",
@@ -123,9 +125,13 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
                   {link.status}
                 </Box>
               ) : null}
-              {/* linkId is empty for hard-relation rows (e.g. a Task's parent
-                  incident) — those are shown but not unlinkable here. */}
-              {link.linkId ? (
+              {/* Inline one-click remove — shown ONLY when the row does NOT drill into
+                  the peek drawer (i.e. standalone pages with no drawer). When a row
+                  drills (Service Desk navigator), removal moves to that drawer's ⋯
+                  overflow menu (the deliberate gate), so no inline button here.
+                  linkId is empty for hard-relation rows (e.g. a Task's parent
+                  incident) — those are shown but not unlinkable. */}
+              {!drill && link.linkId ? (
                 <Tooltip title="Remove link">
                   <IconButton
                     className="rl-unlink"
