@@ -5,6 +5,8 @@ import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
+import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
+import { emitAudit } from "../audit-events/emit-audit";
 
 type ListFilters = {
   dateFrom?: string;
@@ -20,6 +22,33 @@ function makeRef() {
   const n = Math.floor(Math.random() * 9000) + 1000;
   return `SR-${y}-${n}`;
 }
+
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical"
+};
+
+const SR_STATUS_LABELS: Record<string, string> = {
+  NEW: "New",
+  ASSIGNED: "Assigned",
+  IN_PROGRESS: "In progress",
+  WAITING_CUSTOMER: "Waiting on customer",
+  COMPLETED: "Completed",
+  CLOSED: "Closed",
+  CANCELLED: "Cancelled"
+};
+
+// Per-field humanisation for ServiceRequest updates. `status` changes via the status endpoint
+// (STATUS_UPDATED). linkedEntityType/linkedEntityId are dead fields (superseded by RecordLink) —
+// omitted so they never produce history noise.
+const SR_FIELD_SPEC: FieldSpec = {
+  subject: { label: "Subject", kind: "scalar" },
+  description: { label: "Description", kind: "scalar" },
+  priority: { label: "Priority", kind: "enum", labels: PRIORITY_LABELS },
+  assigneeId: { label: "Assignee", kind: "ref" }
+};
 
 @Injectable()
 export class ServiceRequestsService {
@@ -79,16 +108,14 @@ export class ServiceRequestsService {
       }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "ServiceRequest",
-        entityId: sr.id,
-        action: "CREATED",
-        actorUserId: createdById ?? undefined,
-        clientId,
-        data: { reference: sr.reference, subject: sr.subject },
-        serviceRequestId: sr.id
-      }
+    await emitAudit(this.prisma, {
+      entityType: "ServiceRequest",
+      entityId: sr.id,
+      action: "CREATED",
+      actorUserId: createdById,
+      clientId,
+      reference: sr.reference,
+      title: sr.subject
     });
 
     return sr;
@@ -140,16 +167,21 @@ async updateStatusForClient(
     }
   });
 
-  await this.prisma.auditEvent.create({
-    data: {
-      entityType: "ServiceRequest",
-      entityId: sr.id,
-      action: "STATUS_UPDATED",
-      actorUserId,
-      clientId,
-      data: { from: sr.status, to: dto.status },
-      serviceRequestId: sr.id
-    }
+  await emitAudit(this.prisma, {
+    entityType: "ServiceRequest",
+    entityId: sr.id,
+    action: "STATUS_UPDATED",
+    actorUserId,
+    clientId,
+    changes: [
+      {
+        field: "status",
+        label: "Status",
+        from: SR_STATUS_LABELS[sr.status] ?? sr.status,
+        to: SR_STATUS_LABELS[dto.status] ?? dto.status
+      }
+    ],
+    comment: dto.closureSummary?.trim() || null
   });
 
   return updated;
@@ -173,22 +205,33 @@ async updateForClient(
       priority: dto.priority,
       linkedEntityType: dto.linkedEntityType,
       linkedEntityId: dto.linkedEntityId
-    }
+    },
+    include: { assignee: { select: userDisplaySelect } }
   });
 
-  await this.prisma.auditEvent.create({
-    data: {
+  const newAssignee = toUserDisplay(updated.assignee);
+  // Resolve assignee ids -> display names from rows already in hand (old via getForClient, new via
+  // the update include) — no extra lookup; humanised at emit time.
+  const assigneeNames = new Map<string, string>();
+  if (sr.assignee) assigneeNames.set(sr.assignee.id, sr.assignee.displayName);
+  if (newAssignee) assigneeNames.set(newAssignee.id, newAssignee.displayName);
+
+  const changes = diffRecord(sr, dto, SR_FIELD_SPEC, {
+    assigneeId: (id) => (id ? assigneeNames.get(id) ?? null : null)
+  });
+
+  if (changes.length) {
+    await emitAudit(this.prisma, {
       entityType: "ServiceRequest",
       entityId: sr.id,
       action: "UPDATED",
       actorUserId,
       clientId,
-      data: dto,
-      serviceRequestId: sr.id
-    }
-  });
+      changes
+    });
+  }
 
-  return updated;
+  return { ...updated, assignee: newAssignee };
 }
 
   async closeForClient(clientId: string, id: string, actorUserId: string, closureSummary: string) {
@@ -207,16 +250,21 @@ async updateForClient(
       }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "ServiceRequest",
-        entityId: sr.id,
-        action: "CLOSED",
-        actorUserId,
-        clientId,
-        data: { closureSummary },
-        serviceRequestId: sr.id
-      }
+    await emitAudit(this.prisma, {
+      entityType: "ServiceRequest",
+      entityId: sr.id,
+      action: "CLOSED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "status",
+          label: "Status",
+          from: SR_STATUS_LABELS[sr.status] ?? sr.status,
+          to: SR_STATUS_LABELS.CLOSED
+        }
+      ],
+      comment: closureSummary.trim()
     });
 
     return updated;

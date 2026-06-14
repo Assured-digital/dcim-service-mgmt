@@ -112,6 +112,6 @@ export class TasksController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.tasks.updateForClient(clientId, id, dto)
+    return this.tasks.updateForClient(clientId, id, user.userId, dto)
   }
 }
