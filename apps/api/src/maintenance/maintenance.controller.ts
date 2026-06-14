@@ -58,7 +58,7 @@ export class MaintenanceController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.maintenance.updateForClient(clientId, id, dto)
+    return this.maintenance.updateForClient(clientId, id, user.userId, dto)
   }
 
   @Delete(":id")

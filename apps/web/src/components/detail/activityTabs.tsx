@@ -6,38 +6,27 @@ import type { FeedEvent } from "./ActivityFeedItem"
 // Activity filter — shared config + tab bar.
 //
 // Single source of truth for the activity section's filter tabs, used by every
-// record detail page. The internal value "all" is deliberately preserved (it is
-// LABELLED "History") so each page's existing filter logic — `activeFilter === "all"`
-// returns the full feed — stays untouched. The underlying feed event mapping still
-// emits "link" events; they simply have no dedicated tab and surface under History.
+// record detail page. Two tabs only: Comments (the comment/work-note thread) and
+// History (internal value "all" — the unified audit stream). The old Status and
+// Assignments tabs were removed: History now renders the audit stream directly via
+// the shared AuditHistoryList/humaniseAuditEvent, which supersedes those slices.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ActivityFilter = "comment" | "all" | "status" | "assignment"
+export type ActivityFilter = "comment" | "all"
 
-export const FILTER_VALUES: readonly ActivityFilter[] = [
-  "comment",
-  "all",
-  "status",
-  "assignment",
-]
+export const FILTER_VALUES: readonly ActivityFilter[] = ["comment", "all"]
 
 export const DEFAULT_ACTIVITY_FILTER: ActivityFilter = "comment"
 
 export const FILTER_OPTIONS: { value: ActivityFilter; label: string }[] = [
   { value: "comment", label: "Comments" },
   { value: "all", label: "History" },
-  { value: "status", label: "Status" },
-  { value: "assignment", label: "Assignments" },
 ]
 
-// Single source of truth for mapping the selected tab → the visible feed slice.
-// Every detail page routes its feed through this so the tabs stay consistent.
-//
-// "History" (internal value "all") shows system/audit events ONLY — it deliberately
-// EXCLUDES comment posts. Comment events carry their own threads + inline reply
-// fields (see ActivityFeedItem threading), so dropping `type === "comment"` here
-// removes comments, replies AND reply fields from History in one cut. Comments live
-// solely on the Comments tab. The other tabs match their event type directly.
+// Maps the selected tab → the visible feed slice for the COMMENTS tab only. History
+// ("all") no longer flows through here — it renders the audit stream directly via
+// AuditHistoryList — so the "all" branch is effectively unused (it just yields the
+// non-comment remainder, which is now empty since pages only build comment feed events).
 export function filterFeedEvents(
   events: FeedEvent[],
   filter: ActivityFilter

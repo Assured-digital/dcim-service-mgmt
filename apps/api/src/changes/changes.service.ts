@@ -4,11 +4,53 @@ import { resolveCreator } from "../users/creator"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
 import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
+import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
+import { emitAudit } from "../audit-events/emit-audit"
 
 function makeRef() {
   const y = new Date().getFullYear()
   const n = Math.floor(Math.random() * 9000) + 1000
   return `CHG-${y}-${n}`
+}
+
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical"
+}
+
+const CHANGE_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  SUBMITTED: "Submitted",
+  PENDING_APPROVAL: "Pending approval",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
+  CLOSED: "Closed",
+  CANCELLED: "Cancelled"
+}
+
+const DECISION_LABELS: Record<string, string> = {
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  DEFERRED: "Deferred"
+}
+
+// Per-field humanisation for ChangeRequest updates (UpdateChangeDto). `status` is NOT here — it
+// changes via the status endpoint (STATUS_UPDATED). Date fields (scheduledStart/scheduledEnd) are
+// omitted: the shared diffRecord has no date kind, and a Date-vs-ISO-string compare mis-renders.
+const CHANGE_FIELD_SPEC: FieldSpec = {
+  title: { label: "Title", kind: "scalar" },
+  description: { label: "Description", kind: "scalar" },
+  reason: { label: "Reason", kind: "scalar" },
+  impactAssessment: { label: "Impact assessment", kind: "scalar" },
+  rollbackPlan: { label: "Rollback plan", kind: "scalar" },
+  implementationNotes: { label: "Implementation notes", kind: "scalar" },
+  postImplReview: { label: "Post-implementation review", kind: "scalar" },
+  priority: { label: "Priority", kind: "enum", labels: PRIORITY_LABELS },
+  assigneeId: { label: "Assignee", kind: "ref" }
 }
 
 @Injectable()
@@ -95,15 +137,14 @@ export class ChangesService {
           }
         })
 
-        await this.prisma.auditEvent.create({
-          data: {
-            entityType: "ChangeRequest",
-            entityId: change.id,
-            action: "CREATED",
-            actorUserId,
-            clientId,
-            data: { reference: change.reference, title: change.title }
-          }
+        await emitAudit(this.prisma, {
+          entityType: "ChangeRequest",
+          entityId: change.id,
+          action: "CREATED",
+          actorUserId,
+          clientId,
+          reference: change.reference,
+          title: change.title
         })
 
         return change
@@ -131,15 +172,20 @@ export class ChangesService {
       }
     })
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "ChangeRequest",
-        entityId: change.id,
-        action: "STATUS_UPDATED",
-        actorUserId,
-        clientId,
-        data: { from: change.status, to: dto.status }
-      }
+    await emitAudit(this.prisma, {
+      entityType: "ChangeRequest",
+      entityId: change.id,
+      action: "STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "status",
+          label: "Status",
+          from: CHANGE_STATUS_LABELS[change.status] ?? change.status,
+          to: CHANGE_STATUS_LABELS[dto.status] ?? dto.status
+        }
+      ]
     })
 
     return updated
@@ -169,15 +215,20 @@ export class ChangesService {
       data: { status: newStatus }
     })
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "ChangeRequest",
-        entityId: change.id,
-        action: "APPROVAL_RECORDED",
-        actorUserId,
-        clientId,
-        data: { decision: dto.decision }
-      }
+    await emitAudit(this.prisma, {
+      entityType: "ChangeRequest",
+      entityId: change.id,
+      action: "APPROVAL_RECORDED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "decision",
+          label: "Decision",
+          from: null,
+          to: DECISION_LABELS[dto.decision] ?? dto.decision
+        }
+      ]
     })
 
     return approval
@@ -198,7 +249,7 @@ export class ChangesService {
   }) {
     const change = await this.getForClient(clientId, id)
 
-    return this.prisma.changeRequest.update({
+    const updated = await this.prisma.changeRequest.update({
       where: { id: change.id },
       data: {
         title: dto.title,
@@ -212,7 +263,32 @@ export class ChangesService {
         assigneeId: dto.assigneeId,
         scheduledStart: dto.scheduledStart ? new Date(dto.scheduledStart) : undefined,
         scheduledEnd: dto.scheduledEnd ? new Date(dto.scheduledEnd) : undefined
-      }
+      },
+      include: { assignee: { select: userDisplaySelect } }
     })
+
+    const newAssignee = toUserDisplay(updated.assignee)
+    // Resolve assignee ids -> display names from rows already in hand (old via getForClient, new
+    // via the update include) — no extra lookup; humanised at emit time.
+    const assigneeNames = new Map<string, string>()
+    if (change.assignee) assigneeNames.set(change.assignee.id, change.assignee.displayName)
+    if (newAssignee) assigneeNames.set(newAssignee.id, newAssignee.displayName)
+
+    const changes = diffRecord(change, dto, CHANGE_FIELD_SPEC, {
+      assigneeId: (id) => (id ? assigneeNames.get(id) ?? null : null)
+    })
+
+    if (changes.length) {
+      await emitAudit(this.prisma, {
+        entityType: "ChangeRequest",
+        entityId: change.id,
+        action: "UPDATED",
+        actorUserId,
+        clientId,
+        changes
+      })
+    }
+
+    return { ...updated, assignee: newAssignee }
   }
 }

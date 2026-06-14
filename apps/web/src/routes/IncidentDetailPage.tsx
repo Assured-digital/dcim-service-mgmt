@@ -41,7 +41,6 @@ import {
   type ResolvedMention,
   type CommentDraft,
   type FeedEvent,
-  type FeedEventType,
   RecordDetailShell,
   SectionPanel,
   TransitionDialog,
@@ -66,6 +65,8 @@ import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
 import { userLabel } from "../lib/userDisplay"
+import { type AuditEvent } from "../lib/auditEvents"
+import { AuditHistoryList } from "../components/AuditHistoryList"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -87,15 +88,6 @@ type Incident = {
   attachments?: AttachmentSummary[]
   createdAt: string
   updatedAt: string
-}
-
-type AuditEvent = {
-  id: string
-  action: string
-  actorUserId: string | null
-  actorDisplayName?: string | null
-  data?: Record<string, unknown> | null
-  createdAt: string
 }
 
 type IncidentComment = {
@@ -238,97 +230,13 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-function readDataString(data: Record<string, unknown> | null | undefined, key: string): string | null {
-  if (!data) return null
-  const v = data[key]
-  return typeof v === "string" && v.length > 0 ? v : null
-}
-
-function readDataFields(data: Record<string, unknown> | null | undefined): string[] {
-  if (!data) return []
-  const v = data["fields"]
-  return Array.isArray(v) ? v.filter((f): f is string => typeof f === "string") : []
-}
-
-function bold(value: string): React.ReactNode {
-  return (
-    <Box component="span" sx={{ fontWeight: 600, color: "text.primary" }}>
-      {value}
-    </Box>
-  )
-}
-
-const ACTION_LABELS: Record<string, string> = {
-  CREATED: "Created the incident",
-  UPDATED: "Updated incident",
-  STATUS_UPDATED: "Status changed",
-  MOVED: "Moved",
-  MAINTAINED: "Maintenance recorded",
-}
-
-function describeAuditEvent(
-  action: string,
-  data?: Record<string, unknown> | null,
-): { type: FeedEventType; text: React.ReactNode } {
-  const label = ACTION_LABELS[action] ?? action
-
-  if (action === "STATUS_UPDATED") {
-    const fromRaw = readDataString(data, "from")
-    const toRaw = readDataString(data, "to")
-    const from = fromRaw ? STATUS_LABELS[fromRaw] ?? fromRaw : null
-    const to = toRaw ? STATUS_LABELS[toRaw] ?? toRaw : null
-    return {
-      type: "status",
-      text: (
-        <>
-          {label}
-          {from && to ? <> {bold(from)} → {bold(to)}</> : null}
-        </>
-      ),
-    }
-  }
-
-  if (action === "CREATED") {
-    return { type: "status", text: <>{label}</> }
-  }
-
-  if (action === "UPDATED") {
-    const fields = readDataFields(data)
-    if (fields.length === 1 && fields[0] === "assigneeId") {
-      const assigneeName =
-        readDataString(data, "assignee") ??
-        readDataString(data, "assigneeEmail") ??
-        readDataString(data, "assigneeName")
-      return {
-        type: "assignment",
-        text: assigneeName
-          ? <>Assigned to {bold(assigneeName)}</>
-          : <>Assignee updated</>,
-      }
-    }
-    if (fields.includes("linkedEntityType") || fields.includes("linkedEntityId")) {
-      return { type: "link", text: <>Linked record updated</> }
-    }
-    return {
-      type: "status",
-      text: (
-        <>
-          {label}
-          {fields.length ? <>: {bold(fields.join(", "))}</> : null}
-        </>
-      ),
-    }
-  }
-
-  return { type: "status", text: <>{label}</> }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity section (spec section 6)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ActivityContentProps {
   events: FeedEvent[]
+  auditEvents: AuditEvent[]
   activeFilter: ActivityFilter
   onFilterChange: (filter: ActivityFilter) => void
   savingNote: boolean
@@ -337,6 +245,7 @@ interface ActivityContentProps {
 
 const ActivityContent = React.memo(function ActivityContent({
   events,
+  auditEvents,
   activeFilter,
   onFilterChange,
   savingNote,
@@ -357,6 +266,10 @@ const ActivityContent = React.memo(function ActivityContent({
     []
   )
 
+  // History ("all") renders the audit stream directly via the shared humaniser;
+  // the Comments tab keeps the FeedEvent path.
+  const isHistory = activeFilter === "all"
+  const total = isHistory ? auditEvents.length : events.length
   const visibleEvents = events.slice(0, visibleCount)
 
   return (
@@ -367,13 +280,18 @@ const ActivityContent = React.memo(function ActivityContent({
         <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
-      {events.length === 0 ? (
+      {total === 0 ? (
         <Typography
           variant="caption"
           sx={{ color: "text.tertiary" }}
         >
           No activity to show
         </Typography>
+      ) : isHistory ? (
+        <AuditHistoryList
+          events={auditEvents.slice(0, visibleCount)}
+          recordNoun="incident"
+        />
       ) : (
         visibleEvents.map((event, idx) => (
           <ActivityFeedItem
@@ -384,7 +302,7 @@ const ActivityContent = React.memo(function ActivityContent({
         ))
       )}
 
-      {visibleCount < events.length && (
+      {visibleCount < total && (
         <Box sx={{ pt: 1.5, display: "flex", justifyContent: "center" }}>
           <Button
             variant="text"
@@ -392,7 +310,7 @@ const ActivityContent = React.memo(function ActivityContent({
             onClick={handleLoadMore}
             sx={{ color: "text.secondary", fontSize: 12 }}
           >
-            Load more ({events.length - visibleCount} remaining)
+            Load more ({total - visibleCount} remaining)
           </Button>
         </Box>
       )}
@@ -649,21 +567,9 @@ export default function IncidentDetailPage() {
 
   const links = incident?.links ?? []
 
+  // Comments tab feed — work-notes only. (History no longer routes through FeedEvents;
+  // it renders the audit stream directly via AuditHistoryList.)
   const allFeedEvents = React.useMemo<FeedEvent[]>(() => {
-    const audit: FeedEvent[] = (auditEvents ?? []).map((e) => {
-      const { type, text } = describeAuditEvent(e.action, e.data)
-      const transitionComment =
-        e.action === "STATUS_UPDATED" ? readDataString(e.data, "comment") : null
-      return {
-        id: `audit-${e.id}`,
-        type,
-        actor: e.actorDisplayName ?? "System",
-        text,
-        note: transitionComment ?? undefined,
-        time: formatDateTime(e.createdAt),
-        createdAt: e.createdAt,
-      }
-    })
     const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
       id: `note-${n.id}`,
       type: "comment",
@@ -685,10 +591,10 @@ export default function IncidentDetailPage() {
       time: formatDateTime(n.createdAt),
       createdAt: n.createdAt,
     }))
-    return [...audit, ...notes].sort(
+    return notes.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
-  }, [auditEvents, workNotes, id])
+  }, [workNotes, id])
 
   const visibleFeedEvents = React.useMemo<FeedEvent[]>(() => {
     return filterFeedEvents(allFeedEvents, activeFilter)
@@ -901,6 +807,7 @@ export default function IncidentDetailPage() {
           <SectionPanel title="Activity">
             <ActivityContent
               events={visibleFeedEvents}
+              auditEvents={auditEvents ?? []}
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
               savingNote={savingNote}
@@ -913,6 +820,7 @@ export default function IncidentDetailPage() {
   }, [
     incident,
     visibleFeedEvents,
+    auditEvents,
     activeFilter,
     handleFilterChange,
     savingNote,

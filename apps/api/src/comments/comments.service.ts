@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import { NotificationsService } from "../notifications/notifications.service"
 import { computeDisplayName, toUserDisplay, userDisplaySelect, type UserDisplayPick } from "../users/display"
+import { emitAudit } from "../audit-events/emit-audit"
 import { assertEntityInScope } from "./resolve-comment-scope"
 import { resolveValidMentions, type MentionInput } from "./resolve-mentions"
 import { tiptapToPlainText } from "./tiptap-text"
@@ -153,6 +154,13 @@ export class CommentsService {
       commentId: comment.id,
       mentions
     })
+    await emitAudit(this.prisma, {
+      entityType: dto.entityType,
+      entityId: dto.entityId,
+      action: "COMMENTED",
+      actorUserId: authorId,
+      clientId
+    })
     return this.presentOne(comment)
   }
 
@@ -190,6 +198,13 @@ export class CommentsService {
       sourceId: dto.entityId,
       commentId: comment.id,
       mentions
+    })
+    await emitAudit(this.prisma, {
+      entityType: dto.entityType,
+      entityId: dto.entityId,
+      action: "COMMENTED",
+      actorUserId: authorId,
+      clientId
     })
     return this.presentOne(comment)
   }
@@ -280,6 +295,14 @@ export class CommentsService {
       sourceId: parent.entityId,
       commentId: reply.id,
       mentionedUserIds: mentions.filter((m) => m.targetType === "user").map((m) => m.targetId)
+    })
+
+    await emitAudit(this.prisma, {
+      entityType: parent.entityType,
+      entityId: parent.entityId,
+      action: "REPLIED",
+      actorUserId: authorId,
+      clientId
     })
 
     return this.presentOne(reply)

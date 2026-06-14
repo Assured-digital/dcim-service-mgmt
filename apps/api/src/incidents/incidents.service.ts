@@ -5,6 +5,8 @@ import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
+import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
+import { emitAudit } from "../audit-events/emit-audit";
 
 type ListFilters = {
   dateFrom?: string;
@@ -17,6 +19,38 @@ function makeIncidentRef() {
   const n = Math.floor(Math.random() * 9000) + 1000;
   return `IN-${y}-${n}`;
 }
+
+const INCIDENT_STATUS_LABELS: Record<string, string> = {
+  NEW: "New",
+  INVESTIGATING: "Investigating",
+  MITIGATED: "Mitigated",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed"
+};
+
+const INCIDENT_SEVERITY_LABELS: Record<string, string> = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+  CRITICAL: "Critical"
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical"
+};
+
+// Per-field humanisation for Incident updates (UpdateIncidentDto fields). `status` is NOT
+// here — it changes via its own endpoint and emits a STATUS_UPDATED event (below).
+const INCIDENT_FIELD_SPEC: FieldSpec = {
+  title: { label: "Title", kind: "scalar" },
+  description: { label: "Description", kind: "scalar" },
+  severity: { label: "Severity", kind: "enum", labels: INCIDENT_SEVERITY_LABELS },
+  priority: { label: "Priority", kind: "enum", labels: PRIORITY_LABELS },
+  assigneeId: { label: "Assignee", kind: "ref" }
+};
 
 @Injectable()
 export class IncidentsService {
@@ -101,18 +135,14 @@ export class IncidentsService {
       }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "Incident",
-        entityId: created.id,
-        action: "CREATED",
-        actorUserId,
-        clientId,
-        data: {
-          reference: created.reference,
-          title: created.title
-        }
-      }
+    await emitAudit(this.prisma, {
+      entityType: "Incident",
+      entityId: created.id,
+      action: "CREATED",
+      actorUserId,
+      clientId,
+      reference: created.reference,
+      title: created.title
     });
 
     return { ...created, assignee: toUserDisplay(created.assignee) };
@@ -147,20 +177,29 @@ export class IncidentsService {
       }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
+    const newAssignee = toUserDisplay(updated.assignee);
+    // Resolve assignee ids -> display names from rows already in hand (old via getForClient,
+    // new via the update include) — no extra lookup; humanised at emit time.
+    const assigneeNames = new Map<string, string>();
+    if (incident.assignee) assigneeNames.set(incident.assignee.id, incident.assignee.displayName);
+    if (newAssignee) assigneeNames.set(newAssignee.id, newAssignee.displayName);
+
+    const changes = diffRecord(incident, dto, INCIDENT_FIELD_SPEC, {
+      assigneeId: (id) => (id ? assigneeNames.get(id) ?? null : null)
+    });
+
+    if (changes.length) {
+      await emitAudit(this.prisma, {
         entityType: "Incident",
         entityId: incident.id,
         action: "UPDATED",
         actorUserId,
         clientId,
-        data: {
-          fields: Object.keys(dto).filter((field) => (dto as Record<string, unknown>)[field] !== undefined)
-        }
-      }
-    });
+        changes
+      });
+    }
 
-    return { ...updated, assignee: toUserDisplay(updated.assignee) };
+    return { ...updated, assignee: newAssignee };
   }
 
   async updateStatusForClient(
@@ -176,19 +215,21 @@ export class IncidentsService {
       data: { status }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "Incident",
-        entityId: incident.id,
-        action: "STATUS_UPDATED",
-        actorUserId,
-        clientId,
-        data: {
-          from: incident.status,
-          to: status,
-          comment: comment?.trim() || null
+    await emitAudit(this.prisma, {
+      entityType: "Incident",
+      entityId: incident.id,
+      action: "STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "status",
+          label: "Status",
+          from: INCIDENT_STATUS_LABELS[incident.status] ?? incident.status,
+          to: INCIDENT_STATUS_LABELS[status] ?? status
         }
-      }
+      ],
+      comment: comment?.trim() || null
     });
 
     return updated;

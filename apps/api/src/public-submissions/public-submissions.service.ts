@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { emitAudit } from "../audit-events/emit-audit";
 
 function makeRef() {
   const d = new Date();
@@ -76,18 +77,14 @@ export class PublicSubmissionsService {
       }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "PublicSubmission",
-        entityId: submission.id,
-        action: "CONVERTED_TO_SERVICE_REQUEST",
-        actorUserId,
-        clientId,
-        data: {
-          serviceRequestId: serviceRequest.id,
-          serviceRequestReference: serviceRequest.reference
-        }
-      }
+    await emitAudit(this.prisma, {
+      entityType: "PublicSubmission",
+      entityId: submission.id,
+      action: "CONVERTED_TO_SERVICE_REQUEST",
+      actorUserId,
+      clientId,
+      reference: serviceRequest.reference,
+      title: submission.subject
     });
 
     return { submission: updatedSubmission, serviceRequest };

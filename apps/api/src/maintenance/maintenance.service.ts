@@ -3,6 +3,32 @@ import { PrismaService } from "../prisma/prisma.service"
 import { CreateMaintenanceDto, ListMaintenanceQueryDto, UpdateMaintenanceDto } from "./dto"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
+import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
+import { emitAudit } from "../audit-events/emit-audit"
+
+const WORK_TYPE_LABELS: Record<string, string> = {
+  INSPECTION: "Inspection",
+  PSU_REPLACEMENT: "PSU replacement",
+  FIRMWARE_UPGRADE: "Firmware upgrade",
+  PAT_INSPECTION: "PAT inspection",
+  COOLING_CHECK: "Cooling check",
+  CABLE_AUDIT: "Cable audit",
+  REPAIR: "Repair",
+  UPGRADE: "Upgrade",
+  OTHER: "Other"
+}
+
+// Per-field humanisation for Maintenance updates. MaintenanceLog has no clientId (scoped via
+// asset.clientId — the clientId param IS the asset's validated clientId) and no status field
+// (so no STATUS_UPDATED). assetId + performedById are refs resolved from rows already in hand.
+// performedAt/nextDueAt (dates) are omitted — diffRecord has no date kind.
+const MAINTENANCE_FIELD_SPEC: FieldSpec = {
+  assetId: { label: "Asset", kind: "ref" },
+  workType: { label: "Work type", kind: "enum", labels: WORK_TYPE_LABELS },
+  workTypeOther: { label: "Other work type", kind: "scalar" },
+  performedById: { label: "Performed by", kind: "ref" },
+  notes: { label: "Notes", kind: "scalar" }
+}
 
 @Injectable()
 export class MaintenanceService {
@@ -126,6 +152,7 @@ export class MaintenanceService {
 
     await this.refreshLastMaintenance(created.assetId)
 
+    // Asset-scoped event — feeds the Asset detail History (entityType "Asset"/assetId). Kept as-is.
     if (actorUserId) {
       await this.prisma.auditEvent.create({
         data: {
@@ -144,10 +171,21 @@ export class MaintenanceService {
       })
     }
 
+    // Maintenance-scoped event — feeds the Maintenance detail History (entityType "Maintenance"/log
+    // id). clientId is the asset's validated clientId (ensureAssetInScope ran above). MaintenanceLog
+    // has no reference/title, so the CREATED line renders as "created this maintenance".
+    await emitAudit(this.prisma, {
+      entityType: "Maintenance",
+      entityId: created.id,
+      action: "CREATED",
+      actorUserId,
+      clientId
+    })
+
     return { ...created, performedBy: toUserDisplay(created.performedBy) }
   }
 
-  async updateForClient(clientId: string, id: string, dto: UpdateMaintenanceDto) {
+  async updateForClient(clientId: string, id: string, actorUserId: string | null, dto: UpdateMaintenanceDto) {
     this.assertClientScope(clientId)
     const existing = await this.getForClient(clientId, id)
 
@@ -188,7 +226,35 @@ export class MaintenanceService {
     if (updated.assetId !== existing.assetId) {
       await this.refreshLastMaintenance(updated.assetId)
     }
-    return { ...updated, performedBy: toUserDisplay(updated.performedBy) }
+
+    const newPerformedBy = toUserDisplay(updated.performedBy)
+    // Resolve asset + performedBy ids -> display from rows already loaded (existing via
+    // getForClient, new via the update include) — no extra DB round-trip; humanised at emit time.
+    const assetLabels = new Map<string, string>()
+    if (existing.asset) assetLabels.set(existing.asset.id, existing.asset.assetTag ?? existing.asset.name)
+    if (updated.asset) assetLabels.set(updated.asset.id, updated.asset.assetTag ?? updated.asset.name)
+    const performerNames = new Map<string, string>()
+    if (existing.performedBy) performerNames.set(existing.performedBy.id, existing.performedBy.displayName)
+    if (newPerformedBy) performerNames.set(newPerformedBy.id, newPerformedBy.displayName)
+
+    // Spread the DTO class instance into a plain object — diffRecord's dto param is an indexable
+    // Record (a class type has no index signature; Risk/Issue pass anonymous object literals instead).
+    const changes = diffRecord(existing, { ...dto }, MAINTENANCE_FIELD_SPEC, {
+      assetId: (id) => (id ? assetLabels.get(id) ?? null : null),
+      performedById: (id) => (id ? performerNames.get(id) ?? null : null)
+    })
+    if (changes.length) {
+      await emitAudit(this.prisma, {
+        entityType: "Maintenance",
+        entityId: existing.id,
+        action: "UPDATED",
+        actorUserId,
+        clientId,
+        changes
+      })
+    }
+
+    return { ...updated, performedBy: newPerformedBy }
   }
 
   async removeForClient(clientId: string, id: string) {

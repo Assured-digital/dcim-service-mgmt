@@ -5,6 +5,7 @@ import { api } from "../lib/api"
 import {
   Alert,
   Box,
+  Button,
   Chip,
   Snackbar,
   Stack,
@@ -37,7 +38,6 @@ import {
   type ResolvedMention,
   type CommentDraft,
   type FeedEvent,
-  type FeedEventType,
   EditableTitleCard,
   ActivityTabs,
   RecordDetailShell,
@@ -64,6 +64,8 @@ import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
 import { TasksSectionContent } from "../components/TasksSectionContent"
 import { userLabel } from "../lib/userDisplay"
+import { type AuditEvent } from "../lib/auditEvents"
+import { AuditHistoryList } from "../components/AuditHistoryList"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -85,15 +87,6 @@ type SR = {
   updatedAt: string
   assignee: { id: string; displayName: string } | null
   client: { id: string; name: string }
-}
-
-type AuditEvent = {
-  id: string
-  action: string
-  actorUserId?: string | null
-  actorDisplayName?: string | null
-  data?: Record<string, unknown> | null
-  createdAt: string
 }
 
 type SRComment = {
@@ -236,94 +229,13 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-function readDataString(data: Record<string, unknown> | null | undefined, key: string): string | null {
-  if (!data) return null
-  const v = data[key]
-  return typeof v === "string" && v.length > 0 ? v : null
-}
-
-function readDataFields(data: Record<string, unknown> | null | undefined): string[] {
-  if (!data) return []
-  const v = data["fields"]
-  return Array.isArray(v) ? v.filter((f): f is string => typeof f === "string") : []
-}
-
-function bold(value: string): React.ReactNode {
-  return (
-    <Box component="span" sx={{ fontWeight: 600, color: "text.primary" }}>
-      {value}
-    </Box>
-  )
-}
-
-const ACTION_LABELS: Record<string, string> = {
-  CREATED: "Logged the request",
-  UPDATED: "Updated request",
-  STATUS_UPDATED: "Status changed",
-  CLOSED: "Closed the request",
-  CUSTOMER_UPDATE_ADDED: "Customer update sent",
-}
-
-function describeAuditEvent(
-  action: string,
-  data?: Record<string, unknown> | null,
-): { type: FeedEventType; text: React.ReactNode } {
-  const label = ACTION_LABELS[action] ?? action
-
-  if (action === "STATUS_UPDATED") {
-    const fromRaw = readDataString(data, "from")
-    const toRaw = readDataString(data, "to")
-    const from = fromRaw ? STATUS_LABELS[fromRaw] ?? fromRaw : null
-    const to = toRaw ? STATUS_LABELS[toRaw] ?? toRaw : null
-    return {
-      type: "status",
-      text: (
-        <>
-          {label}
-          {from && to ? <> {bold(from)} → {bold(to)}</> : null}
-        </>
-      ),
-    }
-  }
-
-  if (action === "CREATED") {
-    return { type: "status", text: <>{label}</> }
-  }
-
-  if (action === "UPDATED") {
-    const fields = readDataFields(data)
-    if (fields.length === 1 && fields[0] === "assigneeId") {
-      const assigneeName =
-        readDataString(data, "assignee") ??
-        readDataString(data, "assigneeEmail") ??
-        readDataString(data, "assigneeName")
-      return {
-        type: "assignment",
-        text: assigneeName
-          ? <>Assigned to {bold(assigneeName)}</>
-          : <>Assignee updated</>,
-      }
-    }
-    return {
-      type: "status",
-      text: (
-        <>
-          {label}
-          {fields.length ? <>: {bold(fields.join(", "))}</> : null}
-        </>
-      ),
-    }
-  }
-
-  return { type: "status", text: <>{label}</> }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity section (spec section 6)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ActivityContentProps {
   events: FeedEvent[]
+  auditEvents: AuditEvent[]
   activeFilter: ActivityFilter
   onFilterChange: (filter: ActivityFilter) => void
   savingNote: boolean
@@ -332,30 +244,65 @@ interface ActivityContentProps {
 
 const ActivityContent = React.memo(function ActivityContent({
   events,
+  auditEvents,
   activeFilter,
   onFilterChange,
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const [visibleCount, setVisibleCount] = React.useState(10)
+
+  const handleFilterChange = React.useCallback(
+    (filter: ActivityFilter) => {
+      setVisibleCount(10)
+      onFilterChange(filter)
+    },
+    [onFilterChange]
+  )
+
+  const handleLoadMore = React.useCallback(
+    () => setVisibleCount((c) => c + 10),
+    []
+  )
+
+  const isHistory = activeFilter === "all"
+  const total = isHistory ? auditEvents.length : events.length
+  const visibleEvents = events.slice(0, visibleCount)
+
   return (
     <Box>
-      <ActivityTabs value={activeFilter} onChange={onFilterChange} />
+      <ActivityTabs value={activeFilter} onChange={handleFilterChange} />
 
       {activeFilter === "comment" ? (
         <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
-      {events.length === 0 ? (
+      {total === 0 ? (
         <Typography
           variant="caption"
           sx={{ color: "text.tertiary" }}
         >
           No activity to show
         </Typography>
+      ) : isHistory ? (
+        <AuditHistoryList events={auditEvents.slice(0, visibleCount)} recordNoun="service request" />
       ) : (
-        events.map((event, idx) => (
-          <ActivityFeedItem key={event.id} event={event} isLast={idx === events.length - 1} />
+        visibleEvents.map((event, idx) => (
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} />
         ))
+      )}
+
+      {visibleCount < total && (
+        <Box sx={{ pt: 1.5, display: "flex", justifyContent: "center" }}>
+          <Button
+            variant="text"
+            size="small"
+            onClick={handleLoadMore}
+            sx={{ color: "text.secondary", fontSize: 12 }}
+          >
+            Load more ({total - visibleCount} remaining)
+          </Button>
+        </Box>
       )}
     </Box>
   )
@@ -655,23 +602,9 @@ export default function ServiceRequestDetailPage() {
 
   const links = sr?.links ?? []
 
+  // Comments tab feed — work-notes + customer updates. History renders the audit
+  // stream directly via AuditHistoryList (no longer routed through FeedEvents).
   const allFeedEvents = React.useMemo<FeedEvent[]>(() => {
-    const audit: FeedEvent[] = (auditEvents ?? []).map((e) => {
-      const { type, text } = describeAuditEvent(e.action, e.data)
-      const transitionComment =
-        e.action === "STATUS_UPDATED"
-          ? readDataString(e.data, "comment") ?? readDataString(e.data, "closureSummary")
-          : null
-      return {
-        id: `audit-${e.id}`,
-        type,
-        actor: e.actorDisplayName ?? "System",
-        text,
-        note: transitionComment ?? undefined,
-        time: formatDateTime(e.createdAt),
-        createdAt: e.createdAt,
-      }
-    })
     const notes: FeedEvent[] = (workNotes ?? []).map((n) => ({
       id: `note-${n.id}`,
       type: "comment",
@@ -716,10 +649,10 @@ export default function ServiceRequestDetailPage() {
       time: formatDateTime(c.createdAt),
       createdAt: c.createdAt,
     }))
-    return [...audit, ...notes, ...updates].sort(
+    return [...notes, ...updates].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
-  }, [auditEvents, workNotes, customerUpdates, id])
+  }, [workNotes, customerUpdates, id])
 
   const visibleFeedEvents = React.useMemo<FeedEvent[]>(() => {
     return filterFeedEvents(allFeedEvents, activeFilter)
@@ -927,6 +860,7 @@ export default function ServiceRequestDetailPage() {
           <SectionPanel title="Activity">
             <ActivityContent
               events={visibleFeedEvents}
+              auditEvents={auditEvents ?? []}
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
               savingNote={savingNote}
@@ -939,6 +873,7 @@ export default function ServiceRequestDetailPage() {
   }, [
     sr,
     visibleFeedEvents,
+    auditEvents,
     activeFilter,
     handleFilterChange,
     savingNote,

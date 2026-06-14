@@ -1,12 +1,19 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { IncidentSeverity, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { emitAudit } from "../audit-events/emit-audit";
 import {
   ConvertTriageItemDto,
   TriageConvertTargetType,
   TriageLifecycleStatus,
   TriageSourceType
 } from "./dto";
+
+// Triage events are emitted with the PascalCase record name (NOT the raw enum) so they share the
+// entity stream with that record's own CREATED event — one coherent per-record history (admin view #95).
+function triageEntityType(sourceType: TriageSourceType): string {
+  return sourceType === TriageSourceType.REQUEST_INTAKE ? "RequestIntake" : "PublicSubmission";
+}
 
 function makeServiceRequestRef() {
   const y = new Date().getFullYear();
@@ -75,7 +82,7 @@ export class TriageService {
   ) {
     this.assertMandatoryConversionFields(dto);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const source = await this.loadSourceForClient(tx, clientId, sourceType, sourceId);
       if (source.status !== "NEW" && source.status !== "UNDER_REVIEW") {
         throw new BadRequestException("Triage item is already processed.");
@@ -107,27 +114,33 @@ export class TriageService {
         });
       }
 
-      await tx.auditEvent.create({
-        data: {
-          entityType: sourceType,
-          entityId: source.id,
-          action: "TRIAGE_CONVERTED",
-          actorUserId,
-          clientId,
-          data: {
-            targetType: target.entityType,
-            targetId: target.entityId
-          }
-        }
-      });
-
       return {
-        sourceType,
         sourceId: source.id,
+        sourceTitle: source.title,
         targetType: target.entityType,
-        targetId: target.entityId
+        targetId: target.entityId,
+        targetReference: target.reference
       };
     });
+
+    // Emitted post-commit through the single writer (emitAudit takes PrismaService, not a tx client).
+    // reference = the created target's ref; title = the source's title.
+    await emitAudit(this.prisma, {
+      entityType: triageEntityType(sourceType),
+      entityId: result.sourceId,
+      action: "TRIAGE_CONVERTED",
+      actorUserId,
+      clientId,
+      reference: result.targetReference,
+      title: result.sourceTitle
+    });
+
+    return {
+      sourceType,
+      sourceId: result.sourceId,
+      targetType: result.targetType,
+      targetId: result.targetId
+    };
   }
 
   async updateStatus(
@@ -142,7 +155,7 @@ export class TriageService {
       throw new BadRequestException("triageNotes are required when rejecting a triage item.");
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const fromStatus = await this.prisma.$transaction(async (tx) => {
       const source = await this.loadSourceForClient(tx, clientId, sourceType, sourceId);
       if (source.status === "CONVERTED" || source.status === "REJECTED") {
         throw new BadRequestException("Triage item is already finalized.");
@@ -166,26 +179,26 @@ export class TriageService {
         });
       }
 
-      await tx.auditEvent.create({
-        data: {
-          entityType: sourceType,
-          entityId: sourceId,
-          action: "TRIAGE_STATUS_UPDATED",
-          actorUserId,
-          clientId,
-          data: {
-            status,
-            triageNotes: triageNotes?.trim() || null
-          }
-        }
-      });
-
-      return {
-        sourceType,
-        sourceId,
-        status
-      };
+      return source.status;
     });
+
+    // Emitted post-commit through the single writer. Status transition as a `changes` entry;
+    // triageNotes carried as the transition `comment`.
+    await emitAudit(this.prisma, {
+      entityType: triageEntityType(sourceType),
+      entityId: sourceId,
+      action: "TRIAGE_STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      changes: [{ field: "status", label: "Status", from: fromStatus, to: status }],
+      comment: triageNotes?.trim() || null
+    });
+
+    return {
+      sourceType,
+      sourceId,
+      status
+    };
   }
 
   private async loadSourceForClient(
@@ -255,7 +268,8 @@ export class TriageService {
       });
       return {
         entityType: TriageConvertTargetType.SERVICE_REQUEST,
-        entityId: sr.id
+        entityId: sr.id,
+        reference: sr.reference
       };
     }
 
@@ -274,7 +288,8 @@ export class TriageService {
       });
       return {
         entityType: TriageConvertTargetType.INCIDENT,
-        entityId: incident.id
+        entityId: incident.id,
+        reference: incident.reference
       };
     }
 
@@ -293,7 +308,8 @@ export class TriageService {
 
     return {
       entityType: TriageConvertTargetType.TASK,
-      entityId: task.id
+      entityId: task.id,
+      reference: task.reference
     };
   }
 

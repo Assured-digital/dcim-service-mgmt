@@ -3,11 +3,27 @@ import { PrismaService } from "../prisma/prisma.service"
 import { CheckStatus } from "@prisma/client"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
+import { emitAudit } from "../audit-events/emit-audit"
 
 function makeRef(prefix: string) {
   const y = new Date().getFullYear()
   const n = Math.floor(Math.random() * 9000) + 1000
   return `${prefix}-${y}-${n}`
+}
+
+// Humanised CheckStatus values for audit STATUS_UPDATED `changes` (raw enum as fallback). Check has
+// no History tab yet (CheckDetailPage is custom); these emits feed the future admin audit view (#95)
+// and a later History tab needs zero backend work. The status transitions (not per-item responses)
+// are the audit-worthy lifecycle.
+const CHECK_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  SCHEDULED: "Scheduled",
+  ASSIGNED: "Assigned",
+  IN_PROGRESS: "In progress",
+  PENDING_REVIEW: "Pending review",
+  COMPLETED: "Completed",
+  CLOSED: "Closed",
+  CANCELLED: "Cancelled"
 }
 
 function calcPassRate(items: { response: string | null; isRequired: boolean }[]): number {
@@ -26,6 +42,34 @@ export class ChecksService {
 
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
+  }
+
+  // Single-writer status-transition emit for a Check. `from`/`to` are raw CheckStatus values,
+  // humanised here; `comment` carries the transition note (summary / reviewer notes / reason).
+  private async emitCheckStatus(
+    clientId: string,
+    checkId: string,
+    actorUserId: string | null,
+    from: string,
+    to: string,
+    comment?: string | null
+  ) {
+    await emitAudit(this.prisma, {
+      entityType: "Check",
+      entityId: checkId,
+      action: "STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "status",
+          label: "Status",
+          from: CHECK_STATUS_LABELS[from] ?? from,
+          to: CHECK_STATUS_LABELS[to] ?? to
+        }
+      ],
+      comment: comment?.trim() || null
+    })
   }
 
   // ── Templates ──────────────────────────────────────────────────────
@@ -222,6 +266,16 @@ export class ChecksService {
       }
     })
 
+    await emitAudit(this.prisma, {
+      entityType: "Check",
+      entityId: check.id,
+      action: "CREATED",
+      actorUserId,
+      clientId,
+      reference: check.reference,
+      title: check.title
+    })
+
     return { ...check, assignee: toUserDisplay(check.assignee) }
   }
 
@@ -231,10 +285,12 @@ export class ChecksService {
     if (!["DRAFT", "SCHEDULED", "ASSIGNED"].includes(check.status)) {
       throw new BadRequestException("Check cannot be started from its current status")
     }
-    return this.prisma.check.update({
+    const updated = await this.prisma.check.update({
       where: { id: check.id },
       data: { status: CheckStatus.IN_PROGRESS, startedAt: new Date() }
     })
+    await this.emitCheckStatus(clientId, check.id, actorUserId, check.status, CheckStatus.IN_PROGRESS)
+    return updated
   }
 
   async updateItem(clientId: string, checkId: string, itemId: string, dto: any, actorUserId: string) {
@@ -296,7 +352,7 @@ export class ChecksService {
 
     const passRate = calcPassRate(check.items)
 
-    return this.prisma.check.update({
+    const updated = await this.prisma.check.update({
       where: { id: check.id },
       data: {
         status: CheckStatus.PENDING_REVIEW,
@@ -305,6 +361,8 @@ export class ChecksService {
         passRate
       }
     })
+    await this.emitCheckStatus(clientId, check.id, actorUserId, check.status, CheckStatus.PENDING_REVIEW, dto.engineerSummary)
+    return updated
   }
 
   async approveCheck(clientId: string, id: string, dto: any, actorUserId: string) {
@@ -312,7 +370,7 @@ export class ChecksService {
     if (check.status !== CheckStatus.PENDING_REVIEW) {
       throw new BadRequestException("Only checks pending review can be approved")
     }
-    return this.prisma.check.update({
+    const updated = await this.prisma.check.update({
       where: { id: check.id },
       data: {
         status: CheckStatus.COMPLETED,
@@ -321,6 +379,8 @@ export class ChecksService {
         reviewerNotes: dto.reviewerNotes
       }
     })
+    await this.emitCheckStatus(clientId, check.id, actorUserId, check.status, CheckStatus.COMPLETED, dto.reviewerNotes)
+    return updated
   }
 
   async returnForRework(clientId: string, id: string, dto: any, actorUserId: string) {
@@ -328,7 +388,7 @@ export class ChecksService {
     if (check.status !== CheckStatus.PENDING_REVIEW) {
       throw new BadRequestException("Only checks pending review can be returned for rework")
     }
-    return this.prisma.check.update({
+    const updated = await this.prisma.check.update({
       where: { id: check.id },
       data: {
         status: CheckStatus.ASSIGNED,
@@ -336,20 +396,24 @@ export class ChecksService {
         reviewerNotes: dto.reviewerNotes
       }
     })
+    await this.emitCheckStatus(clientId, check.id, actorUserId, check.status, CheckStatus.ASSIGNED, dto.reviewerNotes)
+    return updated
   }
 
-  async cancelCheck(clientId: string, id: string, dto: any) {
+  async cancelCheck(clientId: string, id: string, dto: any, actorUserId: string | null) {
     const check = await this.getForClient(clientId, id)
     if (["COMPLETED", "CLOSED", "CANCELLED"].includes(check.status)) {
       throw new BadRequestException("This check cannot be cancelled")
     }
-    return this.prisma.check.update({
+    const updated = await this.prisma.check.update({
       where: { id: check.id },
       data: {
         status: CheckStatus.CANCELLED,
         cancellationReason: dto.cancellationReason
       }
     })
+    await this.emitCheckStatus(clientId, check.id, actorUserId, check.status, CheckStatus.CANCELLED, dto.cancellationReason)
+    return updated
   }
 
   async createFollowOn(

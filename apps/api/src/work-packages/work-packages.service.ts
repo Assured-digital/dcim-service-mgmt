@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
+import { emitAudit } from "../audit-events/emit-audit"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -70,15 +71,14 @@ export class WorkPackagesService {
           }
         })
 
-        await this.prisma.auditEvent.create({
-          data: {
-            entityType: "WorkPackage",
-            entityId: wp.id,
-            action: "CREATED",
-            actorUserId,
-            clientId,
-            data: { reference: wp.reference, title: wp.title }
-          }
+        await emitAudit(this.prisma, {
+          entityType: "WorkPackage",
+          entityId: wp.id,
+          action: "CREATED",
+          actorUserId,
+          clientId,
+          reference: wp.reference,
+          title: wp.title
         })
 
         return wp

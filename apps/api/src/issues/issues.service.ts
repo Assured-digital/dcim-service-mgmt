@@ -2,11 +2,33 @@ import { ForbiddenException, Injectable, NotFoundException, BadRequestException 
 import { PrismaService } from "../prisma/prisma.service"
 import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
+import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
+import { emitAudit } from "../audit-events/emit-audit"
 
 function makeRef() {
   const y = new Date().getFullYear()
   const n = Math.floor(Math.random() * 9000) + 1000
   return `ISS-${y}-${n}`
+}
+
+const ISSUE_SEVERITY_LABELS: Record<string, string> = {
+  RED: "Red",
+  AMBER: "Amber",
+  GREEN: "Green"
+}
+
+const ISSUE_STATUS_LABELS: Record<string, string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In progress",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed"
+}
+
+// Per-field humanisation for Issue updates. severity is the only humanisable updatable field
+// (DTO @IsIn RED/AMBER/GREEN) — Issue has no assignee column. `status` changes via the status
+// endpoint (STATUS_UPDATED). reviewDate (date) + the dead linkedEntity* scalars are omitted.
+const ISSUE_FIELD_SPEC: FieldSpec = {
+  severity: { label: "Severity", kind: "enum", labels: ISSUE_SEVERITY_LABELS }
 }
 
 @Injectable()
@@ -91,15 +113,14 @@ export class IssuesService {
             status: "OPEN"
           }
         })
-        await this.prisma.auditEvent.create({
-          data: {
-            entityType: "Issue",
-            entityId: issue.id,
-            action: "CREATED",
-            actorUserId,
-            clientId,
-            data: { reference: issue.reference, title: issue.title }
-          }
+        await emitAudit(this.prisma, {
+          entityType: "Issue",
+          entityId: issue.id,
+          action: "CREATED",
+          actorUserId,
+          clientId,
+          reference: issue.reference,
+          title: issue.title
         })
         return issue
       }
@@ -114,7 +135,7 @@ export class IssuesService {
     linkedEntityId?: string
   }) {
     const issue = await this.getForClient(clientId, id)
-    return this.prisma.issue.update({
+    const updated = await this.prisma.issue.update({
       where: { id: issue.id },
       data: {
         severity: dto.severity,
@@ -123,6 +144,21 @@ export class IssuesService {
         linkedEntityId: dto.linkedEntityId
       }
     })
+
+    // severity is an enum string; no ref fields on Issue — no resolvers needed.
+    const changes = diffRecord(issue, dto, ISSUE_FIELD_SPEC)
+    if (changes.length) {
+      await emitAudit(this.prisma, {
+        entityType: "Issue",
+        entityId: issue.id,
+        action: "UPDATED",
+        actorUserId,
+        clientId,
+        changes
+      })
+    }
+
+    return updated
   }
 
   async updateStatusForClient(clientId: string, id: string, actorUserId: string, dto: {
@@ -138,15 +174,21 @@ export class IssuesService {
         closedAt: dto.status === "CLOSED" ? new Date() : undefined
       }
     })
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "Issue",
-        entityId: issue.id,
-        action: "STATUS_UPDATED",
-        actorUserId,
-        clientId,
-        data: { from: issue.status, to: dto.status }
-      }
+    await emitAudit(this.prisma, {
+      entityType: "Issue",
+      entityId: issue.id,
+      action: "STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "status",
+          label: "Status",
+          from: ISSUE_STATUS_LABELS[issue.status] ?? issue.status,
+          to: ISSUE_STATUS_LABELS[dto.status] ?? dto.status
+        }
+      ],
+      comment: dto.resolution?.trim() || null
     })
     return updated
   }

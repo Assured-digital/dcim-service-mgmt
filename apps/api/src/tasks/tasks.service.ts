@@ -4,11 +4,36 @@ import { TaskStatus } from "@prisma/client";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
+import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
+import { emitAudit } from "../audit-events/emit-audit";
 
 function makeRef() {
   const y = new Date().getFullYear()
   const n = Math.floor(Math.random() * 9000) + 1000
   return `TSK-${y}-${n}`
+}
+
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical"
+}
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In progress",
+  BLOCKED: "Blocked",
+  DONE: "Done"
+}
+
+// Per-field humanisation for Task updates. `status` changes via the status endpoint
+// (STATUS_UPDATED). `dueAt` (date) is omitted — the shared diffRecord has no date kind.
+const TASK_FIELD_SPEC: FieldSpec = {
+  title: { label: "Title", kind: "scalar" },
+  description: { label: "Description", kind: "scalar" },
+  priority: { label: "Priority", kind: "enum", labels: PRIORITY_LABELS },
+  assigneeId: { label: "Assignee", kind: "ref" }
 }
 
 type ListFilters = {
@@ -127,15 +152,14 @@ export class TasksService {
           }
         })
 
-        await this.prisma.auditEvent.create({
-          data: {
-            entityType: "Task",
-            entityId: task.id,
-            action: "CREATED",
-            actorUserId,
-            clientId,
-            data: { reference: task.reference, title: task.title }
-          }
+        await emitAudit(this.prisma, {
+          entityType: "Task",
+          entityId: task.id,
+          action: "CREATED",
+          actorUserId,
+          clientId,
+          reference: task.reference,
+          title: task.title
         })
 
         return { ...task, assignee: toUserDisplay(task.assignee) }
@@ -162,19 +186,21 @@ export class TasksService {
       }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "Task",
-        entityId: task.id,
-        action: "STATUS_UPDATED",
-        actorUserId,
-        clientId,
-        data: {
-          from: task.status,
-          to: status,
-          comment: comment?.trim() || null
+    await emitAudit(this.prisma, {
+      entityType: "Task",
+      entityId: task.id,
+      action: "STATUS_UPDATED",
+      actorUserId,
+      clientId,
+      changes: [
+        {
+          field: "status",
+          label: "Status",
+          from: TASK_STATUS_LABELS[task.status] ?? task.status,
+          to: TASK_STATUS_LABELS[status] ?? status
         }
-      }
+      ],
+      comment: comment?.trim() || null
     });
 
     return updated;
@@ -199,7 +225,7 @@ export class TasksService {
     return date;
   }
 
-    async updateForClient(clientId: string, id: string, dto: {
+    async updateForClient(clientId: string, id: string, actorUserId: string, dto: {
     title?: string
     description?: string
     priority?: string
@@ -221,6 +247,29 @@ export class TasksService {
         incident: { select: { id: true, reference: true, title: true } }
       }
     })
-    return { ...updated, assignee: toUserDisplay(updated.assignee) }
+
+    const newAssignee = toUserDisplay(updated.assignee)
+    // Resolve assignee ids -> display names from rows already in hand (old via getForClient, new
+    // via the update include) — no extra lookup; humanised at emit time.
+    const assigneeNames = new Map<string, string>()
+    if (task.assignee) assigneeNames.set(task.assignee.id, task.assignee.displayName)
+    if (newAssignee) assigneeNames.set(newAssignee.id, newAssignee.displayName)
+
+    const changes = diffRecord(task, dto, TASK_FIELD_SPEC, {
+      assigneeId: (id) => (id ? assigneeNames.get(id) ?? null : null)
+    })
+
+    if (changes.length) {
+      await emitAudit(this.prisma, {
+        entityType: "Task",
+        entityId: task.id,
+        action: "UPDATED",
+        actorUserId,
+        clientId,
+        changes
+      })
+    }
+
+    return { ...updated, assignee: newAssignee }
   }
 }

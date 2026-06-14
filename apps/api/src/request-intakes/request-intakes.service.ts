@@ -1,5 +1,6 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { emitAudit } from "../audit-events/emit-audit";
 
 @Injectable()
 export class RequestIntakesService {
@@ -62,18 +63,13 @@ export class RequestIntakesService {
       }
     });
 
-    await this.prisma.auditEvent.create({
-      data: {
-        entityType: "RequestIntake",
-        entityId: created.id,
-        action: "CREATED",
-        actorUserId: requester.userId,
-        clientId,
-        data: {
-          title: created.title,
-          category: created.category ?? null
-        }
-      }
+    await emitAudit(this.prisma, {
+      entityType: "RequestIntake",
+      entityId: created.id,
+      action: "CREATED",
+      actorUserId: requester.userId,
+      clientId,
+      title: created.title
     });
 
     return created;
