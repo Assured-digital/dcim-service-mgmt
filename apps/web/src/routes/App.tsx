@@ -213,10 +213,11 @@ export default function App() {
           <Route path="work-packages" element={<WorkPackagesPage />} />
 
           {/* Admin */}
+          {/* Audit: explicit live-admin roles (excludes deprecated ADMIN) to match the API gate */}
           <Route
             path="audit"
             element={
-              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+              <RequireRoles roles={[ROLES.ORG_OWNER, ROLES.ORG_ADMIN, ROLES.SERVICE_MANAGER]}>
                 <AuditTrailPage />
               </RequireRoles>
             }

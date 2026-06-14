@@ -19,16 +19,10 @@ export class AuditEventsController {
     private readonly prisma: PrismaService
   ) {}
 
+  // Forensic list — gated to live admin roles only (ADMIN is deprecated/legacy, excluded).
+  // The per-record entity-history endpoint below stays broad (detail-page History).
   @Get()
-  @Roles(
-    Role.ORG_OWNER,
-    Role.ORG_ADMIN,
-    Role.ADMIN,
-    Role.SERVICE_MANAGER,
-    Role.SERVICE_DESK_ANALYST,
-    Role.ENGINEER,
-    Role.CLIENT_VIEWER
-  )
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.SERVICE_MANAGER)
   async list(
     @Req() req: any,
     @Query() query: ListAuditEventsQueryDto,
@@ -48,16 +42,9 @@ export class AuditEventsController {
     });
   }
 
+  // Filter dropdown for the forensic list — same admin-only gate as list().
   @Get("actors")
-  @Roles(
-    Role.ORG_OWNER,
-    Role.ORG_ADMIN,
-    Role.ADMIN,
-    Role.SERVICE_MANAGER,
-    Role.SERVICE_DESK_ANALYST,
-    Role.ENGINEER,
-    Role.CLIENT_VIEWER
-  )
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.SERVICE_MANAGER)
   async actors(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);

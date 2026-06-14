@@ -239,7 +239,7 @@ const personalItems: NavItem[] = [
 const scopeIndependentSections: NavSection[] = [
   {
     title: "Admin", icon: <AdminPanelSettingsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Audit Trail", path: "/audit", icon: <HistoryIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
+      { label: "Audit Trail", path: "/audit", icon: <HistoryIcon sx={{ fontSize: ICON_SIZE }} />, roles: [ROLES.ORG_OWNER, ROLES.ORG_ADMIN, ROLES.SERVICE_MANAGER] },
       { label: "Clients", path: "/clients", icon: <ApartmentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
       { label: "Users", path: "/admin/users", icon: <ManageAccountsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
     ]

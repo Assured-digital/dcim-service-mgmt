@@ -523,6 +523,10 @@ model AuditEvent {
 
   serviceRequestId String?
   serviceRequest   ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+
+  @@index([clientId, createdAt])
+  @@index([clientId, entityType, entityId])
+  @@index([clientId, actorUserId])
 }
 
 model RequestIntake {
