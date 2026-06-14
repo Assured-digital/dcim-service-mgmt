@@ -216,7 +216,7 @@ export class ChecksController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.checks.cancelCheck(clientId, id, dto)
+    return this.checks.cancelCheck(clientId, id, dto, user.userId)
   }
 
   @Get(":id/follow-ons")
