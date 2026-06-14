@@ -1,5 +1,6 @@
 import React from "react"
 import { Routes, Route, useParams, useNavigate, useSearchParams } from "react-router-dom"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Drawer, Box, IconButton } from "@mui/material"
 import CloseIcon from "@mui/icons-material/Close"
 import { DrillDownNavigator, type DrillDownPanel } from "../components/shared"
@@ -13,7 +14,7 @@ import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
 import { DrillNavContext, type DrillFn } from "../lib/drillNav"
 import { DetailNarrowProvider, DetailDrawerChromeProvider } from "../components/detail"
-import { routeForSegment } from "../lib/linkedRecords"
+import { routeForSegment, deleteRecordLink } from "../lib/linkedRecords"
 
 // ── Service Desk drill-down adopter ────────────────────────────────────────
 //
@@ -38,40 +39,82 @@ const REF_LABEL: Record<string, string> = {
   issue: "ISSUE",
 }
 
+// React Query key for the depth-1 record's detail query, so removing a link from the
+// drawer can refresh the parent's "Linked records" list. Keyed by the depth-1 :type
+// segment (only sr|inc|chg open at depth 1).
+const DETAIL_QUERY_KEY: Record<string, string> = {
+  sr: "sr-detail",
+  inc: "incident-detail",
+  chg: "change-detail",
+}
+
 export default function ServiceDeskNavigator() {
   const params = useParams()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [searchParams] = useSearchParams()
   const segments = (params["*"] ?? "").split("/").filter(Boolean)
   const [type, id, assocType, assocId] = segments
   const depth = !type ? 0 : assocType ? 2 : 1
 
+  // The id of the link being peeked, carried in the URL by the drilling row (`lid`)
+  // so the drawer's "Remove link" knows which RecordLink to delete. `baseSearch` is
+  // the filter query string WITHOUT it — used for clean back / open-full navigation.
+  const linkId = searchParams.get("lid") ?? undefined
+  const baseSearch = React.useMemo(() => {
+    const sp = new URLSearchParams(searchParams)
+    sp.delete("lid")
+    return sp.toString()
+  }, [searchParams])
+
   // Drill-down from a depth-1 record's right column: PUSH a depth-2 URL so back
-  // returns to the ticket. The filter query string is preserved so the queue
-  // rail keeps its working-set context.
-  const search = searchParams.toString()
+  // returns to the ticket. The filter query string is preserved so the queue rail
+  // keeps its working-set context; a linked-record row also stashes its `lid`.
   const drillPush = React.useCallback<DrillFn>(
-    (nt, aid) => navigate({ pathname: `/service-desk/${type}/${id}/${nt}/${aid}`, search }),
-    [navigate, type, id, search]
+    (nt, aid, lid) => {
+      const sp = new URLSearchParams(searchParams)
+      if (lid) sp.set("lid", lid)
+      else sp.delete("lid")
+      navigate({ pathname: `/service-desk/${type}/${id}/${nt}/${aid}`, search: sp.toString() })
+    },
+    [navigate, type, id, searchParams]
   )
   // Closing the depth-2 drawer returns to the depth-1 ticket, preserving the
-  // filter query string. (Escape/backdrop and the X button both call this.)
+  // filter query string (minus the drawer-only `lid`). (Escape/backdrop and the X
+  // button both call this.)
   const closeDrawer = React.useCallback(
-    () => navigate({ pathname: `/service-desk/${type}/${id}`, search }),
-    [navigate, type, id, search]
+    () => navigate({ pathname: `/service-desk/${type}/${id}`, search: baseSearch }),
+    [navigate, type, id, baseSearch]
   )
+
+  // "Remove link" in the drawer's ⋯ menu: delete the link between the depth-1 record
+  // and the one open in the drawer (reuses the shared deleteRecordLink), then refresh
+  // the parent's "Linked records" list and close the drawer. Fires immediately — the
+  // menu step IS the deliberate gate (no confirm).
+  const removeLinkMutation = useMutation({
+    mutationFn: (lid: string) => deleteRecordLink(lid),
+    onSuccess: () => {
+      const key = DETAIL_QUERY_KEY[type]
+      if (key) qc.invalidateQueries({ queryKey: [key, id] })
+      closeDrawer()
+    },
+  })
+  const onRemoveLink = React.useCallback(() => {
+    if (linkId) removeLinkMutation.mutate(linkId)
+  }, [linkId, removeLinkMutation])
 
   // The drawer's detail shell portals its status control into this header slot, and
   // folds "Open full" into its overflow menu (see DetailDrawerChrome). The slot is a
   // DOM node published via state so the shell re-renders the portal once it mounts.
   const [headerSlot, setHeaderSlot] = React.useState<HTMLElement | null>(null)
   const onOpenFull = React.useCallback(
-    () => navigate({ pathname: routeForSegment(assocType, assocId), search }),
-    [navigate, assocType, assocId, search]
+    () => navigate({ pathname: routeForSegment(assocType, assocId), search: baseSearch }),
+    [navigate, assocType, assocId, baseSearch]
   )
   const drawerChrome = React.useMemo(
-    () => ({ headerSlot, onOpenFull }),
-    [headerSlot, onOpenFull]
+    // onRemoveLink only when the drawer was reached via a linked-record row (lid present).
+    () => ({ headerSlot, onOpenFull, onRemoveLink: linkId ? onRemoveLink : undefined }),
+    [headerSlot, onOpenFull, linkId, onRemoveLink]
   )
 
   const panels: DrillDownPanel[] = [

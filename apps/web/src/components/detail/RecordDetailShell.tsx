@@ -19,6 +19,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import OpenInFullIcon from "@mui/icons-material/OpenInFull"
+import LinkOffIcon from "@mui/icons-material/LinkOff"
 import { useNavigate } from "react-router-dom"
 import { StatusPopover, type PopoverOption } from "./StatusPopover"
 import { useNotification } from "../NotificationProvider"
@@ -661,15 +662,26 @@ function RecordDetailShellImpl({
   )
 
   // In the drawer, "Open full" is an overflow-menu item (not a standalone button),
-  // appended after the record's own overflow actions. On the main page it's just the
+  // appended after the record's own overflow actions; "Remove link" follows it (only
+  // when the drawer was opened from a linked-record row — chrome.onRemoveLink set),
+  // last and danger-styled as the destructive action. On the main page it's just the
   // record's own items.
   const effectiveMoreItems = React.useMemo<MoreMenuItem[]>(() => {
     const base = moreMenuItems ?? []
     if (narrow && chrome) {
-      return [
+      const items: MoreMenuItem[] = [
         ...base,
         { label: "Open full", icon: <OpenInFullIcon sx={{ fontSize: 16 }} />, onClick: chrome.onOpenFull },
       ]
+      if (chrome.onRemoveLink) {
+        items.push({
+          label: "Remove link",
+          icon: <LinkOffIcon sx={{ fontSize: 16 }} />,
+          onClick: chrome.onRemoveLink,
+          danger: true,
+        })
+      }
+      return items
     }
     return base
   }, [moreMenuItems, narrow, chrome])

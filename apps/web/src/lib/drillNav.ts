@@ -12,8 +12,12 @@ import { createContext, useContext } from "react"
 //     never reach depth 3 (the cap).
 // No provider (standalone Task/Risk/Issue/Maintenance pages) → null, and the row
 // falls back to its existing absolute-route navigation.
+//
+// Optional `linkId`: when a linked-record row drills, it passes the id of the link
+// it represents so the navigator can offer "Remove link" in the peek drawer's
+// overflow menu (the removal needs the link identity, which only the row holds).
 
-export type DrillFn = (navType: string, id: string) => void
+export type DrillFn = (navType: string, id: string, linkId?: string) => void
 
 export const DrillNavContext = createContext<DrillFn | null>(null)
 
