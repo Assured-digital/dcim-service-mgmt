@@ -1,30 +1,10 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import {
-  Chip,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  List,
-  ListItem,
-  ListItemText,
-  Stack,
-  Typography
-} from "@mui/material";
-import { statusChipSx } from "../lib/ui";
+import { Dialog, DialogContent, DialogTitle } from "@mui/material";
 import { EmptyState, ErrorState, LoadingState } from "./PageState";
-
-type AuditItem = {
-  id: string;
-  entityType: string;
-  entityId: string;
-  action: string;
-  actorUserId: string | null;
-  actorDisplayName?: string | null;
-  data: Record<string, unknown> | null;
-  createdAt: string;
-};
+import { type AuditEvent } from "../lib/auditEvents";
+import { AuditHistoryList } from "./AuditHistoryList";
 
 type Props = {
   open: boolean;
@@ -38,8 +18,11 @@ export function EntityHistoryDialog({ open, onClose, entityType, entityId, title
   const query = useQuery({
     queryKey: ["entity-history", entityType, entityId],
     enabled: open,
-    queryFn: async () => (await api.get<AuditItem[]>(`/audit-events/entity/${entityType}/${entityId}`)).data
+    queryFn: async () =>
+      (await api.get<AuditEvent[]>(`/audit-events/entity/${entityType}/${entityId}`)).data
   });
+
+  const events = query.data ?? [];
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -47,54 +30,12 @@ export function EntityHistoryDialog({ open, onClose, entityType, entityId, title
       <DialogContent>
         {query.isLoading ? <LoadingState /> : null}
         {query.error ? <ErrorState title="Failed to load history" /> : null}
-        {!query.isLoading && !query.error && (query.data?.length ?? 0) === 0 ? (
+        {!query.isLoading && !query.error && events.length === 0 ? (
           <EmptyState title="No history yet" detail="No audit events were found for this entity." />
         ) : null}
-        <List disablePadding>
-          {(query.data ?? []).map((event) => {
-            const details = event.data ? JSON.stringify(event.data) : null;
-            return (
-              <ListItem key={event.id} divider alignItems="flex-start">
-                <ListItemText
-                  primary={
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Chip size="small" sx={statusChipSx(event.action)} label={event.action.toLowerCase()} />
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {event.actorDisplayName ?? "system"}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(event.createdAt).toLocaleString()}
-                      </Typography>
-                    </Stack>
-                  }
-                  secondary={
-                    details ? (
-                      <Typography
-                        variant="caption"
-                        component="pre"
-                        sx={{
-                          display: "block",
-                          mt: 0.8,
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-word",
-                          bgcolor: "#f8fafc",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: 1,
-                          px: 1,
-                          py: 0.75
-                        }}
-                      >
-                        {details}
-                      </Typography>
-                    ) : null
-                  }
-                />
-              </ListItem>
-            );
-          })}
-        </List>
+        {/* Shared, humanised, content-free renderer — recordNoun derives from each event's entityType. */}
+        {events.length > 0 ? <AuditHistoryList events={events} /> : null}
       </DialogContent>
     </Dialog>
   );
 }
-

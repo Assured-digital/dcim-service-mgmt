@@ -55,6 +55,8 @@ import { userLabel } from "../lib/userDisplay"
 import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
 import { statusColors } from "../components/shared"
+import { type AuditEvent } from "../lib/auditEvents"
+import { AuditHistoryList } from "../components/AuditHistoryList"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -666,13 +668,15 @@ const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Activity section (spec section 6) — empty for maintenance until backend
-// supports audit/comments. Compose box is hidden because no comments
-// mutation is wired for maintenance.
+// Activity section (spec section 6). Comments are empty for maintenance until the
+// backend wires comments (compose box hidden — no comments mutation). History
+// renders the audit stream directly via AuditHistoryList; maintenance emits no
+// audit events yet, so it shows the empty state until 1b adds them.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ActivityContentProps {
   events: FeedEvent[]
+  auditEvents: AuditEvent[]
   activeFilter: ActivityFilter
   onFilterChange: (filter: ActivityFilter) => void
   composeEnabled: boolean
@@ -682,28 +686,63 @@ interface ActivityContentProps {
 
 const ActivityContent = React.memo(function ActivityContent({
   events,
+  auditEvents,
   activeFilter,
   onFilterChange,
   composeEnabled,
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const [visibleCount, setVisibleCount] = React.useState(10)
+
+  const handleFilterChange = React.useCallback(
+    (filter: ActivityFilter) => {
+      setVisibleCount(10)
+      onFilterChange(filter)
+    },
+    [onFilterChange]
+  )
+
+  const handleLoadMore = React.useCallback(
+    () => setVisibleCount((c) => c + 10),
+    []
+  )
+
+  const isHistory = activeFilter === "all"
+  const total = isHistory ? auditEvents.length : events.length
+  const visibleEvents = events.slice(0, visibleCount)
+
   return (
     <Box>
-      <ActivityTabs value={activeFilter} onChange={onFilterChange} />
+      <ActivityTabs value={activeFilter} onChange={handleFilterChange} />
 
       {composeEnabled && activeFilter === "comment" ? (
         <SlimExpandCommentBox saving={savingNote} onPost={onPostNote} />
       ) : null}
 
-      {events.length === 0 ? (
+      {total === 0 ? (
         <Typography variant="caption" sx={{ color: "text.tertiary" }}>
           No activity to show
         </Typography>
+      ) : isHistory ? (
+        <AuditHistoryList events={auditEvents.slice(0, visibleCount)} recordNoun="maintenance record" />
       ) : (
-        events.map((event, idx) => (
-          <ActivityFeedItem key={event.id} event={event} isLast={idx === events.length - 1} />
+        visibleEvents.map((event, idx) => (
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} />
         ))
+      )}
+
+      {visibleCount < total && (
+        <Box sx={{ pt: 1.5, display: "flex", justifyContent: "center" }}>
+          <Button
+            variant="text"
+            size="small"
+            onClick={handleLoadMore}
+            sx={{ color: "text.secondary", fontSize: 12 }}
+          >
+            Load more ({total - visibleCount} remaining)
+          </Button>
+        </Box>
       )}
     </Box>
   )
@@ -760,6 +799,15 @@ export default function MaintenanceDetailPage() {
   // performedByLabel below still reads the embedded performedBy first and only
   // falls back to this list, so existing records resolve regardless.
   const users = useAssignableUsers()
+
+  // Audit stream for the History tab. Maintenance emits no audit events yet, so this
+  // currently returns []; it lights up automatically when 1b wires maintenance audit.
+  const { data: auditEvents } = useQuery({
+    queryKey: ["audit-maintenance", id],
+    queryFn: async () =>
+      (await api.get<AuditEvent[]>(`/audit-events/entity/Maintenance/${id}`)).data,
+    enabled: !!id,
+  })
 
   // ── Mutations (preserved exactly) ──────────────────────────────────────────
 
@@ -1091,6 +1139,7 @@ export default function MaintenanceDetailPage() {
           <SectionPanel title="Activity">
             <ActivityContent
               events={visibleFeedEvents}
+              auditEvents={auditEvents ?? []}
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
               composeEnabled={false}
@@ -1109,6 +1158,7 @@ export default function MaintenanceDetailPage() {
     handleCommitWorkTypeOther,
     handleCommitNotes,
     visibleFeedEvents,
+    auditEvents,
     activeFilter,
     handleFilterChange,
     savingNote,
