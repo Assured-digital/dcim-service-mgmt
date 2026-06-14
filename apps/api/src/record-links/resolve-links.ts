@@ -166,6 +166,18 @@ export async function resolveRecordSummary(
   return rec ?? null;
 }
 
+// Batch-resolve many ids of ONE type within the scoped client (one query). Used by
+// the audit grid to turn entityType+entityId into a human reference/title for events
+// (e.g. UPDATED/STATUS_UPDATED) that don't carry a denormalised reference.
+export async function resolveRecordSummaries(
+  prisma: PrismaService,
+  clientId: string,
+  type: AttachmentRecordType,
+  ids: string[]
+): Promise<LinkRecordSummary[]> {
+  return queryRecords(prisma, clientId, type, { ids });
+}
+
 // Search linkable records of one type within the scoped client (powers the picker).
 export async function searchRecords(
   prisma: PrismaService,

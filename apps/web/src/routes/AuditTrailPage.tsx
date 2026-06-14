@@ -20,20 +20,24 @@ import {
 } from "@mui/material";
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState";
 import { statusChipSx } from "../lib/ui";
+import { type AuditEvent, humaniseAuditEvent } from "../lib/auditEvents";
 
-type AuditEvent = {
-  id: string;
-  entityType: string;
-  entityId: string;
-  action: string;
-  actorUserId: string | null;
-  actorDisplayName?: string | null;
-  data: Record<string, unknown> | null;
-  createdAt: string;
-};
+// Reads a non-empty string field from the event's data JSON. `reference`/`title` are
+// denormalised onto every event at emit time (see emit-audit.ts), so the forensic grid
+// can show "INC-2026-0001 · Incident" without a backend join. Mirrors the private helper
+// in lib/auditEvents.
+function readStr(data: Record<string, unknown> | null | undefined, key: string): string | null {
+  const v = data?.[key];
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+// The list endpoint enriches each event with a live entity reference/title (resolved
+// from the record, since most events carry no denormalised reference). Falls back to
+// data.reference/title, then the raw id, all handled below.
+type AuditRow = AuditEvent & { entityRef?: string | null; entityTitle?: string | null };
 
 type AuditResponse = {
-  items: AuditEvent[];
+  items: AuditRow[];
   total: number;
   page: number;
   pageSize: number;
@@ -86,9 +90,11 @@ export default function AuditTrailPage() {
   );
   const entityOptions = useMemo(
     () =>
-      Array.from(new Set((audit.data?.items ?? []).map((x) => x.entityType))).sort((a, b) =>
-        a.localeCompare(b)
-      ),
+      Array.from(
+        new Set(
+          (audit.data?.items ?? []).map((x) => x.entityType).filter((v): v is string => !!v)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
     [audit.data?.items]
   );
 
@@ -208,31 +214,37 @@ export default function AuditTrailPage() {
                   <TableRow key={event.id}>
                     <TableCell>{new Date(event.createdAt).toLocaleString()}</TableCell>
                     <TableCell>{event.actorDisplayName ?? "system"}</TableCell>
-                    <TableCell>{`${event.entityType} / ${event.entityId}`}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {event.entityRef ?? readStr(event.data, "reference") ?? event.entityId ?? "—"}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {[event.entityType, event.entityTitle ?? readStr(event.data, "title")]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
+                      </Typography>
+                    </TableCell>
                     <TableCell>
                       <Chip size="small" sx={statusChipSx(event.action)} label={event.action.toLowerCase()} />
                     </TableCell>
                     <TableCell>
-                      {event.data ? (
-                        <Typography
-                          variant="caption"
-                          component="pre"
-                          sx={{
-                            whiteSpace: "pre-wrap",
-                            wordBreak: "break-word",
-                            bgcolor: "#f8fafc",
-                            border: "1px solid #e2e8f0",
-                            borderRadius: 1,
-                            px: 1,
-                            py: 0.75,
-                            m: 0
-                          }}
-                        >
-                          {JSON.stringify(event.data)}
-                        </Typography>
-                      ) : (
-                        "-"
-                      )}
+                      {(() => {
+                        const humanised = humaniseAuditEvent(event);
+                        return (
+                          <Stack spacing={0.25}>
+                            {humanised.lines.map((line, i) => (
+                              <Typography key={i} variant="body2">
+                                {line}
+                              </Typography>
+                            ))}
+                            {humanised.note ? (
+                              <Typography variant="caption" color="text.secondary">
+                                “{humanised.note}”
+                              </Typography>
+                            ) : null}
+                          </Stack>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}
