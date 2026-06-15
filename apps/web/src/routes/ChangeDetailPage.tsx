@@ -32,7 +32,7 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined"
 import BlockIcon from "@mui/icons-material/Block"
 import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined"
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined"
-import { statusColors, PriorityPill, type LinkedTask } from "../components/shared"
+import { statusColors, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -1052,9 +1052,7 @@ export default function ChangeDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography variant="body2" color="text.secondary">
-              Change
-            </Typography>
+            <TypeBadge kind="CHG" label="Change" />
           </Box>
         ),
       },
@@ -1095,18 +1093,7 @@ export default function ChangeDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            {change.assignee ? (
-              <Typography variant="body2" color="text.secondary">
-                {userLabel(change.assignee)}
-              </Typography>
-            ) : (
-              <Typography
-                variant="body2"
-                sx={{ color: "text.disabled", fontStyle: "italic" }}
-              >
-                Unassigned
-              </Typography>
-            )}
+            <AssigneeCell user={change.assignee} />
           </Box>
         ),
       },
@@ -1267,7 +1254,7 @@ export default function ChangeDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!change) return undefined
     return {
-      submittedBy: change.createdBy?.displayName ?? null,
+      submittedBy: <AssigneeCell user={change.createdBy ?? null} emptyLabel="—" />,
       createdAt: change.createdAt,
       updatedAt: change.updatedAt,
     }

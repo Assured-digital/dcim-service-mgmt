@@ -61,8 +61,7 @@ import { AttachmentsContent, type AttachmentsHandle } from "../components/Attach
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
-import { userLabel } from "../lib/userDisplay"
-import { statusColors, PriorityPill } from "../components/shared"
+import { statusColors, PriorityPill, TypeBadge, AssigneeCell } from "../components/shared"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -662,9 +661,7 @@ export default function TaskDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography variant="body2" color="text.secondary">
-              Task
-            </Typography>
+            <TypeBadge kind="TASK" label="Task" />
           </Box>
         ),
       },
@@ -693,15 +690,7 @@ export default function TaskDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            {task.assignee ? (
-              <Typography sx={{ fontSize: 12 }}>{userLabel(task.assignee)}</Typography>
-            ) : (
-              <Typography
-                sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}
-              >
-                Unassigned
-              </Typography>
-            )}
+            <AssigneeCell user={task.assignee} />
           </Box>
         ),
       },

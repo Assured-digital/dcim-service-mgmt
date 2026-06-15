@@ -26,17 +26,14 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import PersonIcon from "@mui/icons-material/Person"
-import { statusColors, type LinkedTask } from "../components/shared"
-import { userLabel } from "../lib/userDisplay"
+import { statusColors, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
-import { useBreadcrumb } from "./Shell"
 import {
   EditableTitleCard,
-  useDetailNarrow,
   SlimExpandCommentBox,
   ActivityFeedItem,
   type ResolvedMention,
@@ -493,19 +490,13 @@ export default function RiskDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { notify } = useNotification()
-  const { setPageFullBleed } = useBreadcrumb()
-  const narrow = useDetailNarrow()
 
-  // Render flush in the Shell content area (no surrounding padding/frame), matching
-  // the Service Request detail page, whose ServiceDeskPage wrapper sets this.
-  // In the narrow association-peek drawer the main ticket page behind owns full-bleed;
-  // the drawer instance must NOT touch it, else its unmount on close clobbers the main
-  // page's state (same rule as the breadcrumb label — see RecordDetailShell).
-  React.useEffect(() => {
-    if (narrow) return
-    setPageFullBleed(true)
-    return () => setPageFullBleed(false)
-  }, [narrow, setPageFullBleed])
+  // Full-bleed is owned by RisksIssuesNavigator (the shared DrillDownNavigator
+  // asserts it for the whole /risks-issues/* subtree and clears it on unmount).
+  // This page deliberately does NOT touch it — at depth 1 the assertion is already
+  // in force, and resetting it on unmount when drilling back to the list would
+  // clobber the navigator's state and leave the list in the Shell's default padding.
+  // Mirrors the SR/INC/CHG detail pages, which likewise leave full-bleed to the navigator.
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -909,9 +900,7 @@ export default function RiskDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography variant="body2" color="text.secondary">
-              Risk
-            </Typography>
+            <TypeBadge kind="RSK" label="Risk" />
           </Box>
         ),
       },
@@ -970,13 +959,7 @@ export default function RiskDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            {risk.assignee ? (
-              <Typography sx={{ fontSize: 12 }}>{userLabel(risk.assignee)}</Typography>
-            ) : (
-              <Typography sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}>
-                Unassigned
-              </Typography>
-            )}
+            <AssigneeCell user={risk.assignee} />
           </Box>
         ),
       },
@@ -1064,7 +1047,7 @@ export default function RiskDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!risk) return undefined
     return {
-      submittedBy: risk.createdBy?.displayName ?? null,
+      submittedBy: <AssigneeCell user={risk.createdBy ?? null} emptyLabel="—" />,
       createdAt: risk.createdAt,
       updatedAt: risk.updatedAt,
     }

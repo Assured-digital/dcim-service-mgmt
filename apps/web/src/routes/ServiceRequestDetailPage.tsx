@@ -25,7 +25,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import { statusColors, PriorityPill, type LinkedTask } from "../components/shared"
+import { statusColors, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -62,7 +62,6 @@ import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
 import { TasksSectionContent } from "../components/TasksSectionContent"
-import { userLabel } from "../lib/userDisplay"
 import { type AuditEvent } from "../lib/auditEvents"
 import { AuditHistoryList } from "../components/AuditHistoryList"
 
@@ -763,9 +762,7 @@ export default function ServiceRequestDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography variant="body2" color="text.secondary">
-              Service Request
-            </Typography>
+            <TypeBadge kind="SR" label="Service Request" />
           </Box>
         ),
       },
@@ -806,15 +803,7 @@ export default function ServiceRequestDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            {sr.assignee ? (
-              <Typography sx={{ fontSize: 12 }}>{userLabel(sr.assignee)}</Typography>
-            ) : (
-              <Typography
-                sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}
-              >
-                Unassigned
-              </Typography>
-            )}
+            <AssigneeCell user={sr.assignee} />
           </Box>
         ),
       },
@@ -876,7 +865,7 @@ export default function ServiceRequestDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!sr) return undefined
     return {
-      submittedBy: sr.createdBy?.displayName ?? null,
+      submittedBy: <AssigneeCell user={sr.createdBy ?? null} emptyLabel="—" />,
       createdAt: sr.createdAt,
       updatedAt: sr.updatedAt,
     }

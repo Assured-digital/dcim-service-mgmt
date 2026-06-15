@@ -13,8 +13,6 @@ const ServiceDeskNavigator     = React.lazy(() => import("./ServiceDeskNavigator
 const ServiceDeskDashboard     = React.lazy(() => import("./ServiceDeskDashboard"))
 const TasksPage                = React.lazy(() => import("./TasksPage"))
 const TaskDetailPage           = React.lazy(() => import("./TaskDetailPage"))
-const RiskDetailPage           = React.lazy(() => import("./RiskDetailPage"))
-const IssueDetailPage          = React.lazy(() => import("./IssueDetailPage"))
 const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
 const AssetRegisterPage        = React.lazy(() => import("./AssetRegisterPage"))
 const ChecksPage               = React.lazy(() => import("./ChecksPage"))
@@ -33,7 +31,7 @@ const MaintenancePage          = React.lazy(() => import("./MaintenancePage"))
 const MaintenanceDetailPage    = React.lazy(() => import("./MaintenanceDetailPage"))
 const ConnectionsPage          = React.lazy(() => import("./ConnectionsPage"))
 const ConnectionDetailPage     = React.lazy(() => import("./ConnectionDetailPage"))
-const RisksIssuesPage          = React.lazy(() => import("./RisksIssuesPage"))
+const RisksIssuesNavigator     = React.lazy(() => import("./RisksIssuesNavigator"))
 const SettingsPage             = React.lazy(() => import("./SettingsPage"))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -157,10 +155,11 @@ export default function App() {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/:id" element={<TaskDetailPage />} />
 
-          {/* Risks & Issues — single unified page */}
-          <Route path="risks-issues" element={<RisksIssuesPage />} />
-          <Route path="risks-issues/risks/:id" element={<RiskDetailPage />} />
-          <Route path="risks-issues/issues/:id" element={<IssueDetailPage />} />
+          {/* Risks & Issues — the drill-down navigator owns the whole
+              /risks-issues/* subtree (list → record → association), driven entirely
+              by the URL (mirrors /service-desk/*). More-specific siblings below still
+              win by RR v6 route ranking (static/dynamic outrank the splat). */}
+          <Route path="risks-issues/*" element={<RisksIssuesNavigator />} />
           {/* Legacy risk/issue redirects */}
           <Route path="risks" element={<Navigate to="/risks-issues" replace />} />
           <Route path="issues" element={<Navigate to="/risks-issues" replace />} />

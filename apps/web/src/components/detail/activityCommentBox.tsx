@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Box, Button, IconButton, Tooltip } from "@mui/material"
+import { Box, Button, IconButton, Stack, Tooltip } from "@mui/material"
 import FormatBoldIcon from "@mui/icons-material/FormatBold"
 import FormatItalicIcon from "@mui/icons-material/FormatItalic"
 import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted"
@@ -77,7 +77,7 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
   saving,
   onPost,
   placeholder = "Add a work note...",
-  submitLabel = "Post note",
+  submitLabel = "Post",
   autoFocus = false,
   hideActionsWhenEmpty = false,
   onBlurEmpty,
@@ -190,6 +190,15 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
     if (!editor.isDestroyed) editor.commands.clearContent(true)
   }, [editor, saving, onPost])
 
+  // Cancel — mirrors EditableField's cancel (discard draft + exit edit mode). Clears the
+  // editor content, then collapses back to the slim pretext via onBlurEmpty (the slim-mode
+  // analog of leaving edit mode; optional-chained as it's only set in slim mode).
+  const handleCancel = React.useCallback(() => {
+    if (!editor) return
+    if (!editor.isDestroyed) editor.commands.clearContent(true)
+    onBlurEmpty?.()
+  }, [editor, onBlurEmpty])
+
   // Focus left the editor entirely (relatedTarget outside the wrapper). In slim-reply
   // mode an EMPTY field collapses back to its pretext; a field with unsaved content
   // stays open. Toolbar buttons preventDefault on mousedown, so toggling a mark never
@@ -228,135 +237,136 @@ export const ActivityCommentBox = React.memo(function ActivityCommentBox({
   const disabled = !ed || ed.empty || saving
 
   return (
-    <Box
-      onBlur={handleWrapperBlur}
-      sx={{
-        mb: 1.75,
-        borderRadius: 1,
-        border: "1px solid",
-        borderColor: "divider",
-        bgcolor: "transparent",
-        overflow: "hidden",
-        // Shared focus affordance with the editable title/description fields:
-        // idle = divider token, active = accent token. 1px in both states, so
-        // clicking in highlights the edge without resizing or jumping.
-        transition: "border-color 120ms ease",
-        "&:focus-within": { borderColor: "primary.main" },
-      }}
-    >
-      {/* Quiet toolbar — markdown shortcuts work too; these are for discoverability. */}
+    // Outer wrapper owns the bottom margin + the blur handler. Keeping onBlur here (not on
+    // the bordered box) means focus moving to the Post/Cancel buttons below stays "inside"
+    // the wrapper and never trips the slim-reply collapse — same reason EditableField puts
+    // its onBlur on the outer Box around the field + Save/Cancel row.
+    <Box onBlur={handleWrapperBlur} sx={{ mb: 1.75 }}>
       <Box
         sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 0.25,
-          px: 0.5,
-          py: 0.25,
-          borderBottom: "1px solid",
+          borderRadius: 1,
+          border: "1px solid",
           borderColor: "divider",
+          bgcolor: "transparent",
+          overflow: "hidden",
+          // Shared focus affordance with the editable title/description fields:
+          // idle = divider token, active = accent token. 1px in both states, so
+          // clicking in highlights the edge without resizing or jumping.
+          transition: "border-color 120ms ease",
+          "&:focus-within": { borderColor: "primary.main" },
         }}
       >
-        <ToolbarBtn
-          label="Bold"
-          active={!!ed?.bold}
-          onClick={() => editor?.chain().focus().toggleBold().run()}
-        >
-          <FormatBoldIcon fontSize="small" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Italic"
-          active={!!ed?.italic}
-          onClick={() => editor?.chain().focus().toggleItalic().run()}
-        >
-          <FormatItalicIcon fontSize="small" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Bulleted list"
-          active={!!ed?.bullet}
-          onClick={() => editor?.chain().focus().toggleBulletList().run()}
-        >
-          <FormatListBulletedIcon fontSize="small" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Numbered list"
-          active={!!ed?.ordered}
-          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-        >
-          <FormatListNumberedIcon fontSize="small" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Inline code"
-          active={!!ed?.code}
-          onClick={() => editor?.chain().focus().toggleCode().run()}
-        >
-          <CodeIcon fontSize="small" />
-        </ToolbarBtn>
-        <ToolbarBtn label="Link" active={!!ed?.link} onClick={handleLink}>
-          <LinkIcon fontSize="small" />
-        </ToolbarBtn>
-      </Box>
-
-      {/* Editor surface. Styling targets the ProseMirror root (.comment-editor). */}
-      <Box
-        sx={{
-          px: 1.5,
-          py: 1,
-          fontSize: "0.875rem",
-          "& .comment-editor": { outline: "none", minHeight: "3em", lineHeight: 1.5 },
-          "& .comment-editor p": { m: 0 },
-          "& .comment-editor p + p": { mt: 0.75 },
-          "& .comment-editor ul, & .comment-editor ol": { pl: 3, my: 0.5 },
-          "& .comment-editor li > p": { m: 0 },
-          "& .comment-editor code": {
-            px: 0.5,
-            py: "1px",
-            borderRadius: 0.5,
-            bgcolor: "action.hover",
-            fontFamily: "monospace",
-            fontSize: "0.85em",
-          },
-          "& .comment-editor a": { color: "primary.main", textDecoration: "underline" },
-          "& .comment-mention": {
-            color: "primary.main",
-            fontWeight: 600,
-            bgcolor: "action.hover",
-            borderRadius: 0.5,
-            px: 0.25,
-          },
-          // Placeholder (TipTap Placeholder extension marks the empty first node).
-          "& .comment-editor p.is-editor-empty:first-of-type::before": {
-            content: "attr(data-placeholder)",
-            color: "text.disabled",
-            float: "left",
-            height: 0,
-            pointerEvents: "none",
-          },
-        }}
-      >
-        <EditorContent editor={editor} />
-      </Box>
-
-      {/* Post bar. In slim-reply mode it stays hidden until the field is dirty
-          (has content) — the quiet "Post-on-dirty" affordance; otherwise always shown. */}
-      {!hideActionsWhenEmpty || !ed?.empty ? (
+        {/* Quiet toolbar — markdown shortcuts work too; these are for discoverability. */}
         <Box
           sx={{
             display: "flex",
-            justifyContent: "flex-end",
-            p: 0.75,
-            borderTop: "1px solid",
+            alignItems: "center",
+            gap: 0.25,
+            px: 0.5,
+            py: 0.25,
+            borderBottom: "1px solid",
             borderColor: "divider",
           }}
         >
+          <ToolbarBtn
+            label="Bold"
+            active={!!ed?.bold}
+            onClick={() => editor?.chain().focus().toggleBold().run()}
+          >
+            <FormatBoldIcon fontSize="small" />
+          </ToolbarBtn>
+          <ToolbarBtn
+            label="Italic"
+            active={!!ed?.italic}
+            onClick={() => editor?.chain().focus().toggleItalic().run()}
+          >
+            <FormatItalicIcon fontSize="small" />
+          </ToolbarBtn>
+          <ToolbarBtn
+            label="Bulleted list"
+            active={!!ed?.bullet}
+            onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          >
+            <FormatListBulletedIcon fontSize="small" />
+          </ToolbarBtn>
+          <ToolbarBtn
+            label="Numbered list"
+            active={!!ed?.ordered}
+            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+          >
+            <FormatListNumberedIcon fontSize="small" />
+          </ToolbarBtn>
+          <ToolbarBtn
+            label="Inline code"
+            active={!!ed?.code}
+            onClick={() => editor?.chain().focus().toggleCode().run()}
+          >
+            <CodeIcon fontSize="small" />
+          </ToolbarBtn>
+          <ToolbarBtn label="Link" active={!!ed?.link} onClick={handleLink}>
+            <LinkIcon fontSize="small" />
+          </ToolbarBtn>
+        </Box>
+
+        {/* Editor surface. Styling targets the ProseMirror root (.comment-editor). */}
+        <Box
+          sx={{
+            px: 1.5,
+            py: 1,
+            fontSize: "0.875rem",
+            "& .comment-editor": { outline: "none", minHeight: "3em", lineHeight: 1.5 },
+            "& .comment-editor p": { m: 0 },
+            "& .comment-editor p + p": { mt: 0.75 },
+            "& .comment-editor ul, & .comment-editor ol": { pl: 3, my: 0.5 },
+            "& .comment-editor li > p": { m: 0 },
+            "& .comment-editor code": {
+              px: 0.5,
+              py: "1px",
+              borderRadius: 0.5,
+              bgcolor: "action.hover",
+              fontFamily: "monospace",
+              fontSize: "0.85em",
+            },
+            "& .comment-editor a": { color: "primary.main", textDecoration: "underline" },
+            "& .comment-mention": {
+              color: "primary.main",
+              fontWeight: 600,
+              bgcolor: "action.hover",
+              borderRadius: 0.5,
+              px: 0.25,
+            },
+            // Placeholder (TipTap Placeholder extension marks the empty first node).
+            "& .comment-editor p.is-editor-empty:first-of-type::before": {
+              content: "attr(data-placeholder)",
+              color: "text.disabled",
+              float: "left",
+              height: 0,
+              pointerEvents: "none",
+            },
+          }}
+        >
+          <EditorContent editor={editor} />
+        </Box>
+      </Box>
+
+      {/* Action row — sits BELOW the bordered box (outside the border), mirroring the
+          Description editor's Save/Cancel row. In slim-reply mode it stays hidden until the
+          field is dirty (has content) — the quiet "Post-on-dirty" affordance; else always shown. */}
+      {!hideActionsWhenEmpty || !ed?.empty ? (
+        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1 }}>
           <Button
             variant="contained"
             size="small"
+            disableElevation
             disabled={disabled}
             onClick={handlePost}
           >
             {submitLabel}
           </Button>
-        </Box>
+          <Button size="small" color="inherit" onClick={handleCancel}>
+            Cancel
+          </Button>
+        </Stack>
       ) : null}
     </Box>
   )
@@ -392,7 +402,7 @@ export const SlimExpandCommentBox = React.memo(function SlimExpandCommentBox({
   saving,
   onPost,
   placeholder = "Add a work note...",
-  submitLabel = "Post note",
+  submitLabel = "Post",
   slimSx,
   expandedSx,
 }: SlimExpandCommentBoxProps) {

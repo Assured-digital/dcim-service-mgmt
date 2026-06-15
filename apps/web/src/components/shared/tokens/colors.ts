@@ -137,11 +137,16 @@ export const shadows = {
   hover: "0 2px 8px rgba(15,23,42,0.06)",
 } as const
 
-// Type-badge colours for SR / INC / CHG.
+// Type-badge colours for SR / INC / CHG / RSK / ISS / TASK. (TASK has no list
+// indicator; its colour mirrors the detail-page TASK_TYPE_BADGE so Task keeps one
+// identity colour — used full-label in the detail-panel "Type" row.)
 export const typeBadgeTokens = {
-  SR:  { bg: "#e0f2fe", text: "#075985" },
-  INC: { bg: "#fee2e2", text: "#b91c1c" },
-  CHG: { bg: "#f3e8ff", text: "#6b21a8" },
+  SR:   { bg: "#e0f2fe", text: "#075985" },
+  INC:  { bg: "#fee2e2", text: "#b91c1c" },
+  CHG:  { bg: "#f3e8ff", text: "#6b21a8" },
+  RSK:  { bg: "#fef3c7", text: "#b45309" },
+  ISS:  { bg: "#fce7f3", text: "#be185d" },
+  TASK: { bg: "#eeedfe", text: "#3c3489" },
 } as const
 
 export function chipSx(value: string) {
