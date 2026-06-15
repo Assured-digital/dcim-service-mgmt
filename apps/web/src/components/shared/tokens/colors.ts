@@ -23,18 +23,25 @@ export const uiBorder = {
   strong: "#cbd5e1",
 } as const
 
-// Status is the deliberate LOUD exception to the otherwise-quiet aesthetic:
-// deeper, saturated fills with white text so state is scannable at a glance,
-// and identical everywhere status appears (detail pill, queue table, rail,
-// Risks/Issues). This is the single source of truth — every status indicator
-// reads from here via resolveIntent / chipSx / statusColors.
-export const semanticTokens: Record<SemanticIntent, { bg: string; text: string }> = {
-  success: { bg: "#15803d", text: "#ffffff" }, // green — resolved / done / completed
-  active:  { bg: "#1d4ed8", text: "#ffffff" }, // blue  — in progress / assigned
-  warning: { bg: "#b45309", text: "#ffffff" }, // amber — waiting / pending
-  danger:  { bg: "#b91c1c", text: "#ffffff" }, // red   — blocked / cancelled / overdue
-  neutral: { bg: "#475569", text: "#ffffff" }, // slate — new / open / closed (terminal)
-  info:    { bg: "#1d4ed8", text: "#ffffff" },
+// Status has ONE intent→hue mapping exposed at TWO scales:
+//  - `bg` + `text`: the soft PASTEL scale — a light tinted fill with a darker,
+//    same-hue text/icon, so state is legible without shouting. Used by every
+//    LABELLED status surface (Tasks pill, detail pill, queue table StatusPill,
+//    Risks/Issues, filter chips) via resolveIntent / chipSx / statusColors.
+//  - `solid`: the SATURATED scale — a single deep, fully-saturated colour (the
+//    pre-pastel status fills, recovered from git history) for tiny standalone
+//    GLYPHS with no adjacent label, where the pastel fill is too washed out to
+//    tell intents apart. Used by the Service Desk queue-rail status dot via
+//    statusSolid(). At ~8px the soft fill is near-invisible between intents; the
+//    solid value keeps New/Investigating/Mitigated/Resolved/Closed distinct.
+// This is the single source of truth — pills stay soft, only the rail dot is solid.
+export const semanticTokens: Record<SemanticIntent, { bg: string; text: string; solid: string }> = {
+  success: { bg: "#dcfce7", text: "#16a34a", solid: "#15803d" }, // green — resolved / done / completed
+  active:  { bg: "#dbeafe", text: "#1d4ed8", solid: "#1d4ed8" }, // blue  — in progress / assigned
+  warning: { bg: "#fef3c7", text: "#b45309", solid: "#b45309" }, // amber — waiting / pending
+  danger:  { bg: "#fee2e2", text: "#dc2626", solid: "#b91c1c" }, // red   — blocked / cancelled / overdue
+  neutral: { bg: "#e2e8f0", text: "#475569", solid: "#475569" }, // slate — new / open / closed (terminal)
+  info:    { bg: "#dbeafe", text: "#1d4ed8", solid: "#1d4ed8" }, // blue  — mirrors active
 }
 
 export type RAGLevel = "RED" | "AMBER" | "GREEN"
@@ -50,6 +57,19 @@ export const priorityDots: Record<string, string> = {
   medium:   "#f59e0b",
   high:     "#ef4444",
   critical: "#7c3aed"
+}
+
+// Priority pastel ramp — a true 4-step low -> critical scale (green/amber/orange/
+// red), used by the shared PriorityPill. This is the SAME scheme the detail pages
+// already render for priority, so a priority is the same colour on a list pill as
+// on a detail chip. Distinct from semanticTokens (status) and from the solid
+// priorityDots (the compact leading dots). This is the single source of truth for
+// priority-pill colour — read it via priorityToken().
+export const priorityTokens: Record<string, { bg: string; text: string }> = {
+  low:      { bg: "#dcfce7", text: "#15803d" }, // green
+  medium:   { bg: "#fef3c7", text: "#b45309" }, // amber
+  high:     { bg: "#ffedd5", text: "#c2410c" }, // orange
+  critical: { bg: "#fee2e2", text: "#b91c1c" }, // red
 }
 
 // Semantic status -> intent. First match wins, so order matters:
@@ -107,16 +127,26 @@ export const radii = {
   xs: 4, sm: 6, md: 8, lg: 12, pill: 999,
 } as const
 
+// Shared pill radius — the status pill and the priority pill use ONE value (the
+// app's ~6px baseline), so they match each other and the surrounding UI rather
+// than the old fully-rounded lozenge. Reduce/raise here and both pills follow.
+export const PILL_RADIUS = radii.sm
+
 export const shadows = {
   card: "0 10px 28px rgba(15,23,42,0.06)",
   hover: "0 2px 8px rgba(15,23,42,0.06)",
 } as const
 
-// Type-badge colours for SR / INC / CHG.
+// Type-badge colours for SR / INC / CHG / RSK / ISS / TASK. (TASK has no list
+// indicator; its colour mirrors the detail-page TASK_TYPE_BADGE so Task keeps one
+// identity colour — used full-label in the detail-panel "Type" row.)
 export const typeBadgeTokens = {
-  SR:  { bg: "#e0f2fe", text: "#075985" },
-  INC: { bg: "#fee2e2", text: "#b91c1c" },
-  CHG: { bg: "#f3e8ff", text: "#6b21a8" },
+  SR:   { bg: "#e0f2fe", text: "#075985" },
+  INC:  { bg: "#fee2e2", text: "#b91c1c" },
+  CHG:  { bg: "#f3e8ff", text: "#6b21a8" },
+  RSK:  { bg: "#fef3c7", text: "#b45309" },
+  ISS:  { bg: "#fce7f3", text: "#be185d" },
+  TASK: { bg: "#eeedfe", text: "#3c3489" },
 } as const
 
 export function chipSx(value: string) {
@@ -131,8 +161,21 @@ export function statusColors(value: string): { bg: string; text: string } {
   return semanticTokens[resolveIntent(value)]
 }
 
+// Saturated status colour for tiny standalone glyphs (the queue-rail status dot),
+// where the pastel `bg` washes out at ~8px. Same intent mapping as statusColors —
+// only the scale differs (solid vs soft). Do NOT use for pills; they stay pastel.
+export function statusSolid(value: string): string {
+  return semanticTokens[resolveIntent(value)].solid
+}
+
 export function priorityDot(priority: string): string {
   return priorityDots[priority.toLowerCase()] ?? "#94a3b8"
+}
+
+// Priority pastel fill + text for the shared PriorityPill. Resolves to the 4-step
+// priorityTokens ramp; unknown values fall back to medium.
+export function priorityToken(priority: string): { bg: string; text: string } {
+  return priorityTokens[priority.toLowerCase()] ?? priorityTokens.medium
 }
 
 export function statusSelectSx(minWidth = 180) {

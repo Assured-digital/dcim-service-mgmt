@@ -21,16 +21,15 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
-import { statusColors, type LinkedTask } from "../components/shared"
+import PersonIcon from "@mui/icons-material/Person"
+import { statusColors, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
-import { useBreadcrumb } from "./Shell"
 import {
   EditableTitleCard,
-  useDetailNarrow,
   ActivityTabs,
   SlimExpandCommentBox,
   ActivityFeedItem,
@@ -78,6 +77,10 @@ type Issue = {
   resolution: string | null
   reviewDate: string | null
   closedAt: string | null
+  assigneeId: string | null
+  assignee: { id: string; displayName: string } | null
+  createdById?: string | null
+  createdBy?: { id: string; displayName: string } | null
   links?: ResolvedLink[]
   attachments?: AttachmentSummary[]
   createdAt: string
@@ -299,19 +302,13 @@ export default function IssueDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { notify } = useNotification()
-  const { setPageFullBleed } = useBreadcrumb()
-  const narrow = useDetailNarrow()
 
-  // Render flush in the Shell content area (no surrounding padding/frame), matching
-  // the Service Request detail page, whose ServiceDeskPage wrapper sets this.
-  // In the narrow association-peek drawer the main ticket page behind owns full-bleed;
-  // the drawer instance must NOT touch it, else its unmount on close clobbers the main
-  // page's state (same rule as the breadcrumb label — see RecordDetailShell).
-  React.useEffect(() => {
-    if (narrow) return
-    setPageFullBleed(true)
-    return () => setPageFullBleed(false)
-  }, [narrow, setPageFullBleed])
+  // Full-bleed is owned by RisksIssuesNavigator (the shared DrillDownNavigator
+  // asserts it for the whole /risks-issues/* subtree and clears it on unmount).
+  // This page deliberately does NOT touch it — at depth 1 the assertion is already
+  // in force, and resetting it on unmount when drilling back to the list would
+  // clobber the navigator's state and leave the list in the Shell's default padding.
+  // Mirrors the SR/INC/CHG detail pages, which likewise leave full-bleed to the navigator.
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -593,6 +590,31 @@ export default function IssueDetailPage() {
     (v: string) => commitDetailField({ severity: v }),
     [commitDetailField]
   )
+  const handleSelectAssignee = React.useCallback(
+    (v: string) => commitDetailField({ assigneeId: v }),
+    [commitDetailField]
+  )
+
+  // Assignee-picker options — Unassigned sentinel ("") + the client-scoped assignable users.
+  const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const list: PopoverOption[] = users.map((u) => ({
+      value: u.id,
+      label: u.displayName,
+      iconBg: "#eaf3de",
+      iconColor: "#3b6d11",
+      icon: <PersonIcon sx={{ fontSize: 14 }} />,
+    }))
+    return [
+      {
+        value: "",
+        label: "Unassigned",
+        iconBg: "#f1efe8",
+        iconColor: "#5f5e5a",
+        icon: <PersonIcon sx={{ fontSize: 14 }} />,
+      },
+      ...list,
+    ]
+  }, [users])
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -649,9 +671,7 @@ export default function IssueDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography variant="body2" color="text.secondary">
-              Issue
-            </Typography>
+            <TypeBadge kind="ISS" label="Issue" />
           </Box>
         ),
       },
@@ -678,8 +698,21 @@ export default function IssueDetailPage() {
           </Box>
         ),
       },
+      {
+        key: "assigneeId",
+        label: "Assignee",
+        editable: true,
+        currentValue: issue.assigneeId ?? "",
+        popoverOptions: usersOptions,
+        onSelect: handleSelectAssignee,
+        value: (
+          <Box sx={valueWrapperSx}>
+            <AssigneeCell user={issue.assignee} />
+          </Box>
+        ),
+      },
     ]
-  }, [issue, handleSelectSeverity])
+  }, [issue, handleSelectSeverity, handleSelectAssignee, usersOptions])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -719,7 +752,7 @@ export default function IssueDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!issue) return undefined
     return {
-      submittedBy: null,
+      submittedBy: <AssigneeCell user={issue.createdBy ?? null} emptyLabel="—" />,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
     }

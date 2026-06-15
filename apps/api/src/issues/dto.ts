@@ -48,6 +48,10 @@ export class UpdateIssueDto {
 
   @IsOptional()
   @IsString()
+  assigneeId?: string
+
+  @IsOptional()
+  @IsString()
   linkedEntityType?: string
 
   @IsOptional()

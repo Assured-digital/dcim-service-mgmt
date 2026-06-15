@@ -29,8 +29,8 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
-import { TypeBadge, PriorityDot, Avatar as TicketAvatar } from "../components/shared"
-import { statusColors } from "../components/shared/tokens/colors"
+import { TypeBadge, PriorityPill, StatusPill, AssigneeCell, ListNavRail, RecordTypePicker, type RailSection, type BadgeKind } from "../components/shared"
+import { formatDate } from "../lib/format"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -127,48 +127,6 @@ export function CreateServiceRequestModal({
   )
 }
 
-// ── Type picker (unified queue's "+ New ticket") ──────────────────────────
-function NewTicketTypePicker({
-  open, onClose, onPick
-}: {
-  open: boolean
-  onClose: () => void
-  onPick: (kind: TicketKind) => void
-}) {
-  const options: Array<{ kind: TicketKind; title: string; subtitle: string }> = [
-    { kind: "SR",  title: "Service request", subtitle: "Standard work, access, shipments, reports" },
-    { kind: "INC", title: "Incident",        subtitle: "Unplanned outage or service degradation" },
-    { kind: "CHG", title: "Change",          subtitle: "Planned change with scheduled window" },
-  ]
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>New ticket</DialogTitle>
-      <DialogContent>
-        <Stack gap={1.25} sx={{ pt: 0.5, pb: 1 }}>
-          {options.map(o => (
-            <Box
-              key={o.kind}
-              onClick={() => { onClose(); onPick(o.kind) }}
-              sx={{
-                display: "flex", alignItems: "center", gap: 1.5,
-                p: 1.5, borderRadius: 1.5, cursor: "pointer",
-                border: "1px solid #e2e8f0",
-                "&:hover": { bgcolor: "#f8fafc", borderColor: "#cbd5e1" }
-              }}
-            >
-              <TypeBadge kind={o.kind} />
-              <Box sx={{ flex: 1 }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{o.title}</Typography>
-                <Typography sx={{ fontSize: 12, color: "#64748b" }}>{o.subtitle}</Typography>
-              </Box>
-            </Box>
-          ))}
-        </Stack>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 // ── Unified queue: shared types ───────────────────────────────────────────
 type QueueView = "table" | "board"
 
@@ -242,30 +200,20 @@ function UnifiedFooter() {
   )
 }
 
-// ── Unified queue: status dot + text ──────────────────────────────────────
-// Softened in the dense table only: a coloured dot + plain text, matching the
-// Priority cell's treatment. The dot colour reads the SAME single source of
-// truth as the pills (statusColors -> semanticTokens), so the colour is
-// identical to the detail pill / rail dot — just rendered as a dot here.
+// ── Unified queue: status pill (read-only) ────────────────────────────────
+// The shared StatusPill (6px pastel) — same component as the Tasks row, the
+// detail pill and the priority pill — so the queue reads status-pill +
+// priority-pill consistently (resolving the old dot/pill mix). Read-only: no
+// edit chevron (the intentional Tasks-only inline-edit asymmetry; DataGrid
+// pages don't edit). Overdue keeps the red "Overdue" treatment (same
+// single-source danger token the dot used). Label stays per-domain/humanised.
 function StatusCell({ ticket }: { ticket: Ticket }) {
   const value = ticket.overdue ? "OVERDUE" : ticket.status
-  const label = ticket.overdue ? "overdue" : ticket.status.toLowerCase().replaceAll("_", " ")
-  return (
-    <Stack direction="row" alignItems="center" spacing={0.75}>
-      <Box
-        component="span"
-        sx={{
-          display: "inline-block",
-          width: 8, height: 8, borderRadius: "50%",
-          bgcolor: statusColors(value).bg,
-          flexShrink: 0,
-        }}
-      />
-      <Typography sx={{ fontSize: 12.5 }}>
-        {label.charAt(0).toUpperCase() + label.slice(1)}
-      </Typography>
-    </Stack>
-  )
+  const humanised = ticket.status.toLowerCase().replaceAll("_", " ")
+  const label = ticket.overdue
+    ? "Overdue"
+    : humanised.charAt(0).toUpperCase() + humanised.slice(1)
+  return <StatusPill value={value} label={label} />
 }
 
 // ── Subject cell that only shows a tooltip when its text is truncated ─────
@@ -330,12 +278,10 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
     {
       field: "priority", headerName: "Priority", width: 110,
       renderCell: (p) => (
-        <Stack direction="row" alignItems="center" spacing={0.75}>
-          <PriorityDot priority={p.value as string} />
-          <Typography sx={{ fontSize: 12.5 }}>
-            {(p.value as string).charAt(0).toUpperCase() + (p.value as string).slice(1)}
-          </Typography>
-        </Stack>
+        <PriorityPill
+          priority={p.value as string}
+          label={(p.value as string).charAt(0).toUpperCase() + (p.value as string).slice(1)}
+        />
       ),
     },
     {
@@ -343,27 +289,14 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
       type: "singleSelect",
       valueOptions: assigneeOptions,
       valueGetter: (_v, row) => row.assignee?.displayName ?? "Unassigned",
-      renderCell: (p) => {
-        const t = p.row as Ticket
-        if (!t.assignee) {
-          return <Typography sx={{ fontSize: 12.5, fontStyle: "italic", color: "#94a3b8" }}>Unassigned</Typography>
-        }
-        return (
-          <Tooltip title={t.assignee.displayName} arrow placement="top">
-            <Stack direction="row" alignItems="center" spacing={0.75}>
-              <TicketAvatar name={t.assignee.displayName} size="sm" variant="engineer" />
-              <Typography sx={{ fontSize: 12.5 }}>{p.value as string}</Typography>
-            </Stack>
-          </Tooltip>
-        )
-      },
+      renderCell: (p) => <AssigneeCell user={(p.row as Ticket).assignee} />,
     },
     {
       field: "updatedAt", headerName: "Updated", width: 110,
       valueGetter: (v) => v ? new Date(v as string) : null,
       renderCell: (p) => {
         const t = p.row as Ticket
-        const dateStr = p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"
+        const dateStr = formatDate(t.updatedAt) || "—"
         return (
           <Typography sx={{
             fontSize: 12,
@@ -380,9 +313,7 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
       valueGetter: (v) => v ? new Date(v as string) : null,
       renderCell: (p) => {
         const t = p.row as Ticket
-        const dateStr = p.value
-          ? (p.value as Date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-          : "—"
+        const dateStr = formatDate(t.dueAt) || "—"
         return (
           <Typography sx={{
             fontSize: 12,
@@ -395,120 +326,6 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
       },
     },
   ]
-}
-
-// ── Saved-views rail ──────────────────────────────────────────────────────
-interface SavedView {
-  id: string
-  label: string
-  count?: number
-  icon: React.ReactNode
-}
-
-function NavRail({
-  active, onPick, counts, typeFilter, onTypeFilterChange,
-}: {
-  active: string
-  onPick: (id: string) => void
-  counts: Record<string, number>
-  typeFilter: TicketKind | "all"
-  onTypeFilterChange: (next: TicketKind | "all") => void
-}) {
-  const tickets: SavedView[] = [
-    { id: "open", label: "All open", count: counts.open, icon: <InboxIcon sx={{ fontSize: 18 }} /> },
-    { id: "mine", label: "My tickets", count: counts.mine, icon: <PersonIcon sx={{ fontSize: 18 }} /> },
-    { id: "unassigned", label: "Unassigned", count: counts.unassigned, icon: <HelpOutlineIcon sx={{ fontSize: 18 }} /> },
-    { id: "closed", label: "Resolved 30d", count: counts.closed, icon: <CheckCircleOutlineIcon sx={{ fontSize: 18 }} /> },
-    { id: "overdue", label: "Overdue", count: counts.overdue, icon: <PriorityHighIcon sx={{ fontSize: 18 }} /> },
-  ]
-  const types: Array<{ id: TicketKind | "all"; label: string; icon: React.ReactNode }> = [
-    { id: "all", label: "All", icon: <FilterListIcon sx={{ fontSize: 18 }} /> },
-    { id: "SR", label: "Service requests", icon: <AssignmentIcon sx={{ fontSize: 18 }} /> },
-    { id: "INC", label: "Incidents", icon: <ReportProblemIcon sx={{ fontSize: 18 }} /> },
-    { id: "CHG", label: "Change", icon: <BuildIcon sx={{ fontSize: 18 }} /> },
-  ]
-
-  function renderItem(v: SavedView) {
-    const isActive = v.id === active
-    return (
-      <Box
-        key={v.id}
-        onClick={() => onPick(v.id)}
-        sx={{
-          display: "flex", alignItems: "center", gap: 1.25,
-          px: 1.25, py: 0.875, borderRadius: 1, cursor: "pointer",
-          bgcolor: isActive ? "#e8f1ff" : "transparent",
-          color: isActive ? "primary.main" : "#475569",
-          fontWeight: isActive ? 600 : 400,
-          "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc", color: isActive ? "primary.main" : "#0f172a" },
-          "& .MuiSvgIcon-root": { color: isActive ? "primary.main" : "#94a3b8" }
-        }}
-      >
-        {v.icon}
-        <Typography sx={{ fontSize: 13, flex: 1 }}>{v.label}</Typography>
-        {typeof v.count === "number" ? (
-          <Typography sx={{
-            fontSize: 11, fontWeight: isActive ? 700 : 500,
-            color: isActive ? "primary.main" : "#94a3b8",
-            bgcolor: isActive ? "#fff" : "transparent",
-            borderRadius: 999, px: isActive ? 0.875 : 0,
-          }}>
-            {v.count}
-          </Typography>
-        ) : null}
-      </Box>
-    )
-  }
-
-  function renderTypeItem(t: typeof types[number]) {
-    const isActive = typeFilter === t.id
-    return (
-      <Box
-        key={t.id}
-        onClick={() => onTypeFilterChange(t.id)}
-        sx={{
-          display: "flex", alignItems: "center", gap: 1.25,
-          px: 1.25, py: 0.875, borderRadius: 1, cursor: "pointer",
-          bgcolor: isActive ? "#e8f1ff" : "transparent",
-          color: isActive ? "primary.main" : "#475569",
-          fontWeight: isActive ? 600 : 400,
-          "&:hover": { bgcolor: isActive ? "#e8f1ff" : "#f8fafc", color: isActive ? "primary.main" : "#0f172a" },
-          "& .MuiSvgIcon-root": { color: isActive ? "primary.main" : "#94a3b8" }
-        }}
-      >
-        {t.icon}
-        <Typography sx={{ fontSize: 13, flex: 1 }}>{t.label}</Typography>
-      </Box>
-    )
-  }
-
-  return (
-    <Box sx={{
-      width: 220, flexShrink: 0,
-      borderRight: "1px solid #e2e8f0", bgcolor: "#fff",
-      p: 1, display: "flex", flexDirection: "column", gap: 0.25
-    }}>
-      <Box sx={{
-        px: 1.25, pt: 0.5, pb: 1.25,
-        borderBottom: "1px solid #f1f5f9",
-        mb: 0.5,
-      }}>
-        <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-          Service Desk
-        </Typography>
-      </Box>
-      <Typography sx={sectionLabelSx}>Tickets</Typography>
-      {tickets.map(renderItem)}
-      <Typography sx={sectionLabelSx}>Type</Typography>
-      {types.map(renderTypeItem)}
-    </Box>
-  )
-}
-
-const sectionLabelSx = {
-  fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
-  textTransform: "uppercase", color: "#64748b",
-  px: 1.25, pt: 1.5, pb: 0.5,
 }
 
 // ── Unified queue view ────────────────────────────────────────────────────
@@ -615,7 +432,7 @@ function UnifiedServiceDeskView() {
     setSearchParams(params)   // push
   }
 
-  function handlePickType(kind: TicketKind) {
+  function handlePickType(kind: BadgeKind) {
     if (kind === "SR")  setSrOpen(true)
     if (kind === "INC") setIncOpen(true)
     if (kind === "CHG") setChgOpen(true)
@@ -635,17 +452,36 @@ function UnifiedServiceDeskView() {
     setSearchParams(params, { replace: true })
   }
 
+  // Two independent single-select sections: saved-view (Tickets) and kind (Type).
+  const ticketsSection: RailSection = {
+    label: "Tickets",
+    activeId: savedView,
+    onPick: handleNavPick,
+    items: [
+      { id: "open", label: "All open", count: counts.open, icon: <InboxIcon sx={{ fontSize: 18 }} /> },
+      { id: "mine", label: "My tickets", count: counts.mine, icon: <PersonIcon sx={{ fontSize: 18 }} /> },
+      { id: "unassigned", label: "Unassigned", count: counts.unassigned, icon: <HelpOutlineIcon sx={{ fontSize: 18 }} /> },
+      { id: "closed", label: "Resolved 30d", count: counts.closed, icon: <CheckCircleOutlineIcon sx={{ fontSize: 18 }} /> },
+      { id: "overdue", label: "Overdue", count: counts.overdue, icon: <PriorityHighIcon sx={{ fontSize: 18 }} /> },
+    ],
+  }
+  const typeSection: RailSection = {
+    label: "Type",
+    activeId: typeFilter,
+    onPick: (id) => handleTypeFilterChange(id as TicketKind | "all"),
+    items: [
+      { id: "all", label: "All", icon: <FilterListIcon sx={{ fontSize: 18 }} /> },
+      { id: "SR", label: "Service requests", icon: <AssignmentIcon sx={{ fontSize: 18 }} /> },
+      { id: "INC", label: "Incidents", icon: <ReportProblemIcon sx={{ fontSize: 18 }} /> },
+      { id: "CHG", label: "Change", icon: <BuildIcon sx={{ fontSize: 18 }} /> },
+    ],
+  }
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
       {/* Drill-down (record/association) is owned by the DrillDownNavigator; this
-          body is always the depth-0 queue, so the NavRail + chrome always show. */}
-      <NavRail
-        active={savedView}
-        onPick={handleNavPick}
-        counts={counts}
-        typeFilter={typeFilter}
-        onTypeFilterChange={handleTypeFilterChange}
-      />
+          body is always the depth-0 queue, so the rail + chrome always show. */}
+      <ListNavRail title="Service Desk" sections={[ticketsSection, typeSection]} />
 
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "#f8fafc" }}>
         {/* Header — Search on the left, View + New ticket on the right. */}
@@ -753,7 +589,17 @@ function UnifiedServiceDeskView() {
       </Box>
 
       {/* Modals */}
-      <NewTicketTypePicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={handlePickType} />
+      <RecordTypePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={handlePickType}
+        title="New ticket"
+        options={[
+          { kind: "SR",  title: "Service request", subtitle: "Standard work, access, shipments, reports" },
+          { kind: "INC", title: "Incident",        subtitle: "Unplanned outage or service degradation" },
+          { kind: "CHG", title: "Change",          subtitle: "Planned change with scheduled window" },
+        ]}
+      />
       <CreateServiceRequestModal open={srOpen} onClose={() => setSrOpen(false)} />
       <CreateIncidentModal open={incOpen} onClose={() => setIncOpen(false)} />
       <CreateChangeModal open={chgOpen} onClose={() => setChgOpen(false)} />

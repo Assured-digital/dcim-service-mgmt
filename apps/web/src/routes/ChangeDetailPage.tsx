@@ -6,7 +6,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Divider,
   Paper,
   Snackbar,
@@ -33,7 +32,7 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined"
 import BlockIcon from "@mui/icons-material/Block"
 import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined"
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined"
-import { statusColors, type LinkedTask } from "../components/shared"
+import { statusColors, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -1038,7 +1037,6 @@ export default function ChangeDetailPage() {
 
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!change) return []
-    const priorityColours = PRIORITY_COLOURS[change.priority] ?? PRIORITY_COLOURS.medium
     const valueWrapperSx = {
       width: "100%",
       display: "flex",
@@ -1054,9 +1052,7 @@ export default function ChangeDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography variant="body2" color="text.secondary">
-              Change
-            </Typography>
+            <TypeBadge kind="CHG" label="Change" />
           </Box>
         ),
       },
@@ -1081,16 +1077,9 @@ export default function ChangeDetailPage() {
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
-            <Chip
-              size="small"
+            <PriorityPill
+              priority={change.priority}
               label={change.priority.charAt(0).toUpperCase() + change.priority.slice(1)}
-              sx={{
-                bgcolor: priorityColours.bg,
-                color: priorityColours.text,
-                fontWeight: 600,
-                fontSize: 11,
-                height: 20,
-              }}
             />
           </Box>
         ),
@@ -1104,18 +1093,7 @@ export default function ChangeDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            {change.assignee ? (
-              <Typography variant="body2" color="text.secondary">
-                {userLabel(change.assignee)}
-              </Typography>
-            ) : (
-              <Typography
-                variant="body2"
-                sx={{ color: "text.disabled", fontStyle: "italic" }}
-              >
-                Unassigned
-              </Typography>
-            )}
+            <AssigneeCell user={change.assignee} />
           </Box>
         ),
       },
@@ -1276,7 +1254,7 @@ export default function ChangeDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!change) return undefined
     return {
-      submittedBy: change.createdBy?.displayName ?? null,
+      submittedBy: <AssigneeCell user={change.createdBy ?? null} emptyLabel="—" />,
       createdAt: change.createdAt,
       updatedAt: change.updatedAt,
     }

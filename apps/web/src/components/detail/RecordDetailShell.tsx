@@ -82,7 +82,9 @@ export interface RightSection {
 }
 
 export interface RecordMetadata {
-  submittedBy?: string | null
+  // ReactNode (not just string) so pages can render the creator via the shared
+  // AssigneeCell (avatar + name), matching the Assignee row and the list/comments.
+  submittedBy?: React.ReactNode
   createdAt: string
   updatedAt: string
 }
@@ -802,7 +804,13 @@ function RecordDetailShellImpl({
             ].map((row) => (
               <Box
                 key={row.label}
-                sx={{ display: "flex", justifyContent: "space-between", py: 0.375, px: 0.75 }}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  py: 0.375,
+                  px: 0.75,
+                }}
               >
                 <Typography variant="caption" color="text.secondary">
                   {row.label}

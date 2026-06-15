@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
+import { resolveCreator } from "../users/creator"
+import { toUserDisplay, userDisplaySelect } from "../users/display"
 import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
@@ -24,11 +26,13 @@ const ISSUE_STATUS_LABELS: Record<string, string> = {
   CLOSED: "Closed"
 }
 
-// Per-field humanisation for Issue updates. severity is the only humanisable updatable field
-// (DTO @IsIn RED/AMBER/GREEN) — Issue has no assignee column. `status` changes via the status
-// endpoint (STATUS_UPDATED). reviewDate (date) + the dead linkedEntity* scalars are omitted.
+// Per-field humanisation for Issue updates. severity is an enum string (DTO @IsIn
+// RED/AMBER/GREEN). assigneeId is a ref field — its resolver (id -> displayName) is supplied at
+// the updateForClient call site. `status` changes via the status endpoint (STATUS_UPDATED).
+// reviewDate (date) + the dead linkedEntity* scalars are omitted.
 const ISSUE_FIELD_SPEC: FieldSpec = {
-  severity: { label: "Severity", kind: "enum", labels: ISSUE_SEVERITY_LABELS }
+  severity: { label: "Severity", kind: "enum", labels: ISSUE_SEVERITY_LABELS },
+  assigneeId: { label: "Assignee", kind: "ref" }
 }
 
 @Injectable()
@@ -65,26 +69,30 @@ export class IssuesService {
   } = {}) {
     this.assertClientScope(clientId)
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
-    return this.prisma.issue.findMany({
+    const rows = await this.prisma.issue.findMany({
       where: {
         clientId,
         linkedEntityType: filters.linkedEntityType || undefined,
         linkedEntityId: filters.linkedEntityId || undefined,
         createdAt
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      include: { assignee: { select: userDisplaySelect } }
     })
+    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
   }
 
   async getForClient(clientId: string, id: string) {
     this.assertClientScope(clientId)
     const issue = await this.prisma.issue.findFirst({
-      where: { id, clientId }
+      where: { id, clientId },
+      include: { assignee: { select: userDisplaySelect } }
     })
     if (!issue) throw new NotFoundException("Issue not found")
+    const createdBy = await resolveCreator(this.prisma, issue.createdById)
     const links = await resolveLinkedRecords(this.prisma, clientId, "issue", issue.id)
     const attachments = await resolveAttachments(this.prisma, clientId, "issue", issue.id)
-    return { ...issue, links, attachments }
+    return { ...issue, assignee: toUserDisplay(issue.assignee), createdBy, links, attachments }
   }
 
   async createForClient(clientId: string, actorUserId: string, dto: {
@@ -110,7 +118,8 @@ export class IssuesService {
             reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
             linkedEntityType: dto.linkedEntityType,
             linkedEntityId: dto.linkedEntityId,
-            status: "OPEN"
+            status: "OPEN",
+            createdById: actorUserId
           }
         })
         await emitAudit(this.prisma, {
@@ -131,6 +140,7 @@ export class IssuesService {
   async updateForClient(clientId: string, id: string, actorUserId: string, dto: {
     severity?: string
     reviewDate?: string
+    assigneeId?: string
     linkedEntityType?: string
     linkedEntityId?: string
   }) {
@@ -140,13 +150,23 @@ export class IssuesService {
       data: {
         severity: dto.severity,
         reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
+        assigneeId: dto.assigneeId === "" ? null : dto.assigneeId ?? undefined,
         linkedEntityType: dto.linkedEntityType,
         linkedEntityId: dto.linkedEntityId
-      }
+      },
+      include: { assignee: { select: userDisplaySelect } }
     })
 
-    // severity is an enum string; no ref fields on Issue — no resolvers needed.
-    const changes = diffRecord(issue, dto, ISSUE_FIELD_SPEC)
+    const newAssignee = toUserDisplay(updated.assignee)
+    // Resolve assignee ids -> display names from rows already in hand (old via getForClient,
+    // new via the update include) — no extra lookup; humanised at emit time.
+    const assigneeNames = new Map<string, string>()
+    if (issue.assignee) assigneeNames.set(issue.assignee.id, issue.assignee.displayName)
+    if (newAssignee) assigneeNames.set(newAssignee.id, newAssignee.displayName)
+
+    const changes = diffRecord(issue, dto, ISSUE_FIELD_SPEC, {
+      assigneeId: (id) => (id ? assigneeNames.get(id) ?? null : null)
+    })
     if (changes.length) {
       await emitAudit(this.prisma, {
         entityType: "Issue",
@@ -158,7 +178,7 @@ export class IssuesService {
       })
     }
 
-    return updated
+    return { ...updated, assignee: newAssignee }
   }
 
   async updateStatusForClient(clientId: string, id: string, actorUserId: string, dto: {

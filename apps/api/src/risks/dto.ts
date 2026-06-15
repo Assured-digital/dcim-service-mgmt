@@ -64,6 +64,10 @@ export class UpdateRiskDto {
 
   @IsOptional()
   @IsString()
+  assigneeId?: string
+
+  @IsOptional()
+  @IsString()
   linkedEntityType?: string
 
   @IsOptional()

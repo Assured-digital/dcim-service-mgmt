@@ -27,7 +27,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import { statusColors, type LinkedTask } from "../components/shared"
+import { statusColors, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -64,7 +64,6 @@ import { AttachmentsContent, type AttachmentsHandle } from "../components/Attach
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
-import { userLabel } from "../lib/userDisplay"
 import { type AuditEvent } from "../lib/auditEvents"
 import { AuditHistoryList } from "../components/AuditHistoryList"
 
@@ -696,7 +695,6 @@ export default function IncidentDetailPage() {
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!incident) return []
     const severityColours = SEVERITY_COLOURS[incident.severity]
-    const priorityColours = PRIORITY_COLOURS[incident.priority] ?? PRIORITY_COLOURS.medium
     const valueWrapperSx = {
       width: "100%",
       display: "flex",
@@ -712,9 +710,7 @@ export default function IncidentDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography variant="body2" color="text.secondary">
-              Incident
-            </Typography>
+            <TypeBadge kind="INC" label="Incident" />
           </Box>
         ),
       },
@@ -750,16 +746,9 @@ export default function IncidentDetailPage() {
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
-            <Chip
-              size="small"
+            <PriorityPill
+              priority={incident.priority}
               label={incident.priority.charAt(0).toUpperCase() + incident.priority.slice(1)}
-              sx={{
-                bgcolor: priorityColours.bg,
-                color: priorityColours.text,
-                fontWeight: 600,
-                fontSize: 11,
-                height: 20,
-              }}
             />
           </Box>
         ),
@@ -773,15 +762,7 @@ export default function IncidentDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            {incident.assignee ? (
-              <Typography sx={{ fontSize: 12 }}>{userLabel(incident.assignee)}</Typography>
-            ) : (
-              <Typography
-                sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}
-              >
-                Unassigned
-              </Typography>
-            )}
+            <AssigneeCell user={incident.assignee} />
           </Box>
         ),
       },
@@ -832,7 +813,7 @@ export default function IncidentDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!incident) return undefined
     return {
-      submittedBy: incident.createdBy?.displayName ?? null,
+      submittedBy: <AssigneeCell user={incident.createdBy ?? null} emptyLabel="—" />,
       createdAt: incident.createdAt,
       updatedAt: incident.updatedAt,
     }

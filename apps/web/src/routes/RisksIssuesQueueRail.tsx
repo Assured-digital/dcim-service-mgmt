@@ -1,11 +1,17 @@
 import * as React from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { Box, Stack, Typography } from "@mui/material"
-import { statusSolid } from "../components/shared/tokens/colors"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import { api } from "../lib/api"
+import { statusSolid } from "../components/shared/tokens/colors"
 import { getCurrentUser } from "../lib/auth"
-import { useTickets, type Ticket, KIND_LABELS } from "../lib/tickets"
-import { parseQueueParams, filterTickets, sortTickets } from "../lib/serviceDeskQueue"
+import {
+  parseRIParams, buildUnifiedRows, type Risk, type Issue, type UnifiedRow,
+} from "../lib/risksIssuesQueue"
+
+const STALE_TIME = 60_000
+const KIND_LABEL: Record<UnifiedRow["kind"], string> = { RSK: "Risk", ISS: "Issue" }
 
 // Created date, DD/MM/YY, for the rail row's secondary line.
 function formatCreated(iso: string): string {
@@ -16,41 +22,43 @@ function formatCreated(iso: string): string {
   return `${dd}/${mm}/${yy}`
 }
 
-// ── Service Desk working-queue rail (depth-1 ticket selector) ──────────────
+// ── Risks & Issues working-queue rail (depth-1 record selector) ────────────
 //
-// Rendered by ServiceDeskNavigator as the compressed queue panel's railContent.
-// Shows the EXACT filtered/sorted set the depth-0 table showed — both derive it
-// from the same URL params via the same lib/serviceDeskQueue selectors, so the
-// rail IS the working queue. Clicking an item swaps the open ticket (replace, so
-// browser-back returns to the table, not through each ticket viewed). The filter
+// Rendered by RisksIssuesNavigator as the compressed list panel's railContent.
+// Shows the EXACT filtered/sorted set the depth-0 grid showed — both derive it
+// from the same URL params via the same lib/risksIssuesQueue selector, so the
+// rail IS the working queue. Clicking an item swaps the open record (replace, so
+// browser-back returns to the list, not through each record viewed). The filter
 // query string is preserved on every navigation so the rail set stays put.
+// Mirrors ServiceDeskQueueRail.
 
-export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
+export function RisksIssuesQueueRail({ activeId }: { activeId?: string }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const queueParams = React.useMemo(() => parseQueueParams(searchParams), [searchParams])
-  const currentUser = React.useMemo(() => getCurrentUser(), [])
-  const { data: tickets } = useTickets()
+  const params = React.useMemo(() => parseRIParams(searchParams), [searchParams])
+  const myId = React.useMemo(() => getCurrentUser(), [])?.userId
+
+  const { data: risks = [] } = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<Risk[]>("/risks")).data, staleTime: STALE_TIME })
+  const { data: issues = [] } = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<Issue[]>("/issues")).data, staleTime: STALE_TIME })
 
   const items = React.useMemo(
-    () => sortTickets(filterTickets(tickets, queueParams, currentUser), queueParams.sortModel),
-    [tickets, queueParams, currentUser],
+    () => buildUnifiedRows(risks, issues, params, myId),
+    [risks, issues, params, myId],
   )
 
   const search = searchParams.toString()
-  const toQueue = () => navigate({ pathname: "/service-desk", search })
-  const openTicket = (t: Ticket) =>
-    navigate({ pathname: t.detailPath, search }, { replace: true })
+  const toList = () => navigate({ pathname: "/risks-issues", search })
+  const openRecord = (r: UnifiedRow) => navigate({ pathname: r.detailPath, search }, { replace: true })
 
   return (
     <>
-      {/* Back-to-queue header — returns to the same filtered table. */}
+      {/* Back-to-list header — returns to the same filtered grid. */}
       <Box
         role="button"
         tabIndex={0}
-        aria-label="Back to queue"
-        onClick={toQueue}
-        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toQueue() } }}
+        aria-label="Back to list"
+        onClick={toList}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toList() } }}
         sx={{
           flexShrink: 0,
           display: "flex", alignItems: "center", gap: 0.75,
@@ -64,29 +72,27 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
       >
         <ArrowBackIcon sx={{ fontSize: 16 }} />
         <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-          Queue
+          List
         </Typography>
         <Typography sx={{ ml: "auto", fontSize: 11, color: "#94a3b8" }}>{items.length}</Typography>
       </Box>
 
-      {/* Scrollable ticket list. */}
+      {/* Scrollable record list. */}
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {items.map(t => {
-          const active = t.id === activeId
-          // Dot reads the SAME intent mapping the detail/queue pills use, but the
+        {items.map(r => {
+          const active = r.rawId === activeId
+          // Dot reads the SAME intent mapping the detail/grid pills use, but the
           // SOLID (saturated) scale rather than the pastel fill — at 8px the soft
-          // pill colour is near-invisible between intents, so the rail's only
-          // status signal uses statusSolid (resolveIntent → semanticTokens.solid).
-          // NOT due-proximity.
-          const dotColor = statusSolid(t.status)
+          // pill colour is near-invisible between intents (see ServiceDeskQueueRail).
+          const dotColor = statusSolid(r.status)
           return (
             <Box
-              key={t.id}
+              key={r.id}
               role="button"
               tabIndex={0}
               aria-current={active ? "true" : undefined}
-              onClick={() => openTicket(t)}
-              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTicket(t) } }}
+              onClick={() => openRecord(r)}
+              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRecord(r) } }}
               sx={{
                 display: "flex", alignItems: "flex-start", gap: 1,
                 px: 1.5, py: 1.5,
@@ -103,11 +109,11 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                 sx={{ mt: "5px", width: 8, height: 8, borderRadius: "50%", bgcolor: dotColor, flexShrink: 0 }}
               />
               <Stack spacing={0.25} sx={{ minWidth: 0, flex: 1 }}>
-                {/* Primary: title. Secondary: full type (left, truncates) + created
-                    date (right). Status is carried by the dot now; reference lives in
-                    the breadcrumb + the Details panel. */}
+                {/* Primary: title. Secondary: type (left, truncates) + created date
+                    (right). Status is carried by the dot; reference lives in the
+                    breadcrumb + the Details panel. */}
                 <Typography
-                  title={t.subject}
+                  title={r.title}
                   variant="body2"
                   sx={{
                     color: active ? "primary.main" : "#0f172a",
@@ -115,20 +121,20 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}
                 >
-                  {t.subject}
+                  {r.title}
                 </Typography>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, minWidth: 0 }}>
                   <Typography
-                    title={KIND_LABELS[t.kind]}
+                    title={KIND_LABEL[r.kind]}
                     sx={{
                       fontSize: 11, color: "text.tertiary", minWidth: 0,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}
                   >
-                    {KIND_LABELS[t.kind]}
+                    {KIND_LABEL[r.kind]}
                   </Typography>
                   <Typography sx={{ fontSize: 11, color: "text.tertiary", flexShrink: 0 }}>
-                    {formatCreated(t.createdAt)}
+                    {formatCreated(r.createdAt)}
                   </Typography>
                 </Box>
               </Stack>
