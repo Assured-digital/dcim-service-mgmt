@@ -14,9 +14,9 @@ export { PriorityDot } from "./primitives/PriorityDot"
 export { Avatar } from "./primitives/Avatar"
 export type { AvatarVariant, AvatarSize } from "./primitives/Avatar"
 
-// Presentational list cells (engine-agnostic — <TableCell> or DataGrid renderCell)
-export { StatusPill } from "./cells/StatusPill"
-export { PriorityCell } from "./cells/PriorityCell"
+// Presentational list cells (engine-agnostic — <TableCell> or DataGrid renderCell).
+// One shared pill: IntentPill is the base; StatusPill/PriorityPill are thin wrappers.
+export { IntentPill, StatusPill, PriorityPill } from "./cells/Pill"
 export { AssigneeCell } from "./cells/AssigneeCell"
 
 // Layout

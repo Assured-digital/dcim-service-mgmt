@@ -27,7 +27,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import { statusColors, type LinkedTask } from "../components/shared"
+import { statusColors, PriorityPill, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -696,7 +696,6 @@ export default function IncidentDetailPage() {
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!incident) return []
     const severityColours = SEVERITY_COLOURS[incident.severity]
-    const priorityColours = PRIORITY_COLOURS[incident.priority] ?? PRIORITY_COLOURS.medium
     const valueWrapperSx = {
       width: "100%",
       display: "flex",
@@ -750,16 +749,9 @@ export default function IncidentDetailPage() {
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
-            <Chip
-              size="small"
+            <PriorityPill
+              priority={incident.priority}
               label={incident.priority.charAt(0).toUpperCase() + incident.priority.slice(1)}
-              sx={{
-                bgcolor: priorityColours.bg,
-                color: priorityColours.text,
-                fontWeight: 600,
-                fontSize: 11,
-                height: 20,
-              }}
             />
           </Box>
         ),

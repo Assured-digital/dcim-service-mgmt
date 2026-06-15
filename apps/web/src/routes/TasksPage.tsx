@@ -21,7 +21,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, u
 import { CSS } from "@dnd-kit/utilities"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
-import { priorityDot, StatusPill, PriorityCell, AssigneeCell } from "../components/shared"
+import { priorityDot, StatusPill, PriorityPill, AssigneeCell } from "../components/shared"
 import { ActivityFeedItem, type FeedEvent, type ResolvedMention } from "../components/detail"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
@@ -312,8 +312,8 @@ function InlineCreateRow({ users, onCreate, onCancel, visibleColumns }: {
             <Box component="span"
               onClick={e => setPriorityAnchor(e.currentTarget)}
               sx={{ display: "inline-flex", cursor: "pointer" }}>
-              <PriorityCell priority={priority} label={capitalize(priority)}
-                trailing={<KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6, color: "#94a3b8" }} />} />
+              <PriorityPill priority={priority} label={capitalize(priority)}
+                trailing={<KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} />} />
             </Box>
           </TableCell>
         ) : null}
@@ -687,7 +687,7 @@ export function TaskQuickDetailModal({
               {task?.reference ?? "Task"}
             </Typography>
             {task ? <StatusPill value={task.status} label={STATUS_LABELS[task.status] ?? task.status} /> : null}
-            {task ? <PriorityCell priority={task.priority} label={capitalize(task.priority)} /> : null}
+            {task ? <PriorityPill priority={task.priority} label={capitalize(task.priority)} /> : null}
           </Stack>
           {taskId ? (
             <Button size="small" onClick={() => onOpenFull(taskId)}>
@@ -1333,8 +1333,8 @@ export default function TasksPage() {
                             <Box component="span"
                               onClick={canManage ? e => { e.stopPropagation(); setPriorityAnchor({ el: e.currentTarget, task }) } : undefined}
                               sx={{ display: "inline-flex", cursor: canManage ? "pointer" : "default" }}>
-                              <PriorityCell priority={task.priority} label={capitalize(task.priority)}
-                                trailing={canManage ? <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6, color: "#94a3b8" }} /> : null} />
+                              <PriorityPill priority={task.priority} label={capitalize(task.priority)}
+                                trailing={canManage ? <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} /> : null} />
                             </Box>
                           </TableCell>
                         ) : null}

@@ -6,7 +6,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Snackbar,
   Typography,
 } from "@mui/material"
@@ -63,7 +62,7 @@ import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
 import { userLabel } from "../lib/userDisplay"
-import { statusColors } from "../components/shared"
+import { statusColors, PriorityPill } from "../components/shared"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -648,7 +647,6 @@ export default function TaskDetailPage() {
 
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!task) return []
-    const priorityColours = PRIORITY_COLOURS[task.priority] ?? PRIORITY_COLOURS.medium
     const valueWrapperSx = {
       width: "100%",
       display: "flex",
@@ -679,16 +677,9 @@ export default function TaskDetailPage() {
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
-            <Chip
-              size="small"
+            <PriorityPill
+              priority={task.priority}
               label={task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-              sx={{
-                bgcolor: priorityColours.bg,
-                color: priorityColours.text,
-                fontWeight: 600,
-                fontSize: 11,
-                height: 20,
-              }}
             />
           </Box>
         ),

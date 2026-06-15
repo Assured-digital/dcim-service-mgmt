@@ -29,7 +29,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
-import { TypeBadge, PriorityDot, Avatar as TicketAvatar } from "../components/shared"
+import { TypeBadge, PriorityPill, Avatar as TicketAvatar } from "../components/shared"
 import { statusColors } from "../components/shared/tokens/colors"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -330,12 +330,10 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
     {
       field: "priority", headerName: "Priority", width: 110,
       renderCell: (p) => (
-        <Stack direction="row" alignItems="center" spacing={0.75}>
-          <PriorityDot priority={p.value as string} />
-          <Typography sx={{ fontSize: 12.5 }}>
-            {(p.value as string).charAt(0).toUpperCase() + (p.value as string).slice(1)}
-          </Typography>
-        </Stack>
+        <PriorityPill
+          priority={p.value as string}
+          label={(p.value as string).charAt(0).toUpperCase() + (p.value as string).slice(1)}
+        />
       ),
     },
     {

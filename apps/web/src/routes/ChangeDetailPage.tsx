@@ -6,7 +6,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Divider,
   Paper,
   Snackbar,
@@ -33,7 +32,7 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined"
 import BlockIcon from "@mui/icons-material/Block"
 import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined"
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined"
-import { statusColors, type LinkedTask } from "../components/shared"
+import { statusColors, PriorityPill, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -1038,7 +1037,6 @@ export default function ChangeDetailPage() {
 
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!change) return []
-    const priorityColours = PRIORITY_COLOURS[change.priority] ?? PRIORITY_COLOURS.medium
     const valueWrapperSx = {
       width: "100%",
       display: "flex",
@@ -1081,16 +1079,9 @@ export default function ChangeDetailPage() {
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
-            <Chip
-              size="small"
+            <PriorityPill
+              priority={change.priority}
               label={change.priority.charAt(0).toUpperCase() + change.priority.slice(1)}
-              sx={{
-                bgcolor: priorityColours.bg,
-                color: priorityColours.text,
-                fontWeight: 600,
-                fontSize: 11,
-                height: 20,
-              }}
             />
           </Box>
         ),

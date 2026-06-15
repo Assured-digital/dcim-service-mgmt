@@ -23,18 +23,22 @@ export const uiBorder = {
   strong: "#cbd5e1",
 } as const
 
-// Status is the deliberate LOUD exception to the otherwise-quiet aesthetic:
-// deeper, saturated fills with white text so state is scannable at a glance,
-// and identical everywhere status appears (detail pill, queue table, rail,
-// Risks/Issues). This is the single source of truth — every status indicator
-// reads from here via resolveIntent / chipSx / statusColors.
+// Status uses a soft PASTEL scheme — a light tinted fill with a darker, coloured
+// text/icon in the same hue, so state is legible without shouting (in keeping
+// with the otherwise-quiet aesthetic). Identical everywhere status appears (Tasks
+// pill, detail pill, queue table, rail, Risks/Issues, filter chips). This is the
+// single source of truth — every status indicator reads from here via
+// resolveIntent / chipSx / statusColors.
+// NB: the Service Desk queue table + rail render `.bg` as a small standalone DOT
+// (no text on it), so the pastel fill appears there as a soft dot rather than a
+// filled pill.
 export const semanticTokens: Record<SemanticIntent, { bg: string; text: string }> = {
-  success: { bg: "#15803d", text: "#ffffff" }, // green — resolved / done / completed
-  active:  { bg: "#1d4ed8", text: "#ffffff" }, // blue  — in progress / assigned
-  warning: { bg: "#b45309", text: "#ffffff" }, // amber — waiting / pending
-  danger:  { bg: "#b91c1c", text: "#ffffff" }, // red   — blocked / cancelled / overdue
-  neutral: { bg: "#475569", text: "#ffffff" }, // slate — new / open / closed (terminal)
-  info:    { bg: "#1d4ed8", text: "#ffffff" },
+  success: { bg: "#dcfce7", text: "#16a34a" }, // soft green — resolved / done / completed
+  active:  { bg: "#dbeafe", text: "#1d4ed8" }, // soft blue  — in progress / assigned
+  warning: { bg: "#fef3c7", text: "#b45309" }, // soft amber — waiting / pending
+  danger:  { bg: "#fee2e2", text: "#dc2626" }, // soft red   — blocked / cancelled / overdue
+  neutral: { bg: "#e2e8f0", text: "#475569" }, // soft slate — new / open / closed (terminal)
+  info:    { bg: "#dbeafe", text: "#1d4ed8" }, // soft blue  — mirrors active
 }
 
 export type RAGLevel = "RED" | "AMBER" | "GREEN"
@@ -50,6 +54,19 @@ export const priorityDots: Record<string, string> = {
   medium:   "#f59e0b",
   high:     "#ef4444",
   critical: "#7c3aed"
+}
+
+// Priority pastel ramp — a true 4-step low -> critical scale (green/amber/orange/
+// red), used by the shared PriorityPill. This is the SAME scheme the detail pages
+// already render for priority, so a priority is the same colour on a list pill as
+// on a detail chip. Distinct from semanticTokens (status) and from the solid
+// priorityDots (the compact leading dots). This is the single source of truth for
+// priority-pill colour — read it via priorityToken().
+export const priorityTokens: Record<string, { bg: string; text: string }> = {
+  low:      { bg: "#dcfce7", text: "#15803d" }, // green
+  medium:   { bg: "#fef3c7", text: "#b45309" }, // amber
+  high:     { bg: "#ffedd5", text: "#c2410c" }, // orange
+  critical: { bg: "#fee2e2", text: "#b91c1c" }, // red
 }
 
 // Semantic status -> intent. First match wins, so order matters:
@@ -107,6 +124,11 @@ export const radii = {
   xs: 4, sm: 6, md: 8, lg: 12, pill: 999,
 } as const
 
+// Shared pill radius — the status pill and the priority pill use ONE value (the
+// app's ~6px baseline), so they match each other and the surrounding UI rather
+// than the old fully-rounded lozenge. Reduce/raise here and both pills follow.
+export const PILL_RADIUS = radii.sm
+
 export const shadows = {
   card: "0 10px 28px rgba(15,23,42,0.06)",
   hover: "0 2px 8px rgba(15,23,42,0.06)",
@@ -133,6 +155,12 @@ export function statusColors(value: string): { bg: string; text: string } {
 
 export function priorityDot(priority: string): string {
   return priorityDots[priority.toLowerCase()] ?? "#94a3b8"
+}
+
+// Priority pastel fill + text for the shared PriorityPill. Resolves to the 4-step
+// priorityTokens ramp; unknown values fall back to medium.
+export function priorityToken(priority: string): { bg: string; text: string } {
+  return priorityTokens[priority.toLowerCase()] ?? priorityTokens.medium
 }
 
 export function statusSelectSx(minWidth = 180) {
