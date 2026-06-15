@@ -330,6 +330,8 @@ model User {
   assignedServiceRequests ServiceRequest[]       @relation("AssignedSR")
   assignedIncidents       Incident[]             @relation("AssignedIncident")
   assignedTasks           Task[]                 @relation("AssignedTask")
+  assignedRisks           Risk[]                 @relation("AssignedRisk")
+  assignedIssues          Issue[]                @relation("AssignedIssue")
   requestIntakes          RequestIntake[]        @relation("RequesterIntake")
   assignedChanges         ChangeRequest[]        @relation("AssignedChange")
   changeApprovals         ChangeApproval[]       @relation("ChangeApprovals")
@@ -636,6 +638,9 @@ model Risk {
   closedAt         DateTime?
   linkedEntityType String?
   linkedEntityId   String?
+  assigneeId       String?
+  assignee         User?     @relation("AssignedRisk", fields: [assigneeId], references: [id])
+  createdById      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   source           String?
@@ -655,6 +660,9 @@ model Issue {
   closedAt         DateTime?
   linkedEntityType String?
   linkedEntityId   String?
+  assigneeId       String?
+  assignee         User?     @relation("AssignedIssue", fields: [assigneeId], references: [id])
+  createdById      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }

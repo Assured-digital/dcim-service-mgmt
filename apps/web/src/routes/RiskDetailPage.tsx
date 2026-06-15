@@ -25,7 +25,9 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
+import PersonIcon from "@mui/icons-material/Person"
 import { statusColors, type LinkedTask } from "../components/shared"
+import { userLabel } from "../lib/userDisplay"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -85,6 +87,10 @@ type Risk = {
   acceptanceNote: string | null
   reviewDate: string | null
   closedAt: string | null
+  assigneeId: string | null
+  assignee: { id: string; displayName: string } | null
+  createdById?: string | null
+  createdBy?: { id: string; displayName: string } | null
   links?: ResolvedLink[]
   attachments?: AttachmentSummary[]
   createdAt: string
@@ -822,6 +828,31 @@ export default function RiskDetailPage() {
     (v: string) => commitDetailField({ impact: v }),
     [commitDetailField]
   )
+  const handleSelectAssignee = React.useCallback(
+    (v: string) => commitDetailField({ assigneeId: v }),
+    [commitDetailField]
+  )
+
+  // Assignee-picker options — Unassigned sentinel ("") + the client-scoped assignable users.
+  const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const list: PopoverOption[] = users.map((u) => ({
+      value: u.id,
+      label: u.displayName,
+      iconBg: "#eaf3de",
+      iconColor: "#3b6d11",
+      icon: <PersonIcon sx={{ fontSize: 14 }} />,
+    }))
+    return [
+      {
+        value: "",
+        label: "Unassigned",
+        iconBg: "#f1efe8",
+        iconColor: "#5f5e5a",
+        icon: <PersonIcon sx={{ fontSize: 14 }} />,
+      },
+      ...list,
+    ]
+  }, [users])
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -930,8 +961,27 @@ export default function RiskDetailPage() {
           </Box>
         ),
       },
+      {
+        key: "assigneeId",
+        label: "Assignee",
+        editable: true,
+        currentValue: risk.assigneeId ?? "",
+        popoverOptions: usersOptions,
+        onSelect: handleSelectAssignee,
+        value: (
+          <Box sx={valueWrapperSx}>
+            {risk.assignee ? (
+              <Typography sx={{ fontSize: 12 }}>{userLabel(risk.assignee)}</Typography>
+            ) : (
+              <Typography sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}>
+                Unassigned
+              </Typography>
+            )}
+          </Box>
+        ),
+      },
     ]
-  }, [risk, handleSelectLikelihood, handleSelectImpact])
+  }, [risk, handleSelectLikelihood, handleSelectImpact, handleSelectAssignee, usersOptions])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -1014,7 +1064,7 @@ export default function RiskDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!risk) return undefined
     return {
-      submittedBy: null,
+      submittedBy: risk.createdBy?.displayName ?? null,
       createdAt: risk.createdAt,
       updatedAt: risk.updatedAt,
     }

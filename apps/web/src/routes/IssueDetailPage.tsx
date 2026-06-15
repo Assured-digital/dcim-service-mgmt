@@ -21,6 +21,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
+import PersonIcon from "@mui/icons-material/Person"
 import { statusColors, type LinkedTask } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -54,6 +55,7 @@ import {
 } from "../components/detail"
 import { transitions as issueTransitions } from "../config/transitions/issueTransitions"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { userLabel } from "../lib/userDisplay"
 import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
 import { TasksSectionContent } from "../components/TasksSectionContent"
 import { useDrillNav } from "../lib/drillNav"
@@ -78,6 +80,10 @@ type Issue = {
   resolution: string | null
   reviewDate: string | null
   closedAt: string | null
+  assigneeId: string | null
+  assignee: { id: string; displayName: string } | null
+  createdById?: string | null
+  createdBy?: { id: string; displayName: string } | null
   links?: ResolvedLink[]
   attachments?: AttachmentSummary[]
   createdAt: string
@@ -593,6 +599,31 @@ export default function IssueDetailPage() {
     (v: string) => commitDetailField({ severity: v }),
     [commitDetailField]
   )
+  const handleSelectAssignee = React.useCallback(
+    (v: string) => commitDetailField({ assigneeId: v }),
+    [commitDetailField]
+  )
+
+  // Assignee-picker options — Unassigned sentinel ("") + the client-scoped assignable users.
+  const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const list: PopoverOption[] = users.map((u) => ({
+      value: u.id,
+      label: u.displayName,
+      iconBg: "#eaf3de",
+      iconColor: "#3b6d11",
+      icon: <PersonIcon sx={{ fontSize: 14 }} />,
+    }))
+    return [
+      {
+        value: "",
+        label: "Unassigned",
+        iconBg: "#f1efe8",
+        iconColor: "#5f5e5a",
+        icon: <PersonIcon sx={{ fontSize: 14 }} />,
+      },
+      ...list,
+    ]
+  }, [users])
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -678,8 +709,27 @@ export default function IssueDetailPage() {
           </Box>
         ),
       },
+      {
+        key: "assigneeId",
+        label: "Assignee",
+        editable: true,
+        currentValue: issue.assigneeId ?? "",
+        popoverOptions: usersOptions,
+        onSelect: handleSelectAssignee,
+        value: (
+          <Box sx={valueWrapperSx}>
+            {issue.assignee ? (
+              <Typography sx={{ fontSize: 12 }}>{userLabel(issue.assignee)}</Typography>
+            ) : (
+              <Typography sx={{ fontSize: 12, color: "text.disabled", fontStyle: "italic" }}>
+                Unassigned
+              </Typography>
+            )}
+          </Box>
+        ),
+      },
     ]
-  }, [issue, handleSelectSeverity])
+  }, [issue, handleSelectSeverity, handleSelectAssignee, usersOptions])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -719,7 +769,7 @@ export default function IssueDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!issue) return undefined
     return {
-      submittedBy: null,
+      submittedBy: issue.createdBy?.displayName ?? null,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
     }

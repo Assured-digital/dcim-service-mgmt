@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Box, Stack, Typography } from "@mui/material"
-import { statusColors } from "../components/shared/tokens/colors"
+import { statusSolid } from "../components/shared/tokens/colors"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { getCurrentUser } from "../lib/auth"
 import { useTickets, type Ticket, KIND_LABELS } from "../lib/tickets"
@@ -73,10 +73,12 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {items.map(t => {
           const active = t.id === activeId
-          // Dot reads the SAME status→colour source the detail/queue pills use
-          // (statusColors → resolveIntent → semanticTokens), so a "New" record's
-          // dot matches its "New" pill. NOT due-proximity.
-          const dotColor = statusColors(t.status).bg
+          // Dot reads the SAME intent mapping the detail/queue pills use, but the
+          // SOLID (saturated) scale rather than the pastel fill — at 8px the soft
+          // pill colour is near-invisible between intents, so the rail's only
+          // status signal uses statusSolid (resolveIntent → semanticTokens.solid).
+          // NOT due-proximity.
+          const dotColor = statusSolid(t.status)
           return (
             <Box
               key={t.id}

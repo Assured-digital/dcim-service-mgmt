@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
+import { resolveCreator } from "../users/creator"
+import { toUserDisplay, userDisplaySelect } from "../users/display"
 import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
@@ -28,12 +30,13 @@ const RISK_STATUS_LABELS: Record<string, string> = {
 // Per-field humanisation for Risk updates. likelihood/impact are enum strings (DTO @IsIn
 // LOW/MEDIUM/HIGH). `status` changes via the status endpoint (STATUS_UPDATED). reviewDate
 // (date) is omitted — diffRecord has no date kind. The dead linkedEntity* scalars are omitted
-// (links live in the RecordLink join table now). Risk has no owner/creator column (#87 unshipped),
-// so there are no ref fields.
+// (links live in the RecordLink join table now). assigneeId is a ref field — its resolver
+// (id -> displayName) is supplied at the updateForClient call site.
 const RISK_FIELD_SPEC: FieldSpec = {
   mitigationPlan: { label: "Mitigation plan", kind: "scalar" },
   likelihood: { label: "Likelihood", kind: "enum", labels: RISK_LEVEL_LABELS },
-  impact: { label: "Impact", kind: "enum", labels: RISK_LEVEL_LABELS }
+  impact: { label: "Impact", kind: "enum", labels: RISK_LEVEL_LABELS },
+  assigneeId: { label: "Assignee", kind: "ref" }
 }
 
 @Injectable()
@@ -70,26 +73,30 @@ export class RisksService {
   } = {}) {
     this.assertClientScope(clientId)
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
-    return this.prisma.risk.findMany({
+    const rows = await this.prisma.risk.findMany({
       where: {
         clientId,
         linkedEntityType: filters.linkedEntityType || undefined,
         linkedEntityId: filters.linkedEntityId || undefined,
         createdAt
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      include: { assignee: { select: userDisplaySelect } }
     })
+    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
   }
 
   async getForClient(clientId: string, id: string) {
     this.assertClientScope(clientId)
     const risk = await this.prisma.risk.findFirst({
-      where: { id, clientId }
+      where: { id, clientId },
+      include: { assignee: { select: userDisplaySelect } }
     })
     if (!risk) throw new NotFoundException("Risk not found")
+    const createdBy = await resolveCreator(this.prisma, risk.createdById)
     const links = await resolveLinkedRecords(this.prisma, clientId, "risk", risk.id)
     const attachments = await resolveAttachments(this.prisma, clientId, "risk", risk.id)
-    return { ...risk, links, attachments }
+    return { ...risk, assignee: toUserDisplay(risk.assignee), createdBy, links, attachments }
   }
 
   async createForClient(clientId: string, actorUserId: string, dto: {
@@ -119,7 +126,8 @@ export class RisksService {
             source: dto.source ?? "MANUAL",
             linkedEntityType: dto.linkedEntityType,
             linkedEntityId: dto.linkedEntityId,
-            status: "IDENTIFIED"
+            status: "IDENTIFIED",
+            createdById: actorUserId
           }
         })
         await emitAudit(this.prisma, {
@@ -174,6 +182,7 @@ export class RisksService {
     reviewDate?: string
     likelihood?: string
     impact?: string
+    assigneeId?: string
     linkedEntityType?: string
     linkedEntityId?: string
   }) {
@@ -185,13 +194,23 @@ export class RisksService {
         likelihood: dto.likelihood,
         impact: dto.impact,
         reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
+        assigneeId: dto.assigneeId === "" ? null : dto.assigneeId ?? undefined,
         linkedEntityType: dto.linkedEntityType,
         linkedEntityId: dto.linkedEntityId
-      }
+      },
+      include: { assignee: { select: userDisplaySelect } }
     })
 
-    // No ref fields on Risk — humanise enums/scalars directly (no resolvers needed).
-    const changes = diffRecord(risk, dto, RISK_FIELD_SPEC)
+    const newAssignee = toUserDisplay(updated.assignee)
+    // Resolve assignee ids -> display names from rows already in hand (old via getForClient,
+    // new via the update include) — no extra lookup; humanised at emit time.
+    const assigneeNames = new Map<string, string>()
+    if (risk.assignee) assigneeNames.set(risk.assignee.id, risk.assignee.displayName)
+    if (newAssignee) assigneeNames.set(newAssignee.id, newAssignee.displayName)
+
+    const changes = diffRecord(risk, dto, RISK_FIELD_SPEC, {
+      assigneeId: (id) => (id ? assigneeNames.get(id) ?? null : null)
+    })
     if (changes.length) {
       await emitAudit(this.prisma, {
         entityType: "Risk",
@@ -203,6 +222,6 @@ export class RisksService {
       })
     }
 
-    return updated
+    return { ...updated, assignee: newAssignee }
   }
 }

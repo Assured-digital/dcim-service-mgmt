@@ -23,22 +23,25 @@ export const uiBorder = {
   strong: "#cbd5e1",
 } as const
 
-// Status uses a soft PASTEL scheme — a light tinted fill with a darker, coloured
-// text/icon in the same hue, so state is legible without shouting (in keeping
-// with the otherwise-quiet aesthetic). Identical everywhere status appears (Tasks
-// pill, detail pill, queue table, rail, Risks/Issues, filter chips). This is the
-// single source of truth — every status indicator reads from here via
-// resolveIntent / chipSx / statusColors.
-// NB: the Service Desk queue table + rail render `.bg` as a small standalone DOT
-// (no text on it), so the pastel fill appears there as a soft dot rather than a
-// filled pill.
-export const semanticTokens: Record<SemanticIntent, { bg: string; text: string }> = {
-  success: { bg: "#dcfce7", text: "#16a34a" }, // soft green — resolved / done / completed
-  active:  { bg: "#dbeafe", text: "#1d4ed8" }, // soft blue  — in progress / assigned
-  warning: { bg: "#fef3c7", text: "#b45309" }, // soft amber — waiting / pending
-  danger:  { bg: "#fee2e2", text: "#dc2626" }, // soft red   — blocked / cancelled / overdue
-  neutral: { bg: "#e2e8f0", text: "#475569" }, // soft slate — new / open / closed (terminal)
-  info:    { bg: "#dbeafe", text: "#1d4ed8" }, // soft blue  — mirrors active
+// Status has ONE intent→hue mapping exposed at TWO scales:
+//  - `bg` + `text`: the soft PASTEL scale — a light tinted fill with a darker,
+//    same-hue text/icon, so state is legible without shouting. Used by every
+//    LABELLED status surface (Tasks pill, detail pill, queue table StatusPill,
+//    Risks/Issues, filter chips) via resolveIntent / chipSx / statusColors.
+//  - `solid`: the SATURATED scale — a single deep, fully-saturated colour (the
+//    pre-pastel status fills, recovered from git history) for tiny standalone
+//    GLYPHS with no adjacent label, where the pastel fill is too washed out to
+//    tell intents apart. Used by the Service Desk queue-rail status dot via
+//    statusSolid(). At ~8px the soft fill is near-invisible between intents; the
+//    solid value keeps New/Investigating/Mitigated/Resolved/Closed distinct.
+// This is the single source of truth — pills stay soft, only the rail dot is solid.
+export const semanticTokens: Record<SemanticIntent, { bg: string; text: string; solid: string }> = {
+  success: { bg: "#dcfce7", text: "#16a34a", solid: "#15803d" }, // green — resolved / done / completed
+  active:  { bg: "#dbeafe", text: "#1d4ed8", solid: "#1d4ed8" }, // blue  — in progress / assigned
+  warning: { bg: "#fef3c7", text: "#b45309", solid: "#b45309" }, // amber — waiting / pending
+  danger:  { bg: "#fee2e2", text: "#dc2626", solid: "#b91c1c" }, // red   — blocked / cancelled / overdue
+  neutral: { bg: "#e2e8f0", text: "#475569", solid: "#475569" }, // slate — new / open / closed (terminal)
+  info:    { bg: "#dbeafe", text: "#1d4ed8", solid: "#1d4ed8" }, // blue  — mirrors active
 }
 
 export type RAGLevel = "RED" | "AMBER" | "GREEN"
@@ -151,6 +154,13 @@ export function chipSx(value: string) {
 // so a given status is the same colour everywhere it appears.
 export function statusColors(value: string): { bg: string; text: string } {
   return semanticTokens[resolveIntent(value)]
+}
+
+// Saturated status colour for tiny standalone glyphs (the queue-rail status dot),
+// where the pastel `bg` washes out at ~8px. Same intent mapping as statusColors —
+// only the scale differs (solid vs soft). Do NOT use for pills; they stay pastel.
+export function statusSolid(value: string): string {
+  return semanticTokens[resolveIntent(value)].solid
 }
 
 export function priorityDot(priority: string): string {
