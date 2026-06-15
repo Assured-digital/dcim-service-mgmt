@@ -9,7 +9,8 @@ data-centre services consultancy). Serves multiple client organisations. Enterpr
 
 **Stack:** NestJS (API) · React + Vite + MUI v5 (web) · PostgreSQL + Prisma · Docker-first monorepo.
 Repo: `Assured-digital/dcim-service-mgmt`. Local dev on Windows (PowerShell — use `Select-String` /
-`Get-ChildItem`, NOT grep). IDE: VS Code with the Claude Code extension.
+`Get-ChildItem -Recurse`, NOT grep; no `&&` chaining — use `;` or separate lines). IDE: VS Code with
+the Claude Code extension. (NB: Azure **Cloud Shell is bash** — different conventions; see Deploy & DB.)
 
 Monorepo layout: `apps/api` (NestJS) · `apps/web` (React) · `packages/shared`. Prisma schema +
 migrations under `apps/api/prisma`. Local dev via `docker-compose.yml` (Postgres 16, MinIO, api, web).
@@ -81,10 +82,13 @@ set (not per-record-type duplication). When extending either, mirror the existin
   (`LINK_RECORD_TYPES`). The old single-scalar `linkedEntityType`/`linkedEntityId` fields are DEAD
   (superseded by the join table) — left in place for an additive migration; carded to drop.
 - **Attachments** (`apps/api/src/attachments/`): an `Attachment` model — metadata + `storageKey` in DB,
-  bytes in object storage via the `StorageService` abstraction (S3 provider live, used with local MinIO;
-  Azure provider is a STUB — not yet implemented). Files stream THROUGH the API (`GET /attachments/:id`)
-  with an auth + tenant re-check on every access — NO pre-signed URLs (deliberate; keeps every access on
-  the client-scope chokepoint). Security policy in `attachments/content-policy.ts`: magic-byte content
+  bytes in object storage via the `StorageService` abstraction (routes on `STORAGE_PROVIDER`: `s3` against
+  local MinIO in dev, `azure` Blob in cloud — BOTH LIVE; see Storage backend below). Files stream THROUGH
+  the API (`GET /attachments/:id`) with an auth + tenant re-check on every access — NO pre-signed URLs / no
+  public or SAS URLs (deliberate; keeps every access on the client-scope chokepoint). Tenant isolation is
+  enforced at the API DB-row `clientId` check, so it is storage-backend-independent — the `storageKey`
+  embeds `clientId` only for tidiness, NOT as the security boundary. Security policy in
+  `attachments/content-policy.ts`: magic-byte content
   validation (client-sent Content-Type is IGNORED for the type decision), allow-list = PDF + raster
   images (PNG/JPEG/GIF/WebP), SVG REJECTED (script-carrying XSS vector), `Content-Disposition: inline`
   only for the validated allow-list, `X-Content-Type-Options: nosniff` always, 25 MB cap. Frontend:
@@ -93,10 +97,15 @@ set (not per-record-type duplication). When extending either, mirror the existin
   (`ATTACHMENT_RECORD_TYPES`) = the six work-items + `maintenance` + `check` (DECOUPLED from the link
   union: Maintenance/Check are attachable but NOT linkable). `maintenance` (MaintenanceLog) has no
   `clientId` — scoped indirectly via `asset.clientId` in the resolver.
-- **NOT YET WIRED IN PROD:** no storage backend / `S3_*`/`AZURE_STORAGE_*` env is configured on test or
-  prod container apps, so attachment UPLOAD/DOWNLOAD does not function in deployed environments (verified
-  local/MinIO only). Carded. Also: Maintenance/Check attachment *frontend panels* are not yet wired
-  (backend done).
+- **Storage backend — LIVE on test + prod.** Attachment upload/download works in both deployed
+  environments (Azure Blob) and locally (S3/MinIO). The Azure provider (`storage/azure.provider.ts`) uses
+  `@azure/storage-blob` + `DefaultAzureCredential` (the container app's managed identity — NO account key
+  stored). **Env vars** (set out-of-band — see Deploy & DB sequencing): `STORAGE_PROVIDER=azure`,
+  `AZURE_STORAGE_ACCOUNT=<account>`, `AZURE_STORAGE_CONTAINER=dcms-attachments` (NB: `dcms-attachments`,
+  NOT `attachments` — the provider's `"attachments"` default is wrong for our envs), and the CRITICAL
+  `AZURE_CLIENT_ID=<user-assigned identity clientId>` (see deploy gotcha #5). The identity needs **Storage
+  Blob Data Contributor** on the storage account. Frontend is fully wired: all six work-items PLUS the
+  Maintenance and Check detail pages mount `AttachmentsContent`.
 
 ## Architecture — multi-tenant client scoping (CRITICAL)
 Tenant isolation is centralised in ONE place: resolveClientScope (and the shared resolveAssignedClient) in apps/api/src/auth/request-context.ts. It is called by the controllers at the request edge (reading the x-client-id header + the JWT user), and returns a validated clientId which is passed into the service methods. Services then filter every query by that clientId — list queries use where: { clientId }; detail fetches use where: { id, clientId } together (never id alone), so a record cannot be fetched cross-client by guessing its id. (One exception: assets.service.ts fetches by id then checks clientId/ownerType after the fetch — safe, but the odd one out; new code should prefer query-scoping.) Do not scatter or reinvent client-filtering logic — resolve once in the controller, filter by the passed clientId in the service.
@@ -164,7 +173,9 @@ validates it. There is NO "hidden selector / auto-scope" special-case — do not
   verified locally has NOT actually exercised its SQL file. Watch the migrate job on the first test deploy
   of any new migration.
 - Azure ops run in browser **Cloud Shell** (`az`). Cloud Shell mangles long pastes / nested heredocs and
-  loses home-dir files on reconnect (Azure resources are never lost).
+  loses home-dir files on reconnect (Azure resources are never lost). Cloud Shell is **bash**, NOT
+  PowerShell — use `grep`, `2>/dev/null` (NOT `2>$null`), `&&` chaining, and forward-slash paths there
+  (the inverse of the local Windows/PowerShell conventions in "What this is").
 
 ### Local dev gotcha (Windows)
 - **The `nest start:dev` watcher does NOT reliably pick up host bind-mount edits** on Windows. After
@@ -200,6 +211,19 @@ validates it. There is NO "hidden selector / auto-scope" special-case — do not
 4. **Always verify the running image after any deploy issue** (matches the intended commit, and both API
    AND web if the failure skipped deploy steps):
    `az containerapp show -g <rg> --name adsm-api-<env> --query "properties.template.containers[0].image" -o tsv`
+5. **`AZURE_CLIENT_ID` is REQUIRED for storage in EVERY environment.** `DefaultAzureCredential` does NOT
+   auto-select a *user-assigned* managed identity — without `AZURE_CLIENT_ID` set to the container app's
+   user-assigned identity clientId, the credential finds no usable identity and storage auth fails with a
+   **500**. This bit PROD (which has ONLY a user-assigned identity) after TEST looked fine — TEST happened
+   to also have a *system-assigned* identity, which `DefaultAzureCredential` auto-discovers, masking the
+   missing var. Set `AZURE_CLIENT_ID` explicitly on every env, and grant that identity **Storage Blob Data
+   Contributor** on the storage account.
+6. **Env vars are set OUT-OF-BAND and persist across image-only deploys — deploy CODE before flipping a
+   flag.** Both deploy workflows update ONLY the container image; they set NO env/secrets. Env/secrets are
+   applied manually via `az containerapp update --set-env-vars ...` and survive subsequent image deploys.
+   CONSEQUENCE: when shipping a feature gated by an env var, deploy the CODE first, THEN flip the env var —
+   flipping a flag onto an OLD image runs the old/stub behaviour. (This bit us: setting
+   `STORAGE_PROVIDER=azure` before the Azure provider code was deployed → the old stub threw.)
 
 ## Docs in repo
 - `docs/MULTI_CLIENT_ASSIGNMENT_DESIGN.md` — multi-client architecture + phased plan
@@ -216,5 +240,12 @@ validates it. There is NO "hidden selector / auto-scope" special-case — do not
   detail pages call `setRecordLabel` via `BreadcrumbContext`).
 - Chip-style response buttons with tinted backgrounds; no solid colour fills on interactive elements.
 - `StatusPill` fixed width so it doesn't shift on status transitions.
+- **List pages must claim full-bleed.** List / drill-down navigator pages call `setPageFullBleed(true)`
+  (from `useBreadcrumb()`) on mount and restore it on unmount; the Shell (`apps/web/src/routes/Shell.tsx`)
+  then drops its content padding to `0` and switches overflow to `hidden`. Full-bleed is OWNED either by
+  the shared `DrillDownNavigator` (e.g. R&I) or by the page itself (e.g. `ServiceDeskDashboard`) — the
+  reference pattern. WITHOUT it, list pages regress to excess padding + page-wide horizontal scroll (this
+  regressed when the R&I navigator was adopted and full-bleed got dropped — had to be re-fixed). Preserve
+  it through any list-page layout restructure.
 - Design tokens: primary `#1d4ed8`, dark navy sidebar `#0d1526`, slate/blue palette;
   Space Grotesk + Manrope typefaces.
