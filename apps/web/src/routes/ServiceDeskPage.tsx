@@ -29,8 +29,8 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
-import { TypeBadge, PriorityPill, Avatar as TicketAvatar } from "../components/shared"
-import { statusColors } from "../components/shared/tokens/colors"
+import { TypeBadge, PriorityPill, StatusPill, AssigneeCell } from "../components/shared"
+import { formatDate } from "../lib/format"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -242,30 +242,20 @@ function UnifiedFooter() {
   )
 }
 
-// ── Unified queue: status dot + text ──────────────────────────────────────
-// Softened in the dense table only: a coloured dot + plain text, matching the
-// Priority cell's treatment. The dot colour reads the SAME single source of
-// truth as the pills (statusColors -> semanticTokens), so the colour is
-// identical to the detail pill / rail dot — just rendered as a dot here.
+// ── Unified queue: status pill (read-only) ────────────────────────────────
+// The shared StatusPill (6px pastel) — same component as the Tasks row, the
+// detail pill and the priority pill — so the queue reads status-pill +
+// priority-pill consistently (resolving the old dot/pill mix). Read-only: no
+// edit chevron (the intentional Tasks-only inline-edit asymmetry; DataGrid
+// pages don't edit). Overdue keeps the red "Overdue" treatment (same
+// single-source danger token the dot used). Label stays per-domain/humanised.
 function StatusCell({ ticket }: { ticket: Ticket }) {
   const value = ticket.overdue ? "OVERDUE" : ticket.status
-  const label = ticket.overdue ? "overdue" : ticket.status.toLowerCase().replaceAll("_", " ")
-  return (
-    <Stack direction="row" alignItems="center" spacing={0.75}>
-      <Box
-        component="span"
-        sx={{
-          display: "inline-block",
-          width: 8, height: 8, borderRadius: "50%",
-          bgcolor: statusColors(value).bg,
-          flexShrink: 0,
-        }}
-      />
-      <Typography sx={{ fontSize: 12.5 }}>
-        {label.charAt(0).toUpperCase() + label.slice(1)}
-      </Typography>
-    </Stack>
-  )
+  const humanised = ticket.status.toLowerCase().replaceAll("_", " ")
+  const label = ticket.overdue
+    ? "Overdue"
+    : humanised.charAt(0).toUpperCase() + humanised.slice(1)
+  return <StatusPill value={value} label={label} />
 }
 
 // ── Subject cell that only shows a tooltip when its text is truncated ─────
@@ -341,27 +331,14 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
       type: "singleSelect",
       valueOptions: assigneeOptions,
       valueGetter: (_v, row) => row.assignee?.displayName ?? "Unassigned",
-      renderCell: (p) => {
-        const t = p.row as Ticket
-        if (!t.assignee) {
-          return <Typography sx={{ fontSize: 12.5, fontStyle: "italic", color: "#94a3b8" }}>Unassigned</Typography>
-        }
-        return (
-          <Tooltip title={t.assignee.displayName} arrow placement="top">
-            <Stack direction="row" alignItems="center" spacing={0.75}>
-              <TicketAvatar name={t.assignee.displayName} size="sm" variant="engineer" />
-              <Typography sx={{ fontSize: 12.5 }}>{p.value as string}</Typography>
-            </Stack>
-          </Tooltip>
-        )
-      },
+      renderCell: (p) => <AssigneeCell user={(p.row as Ticket).assignee} />,
     },
     {
       field: "updatedAt", headerName: "Updated", width: 110,
       valueGetter: (v) => v ? new Date(v as string) : null,
       renderCell: (p) => {
         const t = p.row as Ticket
-        const dateStr = p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"
+        const dateStr = formatDate(t.updatedAt) || "—"
         return (
           <Typography sx={{
             fontSize: 12,
@@ -378,9 +355,7 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
       valueGetter: (v) => v ? new Date(v as string) : null,
       renderCell: (p) => {
         const t = p.row as Ticket
-        const dateStr = p.value
-          ? (p.value as Date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-          : "—"
+        const dateStr = formatDate(t.dueAt) || "—"
         return (
           <Typography sx={{
             fontSize: 12,
