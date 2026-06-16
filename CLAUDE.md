@@ -194,6 +194,23 @@ validates it. There is NO "hidden selector / auto-scope" special-case — do not
   re-optimize. Do NOT chase reinstalls/rebuilds — check `vite.config` and read the actual stack trace
   first. A persistent unchanged Vite dep hash across rebuilds means the optimize cache (not the install) is
   the issue.
+- **Vite `optimizeDeps.include` MUST pin the heavy MUI/emotion/query/router deps — not just react.**
+  Symptom: app boots (document + main.tsx load 200) but every lazy-loaded route white-screens; console shows
+  `GET /node_modules/.vite/deps/@mui_icons-material.js → 504 (Outdated Optimize Dep)` →
+  `Failed to fetch dynamically imported module: LoginPage.tsx`, with MISMATCHED dep `?v=` hashes across
+  chunks. Persists across `.vite` wipe + restart (NOT transient). Root cause: a big package
+  (`@mui/icons-material` especially) imported only by a lazy route is discovered LATE, mid-session, after
+  the first optimize pass — Vite re-optimizes and discards the hash the running page already loaded → 504.
+  Fix (in `apps/web/vite.config.ts`): `optimizeDeps.include` lists react + ALL heavy lazy-imported deps so
+  Vite pre-bundles them upfront in ONE coherent pass — currently `@mui/material`, `@mui/icons-material`,
+  `@mui/x-charts`, `@mui/x-data-grid`, `@emotion/react`, `@emotion/styled`, `@tanstack/react-query`,
+  `react-router-dom` (keep the four `react*` entries + `resolve.dedupe` intact). After ANY dep change the
+  recovery is: clear the cache `docker compose exec web sh -c "rm -rf /app/apps/web/node_modules/.vite
+  /app/node_modules/.vite"` → `docker compose restart web` → WAIT for the optimizer to settle before
+  probing. NB: a FIRST cold-start load can briefly split hashes as deps are crawled in waves; the persisted
+  cache unifies them — verify on a plain restart (cache reused) that all deps share ONE `?v=` hash and
+  `@mui_icons-material.js` serves 200. The web service is bind-mounted, so `vite.config` edits apply on
+  restart (no rebuild). Dev-only — prod uses the Rollup bundle (no dev optimizer), unaffected.
 - **Monorepo install rule: always install from the repo ROOT.** This is an npm-workspaces monorepo
   (single root lockfile, hoisted deps). NEVER `npm install --prefix apps/web` — that creates a standalone
   `apps/web/node_modules` with its own duplicate React. The root `.dockerignore` excludes

@@ -66,6 +66,14 @@ services:
       ports:
         - "5173:5173"
       command: npm run dev -- --host 0.0.0.0 --port 5173
+      volumes:
+        # Bind-mount live source for HMR; the two anonymous volumes below MASK
+        # the host node_modules so the container uses its OWN image-installed
+        # deps (the critical guard against the duplicate-React trap on Windows).
+        - ./apps/web:/app/apps/web
+        - ./packages:/app/packages
+        - /app/node_modules
+        - /app/apps/web/node_modules
       depends_on:
         - api
 
