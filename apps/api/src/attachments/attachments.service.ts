@@ -7,6 +7,7 @@ import {
   UnsupportedMediaTypeException
 } from "@nestjs/common";
 import { v4 as uuidv4 } from "uuid";
+import { CheckStatus } from "@prisma/client";
 import type { Readable } from "stream";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
@@ -20,6 +21,38 @@ export class AttachmentsService {
 
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope");
+  }
+
+  // Evidence-immutability lock: once a Check is COMPLETED/CLOSED its attachment set is
+  // frozen (the signed-off evidence record), so neither check-level nor per-item
+  // (check-item) photos may be added or deleted. This is a STATUS predicate layered ON
+  // TOP of the clientId chokepoint — it never replaces or weakens tenant scoping; every
+  // lookup here is still clientId-scoped (the same indirect chain resolve-links uses).
+  // Only the two check-owned attachment types are affected; all other types short-circuit.
+  // Mirrors the ChecksService.updateItem block (message style + COMPLETED/CLOSED gate).
+  private async assertCheckNotLocked(clientId: string, recordType: string, recordId: string) {
+    let status: string | null | undefined;
+    if (recordType === "check") {
+      // recordId IS the checkId — scoped by clientId.
+      const check = await this.prisma.check.findFirst({
+        where: { id: recordId, clientId },
+        select: { status: true }
+      });
+      status = check?.status;
+    } else if (recordType === "check-item") {
+      // recordId is the itemId — resolve the owning check's status THROUGH the item,
+      // scoped by check.clientId (same indirect tenant chain as resolve-links).
+      const item = await this.prisma.checkItem.findFirst({
+        where: { id: recordId, check: { clientId } },
+        select: { check: { select: { status: true } } }
+      });
+      status = item?.check.status;
+    } else {
+      return; // not a check-owned attachment — no status lock
+    }
+    if (status === CheckStatus.COMPLETED || status === CheckStatus.CLOSED) {
+      throw new BadRequestException("Cannot modify attachments on a completed check");
+    }
   }
 
   private toSummary(row: {
@@ -53,6 +86,9 @@ export class AttachmentsService {
     // attachment can never be hung off a record outside the caller's scope.
     const target = await resolveRecordSummary(this.prisma, clientId, recordType, recordId);
     if (!target) throw new NotFoundException(`Record not found in this client: ${recordType}`);
+
+    // Block uploads onto a signed-off check (check/check-item only); no-op otherwise.
+    await this.assertCheckNotLocked(clientId, recordType, recordId);
 
     if (!file || !file.buffer || file.buffer.length === 0) {
       throw new BadRequestException("No file provided");
@@ -110,6 +146,9 @@ export class AttachmentsService {
     this.assertClientScope(clientId);
     const att = await this.prisma.attachment.findFirst({ where: { id, clientId } });
     if (!att) throw new NotFoundException("Attachment not found");
+    // Same evidence lock on delete: a COMPLETED/CLOSED check's photos can't be removed
+    // (check/check-item only; the att row carries the owning recordType + recordId).
+    await this.assertCheckNotLocked(clientId, att.recordType, att.recordId);
     // Remove the bytes first, then the metadata row. If the byte delete fails we keep
     // the row so the operation is retryable rather than leaving a dangling pointer.
     await this.storage.deleteObject(att.storageKey);

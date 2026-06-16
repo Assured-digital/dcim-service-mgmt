@@ -552,6 +552,10 @@ export default function CheckDetailPage() {
   // the editable execution UI, so the approver attests to fixed evidence — they cannot
   // alter responses/notes/photos. Only the engineer's IN_PROGRESS pass is editable.
   const isExecuting = check.status === "IN_PROGRESS"
+  // Evidence is frozen once the check is signed off — the check-level attachments panel
+  // goes read-only (no Attach file / no delete), mirroring the backend attachment lock.
+  // (Per-item photos are already preview-only in the standard-layout checklist below.)
+  const attachmentsLocked = ["COMPLETED", "CLOSED"].includes(check.status)
 
   // Group items by section — already computed above, just re-derive for the check guard
   // (sections/sectionNames are correct since check.items is now available)
@@ -1592,6 +1596,7 @@ export default function CheckDetailPage() {
                 attachments={check?.attachments ?? []}
                 recordType="check"
                 recordId={check?.id ?? ""}
+                readOnly={attachmentsLocked}
                 onChanged={() => qc.invalidateQueries({ queryKey: ["check-detail", id] })}
               />
             </RightPanelSection>

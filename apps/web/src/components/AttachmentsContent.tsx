@@ -29,6 +29,10 @@ interface AttachmentsContentProps {
   // to the section header "+" (via the imperative openPicker handle below), so they
   // pass false; non-shell consumers (e.g. CheckDetailPage) keep the default.
   showAddButton?: boolean
+  // Frozen evidence: hide every mutate affordance (Attach file + per-row Delete),
+  // leaving view/download/preview. Used by CheckDetailPage for COMPLETED/CLOSED checks,
+  // mirroring the backend attachment lock so the UI never offers an action the API rejects.
+  readOnly?: boolean
 }
 
 // Imperative handle so a host (the section-header "+") can trigger the file picker
@@ -46,7 +50,7 @@ const ACCEPT = ".pdf,image/png,image/jpeg,image/gif,image/webp"
 // its own upload/delete mutations and the in-app preview modal.
 export const AttachmentsContent = React.memo(
   React.forwardRef<AttachmentsHandle, AttachmentsContentProps>(function AttachmentsContent(
-    { attachments, recordType, recordId, onChanged, showAddButton = true },
+    { attachments, recordType, recordId, onChanged, showAddButton = true, readOnly = false },
     ref
   ) {
   const { notify } = useNotification()
@@ -152,26 +156,28 @@ export const AttachmentsContent = React.memo(
                   <FileDownloadIcon sx={{ fontSize: 14 }} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton
-                  className="at-action"
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleDelete(att)
-                  }}
-                  sx={{ opacity: 0, transition: "opacity 0.15s", flexShrink: 0, p: 0.25 }}
-                >
-                  <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              </Tooltip>
+              {!readOnly ? (
+                <Tooltip title="Delete">
+                  <IconButton
+                    className="at-action"
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDelete(att)
+                    }}
+                    sx={{ opacity: 0, transition: "opacity 0.15s", flexShrink: 0, p: 0.25 }}
+                  >
+                    <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Tooltip>
+              ) : null}
             </Box>
           )
         })
       )}
 
       <input ref={inputRef} type="file" accept={ACCEPT} hidden onChange={handlePick} />
-      {showAddButton ? (
+      {showAddButton && !readOnly ? (
         <Button
           variant="text"
           size="small"
