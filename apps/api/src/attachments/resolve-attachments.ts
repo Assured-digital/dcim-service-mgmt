@@ -36,3 +36,35 @@ export async function resolveAttachments(
     inline: isInlineType(r.contentType)
   }));
 }
+
+// Batch variant of resolveAttachments: resolve attachments for MANY recordIds of one
+// type in a single query, grouped by recordId (newest-first within each group). Same
+// clientId chokepoint as the single resolver. Used to graft per-item attachments onto
+// a record's children (e.g. each CheckItem on a Check) without an N+1 of single calls.
+export async function resolveAttachmentsForRecords(
+  prisma: PrismaService,
+  clientId: string,
+  recordType: AttachmentRecordType,
+  recordIds: string[]
+): Promise<Map<string, AttachmentSummary[]>> {
+  const grouped = new Map<string, AttachmentSummary[]>();
+  if (recordIds.length === 0) return grouped;
+  const rows = await prisma.attachment.findMany({
+    where: { clientId, recordType, recordId: { in: recordIds } },
+    orderBy: { createdAt: "desc" }
+  });
+  for (const r of rows) {
+    const summary: AttachmentSummary = {
+      id: r.id,
+      filename: r.filename,
+      contentType: r.contentType,
+      size: r.size,
+      uploadedAt: r.createdAt.toISOString(),
+      inline: isInlineType(r.contentType)
+    };
+    const list = grouped.get(r.recordId);
+    if (list) list.push(summary);
+    else grouped.set(r.recordId, [summary]);
+  }
+  return grouped;
+}

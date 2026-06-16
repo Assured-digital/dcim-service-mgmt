@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { CheckStatus } from "@prisma/client"
-import { resolveAttachments } from "../attachments/resolve-attachments"
+import { resolveAttachments, resolveAttachmentsForRecords } from "../attachments/resolve-attachments"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
 import { emitAudit } from "../audit-events/emit-audit"
 
@@ -216,10 +216,20 @@ export class ChecksService {
     })
     if (!check) throw new NotFoundException("Check not found")
     const attachments = await resolveAttachments(this.prisma, clientId, "check", check.id)
+    // Per-item field-evidence photos: batch-resolve check-item attachments (scoped
+    // indirectly via the parent check) and graft onto each item, mirroring the
+    // check-level resolver above.
+    const itemAttachments = await resolveAttachmentsForRecords(
+      this.prisma,
+      clientId,
+      "check-item",
+      check.items.map((i) => i.id)
+    )
     return {
       ...check,
       assignee: toUserDisplay(check.assignee),
       reviewer: toUserDisplay(check.reviewer),
+      items: check.items.map((i) => ({ ...i, attachments: itemAttachments.get(i.id) ?? [] })),
       attachments
     }
   }

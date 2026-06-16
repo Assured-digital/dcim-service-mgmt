@@ -17,14 +17,16 @@ export function isLinkRecordType(value: unknown): value is LinkRecordType {
   return typeof value === "string" && (LINK_RECORD_TYPES as readonly string[]).includes(value);
 }
 
-// Attachments accept the six link types PLUS Maintenance and Check. This list is
-// deliberately SEPARATE from LINK_RECORD_TYPES: extending it makes those records
-// attachable WITHOUT making them linkable (record-links still validates against the
-// six). The record resolver below understands all eight.
+// Attachments accept the six link types PLUS Maintenance, Check and Check-item. This
+// list is deliberately SEPARATE from LINK_RECORD_TYPES: extending it makes those
+// records attachable WITHOUT making them linkable (record-links still validates
+// against the six). The record resolver below understands all nine. `check-item` is a
+// line-item on a Check — attachable (per-item field-evidence photos) but never linkable.
 export const ATTACHMENT_RECORD_TYPES = [
   ...LINK_RECORD_TYPES,
   "maintenance",
-  "check"
+  "check",
+  "check-item"
 ] as const;
 
 export type AttachmentRecordType = (typeof ATTACHMENT_RECORD_TYPES)[number];
@@ -150,6 +152,22 @@ async function queryRecords(
         take
       });
       return rows.map((r) => ({ type, id: r.id, reference: "", title: r.workTypeOther ?? r.workType, status: "" }));
+    }
+    case "check-item": {
+      // CheckItem has no clientId/reference/status of its own — it is a line-item on a
+      // Check, tenant-scoped THROUGH its parent Check (check.clientId), exactly as the
+      // maintenance case scopes through asset.clientId. A concrete clientId in
+      // check:{clientId} excludes any other client's items. Used only as an existence/
+      // tenant check for attachments (check-item is attachable, not linkable, so the
+      // picker/search never reaches this case). The summary is synthesised from the
+      // item label — these fields are never surfaced for attachments.
+      const rows = await prisma.checkItem.findMany({
+        where: { check: { clientId }, ...idWhere },
+        select: { id: true, label: true },
+        orderBy,
+        take
+      });
+      return rows.map((r) => ({ type, id: r.id, reference: "", title: r.label, status: "" }));
     }
   }
 }

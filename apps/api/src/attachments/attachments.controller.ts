@@ -30,17 +30,21 @@ import {
   MAX_ATTACHMENT_BYTES
 } from "./content-policy";
 
-// Same operational role split as the record-links controller: reads open to the full
-// operational set, mutations exclude read-only viewers.
+// Reads open to the full operational set; mutations exclude only read-only viewers
+// (CLIENT_VIEWER / PUBLIC_USER). ENGINEER is a WRITE role here: field engineers attach
+// site-evidence photos to checks/check-items/maintenance on-site — without write access
+// the per-item evidence flow (and the check-level panel) 403s for the actual field user.
+// Upload/delete stay tenant-scoped (clientId chokepoint) + magic-byte content-validated.
 const ATTACH_WRITE_ROLES = [
   Role.ORG_OWNER,
   Role.ORG_ADMIN,
   Role.ADMIN,
   Role.SERVICE_MANAGER,
-  Role.SERVICE_DESK_ANALYST
+  Role.SERVICE_DESK_ANALYST,
+  Role.ENGINEER
 ] as const;
 
-const ATTACH_READ_ROLES = [...ATTACH_WRITE_ROLES, Role.ENGINEER, Role.CLIENT_VIEWER] as const;
+const ATTACH_READ_ROLES = [...ATTACH_WRITE_ROLES, Role.CLIENT_VIEWER] as const;
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("attachments")

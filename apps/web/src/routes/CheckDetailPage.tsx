@@ -13,12 +13,15 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import CameraAltIcon from "@mui/icons-material/CameraAlt"
 import AttachFileIcon from "@mui/icons-material/AttachFile"
+import ImageIcon from "@mui/icons-material/Image"
+import DescriptionIcon from "@mui/icons-material/Description"
 import {
   PropertiesPanel, chipSx, ragTokens, WorkflowStrip
 } from "../components/shared"
 import { RightPanelSection } from "../components/detail"
 import { AttachmentsContent } from "../components/AttachmentsContent"
-import type { AttachmentSummary } from "../lib/attachments"
+import { AttachmentPreviewModal } from "../components/AttachmentPreviewModal"
+import { type AttachmentSummary, uploadAttachment, deleteAttachment, isImageType } from "../lib/attachments"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -37,6 +40,7 @@ type CheckItem = {
   notes: string | null
   sortOrder: number
   followOns: { id: string; entityType: string; entityId: string; note: string | null }[]
+  attachments?: AttachmentSummary[]
 }
 
 type Check = {
@@ -193,7 +197,7 @@ function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
 export default function CheckDetailPage() {
   const { id } = useParams()
   const qc = useQueryClient()
-  const { setRecordLabel } = useBreadcrumb()
+  const { setRecordLabel, setPageFullBleed } = useBreadcrumb()
 
   const canExecute = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
@@ -206,7 +210,10 @@ export default function CheckDetailPage() {
   const [activeTab, setActiveTab] = React.useState(0) // for standard layout
 
   const [drafts, setDrafts] = React.useState<Record<string, { response: string; notes: string; notesOpen?: boolean }>>({})
-  const [photos, setPhotos] = React.useState<Record<string, string[]>>({})
+  // Per-item field-evidence photos now persist to object storage as `check-item`
+  // attachments (was an ephemeral base64-in-state trap that lost photos on refresh).
+  const [uploadingItems, setUploadingItems] = React.useState<Record<string, boolean>>({})
+  const [previewAtt, setPreviewAtt] = React.useState<AttachmentSummary | null>(null)
   const photoInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
   const [followOnItem, setFollowOnItem] = React.useState<CheckItem | null>(null)
   const [submitOpen, setSubmitOpen] = React.useState(false)
@@ -233,6 +240,21 @@ export default function CheckDetailPage() {
   })
 
   React.useEffect(() => { if (check) setRecordLabel(check.reference) }, [check]) // eslint-disable-line
+
+  // The execution layout is a full-bleed fixed-viewport pane (same scroll model as
+  // the standard RecordDetailShell): claim full-bleed so the Shell <main> drops its
+  // padding AND its page-level scroll, leaving the items column as the single
+  // content scroll. WITHOUT this, the page sat inside the padded, overflow:auto
+  // <main> and the old negative-margin bleed (md -24px vs <main>'s 20px padding)
+  // pushed the box ~8px wider than <main> → a desktop horizontal scrollbar. The
+  // standard (non-execution) layout stays padded, so full-bleed is released whenever
+  // the check isn't executing and on unmount. (Mobile <main> ignores full-bleed —
+  // it keeps its own padding + scroll, which is what the xs sticky-footer flow wants.)
+  const isExecLayout = !!check && ["IN_PROGRESS", "PENDING_REVIEW"].includes(check.status)
+  React.useEffect(() => {
+    setPageFullBleed(isExecLayout)
+    return () => setPageFullBleed(false)
+  }, [isExecLayout, setPageFullBleed])
 
   function getDraft(item: CheckItem) {
     return {
@@ -324,28 +346,30 @@ export default function CheckDetailPage() {
     } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to add item")) }
   }
 
-  function handlePhotoSelect(itemId: string, files: FileList | null) {
+  // Upload each selected photo as a `check-item` attachment (persisted to object
+  // storage, scoped to the check's client), then refresh so the new rows appear.
+  async function handlePhotoSelect(itemId: string, files: FileList | null) {
     if (!files || files.length === 0) return
-    Array.from(files).forEach(file => {
-      const reader = new FileReader()
-      reader.onload = e => {
-        const url = e.target?.result as string
-        if (url) {
-          setPhotos(prev => ({
-            ...prev,
-            [itemId]: [...(prev[itemId] ?? []), url]
-          }))
-        }
+    setUploadingItems(prev => ({ ...prev, [itemId]: true }))
+    try {
+      for (const file of Array.from(files)) {
+        await uploadAttachment("check-item", itemId, file)
       }
-      reader.readAsDataURL(file)
-    })
+      await qc.invalidateQueries({ queryKey: ["check-detail", id] })
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to upload photo"))
+    } finally {
+      setUploadingItems(prev => ({ ...prev, [itemId]: false }))
+    }
   }
 
-  function removePhoto(itemId: string, idx: number) {
-    setPhotos(prev => ({
-      ...prev,
-      [itemId]: (prev[itemId] ?? []).filter((_, i) => i !== idx)
-    }))
+  async function removePhoto(att: AttachmentSummary) {
+    try {
+      await deleteAttachment(att.id)
+      await qc.invalidateQueries({ queryKey: ["check-detail", id] })
+    } catch (e: unknown) {
+      setError(getApiErrorMessage(e, "Failed to remove photo"))
+    }
   }
 
   // Compute sections early so hooks can reference sectionNames safely
@@ -603,8 +627,10 @@ export default function CheckDetailPage() {
               <Button size="small"
                 onClick={() => handleResponseClick(item, "PASS")}
                 sx={{
-                  minWidth: 72, fontSize: 12, fontWeight: 600, borderRadius: "6px",
-                  border: "1.5px solid", py: "7px",
+                  flex: { xs: 1, md: "0 1 auto" },
+                  minWidth: { xs: 0, md: 72 },
+                  fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
+                  border: "1.5px solid", py: { xs: "11px", md: "7px" },
                   borderColor: isPass ? "#15803d" : "#e2e8f0",
                   bgcolor: isPass ? "#dcfce7" : "#ffffff",
                   color: isPass ? "#15803d" : "#64748b",
@@ -615,8 +641,10 @@ export default function CheckDetailPage() {
               <Button size="small"
                 onClick={() => handleResponseClick(item, "FAIL")}
                 sx={{
-                  minWidth: 72, fontSize: 12, fontWeight: 600, borderRadius: "6px",
-                  border: "1.5px solid", py: "7px",
+                  flex: { xs: 1, md: "0 1 auto" },
+                  minWidth: { xs: 0, md: 72 },
+                  fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
+                  border: "1.5px solid", py: { xs: "11px", md: "7px" },
                   borderColor: isFail ? "#b91c1c" : "#e2e8f0",
                   bgcolor: isFail ? "#fee2e2" : "#ffffff",
                   color: isFail ? "#b91c1c" : "#64748b",
@@ -628,8 +656,10 @@ export default function CheckDetailPage() {
                 <Button size="small"
                   onClick={() => handleResponseClick(item, "NA")}
                   sx={{
-                    minWidth: 72, fontSize: 12, fontWeight: 600, borderRadius: "6px",
-                    border: "1.5px solid", py: "7px",
+                    flex: { xs: 1, md: "0 1 auto" },
+                    minWidth: { xs: 0, md: 72 },
+                    fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
+                    border: "1.5px solid", py: { xs: "11px", md: "7px" },
                     borderColor: isNA ? "#64748b" : "#e2e8f0",
                     bgcolor: isNA ? "#f1f5f9" : "#ffffff",
                     color: isNA ? "#475569" : "#64748b",
@@ -665,7 +695,7 @@ export default function CheckDetailPage() {
                       value={draft.notes}
                       onChange={e => setDrafts(prev => ({ ...prev, [item.id]: { ...getDraft(item), notes: e.target.value } }))}
                       onBlur={e => handleNotesBlur(item, e.target.value)}
-                      sx={{ "& .MuiInputBase-root": { fontSize: 12, bgcolor: "#ffffff" } }}
+                      sx={{ "& .MuiInputBase-root": { fontSize: { xs: 16, md: 12 }, bgcolor: "#ffffff" } }}
                     />
                     <Stack direction="row" justifyContent="flex-end" sx={{ mt: "6px" }}>
                       <Button size="small" variant="text"
@@ -679,52 +709,64 @@ export default function CheckDetailPage() {
 
                 {/* Action row: photo thumbs + Add photo + Add note — same style */}
                 <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                  {/* Hidden file input */}
+                  {/* Hidden file input — `capture` opens the camera on mobile, the file
+                      picker on desktop. Value reset so re-selecting the same file fires. */}
                   <input
-                    type="file" accept="image/*" multiple style={{ display: "none" }}
+                    type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }}
                     ref={el => { photoInputRefs.current[item.id] = el }}
-                    onChange={e => handlePhotoSelect(item.id, e.target.files)}
+                    onChange={e => { handlePhotoSelect(item.id, e.target.files); e.target.value = "" }}
                   />
-                  {/* Photo thumbnails */}
-                  {(photos[item.id] ?? []).map((url, idx) => (
-                    <Box key={idx} sx={{ position: "relative", width: 40, height: 40 }}>
-                      <Box component="img" src={url}
-                        sx={{ width: 40, height: 40, borderRadius: "4px", objectFit: "cover", border: "1px solid #e2e8f0", display: "block" }} />
-                      <Box onClick={() => removePhoto(item.id, idx)} sx={{
-                        position: "absolute", top: -4, right: -4,
-                        width: 14, height: 14, borderRadius: "50%",
-                        bgcolor: "#475569", color: "#fff",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 9, cursor: "pointer", fontWeight: 700,
-                        "&:hover": { bgcolor: "#0f172a" }
-                      }}>×</Box>
-                    </Box>
+                  {/* Persisted evidence thumbnails — click to preview (auth'd blob), × to delete */}
+                  {(item.attachments ?? []).map((att) => (
+                    <Tooltip key={att.id} title={att.filename}>
+                      <Box sx={{ position: "relative", width: 40, height: 40 }}>
+                        <Box onClick={() => setPreviewAtt(att)} sx={{
+                          width: 40, height: 40, borderRadius: "4px", border: "1px solid #e2e8f0",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          bgcolor: "#f8fafc", cursor: "pointer",
+                          "&:hover": { borderColor: "#cbd5e1" }
+                        }}>
+                          {isImageType(att.contentType)
+                            ? <ImageIcon sx={{ fontSize: 18, color: "#64748b" }} />
+                            : <DescriptionIcon sx={{ fontSize: 18, color: "#64748b" }} />}
+                        </Box>
+                        <Box onClick={() => removePhoto(att)} sx={{
+                          position: "absolute", top: -4, right: -4,
+                          width: { xs: 18, md: 14 }, height: { xs: 18, md: 14 }, borderRadius: "50%",
+                          bgcolor: "#475569", color: "#fff",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: { xs: 11, md: 9 }, cursor: "pointer", fontWeight: 700,
+                          "&:hover": { bgcolor: "#0f172a" }
+                        }}>×</Box>
+                      </Box>
+                    </Tooltip>
                   ))}
 
                   {/* Add photo — ghost button */}
-                  <Box onClick={() => photoInputRefs.current[item.id]?.click()} sx={{
+                  <Box onClick={() => { if (!uploadingItems[item.id]) photoInputRefs.current[item.id]?.click() }} sx={{
                     display: "flex", alignItems: "center", gap: "5px",
-                    px: "10px", py: "5px", borderRadius: "5px",
+                    px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
                     border: "1px solid #e2e8f0", color: "#64748b",
-                    fontSize: 11.5, cursor: "pointer", fontWeight: 500,
+                    fontSize: { xs: 13, md: 11.5 }, cursor: uploadingItems[item.id] ? "default" : "pointer", fontWeight: 500,
+                    opacity: uploadingItems[item.id] ? 0.6 : 1,
                     transition: "all 0.1s",
                     "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }
                   }}>
-                    <CameraAltIcon sx={{ fontSize: 13 }} />
-                    {(photos[item.id] ?? []).length > 0 ? "Add more" : "Add photo"}
+                    <CameraAltIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
+                    {uploadingItems[item.id] ? "Uploading…" : (item.attachments ?? []).length > 0 ? "Add more" : "Add photo"}
                   </Box>
 
                   {/* Add note — same ghost button style, only show if no note yet */}
                   {!draft.notes && !drafts[item.id]?.notesOpen ? (
                     <Box onClick={() => setDrafts(prev => ({ ...prev, [item.id]: { ...getDraft(item), notesOpen: true } }))} sx={{
                       display: "flex", alignItems: "center", gap: "5px",
-                      px: "10px", py: "5px", borderRadius: "5px",
+                      px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
                       border: "1px solid #e2e8f0", color: "#64748b",
-                      fontSize: 11.5, cursor: "pointer", fontWeight: 500,
+                      fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500,
                       transition: "all 0.1s",
                       "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }
                     }}>
-                      <AddIcon sx={{ fontSize: 13 }} />
+                      <AddIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
                       Add note{isFail ? " (recommended)" : ""}
                     </Box>
                   ) : null}
@@ -776,11 +818,20 @@ export default function CheckDetailPage() {
 
     return (
       <Box sx={{
-        mx: { xs: "-12px", md: "-24px" },
-        mt: { xs: "-12px", md: "-24px" },
-        mb: { xs: "-12px", md: "-24px" },
-        height: "calc(100vh - 56px)",
-        display: "flex", flexDirection: "column", overflow: "hidden",
+        // md+: the page is full-bleed (the effect above flips Shell <main> to p:0 +
+        // overflow:hidden + flex column), so there's NO padding to escape — we just
+        // fill the pane with flex:1 and the columns scroll internally. (The old
+        // md -24px bleed against <main>'s 20px padding was the horizontal-scroll bug.)
+        // xs: the mobile Shell <main> keeps its 12px padding and is the scroll
+        // container, so we bleed -12px to go edge-to-edge, grow naturally, and pin the
+        // action bar with position:sticky (B3) — this avoids the 56px-header + 12px-
+        // padding double-count that would clip a fixed-height flex footer on phones.
+        mx: { xs: "-12px", md: 0 },
+        mt: { xs: "-12px", md: 0 },
+        mb: { xs: "-12px", md: 0 },
+        flex: { md: 1 }, minHeight: { md: 0 },
+        display: "flex", flexDirection: "column",
+        overflow: { xs: "visible", md: "hidden" },
         bgcolor: "var(--color-background-tertiary)"
       }}>
         {/* ── Exec header ─────────────────────────────────────────────── */}
@@ -859,12 +910,18 @@ export default function CheckDetailPage() {
           {error ? <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert> : null}
         </Box>
 
-        {/* ── 3-column body ───────────────────────────────────────────── */}
-        <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        {/* ── 3-column body (stacks to a single column on xs) ──────────── */}
+        <Box sx={{
+          flex: 1, display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          overflow: { xs: "visible", md: "hidden" },
+          minHeight: { md: 0 },
+        }}>
 
-          {/* Section rail */}
+          {/* Section rail — hidden on xs (inline section headers cover context;
+              jump-nav is low value on a linear phone scroll) */}
           {sectionNames.length > 1 ? (
-            <Box sx={{ width: 220, minWidth: 220, bgcolor: "#ffffff", borderRight: "1px solid #e2e8f0", overflowY: "auto", flexShrink: 0, py: "16px" }}>
+            <Box sx={{ display: { xs: "none", md: "block" }, width: 220, minWidth: 220, bgcolor: "#ffffff", borderRight: "1px solid #e2e8f0", overflowY: "auto", flexShrink: 0, py: "16px" }}>
               <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", px: "20px", pb: "10px" }}>
                 Sections
               </Typography>
@@ -915,7 +972,7 @@ export default function CheckDetailPage() {
           ) : null}
 
           {/* Items column */}
-          <Box ref={itemsColumnRef} sx={{ flex: 1, overflowY: "auto", p: "24px 28px", minWidth: 0 }}>
+          <Box ref={itemsColumnRef} sx={{ flex: 1, overflowY: { xs: "visible", md: "auto" }, p: { xs: "16px 12px", md: "24px 28px" }, minWidth: 0 }}>
             {totalItems === 0 ? (
               <Box sx={{ py: 6, textAlign: "center" }}>
                 <Typography variant="body2" color="text.secondary">No checklist items. This check was created without a template.</Typography>
@@ -971,8 +1028,14 @@ export default function CheckDetailPage() {
             ) : null}
           </Box>
 
-          {/* Context column (240px) */}
-          <Box sx={{ width: 240, minWidth: 240, bgcolor: "#ffffff", borderLeft: "1px solid #e2e8f0", overflowY: "auto", flexShrink: 0, p: "20px" }}>
+          {/* Context column (240px on md+; full-width, stacked below items on xs) */}
+          <Box sx={{
+            width: { xs: "100%", md: 240 }, minWidth: { xs: 0, md: 240 },
+            bgcolor: "#ffffff",
+            borderLeft: { xs: "none", md: "1px solid #e2e8f0" },
+            borderTop: { xs: "1px solid #e2e8f0", md: "none" },
+            overflowY: { xs: "visible", md: "auto" }, flexShrink: 0, p: "20px",
+          }}>
 
             {/* Check details */}
             <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
@@ -996,7 +1059,7 @@ export default function CheckDetailPage() {
 
             {/* Submit / review area */}
             {check.status === "IN_PROGRESS" ? (
-              <Box>
+              <Box sx={{ display: { xs: "none", md: "block" } }}>
                 <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
                   Submit
                 </Typography>
@@ -1024,7 +1087,7 @@ export default function CheckDetailPage() {
             ) : null}
 
             {check.status === "PENDING_REVIEW" ? (
-              <Box>
+              <Box sx={{ display: { xs: "none", md: "block" } }}>
                 <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
                   Review
                 </Typography>
@@ -1078,7 +1141,49 @@ export default function CheckDetailPage() {
           </Box>
         </Box>
 
+        {/* ── Sticky action bar (xs only) — keeps submit/review reachable
+            without scrolling the whole form; the in-panel block above is
+            hidden on xs to avoid duplication. ──────────────────────────── */}
+        <Box sx={{
+          display: { xs: "flex", md: "none" },
+          position: "sticky", bottom: 0, zIndex: 2, flexShrink: 0,
+          bgcolor: "#ffffff", borderTop: "1px solid #e2e8f0",
+          p: "12px", gap: 1, alignItems: "center",
+          boxShadow: "0 -2px 8px rgba(15,23,42,0.06)",
+        }}>
+          {check.status === "IN_PROGRESS" ? (
+            <Stack spacing={0.5} sx={{ width: "100%" }}>
+              {!allRequiredAnswered ? (
+                <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                  {check.items.filter(i => i.isRequired && !i.response).length} required item(s) remaining
+                </Typography>
+              ) : null}
+              <Button fullWidth variant="contained" size="large"
+                disabled={!allRequiredAnswered}
+                onClick={() => setSubmitOpen(true)}
+                sx={{ py: "12px", fontSize: 15 }}>
+                Submit for review →
+              </Button>
+            </Stack>
+          ) : null}
+          {check.status === "PENDING_REVIEW" ? (
+            <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
+              <Button fullWidth variant="outlined" color="warning"
+                onClick={() => { setReviewAction("return"); setReviewOpen(true) }}
+                sx={{ py: "11px", fontSize: 14 }}>
+                Return
+              </Button>
+              <Button fullWidth variant="contained"
+                onClick={() => { setReviewAction("approve"); setReviewOpen(true) }}
+                sx={{ py: "11px", fontSize: 14 }}>
+                Approve
+              </Button>
+            </Stack>
+          ) : null}
+        </Box>
+
         {dialogs}
+        <AttachmentPreviewModal open={!!previewAtt} attachment={previewAtt} onClose={() => setPreviewAtt(null)} />
       </Box>
     )
   }
@@ -1336,6 +1441,7 @@ export default function CheckDetailPage() {
       </Box>
 
       {dialogs}
+      <AttachmentPreviewModal open={!!previewAtt} attachment={previewAtt} onClose={() => setPreviewAtt(null)} />
     </Box>
   )
 }

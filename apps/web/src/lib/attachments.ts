@@ -14,10 +14,11 @@ export interface AttachmentSummary {
   inline: boolean
 }
 
-// The record an attachment hangs off — the six work-item link types PLUS `maintenance`
-// and `check`, which are attachable but NOT linkable (decoupled from the link union).
+// The record an attachment hangs off — the six work-item link types PLUS `maintenance`,
+// `check` and `check-item` (a line-item on a check, carrying per-item field-evidence
+// photos), which are attachable but NOT linkable (decoupled from the link union).
 // Mirrors the backend `ATTACHMENT_RECORD_TYPES` contract (the on-the-wire `recordType`).
-export type AttachmentRecordType = LinkRecordType | "maintenance" | "check"
+export type AttachmentRecordType = LinkRecordType | "maintenance" | "check" | "check-item"
 
 export function isImageType(contentType: string): boolean {
   return contentType.startsWith("image/")

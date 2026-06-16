@@ -4,10 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Box, Button, Card, Chip, Dialog, DialogContent, DialogTitle,
-  MenuItem, Stack, Tab, Tabs, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Typography
+  MenuItem, Stack, Tab, Tabs, TextField, Typography
 } from "@mui/material"
-import { chipSx } from "../components/shared"
+import { chipSx, ResponsiveList, type ResponsiveColumn } from "../components/shared"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
@@ -106,6 +105,58 @@ export default function ChecksPage() {
 
   const selectedTemplate = (templates ?? []).find(t => t.id === templateId)
 
+  // Column definitions reuse the exact original cell JSX, so the md+ table is
+  // byte-identical; `card` roles drive the xs (phone) card layout.
+  const columns: ResponsiveColumn<Check>[] = [
+    {
+      id: "reference", header: "Reference", card: { role: "meta" },
+      cellSx: { fontWeight: 700, fontFamily: "monospace", fontSize: 12 },
+      render: (check) => check.reference,
+    },
+    {
+      id: "title", header: "Title", card: { role: "title" },
+      render: (check) => <Typography variant="body2" fontWeight={600}>{check.title}</Typography>,
+    },
+    {
+      id: "type", header: "Type", card: { role: "meta" },
+      render: (check) => <Typography variant="caption" color="text.secondary">{check.checkType}</Typography>,
+    },
+    {
+      id: "site", header: "Site", card: { role: "meta" },
+      render: (check) => <Typography variant="caption">{check.site?.name ?? "—"}</Typography>,
+    },
+    {
+      id: "status", header: "Status", card: { role: "status" },
+      render: (check) => (
+        <Chip size="small" sx={chipSx(check.status)} label={STATUS_LABELS[check.status] ?? check.status} />
+      ),
+    },
+    {
+      id: "progress", header: "Progress", card: { role: "meta" },
+      render: (check) => check.items.length > 0 ? (
+        <Chip size="small" sx={progressSx(check.items)} label={progressLabel(check.items)} />
+      ) : (
+        <Typography variant="caption" color="text.secondary">No items</Typography>
+      ),
+    },
+    {
+      id: "scheduled", header: "Scheduled", card: { role: "meta" },
+      render: (check) => (
+        <Typography variant="caption" color="text.secondary">
+          {check.scheduledAt ? new Date(check.scheduledAt).toLocaleDateString("en-GB") : "—"}
+        </Typography>
+      ),
+    },
+    {
+      id: "assignee", header: "Assignee", card: { role: "meta" },
+      render: (check) => (
+        <Typography variant="caption" color="text.secondary">
+          {check.assignee?.displayName ?? "Unassigned"}
+        </Typography>
+      ),
+    },
+  ]
+
   async function handleCreate() {
     if (!templateId || !siteId) return
     setSaving(true)
@@ -185,69 +236,12 @@ export default function ChecksPage() {
         ) : null}
 
         {filtered.length > 0 ? (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Reference</TableCell>
-                  <TableCell>Title</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Site</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Progress</TableCell>
-                  <TableCell>Scheduled</TableCell>
-                  <TableCell>Assignee</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filtered.map((check) => (
-                  <TableRow
-                    key={check.id}
-                    onClick={() => navigate(`/checks/${check.id}`)}
-                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}
-                  >
-                    <TableCell sx={{ fontWeight: 700, fontFamily: "monospace", fontSize: 12 }}>
-                      {check.reference}
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={600}>{check.title}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">{check.checkType}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption">{check.site?.name ?? "—"}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip size="small" sx={chipSx(check.status)}
-                        label={STATUS_LABELS[check.status] ?? check.status} />
-                    </TableCell>
-                    <TableCell>
-                      {check.items.length > 0 ? (
-                        <Chip size="small"
-                          sx={progressSx(check.items)}
-                          label={progressLabel(check.items)} />
-                      ) : (
-                        <Typography variant="caption" color="text.secondary">No items</Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">
-                        {check.scheduledAt
-                          ? new Date(check.scheduledAt).toLocaleDateString("en-GB")
-                          : "—"}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">
-                        {check.assignee?.displayName ?? "Unassigned"}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <ResponsiveList
+            columns={columns}
+            rows={filtered}
+            getRowKey={(check) => check.id}
+            onRowClick={(check) => navigate(`/checks/${check.id}`)}
+          />
         ) : null}
       </Card>
 
