@@ -1430,6 +1430,28 @@ export default function CheckDetailPage() {
                                     ))}
                                   </Stack>
                                 ) : null}
+                                {/* Per-item field-evidence photos — read-only thumbnails; click to
+                                    preview the auth'd blob via the shared modal. No delete in this
+                                    view (the execution UI owns editing). Without this the captured
+                                    evidence is invisible once a check leaves the execution screen. */}
+                                {(item.attachments ?? []).length > 0 ? (
+                                  <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", mt: "8px" }}>
+                                    {(item.attachments ?? []).map((att) => (
+                                      <Tooltip key={att.id} title={att.filename}>
+                                        <Box onClick={() => setPreviewAtt(att)} sx={{
+                                          width: 40, height: 40, borderRadius: "4px", border: "1px solid #e2e8f0",
+                                          display: "flex", alignItems: "center", justifyContent: "center",
+                                          bgcolor: "#f8fafc", cursor: "pointer",
+                                          "&:hover": { borderColor: "#cbd5e1" }
+                                        }}>
+                                          {isImageType(att.contentType)
+                                            ? <ImageIcon sx={{ fontSize: 18, color: "#64748b" }} />
+                                            : <DescriptionIcon sx={{ fontSize: 18, color: "#64748b" }} />}
+                                        </Box>
+                                      </Tooltip>
+                                    ))}
+                                  </Box>
+                                ) : null}
                               </Box>
                             </Stack>
                           </Box>
