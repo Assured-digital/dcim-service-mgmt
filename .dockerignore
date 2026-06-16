@@ -1,0 +1,15 @@
+# Never copy host-installed dependencies into the build context. The Dockerfiles run
+# their own `npm install` inside the (Linux) image; copying a host node_modules (esp.
+# from Windows) bakes in wrong-platform binaries and duplicate package copies — e.g. a
+# second React instance, which breaks hooks at runtime ("Invalid hook call").
+node_modules
+**/node_modules
+
+# Build output (regenerated inside the image)
+dist
+**/dist
+
+# Local-only
+.git
+.env
+**/.env.local

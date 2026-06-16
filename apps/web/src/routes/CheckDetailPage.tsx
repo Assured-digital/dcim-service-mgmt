@@ -15,16 +15,21 @@ import CameraAltIcon from "@mui/icons-material/CameraAlt"
 import AttachFileIcon from "@mui/icons-material/AttachFile"
 import ImageIcon from "@mui/icons-material/Image"
 import DescriptionIcon from "@mui/icons-material/Description"
+import CloudOffIcon from "@mui/icons-material/CloudOff"
+import ScheduleIcon from "@mui/icons-material/Schedule"
 import {
   PropertiesPanel, chipSx, ragTokens, WorkflowStrip
 } from "../components/shared"
 import { RightPanelSection } from "../components/detail"
 import { AttachmentsContent } from "../components/AttachmentsContent"
 import { AttachmentPreviewModal } from "../components/AttachmentPreviewModal"
-import { type AttachmentSummary, uploadAttachment, deleteAttachment, isImageType } from "../lib/attachments"
+import { type AttachmentSummary, deleteAttachment, isImageType } from "../lib/attachments"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { checkSync } from "../lib/offline/checkQueue"
+import { useCheckExecutionSync, type CheckSyncStatus } from "../lib/offline/useCheckExecutionSync"
+import { useOnlineStatus } from "../lib/useOnlineStatus"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type CheckItem = {
@@ -102,6 +107,46 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 type DetailRow = { label: string; value: string }
+
+// ── Sync status pill (Phase 4a offline resilience) ─────────────────────────
+// Honest, minimal indicator: the engineer must trust that work captured offline is
+// saved on-device and will sync — the opposite of the old silent-loss trap.
+function SyncStatusPill({ status, pendingCount }: { status: CheckSyncStatus; pendingCount: number }) {
+  if (status === "synced") {
+    return (
+      <Stack direction="row" alignItems="center" spacing={0.5}>
+        <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#15803d", boxShadow: "0 0 0 3px rgba(21,128,61,0.15)" }} />
+        <Typography sx={{ fontSize: 11.5, color: "#15803d" }}>All changes saved</Typography>
+      </Stack>
+    )
+  }
+  if (status === "syncing") {
+    return (
+      <Typography sx={{ fontSize: 11.5, color: "var(--color-text-secondary)" }}>
+        Syncing{pendingCount > 0 ? ` ${pendingCount}` : ""}…
+      </Typography>
+    )
+  }
+  if (status === "offline") {
+    return (
+      <Tooltip title="Saved on this device — will sync automatically when you're back online">
+        <Stack direction="row" alignItems="center" spacing={0.6}>
+          <CloudOffIcon sx={{ fontSize: 14, color: "#b45309" }} />
+          <Typography sx={{ fontSize: 11.5, color: "#b45309", fontWeight: 500 }}>
+            Offline — {pendingCount} saved on this device
+          </Typography>
+        </Stack>
+      </Tooltip>
+    )
+  }
+  // pending: online but not yet confirmed (server error / mid-retry)
+  return (
+    <Stack direction="row" alignItems="center" spacing={0.6}>
+      <ScheduleIcon sx={{ fontSize: 13, color: "#b45309" }} />
+      <Typography sx={{ fontSize: 11.5, color: "#b45309" }}>{pendingCount} not yet synced…</Typography>
+    </Stack>
+  )
+}
 
 // ── Follow-on modal ────────────────────────────────────────────────────────
 function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
@@ -201,18 +246,22 @@ export default function CheckDetailPage() {
 
   const canExecute = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
+  // Phase 4a: durable offline resilience for in-progress execution. The sync manager
+  // persists answers/notes/photos to IndexedDB and replays them when online; the page
+  // keeps its existing optimistic `drafts` layer on top (seeded from IDB on mount).
+  const sync = useCheckExecutionSync(id)
+  const online = useOnlineStatus()
+
   const [error, setError] = React.useState("")
   const [transitioning, setTransitioning] = React.useState(false)
-  const [isSaving, setIsSaving] = React.useState(false)
-  const [lastSaved, setLastSaved] = React.useState<Date | null>(null)
   const [copied, setCopied] = React.useState(false)
   const [activeSection, setActiveSection] = React.useState<string | null>(null)
   const [activeTab, setActiveTab] = React.useState(0) // for standard layout
 
   const [drafts, setDrafts] = React.useState<Record<string, { response: string; notes: string; notesOpen?: boolean }>>({})
-  // Per-item field-evidence photos now persist to object storage as `check-item`
-  // attachments (was an ephemeral base64-in-state trap that lost photos on refresh).
-  const [uploadingItems, setUploadingItems] = React.useState<Record<string, boolean>>({})
+  // Per-item field-evidence photos persist to object storage as `check-item`
+  // attachments; offline captures queue locally (see useCheckExecutionSync) and show
+  // as pending thumbnails until they upload.
   const [previewAtt, setPreviewAtt] = React.useState<AttachmentSummary | null>(null)
   const photoInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
   const [followOnItem, setFollowOnItem] = React.useState<CheckItem | null>(null)
@@ -233,9 +282,23 @@ export default function CheckDetailPage() {
   const isScrollingRef = React.useRef(false)
   const scrollTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // networkMode "always" so the queryFn runs even when offline (React Query would
+  // otherwise pause it) — letting us fall back to the IDB-cached check doc if the live
+  // GET fails. Online, the fresh response is cached as the last-good doc.
   const { data: check, isLoading } = useQuery({
     queryKey: ["check-detail", id],
-    queryFn: async () => (await api.get<Check>(`/checks/${id}`)).data,
+    networkMode: "always",
+    queryFn: async () => {
+      try {
+        const data = (await api.get<Check>(`/checks/${id}`)).data
+        void checkSync.cacheDoc(id!, data)
+        return data
+      } catch (err) {
+        const cached = await checkSync.loadCachedDoc(id!)
+        if (cached) return cached as Check
+        throw err
+      }
+    },
     enabled: !!id
   })
 
@@ -256,6 +319,48 @@ export default function CheckDetailPage() {
     return () => setPageFullBleed(false)
   }, [isExecLayout, setPageFullBleed])
 
+  // Restore-on-reopen: seed the optimistic drafts from any locally-persisted answers so
+  // un-synced work (after a disconnect/refresh) is still on screen. Fills only items the
+  // user isn't already editing this session; merge rule is local-wins-until-drained.
+  const hydratedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!id || hydratedRef.current) return
+    let alive = true
+    checkSync.loadAnswers(id).then(answers => {
+      if (!alive) return
+      hydratedRef.current = true
+      const entries = Object.entries(answers)
+      if (entries.length === 0) return
+      setDrafts(prev => {
+        const next = { ...prev }
+        for (const [itemId, a] of entries) {
+          if (!next[itemId]) next[itemId] = { response: a.response, notes: a.notes }
+        }
+        return next
+      })
+    })
+    return () => { alive = false }
+  }, [id])
+
+  // Once the queue drains to empty (writes confirmed on the server), refetch so synced
+  // answers/photos reflect server truth. Fires on the >0 → 0 transition only.
+  const prevPendingRef = React.useRef(0)
+  React.useEffect(() => {
+    if (prevPendingRef.current > 0 && sync.pendingCount === 0) {
+      qc.invalidateQueries({ queryKey: ["check-detail", id] })
+    }
+    prevPendingRef.current = sync.pendingCount
+  }, [sync.pendingCount, id, qc])
+
+  // Light guard: warn before unloading only if offline with un-synced work (online work
+  // is durable in IDB and replays on next load, so no warning needed there).
+  React.useEffect(() => {
+    if (online || sync.pendingCount === 0) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = "" }
+    window.addEventListener("beforeunload", handler)
+    return () => window.removeEventListener("beforeunload", handler)
+  }, [online, sync.pendingCount])
+
   function getDraft(item: CheckItem) {
     return {
       response: drafts[item.id]?.response ?? item.response ?? "",
@@ -265,31 +370,23 @@ export default function CheckDetailPage() {
   }
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  // Writes are optimistic + durable: persisted to IndexedDB and queued for replay
+  // (survive disconnect/refresh), then synced immediately when online. The refetch
+  // happens once the queue drains (the pendingCount effect above), not inline here.
   async function handleResponseClick(item: CheckItem, response: string) {
     const currentNotes = getDraft(item).notes
     const currentNotesOpen = getDraft(item).notesOpen
     setDrafts(prev => ({ ...prev, [item.id]: { response, notes: currentNotes, notesOpen: currentNotesOpen } }))
-    setIsSaving(true)
-    try {
-      await api.post(`/checks/${id}/items/${item.id}`, {
-        response, notes: currentNotes || undefined
-      })
-      qc.invalidateQueries({ queryKey: ["check-detail", id] })
-      setLastSaved(new Date())
-    } finally { setIsSaving(false) }
+    await sync.saveItemAnswer(item.id, { response, notes: currentNotes || undefined })
   }
 
   async function handleNotesBlur(item: CheckItem, notes: string) {
     const currentResponse = getDraft(item).response
     if (!currentResponse && !notes.trim()) return
-    setIsSaving(true)
-    try {
-      await api.post(`/checks/${id}/items/${item.id}`, {
-        response: currentResponse || undefined, notes: notes || undefined
-      })
-      qc.invalidateQueries({ queryKey: ["check-detail", id] })
-      setLastSaved(new Date())
-    } finally { setIsSaving(false) }
+    await sync.saveItemAnswer(item.id, {
+      response: currentResponse || undefined,
+      notes: notes || undefined,
+    })
   }
 
   async function handleStart() {
@@ -306,6 +403,9 @@ export default function CheckDetailPage() {
     setTransitioning(true); setError("")
     try {
       await api.post(`/checks/${id}/submit`, { engineerSummary: engineerSummary || undefined })
+      // Submitted ⇒ no longer executing; drop the local draft/queue state for this check.
+      // (Submit is gated on a drained queue, so nothing un-synced is discarded.)
+      await checkSync.clearCheck(id!)
       setSubmitOpen(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
@@ -346,20 +446,13 @@ export default function CheckDetailPage() {
     } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to add item")) }
   }
 
-  // Upload each selected photo as a `check-item` attachment (persisted to object
-  // storage, scoped to the check's client), then refresh so the new rows appear.
+  // Queue each selected photo durably (IndexedDB) and upload when online — a capture is
+  // never lost if signal drops mid-visit. Queued photos show as pending thumbnails and
+  // appear as `check-item` attachments once their upload drains.
   async function handlePhotoSelect(itemId: string, files: FileList | null) {
     if (!files || files.length === 0) return
-    setUploadingItems(prev => ({ ...prev, [itemId]: true }))
-    try {
-      for (const file of Array.from(files)) {
-        await uploadAttachment("check-item", itemId, file)
-      }
-      await qc.invalidateQueries({ queryKey: ["check-detail", id] })
-    } catch (e: unknown) {
-      setError(getApiErrorMessage(e, "Failed to upload photo"))
-    } finally {
-      setUploadingItems(prev => ({ ...prev, [itemId]: false }))
+    for (const file of Array.from(files)) {
+      await sync.queuePhoto(itemId, file)
     }
   }
 
@@ -742,18 +835,31 @@ export default function CheckDetailPage() {
                     </Tooltip>
                   ))}
 
+                  {/* Queued (offline) photos — captured on-device, awaiting upload. Shown
+                      from a local object URL with a pending badge so the engineer trusts
+                      the capture survived; replaced by the real attachment once it drains. */}
+                  {(sync.photosByItem[item.id] ?? []).map((p) => (
+                    <Tooltip key={p.seq} title={`${p.filename} — saved on this device, will upload when online`}>
+                      <Box sx={{ position: "relative", width: 40, height: 40, borderRadius: "4px", overflow: "hidden", border: "1px dashed #cbd5e1", opacity: 0.75 }}>
+                        <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                        <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "2px", py: "1px", display: "flex", alignItems: "center" }}>
+                          <ScheduleIcon sx={{ fontSize: 10 }} />
+                        </Box>
+                      </Box>
+                    </Tooltip>
+                  ))}
+
                   {/* Add photo — ghost button */}
-                  <Box onClick={() => { if (!uploadingItems[item.id]) photoInputRefs.current[item.id]?.click() }} sx={{
+                  <Box onClick={() => photoInputRefs.current[item.id]?.click()} sx={{
                     display: "flex", alignItems: "center", gap: "5px",
                     px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
                     border: "1px solid #e2e8f0", color: "#64748b",
-                    fontSize: { xs: 13, md: 11.5 }, cursor: uploadingItems[item.id] ? "default" : "pointer", fontWeight: 500,
-                    opacity: uploadingItems[item.id] ? 0.6 : 1,
+                    fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500,
                     transition: "all 0.1s",
                     "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }
                   }}>
                     <CameraAltIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
-                    {uploadingItems[item.id] ? "Uploading…" : (item.attachments ?? []).length > 0 ? "Add more" : "Add photo"}
+                    {((item.attachments ?? []).length > 0 || (sync.photosByItem[item.id]?.length ?? 0) > 0) ? "Add more" : "Add photo"}
                   </Box>
 
                   {/* Add note — same ghost button style, only show if no note yet */}
@@ -850,17 +956,8 @@ export default function CheckDetailPage() {
             </Stack>
             <Chip size="small" sx={chipSx(check.status)} label={STATUS_LABELS[check.status]} />
             <Box sx={{ flex: 1 }} />
-            {/* Sync indicator */}
-            <Stack direction="row" alignItems="center" spacing={0.75}>
-              {isSaving ? (
-                <Typography sx={{ fontSize: 11.5, color: "var(--color-text-secondary)" }}>Saving...</Typography>
-              ) : lastSaved ? (
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#15803d", boxShadow: "0 0 0 3px rgba(21,128,61,0.15)" }} />
-                  <Typography sx={{ fontSize: 11.5, color: "#15803d" }}>All changes saved</Typography>
-                </Stack>
-              ) : null}
-            </Stack>
+            {/* Sync indicator — offline-aware (Phase 4a) */}
+            <SyncStatusPill status={sync.status} pendingCount={sync.pendingCount} />
           </Stack>
 
           {/* Title + actions */}
@@ -1075,9 +1172,13 @@ export default function CheckDetailPage() {
                     <Box sx={{ bgcolor: "#fef3c7", color: "#92400e", p: "6px 10px", borderRadius: "5px", fontSize: 11, mb: "10px" }}>
                       Complete all required items first
                     </Box>
+                  ) : sync.pendingCount > 0 ? (
+                    <Box sx={{ bgcolor: "#fef3c7", color: "#92400e", p: "6px 10px", borderRadius: "5px", fontSize: 11, mb: "10px" }}>
+                      {sync.pendingCount} change(s) still to sync — submit once saved
+                    </Box>
                   ) : null}
                   <Button fullWidth variant="contained" size="small"
-                    disabled={!allRequiredAnswered}
+                    disabled={!allRequiredAnswered || sync.pendingCount > 0}
                     onClick={() => setSubmitOpen(true)}
                     sx={{ fontSize: 12, py: "10px" }}>
                     Submit for review →
@@ -1157,9 +1258,13 @@ export default function CheckDetailPage() {
                 <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
                   {check.items.filter(i => i.isRequired && !i.response).length} required item(s) remaining
                 </Typography>
+              ) : sync.pendingCount > 0 ? (
+                <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                  {sync.pendingCount} change(s) still to sync…
+                </Typography>
               ) : null}
               <Button fullWidth variant="contained" size="large"
-                disabled={!allRequiredAnswered}
+                disabled={!allRequiredAnswered || sync.pendingCount > 0}
                 onClick={() => setSubmitOpen(true)}
                 sx={{ py: "12px", fontSize: 15 }}>
                 Submit for review →

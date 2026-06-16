@@ -182,6 +182,24 @@ validates it. There is NO "hidden selector / auto-scope" special-case — do not
   editing backend code, run `docker compose restart api` before testing — otherwise the container serves
   STALE code and you get false negatives (a fix that "didn't work" / an upload that 400s). This has caused
   false-negative verification runs repeatedly; restart first, debug second.
+- **Vite React-dispatcher bug ("Invalid hook call" trap).** Symptom: dev server blank screen, console
+  shows `Invalid hook call` / `Cannot read properties of null (reading 'useState')` at the FIRST `useState`
+  in the render tree. This is NOT necessarily a duplicate React — VERIFY first with `npm ls react` (and
+  `docker compose exec web sh -c "cd /app/apps/web && npm ls react"` for the container). If exactly one
+  React resolves on both, it's Vite dep-optimization splitting React's internals (renderer and hooks
+  referencing different dispatcher instances) — commonly triggered by adding a new dependency, which forces
+  a full Vite re-optimize and exposes a missing dedupe config. Fix: ensure `apps/web/vite.config.ts` has
+  `resolve.dedupe: ["react", "react-dom"]` + `optimizeDeps.include: ["react", "react-dom",
+  "react-dom/client", "react/jsx-runtime"]`, then rebuild the web image and clear the `.vite` cache so deps
+  re-optimize. Do NOT chase reinstalls/rebuilds — check `vite.config` and read the actual stack trace
+  first. A persistent unchanged Vite dep hash across rebuilds means the optimize cache (not the install) is
+  the issue.
+- **Monorepo install rule: always install from the repo ROOT.** This is an npm-workspaces monorepo
+  (single root lockfile, hoisted deps). NEVER `npm install --prefix apps/web` — that creates a standalone
+  `apps/web/node_modules` with its own duplicate React. The root `.dockerignore` excludes
+  `node_modules` / `**/node_modules`, so a host install can never pollute the Docker image (which runs its
+  own in-image `npm install`). To add a dependency: install from root — it updates the root lockfile and
+  hoists correctly.
 
 ### Deploy & migration gotchas (HARD-WON — read before deploying/migrating)
 1. **No `CREATE EXTENSION` for non-allow-listed extensions.** `pgcrypto` is NOT allow-listed on Azure
