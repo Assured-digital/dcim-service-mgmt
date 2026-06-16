@@ -263,6 +263,10 @@ export default function CheckDetailPage() {
   // attachments; offline captures queue locally (see useCheckExecutionSync) and show
   // as pending thumbnails until they upload.
   const [previewAtt, setPreviewAtt] = React.useState<AttachmentSummary | null>(null)
+  // Local caption edits keyed by a stable id: an attachment id for persisted photos,
+  // `pending:<seq>` for not-yet-uploaded captures. Held until committed (on blur) so
+  // typing doesn't fire a write per keystroke. Falls back to the server/queued value.
+  const [captionDrafts, setCaptionDrafts] = React.useState<Record<string, string>>({})
   const photoInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
   const [followOnItem, setFollowOnItem] = React.useState<CheckItem | null>(null)
   const [submitOpen, setSubmitOpen] = React.useState(false)
@@ -465,6 +469,28 @@ export default function CheckDetailPage() {
     } catch (e: unknown) {
       setError(getApiErrorMessage(e, "Failed to remove photo"))
     }
+  }
+
+  // Caption value to show: the in-flight draft if the user has touched this input, else
+  // the server (persisted) / queued (pending) value.
+  function captionValue(key: string, fallback: string): string {
+    return key in captionDrafts ? captionDrafts[key] : fallback
+  }
+
+  // Commit a caption on blur. Persisted attachment → queued caption-edit (PATCH on drain,
+  // offline-safe); pending capture → caption stored on the queued photo (rides the upload).
+  // Both no-op when unchanged. The drain's pendingCount→0 effect refetches persisted edits.
+  async function commitAttCaption(att: AttachmentSummary) {
+    const key = att.id
+    if (!(key in captionDrafts)) return
+    const next = captionDrafts[key]
+    if ((att.caption ?? "") !== next) await sync.queueCaptionEdit(att.id, next)
+  }
+  async function commitPendingCaption(seq: number, current: string) {
+    const key = `pending:${seq}`
+    if (!(key in captionDrafts)) return
+    const next = captionDrafts[key]
+    if ((current ?? "") !== next) await sync.setPendingPhotoCaption(seq, next)
   }
 
   // Compute sections early so hooks can reference sectionNames safely
@@ -809,8 +835,10 @@ export default function CheckDetailPage() {
                   </Box>
                 ) : null}
 
-                {/* Action row: photo thumbs + Add photo + Add note — same style */}
-                <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                {/* Action row: captioned photo cells + Add photo + Add note — same style.
+                    flex-start so the ghost buttons align to the thumbnails, not the taller
+                    captioned cells. */}
+                <Box sx={{ display: "flex", alignItems: "flex-start", gap: "8px", flexWrap: "wrap" }}>
                   {/* Hidden file input — `capture` opens the camera on mobile, the file
                       picker on desktop. Value reset so re-selecting the same file fires. */}
                   <input
@@ -818,44 +846,66 @@ export default function CheckDetailPage() {
                     ref={el => { photoInputRefs.current[item.id] = el }}
                     onChange={e => { handlePhotoSelect(item.id, e.target.files); e.target.value = "" }}
                   />
-                  {/* Persisted evidence thumbnails — click to preview (auth'd blob), × to delete */}
+                  {/* Persisted evidence cells — thumbnail (click to preview, × to delete) +
+                      optional caption input beneath. Caption editable while IN_PROGRESS. */}
                   {(item.attachments ?? []).map((att) => (
-                    <Tooltip key={att.id} title={att.filename}>
-                      <Box sx={{ position: "relative", width: 40, height: 40 }}>
-                        <Box onClick={() => setPreviewAtt(att)} sx={{
-                          width: 40, height: 40, borderRadius: "4px", border: "1px solid #e2e8f0",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          bgcolor: "#f8fafc", cursor: "pointer",
-                          "&:hover": { borderColor: "#cbd5e1" }
-                        }}>
-                          {isImageType(att.contentType)
-                            ? <ImageIcon sx={{ fontSize: 18, color: "#64748b" }} />
-                            : <DescriptionIcon sx={{ fontSize: 18, color: "#64748b" }} />}
+                    <Box key={att.id} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
+                      <Tooltip title={att.filename}>
+                        <Box sx={{ position: "relative", width: 48, height: 48 }}>
+                          <Box onClick={() => setPreviewAtt(att)} sx={{
+                            width: 48, height: 48, borderRadius: "4px", border: "1px solid #e2e8f0",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            bgcolor: "#f8fafc", cursor: "pointer",
+                            "&:hover": { borderColor: "#cbd5e1" }
+                          }}>
+                            {isImageType(att.contentType)
+                              ? <ImageIcon sx={{ fontSize: 20, color: "#64748b" }} />
+                              : <DescriptionIcon sx={{ fontSize: 20, color: "#64748b" }} />}
+                          </Box>
+                          <Box onClick={() => removePhoto(att)} sx={{
+                            position: "absolute", top: -4, right: -4,
+                            width: { xs: 18, md: 14 }, height: { xs: 18, md: 14 }, borderRadius: "50%",
+                            bgcolor: "#475569", color: "#fff",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: { xs: 11, md: 9 }, cursor: "pointer", fontWeight: 700,
+                            "&:hover": { bgcolor: "#0f172a" }
+                          }}>×</Box>
                         </Box>
-                        <Box onClick={() => removePhoto(att)} sx={{
-                          position: "absolute", top: -4, right: -4,
-                          width: { xs: 18, md: 14 }, height: { xs: 18, md: 14 }, borderRadius: "50%",
-                          bgcolor: "#475569", color: "#fff",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: { xs: 11, md: 9 }, cursor: "pointer", fontWeight: 700,
-                          "&:hover": { bgcolor: "#0f172a" }
-                        }}>×</Box>
-                      </Box>
-                    </Tooltip>
+                      </Tooltip>
+                      <TextField
+                        variant="standard" placeholder="Caption — optional"
+                        value={captionValue(att.id, att.caption ?? "")}
+                        onChange={e => setCaptionDrafts(prev => ({ ...prev, [att.id]: e.target.value }))}
+                        onBlur={() => commitAttCaption(att)}
+                        inputProps={{ maxLength: 280 }}
+                        sx={{ "& .MuiInput-input": { fontSize: { xs: 16, md: 11 }, py: "1px", color: "#0f172a" } }}
+                      />
+                    </Box>
                   ))}
 
-                  {/* Queued (offline) photos — captured on-device, awaiting upload. Shown
-                      from a local object URL with a pending badge so the engineer trusts
-                      the capture survived; replaced by the real attachment once it drains. */}
+                  {/* Queued (offline) photo cells — captured on-device, awaiting upload.
+                      Shown from a local object URL with a pending badge; the caption is
+                      stored on the queued capture so it replays with the upload. Replaced
+                      by the persisted cell once it drains. */}
                   {(sync.photosByItem[item.id] ?? []).map((p) => (
-                    <Tooltip key={p.seq} title={`${p.filename} — saved on this device, will upload when online`}>
-                      <Box sx={{ position: "relative", width: 40, height: 40, borderRadius: "4px", overflow: "hidden", border: "1px dashed #cbd5e1", opacity: 0.75 }}>
-                        <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                        <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "2px", py: "1px", display: "flex", alignItems: "center" }}>
-                          <ScheduleIcon sx={{ fontSize: 10 }} />
+                    <Box key={p.seq} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
+                      <Tooltip title={`${p.filename} — saved on this device, will upload when online`}>
+                        <Box sx={{ position: "relative", width: 48, height: 48, borderRadius: "4px", overflow: "hidden", border: "1px dashed #cbd5e1", opacity: 0.85 }}>
+                          <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                          <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "2px", py: "1px", display: "flex", alignItems: "center" }}>
+                            <ScheduleIcon sx={{ fontSize: 10 }} />
+                          </Box>
                         </Box>
-                      </Box>
-                    </Tooltip>
+                      </Tooltip>
+                      <TextField
+                        variant="standard" placeholder="Caption — optional"
+                        value={captionValue(`pending:${p.seq}`, p.caption ?? "")}
+                        onChange={e => setCaptionDrafts(prev => ({ ...prev, [`pending:${p.seq}`]: e.target.value }))}
+                        onBlur={() => commitPendingCaption(p.seq, p.caption ?? "")}
+                        inputProps={{ maxLength: 280 }}
+                        sx={{ "& .MuiInput-input": { fontSize: { xs: 16, md: 11 }, py: "1px", color: "#0f172a" } }}
+                      />
+                    </Box>
                   ))}
 
                   {/* Add photo — ghost button */}
@@ -1434,25 +1484,38 @@ export default function CheckDetailPage() {
                                     ))}
                                   </Stack>
                                 ) : null}
-                                {/* Per-item field-evidence photos — read-only thumbnails; click to
-                                    preview the auth'd blob via the shared modal. No delete in this
-                                    view (the execution UI owns editing). Without this the captured
-                                    evidence is invisible once a check leaves the execution screen. */}
+                                {/* Per-item field-evidence — read-only captioned cards; click the
+                                    thumbnail to preview the auth'd blob via the shared modal. The
+                                    caption (when set) labels the evidence; otherwise fall back to
+                                    filename + capture date. No editing here (the execution UI owns it).
+                                    Without this the captured evidence is invisible once a check leaves
+                                    the execution screen. */}
                                 {(item.attachments ?? []).length > 0 ? (
-                                  <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", mt: "8px" }}>
+                                  <Box sx={{ display: "flex", alignItems: "flex-start", gap: "10px", flexWrap: "wrap", mt: "8px" }}>
                                     {(item.attachments ?? []).map((att) => (
-                                      <Tooltip key={att.id} title={att.filename}>
-                                        <Box onClick={() => setPreviewAtt(att)} sx={{
-                                          width: 40, height: 40, borderRadius: "4px", border: "1px solid #e2e8f0",
-                                          display: "flex", alignItems: "center", justifyContent: "center",
-                                          bgcolor: "#f8fafc", cursor: "pointer",
-                                          "&:hover": { borderColor: "#cbd5e1" }
-                                        }}>
-                                          {isImageType(att.contentType)
-                                            ? <ImageIcon sx={{ fontSize: 18, color: "#64748b" }} />
-                                            : <DescriptionIcon sx={{ fontSize: 18, color: "#64748b" }} />}
-                                        </Box>
-                                      </Tooltip>
+                                      <Box key={att.id} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
+                                        <Tooltip title={att.filename}>
+                                          <Box onClick={() => setPreviewAtt(att)} sx={{
+                                            width: 48, height: 48, borderRadius: "4px", border: "1px solid #e2e8f0",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            bgcolor: "#f8fafc", cursor: "pointer",
+                                            "&:hover": { borderColor: "#cbd5e1" }
+                                          }}>
+                                            {isImageType(att.contentType)
+                                              ? <ImageIcon sx={{ fontSize: 20, color: "#64748b" }} />
+                                              : <DescriptionIcon sx={{ fontSize: 20, color: "#64748b" }} />}
+                                          </Box>
+                                        </Tooltip>
+                                        {att.caption ? (
+                                          <Typography sx={{ fontSize: 11, color: "#334155", lineHeight: 1.3, wordBreak: "break-word" }}>
+                                            {att.caption}
+                                          </Typography>
+                                        ) : (
+                                          <Typography sx={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.3, wordBreak: "break-word" }}>
+                                            {att.filename} · {new Date(att.uploadedAt).toLocaleDateString("en-GB")}
+                                          </Typography>
+                                        )}
+                                      </Box>
                                     ))}
                                   </Box>
                                 ) : null}

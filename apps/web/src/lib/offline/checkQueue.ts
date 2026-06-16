@@ -1,5 +1,5 @@
 import { api } from "../api"
-import { uploadAttachment } from "../attachments"
+import { updateAttachmentCaption, uploadAttachment } from "../attachments"
 import { getDB, type CheckStateRecord, type QueuedMutation, type StoredAnswer } from "./db"
 
 // ── Field-work sync manager (singleton) ───────────────────────────────────────
@@ -16,6 +16,7 @@ export interface PendingPhotoView {
   itemId: string
   url: string // object URL for the captured blob (revoked when the entry leaves the queue)
   filename: string
+  caption?: string // optional caption captured on-device; replays with the upload
 }
 
 export interface CheckPending {
@@ -147,7 +148,7 @@ class CheckSyncManager {
     void this.drain()
   }
 
-  async queuePhoto(checkId: string, itemId: string, file: File): Promise<void> {
+  async queuePhoto(checkId: string, itemId: string, file: File, caption?: string): Promise<void> {
     const db = await getDB()
     await db.add("mutationQueue", {
       checkId,
@@ -155,9 +156,45 @@ class CheckSyncManager {
       kind: "photo",
       blob: file,
       filename: file.name || "photo.jpg",
+      caption: caption?.trim() || undefined,
       createdAt: Date.now(),
       attempts: 0,
     })
+    await this.rebuildSnapshot()
+    void this.drain()
+  }
+
+  // Set the caption on a still-queued (not-yet-uploaded) photo capture, so it replays
+  // atomically with the file. No-op if that capture has already drained (its entry is
+  // gone — by then it's a persisted attachment, edited via queueCaptionEdit instead).
+  async setPendingPhotoCaption(seq: number, caption: string): Promise<void> {
+    const db = await getDB()
+    const existing = await db.get("mutationQueue", seq)
+    if (!existing || existing.kind !== "photo") return
+    await db.put("mutationQueue", { ...existing, caption: caption.trim() || undefined })
+    await this.rebuildSnapshot()
+  }
+
+  // Edit the caption of an ALREADY-uploaded attachment. Mirrors saveItemAnswer: persist
+  // optimistically (coalesce ≤1 caption mutation per attachmentId, last write wins) then
+  // drain — online it replays immediately (PATCH), offline it waits for reconnect.
+  async queueCaptionEdit(checkId: string, attachmentId: string, caption: string): Promise<void> {
+    const db = await getDB()
+    const value = caption.trim() || undefined
+    const existing = await this.findCaptionMutation(checkId, attachmentId)
+    if (existing?.seq !== undefined) {
+      await db.put("mutationQueue", { ...existing, caption: value, attempts: 0 })
+    } else {
+      await db.add("mutationQueue", {
+        checkId,
+        itemId: "", // captions hang off an attachment, not an item — itemId unused here
+        kind: "caption",
+        attachmentId,
+        caption: value,
+        createdAt: Date.now(),
+        attempts: 0,
+      })
+    }
     await this.rebuildSnapshot()
     void this.drain()
   }
@@ -181,6 +218,12 @@ class CheckSyncManager {
     return all.find((m) => m.kind === "item" && m.itemId === itemId)
   }
 
+  private async findCaptionMutation(checkId: string, attachmentId: string): Promise<QueuedMutation | undefined> {
+    const db = await getDB()
+    const all = await db.getAllFromIndex("mutationQueue", "by-check", checkId)
+    return all.find((m) => m.kind === "caption" && m.attachmentId === attachmentId)
+  }
+
   // ── Replay ─────────────────────────────────────────────────────────────────
   async drain(): Promise<void> {
     if (this.draining) return
@@ -200,9 +243,12 @@ class CheckSyncManager {
               response: m.payload?.response || undefined,
               notes: m.payload?.notes || undefined,
             })
+          } else if (m.kind === "caption" && m.attachmentId) {
+            // Caption edit on an already-uploaded attachment (offline replay).
+            await updateAttachmentCaption(m.attachmentId, m.caption ?? "")
           } else if (m.blob) {
             const file = new File([m.blob], m.filename ?? "photo.jpg", { type: m.blob.type })
-            await uploadAttachment("check-item", m.itemId, file)
+            await uploadAttachment("check-item", m.itemId, file, m.caption)
           }
           if (m.seq !== undefined) await db.delete("mutationQueue", m.seq)
         } catch (err) {
@@ -252,6 +298,7 @@ class CheckSyncManager {
           itemId: m.itemId,
           url,
           filename: m.filename ?? "photo.jpg",
+          caption: m.caption,
         })
       }
     }

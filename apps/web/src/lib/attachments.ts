@@ -10,6 +10,7 @@ export interface AttachmentSummary {
   filename: string
   contentType: string
   size: number
+  caption: string | null // optional short evidence label; null when none set
   uploadedAt: string
   inline: boolean
 }
@@ -45,14 +46,30 @@ export function formatFileSize(bytes: number): string {
 export async function uploadAttachment(
   recordType: AttachmentRecordType,
   recordId: string,
-  file: File
+  file: File,
+  caption?: string | null
 ): Promise<AttachmentSummary> {
   const fd = new FormData()
   fd.append("file", file)
   fd.append("recordType", recordType)
   fd.append("recordId", recordId)
+  // Caption rides along with the upload (frictionless capture). Only send a non-blank
+  // value; absent => stored NULL by the backend.
+  if (caption && caption.trim()) fd.append("caption", caption.trim())
   // Let axios set the multipart boundary; do NOT set Content-Type manually.
   const { data } = await api.post<AttachmentSummary>("/attachments", fd)
+  return data
+}
+
+// Edit the caption of an existing attachment. A blank caption clears it. Rejected by
+// the backend (400) if the owning check is COMPLETED/CLOSED (evidence lock).
+export async function updateAttachmentCaption(
+  id: string,
+  caption: string
+): Promise<AttachmentSummary> {
+  const { data } = await api.patch<AttachmentSummary>(`/attachments/${id}`, {
+    caption: caption.trim() || undefined,
+  })
   return data
 }
 

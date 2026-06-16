@@ -1,5 +1,9 @@
-import { IsIn, IsNotEmpty, IsString } from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from "class-validator";
 import { ATTACHMENT_RECORD_TYPES, AttachmentRecordType } from "../record-links/resolve-links";
+
+// Longest accepted caption — a short label, not free-form prose. Enforced here and
+// re-clamped server-side (normalizeCaption) so a direct API caller can't exceed it.
+export const MAX_CAPTION_LENGTH = 280;
 
 // The target record an upload attaches to. The eight attachable types (the six
 // link types + maintenance + check). This is the SEPARATE attachment list — record-
@@ -11,4 +15,20 @@ export class CreateAttachmentDto {
   @IsString()
   @IsNotEmpty()
   recordId!: string;
+
+  // Optional caption captured alongside the file (frictionless field-evidence labelling).
+  // Multipart sends it as a form field; absent/blank => stored NULL.
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_CAPTION_LENGTH)
+  caption?: string;
+}
+
+// Edit just the caption of an existing attachment. A blank/absent caption clears it
+// (stored NULL). Rejected by the service if the owning check is COMPLETED/CLOSED.
+export class UpdateAttachmentCaptionDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_CAPTION_LENGTH)
+  caption?: string;
 }

@@ -13,6 +13,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { AttachmentRecordType, resolveRecordSummary } from "../record-links/resolve-links";
 import { MAX_ATTACHMENT_BYTES, sniffContentType } from "./content-policy";
+import { MAX_CAPTION_LENGTH } from "./dto";
 import { AttachmentSummary } from "./resolve-attachments";
 
 @Injectable()
@@ -55,11 +56,21 @@ export class AttachmentsService {
     }
   }
 
+  // Caption is a short label, not prose: trim, drop to NULL when blank, and clamp to
+  // the DTO max so a direct API caller can't exceed the validated bound.
+  private normalizeCaption(caption: string | null | undefined): string | null {
+    if (typeof caption !== "string") return null;
+    const trimmed = caption.trim();
+    if (!trimmed) return null;
+    return trimmed.slice(0, MAX_CAPTION_LENGTH);
+  }
+
   private toSummary(row: {
     id: string;
     filename: string;
     contentType: string;
     size: number;
+    caption: string | null;
     createdAt: Date;
   }): AttachmentSummary {
     return {
@@ -67,6 +78,7 @@ export class AttachmentsService {
       filename: row.filename,
       contentType: row.contentType,
       size: row.size,
+      caption: row.caption ?? null,
       uploadedAt: row.createdAt.toISOString(),
       inline: true // every stored type is allow-listed, hence inline-eligible
     };
@@ -77,7 +89,8 @@ export class AttachmentsService {
     recordType: AttachmentRecordType,
     recordId: string,
     actorUserId: string | null,
-    file: Express.Multer.File | undefined
+    file: Express.Multer.File | undefined,
+    caption?: string | null
   ): Promise<AttachmentSummary> {
     this.assertClientScope(clientId);
 
@@ -118,10 +131,30 @@ export class AttachmentsService {
         contentType,
         size: file.size,
         storageKey,
+        caption: this.normalizeCaption(caption),
         uploadedById: actorUserId ?? undefined
       }
     });
 
+    return this.toSummary(row);
+  }
+
+  // Edit just the caption of an existing attachment (clientId-scoped lookup is the
+  // tenant chokepoint, same as every other read here). The evidence lock applies: a
+  // caption edit on a COMPLETED/CLOSED check is rejected, mirroring create/delete.
+  async updateCaption(
+    clientId: string,
+    id: string,
+    caption: string | null | undefined
+  ): Promise<AttachmentSummary> {
+    this.assertClientScope(clientId);
+    const att = await this.prisma.attachment.findFirst({ where: { id, clientId } });
+    if (!att) throw new NotFoundException("Attachment not found");
+    await this.assertCheckNotLocked(clientId, att.recordType, att.recordId);
+    const row = await this.prisma.attachment.update({
+      where: { id: att.id },
+      data: { caption: this.normalizeCaption(caption) }
+    });
     return this.toSummary(row);
   }
 

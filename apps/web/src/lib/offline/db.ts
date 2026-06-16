@@ -23,17 +23,24 @@ export interface CheckStateRecord {
   updatedAt: number
 }
 
-// One pending write awaiting replay. `kind:'item'` is coalesced (≤1 per itemId, last
-// write wins — the server endpoint is an idempotent upsert). `kind:'photo'` is
-// append-only (one per capture; the blob is replayed via uploadAttachment).
+// One pending write awaiting replay.
+//  - `kind:'item'`    coalesced (≤1 per itemId, last write wins — idempotent upsert).
+//  - `kind:'photo'`   append-only (one per capture; blob replayed via uploadAttachment).
+//                     `caption` rides along and is posted atomically with the file.
+//  - `kind:'caption'` coalesced (≤1 per attachmentId, last write wins) — a caption edit
+//                     on an ALREADY-uploaded attachment; replayed via PATCH /attachments.
+// (No IDB version bump for the new kind/field — IndexedDB stores values structurally, the
+// object stores + `by-check` index are unchanged.)
 export interface QueuedMutation {
   seq?: number // auto-increment key (FIFO ordering); absent until written
   checkId: string
   itemId: string
-  kind: "item" | "photo"
+  kind: "item" | "photo" | "caption"
   payload?: { response?: string; notes?: string }
   blob?: Blob
   filename?: string
+  caption?: string // photo: caption captured with the file; caption-kind: the new value
+  attachmentId?: string // caption-kind only: the persisted attachment being re-captioned
   uploadId?: string // reserved for future server-side dedup (4b); unused in 4a
   createdAt: number
   attempts: number

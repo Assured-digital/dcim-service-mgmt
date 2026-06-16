@@ -10,6 +10,7 @@ export type AttachmentSummary = {
   filename: string;
   contentType: string;
   size: number;
+  caption: string | null; // optional short evidence label; null when none set
   uploadedAt: string;
   inline: boolean;
 };
@@ -32,6 +33,7 @@ export async function resolveAttachments(
     filename: r.filename,
     contentType: r.contentType,
     size: r.size,
+    caption: r.caption ?? null,
     uploadedAt: r.createdAt.toISOString(),
     inline: isInlineType(r.contentType)
   }));
@@ -59,6 +61,7 @@ export async function resolveAttachmentsForRecords(
       filename: r.filename,
       contentType: r.contentType,
       size: r.size,
+      caption: r.caption ?? null,
       uploadedAt: r.createdAt.toISOString(),
       inline: isInlineType(r.contentType)
     };

@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   Post,
   Req,
   Res,
@@ -23,7 +24,7 @@ import { Roles } from "../auth/roles.decorator";
 import { getJwtUser, resolveClientScope } from "../auth/request-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { AttachmentsService } from "./attachments.service";
-import { CreateAttachmentDto } from "./dto";
+import { CreateAttachmentDto, UpdateAttachmentCaptionDto } from "./dto";
 import {
   contentDispositionHeader,
   isInlineType,
@@ -74,8 +75,24 @@ export class AttachmentsController {
       dto.recordType,
       dto.recordId,
       user.userId ?? null,
-      file
+      file,
+      dto.caption
     );
+  }
+
+  // Edit a caption on an existing attachment. Write-roles only + clientId-scoped +
+  // evidence-lock (a caption edit on a COMPLETED/CLOSED check is rejected in the service).
+  @Patch(":id")
+  @Roles(...ATTACH_WRITE_ROLES)
+  async updateCaption(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: UpdateAttachmentCaptionDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.attachments.updateCaption(clientId, id, dto.caption);
   }
 
   @Get(":id")

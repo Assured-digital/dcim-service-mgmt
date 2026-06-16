@@ -13,7 +13,11 @@ export interface CheckExecutionSync {
   pendingCount: number
   photosByItem: Record<string, PendingPhotoView[]>
   saveItemAnswer: (itemId: string, patch: { response?: string; notes?: string }) => Promise<void>
-  queuePhoto: (itemId: string, file: File) => Promise<void>
+  queuePhoto: (itemId: string, file: File, caption?: string) => Promise<void>
+  // Caption on a still-queued capture (rides along with the upload).
+  setPendingPhotoCaption: (seq: number, caption: string) => Promise<void>
+  // Caption edit on an already-uploaded attachment (queues + drains; offline-safe).
+  queueCaptionEdit: (attachmentId: string, caption: string) => Promise<void>
 }
 
 const EMPTY_PHOTOS: Record<string, PendingPhotoView[]> = {}
@@ -42,8 +46,11 @@ export function useCheckExecutionSync(checkId: string | undefined): CheckExecuti
       photosByItem,
       saveItemAnswer: (itemId, patch) =>
         checkId ? checkSync.saveItemAnswer(checkId, itemId, patch) : Promise.resolve(),
-      queuePhoto: (itemId, file) =>
-        checkId ? checkSync.queuePhoto(checkId, itemId, file) : Promise.resolve(),
+      queuePhoto: (itemId, file, caption) =>
+        checkId ? checkSync.queuePhoto(checkId, itemId, file, caption) : Promise.resolve(),
+      setPendingPhotoCaption: (seq, caption) => checkSync.setPendingPhotoCaption(seq, caption),
+      queueCaptionEdit: (attachmentId, caption) =>
+        checkId ? checkSync.queueCaptionEdit(checkId, attachmentId, caption) : Promise.resolve(),
     }),
     [status, pendingCount, photosByItem, checkId],
   )
