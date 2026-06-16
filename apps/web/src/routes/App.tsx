@@ -16,6 +16,7 @@ const TaskDetailPage           = React.lazy(() => import("./TaskDetailPage"))
 const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
 const AssetRegisterPage        = React.lazy(() => import("./AssetRegisterPage"))
 const ChecksPage               = React.lazy(() => import("./ChecksPage"))
+const CheckHistoryPage         = React.lazy(() => import("./CheckHistoryPage"))
 const CheckDetailPage          = React.lazy(() => import("./CheckDetailPage"))
 const CheckTemplatesPage       = React.lazy(() => import("./CheckTemplatesPage"))
 const CheckTemplateDetailPage  = React.lazy(() => import("./CheckTemplateDetailPage"))
@@ -204,6 +205,7 @@ export default function App() {
 
           {/* Field Work — Engineering Checks */}
           <Route path="checks" element={<ChecksPage />} />
+          <Route path="checks/history" element={<CheckHistoryPage />} />
           <Route path="checks/:id" element={<CheckDetailPage />} />
           <Route path="check-templates" element={<CheckTemplatesPage />} />
           <Route path="check-templates/:id" element={<CheckTemplateDetailPage />} />

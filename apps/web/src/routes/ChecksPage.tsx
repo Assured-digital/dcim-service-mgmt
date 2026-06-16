@@ -116,18 +116,16 @@ export default function ChecksPage() {
           >
             Engineering checks
           </Typography>
-          <Tooltip title="Completed-check history — coming soon">
-            <span>
-              <Button
-                size="small"
-                variant="outlined"
-                disabled
-                startIcon={<HistoryIcon sx={{ fontSize: 16 }} />}
-                sx={{ fontSize: 12 }}
-              >
-                History
-              </Button>
-            </span>
+          <Tooltip title="Completed & closed check history">
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => navigate("/checks/history")}
+              startIcon={<HistoryIcon sx={{ fontSize: 16 }} />}
+              sx={{ fontSize: 12 }}
+            >
+              History
+            </Button>
           </Tooltip>
           {canManage ? (
             <Button size="small" variant="contained" onClick={() => setCreateOpen(true)} sx={{ fontSize: 12 }}>

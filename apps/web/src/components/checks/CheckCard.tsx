@@ -22,8 +22,11 @@ export type Check = {
   priority: string
   scheduledAt: string | null
   submittedAt: string | null
+  completedAt: string | null
+  closedAt: string | null
   passRate: number | null
   createdAt: string
+  updatedAt: string
   site: { id: string; name: string } | null
   assignee: { id: string; displayName: string } | null
   template: { id: string; name: string; checkType: string } | null
