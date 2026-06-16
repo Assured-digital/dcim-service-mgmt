@@ -1,3 +1,5 @@
+import { entityStatusIntent, semanticTokens } from "../components/shared/tokens/colors"
+
 // ─── Shared types ──────────────────────────────────────────────────────────
 
 export type Asset = {
@@ -85,11 +87,12 @@ export const ASSET_LIFECYCLE_OPTIONS = ["ACTIVE", "PLANNED", "PROCUREMENT", "STA
 
 export function assetBg(type: string) { return ASSET_TYPE_BG[type] ?? "#f1f5f9" }
 
-export function lifecycleSx(state: string) {
-  if (state === "ACTIVE") return { bgcolor: "#dcfce7", color: "#15803d" }
-  if (state === "RETIRED") return { bgcolor: "#f1f5f9", color: "#64748b" }
-  if (state === "STAGING") return { bgcolor: "#dbeafe", color: "#1d4ed8" }
-  return { bgcolor: "#fef3c7", color: "#b45309" }
+// Saturated lifecycle colour for label-less glyphs (the rack-elevation stripe, the
+// register dot). Reads the SAME entityStatusIntent map the lifecycle pills use, on
+// the `solid` scale (the pastel fill washes out at a few px), so chip / stripe / dot
+// all agree: ACTIVE→green, STAGING→blue, PROCUREMENT→amber, PLANNED/RETIRED→slate.
+export function lifecycleGlyphColor(state: string) {
+  return semanticTokens[entityStatusIntent(state)].solid
 }
 
 export function barColor(pct: number) { return pct > 85 ? "#b91c1c" : pct > 65 ? "#b45309" : "#15803d" }
@@ -123,9 +126,5 @@ export function actionLabel(action: string, data?: { from?: string; to?: string;
 }
 
 export function stripeBg(state: string) {
-  if (state === "ACTIVE") return "#22c55e"
-  if (state === "STAGING") return "#8b5cf6"
-  if (state === "PLANNED") return "#3b82f6"
-  if (state === "RETIRED") return "#94a3b8"
-  return "#f59e0b"
+  return lifecycleGlyphColor(state)
 }

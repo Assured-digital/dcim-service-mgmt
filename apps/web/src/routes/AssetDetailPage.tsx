@@ -11,11 +11,11 @@ import { api } from "../lib/api"
 import { EditActionsButton } from "../components/EditActionsButton"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
-import { chipSx } from "../components/shared"
+import { StatusPill, entityStatusIntent } from "../components/shared"
 import { useBreadcrumb } from "./Shell"
 import {
   Asset, AuditEvent, Cabinet, LinkedIssue, LinkedRisk, LinkedServiceRequest, LinkedTask,
-  ASSET_LIFECYCLE_OPTIONS, HEADER_HEIGHT, lifecycleSx, getApiErrorMessage
+  ASSET_LIFECYCLE_OPTIONS, HEADER_HEIGHT, getApiErrorMessage
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import {
@@ -705,10 +705,9 @@ const OverviewTab = React.memo(function OverviewTab({
                 {ASSET_LIFECYCLE_OPTIONS.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
               </TextField>
             ) : (
-              <Chip
-                size="small"
+              <StatusPill
+                intent={entityStatusIntent(asset.lifecycleState)}
                 label={asset.lifecycleState.charAt(0) + asset.lifecycleState.slice(1).toLowerCase()}
-                sx={{ ...lifecycleSx(asset.lifecycleState), fontSize: 11, fontWeight: 600, height: 22 }}
               />
             )}
           </PropertyRow>
@@ -747,7 +746,9 @@ const OverviewTab = React.memo(function OverviewTab({
                 sx={{ border: "1px solid #e2e8f0", borderRadius: "8px", p: "10px 12px", cursor: "pointer", "&:hover": { bgcolor: "#f8fafc", borderColor: "#cbd5e1" } }}>
                 <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: "4px" }}>
                   <Typography sx={{ fontSize: 11.5, fontFamily: "monospace", fontWeight: 700, color: "#475569" }}>{item.reference}</Typography>
-                  <Chip size="small" label={String(item.status).toLowerCase().replaceAll("_", " ")} sx={{ ...chipSx(item.status), fontSize: 9.5, height: 18, ml: "auto" }} />
+                  <Box sx={{ ml: "auto", display: "inline-flex", flexShrink: 0 }}>
+                    <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
+                  </Box>
                 </Stack>
                 <Typography sx={{ fontSize: 12, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle}</Typography>
               </Box>
@@ -839,7 +840,7 @@ function LinkedTab({
                 <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#0f172a", fontFamily: "monospace" }}>{item.reference}</Typography>
                 <Typography sx={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle}</Typography>
               </Box>
-              <Chip size="small" label={String(item.status).toLowerCase().replaceAll("_", " ")} sx={{ ...chipSx(item.status), fontSize: 10, height: 20 }} />
+              <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
             </Stack>
           ))}
         </Box>
@@ -960,9 +961,9 @@ function HistoryTab({ events }: { events: AuditEventWithActor[] }) {
 
                 {isStatusChange ? (
                   <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: "6px" }}>
-                    <Chip size="small" label={String(event.data!.from).toLowerCase().replaceAll("_", " ")} sx={{ ...chipSx(event.data!.from), fontSize: 10, height: 18 }} />
+                    <StatusPill value={event.data!.from} label={String(event.data!.from).toLowerCase().replaceAll("_", " ")} size="sm" />
                     <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>→</Typography>
-                    <Chip size="small" label={String(event.data!.to).toLowerCase().replaceAll("_", " ")} sx={{ ...chipSx(event.data!.to), fontSize: 10, height: 18 }} />
+                    <StatusPill value={event.data!.to} label={String(event.data!.to).toLowerCase().replaceAll("_", " ")} size="sm" />
                   </Stack>
                 ) : null}
 

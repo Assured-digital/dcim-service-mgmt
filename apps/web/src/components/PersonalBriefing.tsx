@@ -7,7 +7,7 @@ import { BarChart } from "@mui/x-charts/BarChart"
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh"
 import WbSunnyIcon from "@mui/icons-material/WbSunny"
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
-import { chipSx, TypeBadge } from "./shared"
+import { StatusPill, TypeBadge } from "./shared"
 import { getCurrentUser, type CurrentUser } from "../lib/auth"
 import type { Ticket } from "../lib/tickets"
 
@@ -186,9 +186,8 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
               <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#475569" }}>
                 {focus.reference}
               </Typography>
-              <Chip
-                size="small"
-                sx={chipSx(focus.overdue ? "OVERDUE" : focus.status)}
+              <StatusPill
+                value={focus.overdue ? "OVERDUE" : focus.status}
                 label={focus.overdue ? "overdue" : focus.status.toLowerCase().replaceAll("_", " ")}
               />
               <Typography sx={{ fontSize: 11.5, color: "#64748b", ml: "auto" }}>

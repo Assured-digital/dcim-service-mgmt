@@ -6,7 +6,7 @@ import {
   DialogTitle, MenuItem, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Typography
 } from "@mui/material"
-import { statusChipSx } from "../lib/ui"
+import { StatusPill, entityStatusIntent } from "../components/shared"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 
 type WorkPackage = {
@@ -86,7 +86,13 @@ export default function WorkPackagesPage() {
                     <TableCell sx={{ fontWeight: 700, fontFamily: "monospace" }}>{wp.reference}</TableCell>
                     <TableCell>{wp.title}</TableCell>
                     <TableCell><Chip size="small" label={wp.type.replace("_", " ")} /></TableCell>
-                    <TableCell><Chip size="small" sx={statusChipSx(wp.status)} label={wp.status} /></TableCell>
+                    <TableCell>
+                      <StatusPill
+                        intent={entityStatusIntent(wp.status)}
+                        label={wp.status.toLowerCase()}
+                        size="sm"
+                      />
+                    </TableCell>
                     <TableCell>{wp.startDate ? new Date(wp.startDate).toLocaleDateString("en-GB") : "—"}</TableCell>
                     <TableCell>{wp.endDate ? new Date(wp.endDate).toLocaleDateString("en-GB") : "—"}</TableCell>
                     <TableCell>{wp.value ? `£${wp.value.toLocaleString()}` : "—"}</TableCell>

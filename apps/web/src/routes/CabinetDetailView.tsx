@@ -3,16 +3,16 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Chip, Drawer, Stack, Table, TableBody, TableCell,
+  Box, Button, Drawer, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Tooltip, Typography
 } from "@mui/material"
 import StorageIcon from "@mui/icons-material/Storage"
-import { chipSx } from "../components/shared"
+import { StatusPill, entityStatusIntent } from "../components/shared"
 import { TaskQuickDetailModal } from "./TasksPage"
 import {
   Asset, Cabinet, Room, RackTab, ElevationSide,
   AuditEvent, LinkedTask, LinkedServiceRequest, LinkedRisk, LinkedIssue,
-  assetBg, lifecycleSx, normalizeRackSide, formatKw, actionLabel, stripeBg
+  assetBg, normalizeRackSide, formatKw, actionLabel, stripeBg
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 
@@ -291,7 +291,9 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "8px" }}>
                       <Box sx={{ px: "8px", py: "3px", borderRadius: "4px", bgcolor: assetBg(selectedRackAsset.assetType) }}><Typography sx={{ fontSize: 10.5, fontWeight: 600, color: "#334155" }}>{selectedRackAsset.assetType}</Typography></Box>
                       <Typography sx={{ fontSize: 11, fontFamily: "monospace", color: "#94a3b8" }}>{selectedRackAsset.assetTag}</Typography>
-                      <Chip size="small" label={selectedRackAsset.lifecycleState.toLowerCase()} sx={{ ...lifecycleSx(selectedRackAsset.lifecycleState), ml: "auto", fontSize: 10 }} />
+                      <Box sx={{ ml: "auto", display: "inline-flex" }}>
+                        <StatusPill intent={entityStatusIntent(selectedRackAsset.lifecycleState)} label={selectedRackAsset.lifecycleState.toLowerCase()} size="sm" />
+                      </Box>
                     </Stack>
                     <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#0f172a" }}>{selectedRackAsset.name}</Typography>
                   </Box>
@@ -380,7 +382,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                       <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{item.reference}</Typography>
                       <Typography sx={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.subtitle(item)}</Typography>
                     </Box>
-                    <Chip size="small" label={String(item.status).toLowerCase().replaceAll("_", " ")} sx={{ ...chipSx(item.status), fontSize: 10, height: 20 }} />
+                    <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
                   </Stack>
                 ))}
               </Box>

@@ -13,7 +13,7 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { chipSx } from "../components/shared"
+import { StatusPill } from "../components/shared"
 import { Chip } from "@mui/material"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 
@@ -283,7 +283,7 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
         <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{reference}</Typography>
       </Box>
       <Stack direction="row" alignItems="center" gap="8px" sx={{ flexShrink: 0 }}>
-        <Chip size="small" label={status.toLowerCase().replace(/_/g, " ")} sx={{ ...chipSx(status), height: 20, fontSize: 10 }} />
+        <StatusPill value={status} label={status.toLowerCase().replace(/_/g, " ")} size="sm" />
         <Typography sx={{ fontSize: 11, color: "#94a3b8", minWidth: 36, textAlign: "right" }}>{ago}</Typography>
       </Stack>
     </Box>

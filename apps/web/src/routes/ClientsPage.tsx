@@ -1,9 +1,10 @@
 import React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Box, Button, Card, Chip, Typography } from "@mui/material"
+import { Box, Button, Card, Typography } from "@mui/material"
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid"
 import AddBusinessIcon from "@mui/icons-material/AddBusiness"
 import EditIcon from "@mui/icons-material/Edit"
+import { StatusPill, entityStatusIntent } from "../components/shared"
 import { listClients, type ClientView } from "../lib/clients"
 import { EmptyState, ErrorState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
@@ -56,12 +57,13 @@ export default function ClientsPage() {
         field: "status",
         headerName: "Status",
         width: 120,
-        renderCell: (p) =>
-          (p.value as string) === "ACTIVE" ? (
-            <Chip size="small" label="active" sx={{ bgcolor: "#dcfce7", color: "#166534", fontWeight: 600 }} />
-          ) : (
-            <Chip size="small" label="inactive" sx={{ bgcolor: "#f1f5f9", color: "#64748b", fontWeight: 600 }} />
-          )
+        renderCell: (p) => (
+          <StatusPill
+            intent={entityStatusIntent(p.value as string)}
+            label={(p.value as string).toLowerCase()}
+            size="sm"
+          />
+        )
       },
       {
         field: "updatedAt",

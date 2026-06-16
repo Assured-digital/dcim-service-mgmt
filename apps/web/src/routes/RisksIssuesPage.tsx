@@ -171,7 +171,11 @@ function RisksIssuesQueueView() {
       renderCell: (p: GridRenderCellParams<UnifiedRow>) => {
         const row = p.row as UnifiedRow
         const labels = row.kind === "RSK" ? RISK_STATUS_LABELS : ISSUE_STATUS_LABELS
-        return <StatusPill value={row.status} label={labels[row.status] ?? row.status} />
+        // Risk MITIGATING is an in-progress state (blue) — override the resolveIntent
+        // MITIGAT->success collision that would wrongly green it. Incident MITIGATED
+        // is terminal-good and stays green (untouched, different surface).
+        const intent = row.kind === "RSK" && row.status === "MITIGATING" ? "active" as const : undefined
+        return <StatusPill value={row.status} intent={intent} label={labels[row.status] ?? row.status} />
       },
     },
     {

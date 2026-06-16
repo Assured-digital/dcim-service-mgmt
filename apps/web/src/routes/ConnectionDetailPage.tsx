@@ -20,6 +20,7 @@ import {
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { StatusPill, entityStatusIntent } from "../components/shared"
 
 type Connection = {
   id: string
@@ -153,9 +154,14 @@ export default function ConnectionDetailPage() {
               <Typography variant="h5" sx={{ mb: 0.75 }}>
                 {connection.data.connectionType}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Status: {connection.data.status}
-              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" color="text.secondary">Status</Typography>
+                <StatusPill
+                  intent={entityStatusIntent(connection.data.status)}
+                  label={connection.data.status.toLowerCase()}
+                  size="sm"
+                />
+              </Stack>
             </Box>
             {canManage ? (
               <Stack direction="row" spacing={1}>

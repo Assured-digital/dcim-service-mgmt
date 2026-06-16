@@ -17,30 +17,41 @@ import {
 // not two parallel ones. Radius is the shared PILL_RADIUS (the app's ~6px
 // baseline), so status and priority pills always match each other and the
 // surrounding UI — not the old fully-rounded lozenge.
+// `size`: "md" (default) is the baseline h24/px10/fs11; "sm" is a denser h20/px8/fs10
+// for tight rows (per-item checks, properties panels, list cells).
+// `minWidth`: a floor (+ centred content) for IN-PLACE pills (e.g. a detail-header
+// status) so the pill keeps one width and does NOT reflow as the status word changes.
 export function IntentPill({
   bg,
   text,
   label,
   trailing,
+  size = "md",
+  minWidth,
 }: {
   bg: string
   text: string
   label: React.ReactNode
   trailing?: React.ReactNode
+  size?: "sm" | "md"
+  minWidth?: number
 }) {
+  const dims = size === "sm" ? { height: 20, px: "8px", fontSize: 10 } : { height: 24, px: "10px", fontSize: 11 }
   return (
     <Box
       component="span"
       sx={{
         display: "inline-flex",
         alignItems: "center",
+        justifyContent: minWidth ? "center" : undefined,
         gap: "2px",
-        height: 24,
-        px: "10px",
+        height: dims.height,
+        px: dims.px,
+        minWidth,
         borderRadius: `${PILL_RADIUS}px`,
         bgcolor: bg,
         color: text,
-        fontSize: 11,
+        fontSize: dims.fontSize,
         fontWeight: 600,
         lineHeight: 1,
         whiteSpace: "nowrap",
@@ -61,14 +72,20 @@ export function StatusPill({
   intent,
   label,
   trailing,
+  size,
+  minWidth,
 }: {
   value?: string
   intent?: SemanticIntent
   label: React.ReactNode
   trailing?: React.ReactNode
+  size?: "sm" | "md"
+  minWidth?: number
 }) {
   const tok = semanticTokens[intent ?? resolveIntent(value ?? "")]
-  return <IntentPill bg={tok.bg} text={tok.text} label={label} trailing={trailing} />
+  return (
+    <IntentPill bg={tok.bg} text={tok.text} label={label} trailing={trailing} size={size} minWidth={minWidth} />
+  )
 }
 
 // Priority pill — the SAME pill, fed the 4-step priority ramp (priorityToken),
@@ -78,11 +95,17 @@ export function PriorityPill({
   priority,
   label,
   trailing,
+  size,
+  minWidth,
 }: {
   priority: string
   label: React.ReactNode
   trailing?: React.ReactNode
+  size?: "sm" | "md"
+  minWidth?: number
 }) {
   const tok = priorityToken(priority)
-  return <IntentPill bg={tok.bg} text={tok.text} label={label} trailing={trailing} />
+  return (
+    <IntentPill bg={tok.bg} text={tok.text} label={label} trailing={trailing} size={size} minWidth={minWidth} />
+  )
 }

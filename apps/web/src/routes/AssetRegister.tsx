@@ -5,7 +5,7 @@ import {
   GridToolbarContainer,
   GridToolbarColumnsButton, GridToolbarExport
 } from "@mui/x-data-grid"
-import { Asset } from "../lib/infrastructure"
+import { Asset, lifecycleGlyphColor } from "../lib/infrastructure"
 
 export interface AssetRegisterProps {
   filteredRows: Asset[]
@@ -26,9 +26,6 @@ const TYPE_CHIP_STYLES: Record<string, { bg: string; fg: string }> = {
 }
 const typeStyleFor = (type: string) => TYPE_CHIP_STYLES[type] ?? { bg: "#F1EFE8", fg: "#444441" }
 
-const LIFECYCLE_COLOR: Record<string, string> = {
-  ACTIVE: "#639922", STAGING: "#BA7517", PLANNED: "#378ADD", PROCUREMENT: "#378ADD", RETIRED: "#888780",
-}
 const LIFECYCLE_LABEL: Record<string, string> = {
   ACTIVE: "Active", STAGING: "Staging", PLANNED: "Planned", PROCUREMENT: "Procurement", RETIRED: "Retired",
 }
@@ -107,7 +104,7 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
       field: "lifecycleState", headerName: "Lifecycle", width: 120,
       renderCell: (p) => (
         <Stack direction="row" alignItems="center" spacing={0.75}>
-          <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: LIFECYCLE_COLOR[p.value as string] ?? "#888780" }} />
+          <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: lifecycleGlyphColor(p.value as string) }} />
           <Typography sx={{ fontSize: 12.5 }}>{LIFECYCLE_LABEL[p.value as string] ?? (p.value as string)}</Typography>
         </Stack>
       ),

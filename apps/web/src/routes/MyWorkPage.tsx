@@ -6,7 +6,7 @@ import { api } from "../lib/api"
 import { setSelectedClientId } from "../lib/scope"
 import { Box, Chip, Stack, Typography } from "@mui/material"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { chipSx } from "../components/shared"
+import { StatusPill } from "../components/shared"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { PersonalBriefing } from "../components/PersonalBriefing"
 import { useTickets } from "../lib/tickets"
@@ -195,12 +195,10 @@ function WorkItemCard({
         </Stack>
       </Box>
 
-      {/* Status chip */}
-      <Chip
-        size="small"
-        label={status.toLowerCase().replace(/_/g, " ")}
-        sx={{ ...chipSx(status), flexShrink: 0 }}
-      />
+      {/* Status pill */}
+      <Box sx={{ flexShrink: 0, display: "inline-flex" }}>
+        <StatusPill value={status} label={status.toLowerCase().replace(/_/g, " ")} size="sm" />
+      </Box>
 
       {/* Chevron */}
       <Typography sx={{ fontSize: 16, color: "#cbd5e1", flexShrink: 0, lineHeight: 1 }}>›</Typography>

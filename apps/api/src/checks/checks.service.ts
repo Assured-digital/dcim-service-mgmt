@@ -196,7 +196,23 @@ export class ChecksService {
       },
       orderBy: { updatedAt: "desc" }
     })
-    return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
+    // Evidence presence/thumbnails for the queue landing (review cards). Batch-resolve
+    // check-level AND per-item attachments across ALL rows — two queries regardless of
+    // row count (no N+1), mirroring getForClient's per-record resolve. Metadata only
+    // (no bytes); merged newest-first per check.
+    const checkIds = rows.map((r) => r.id)
+    const allItemIds = rows.flatMap((r) => r.items.map((i) => i.id))
+    const [checkAtt, itemAtt] = await Promise.all([
+      resolveAttachmentsForRecords(this.prisma, clientId, "check", checkIds),
+      resolveAttachmentsForRecords(this.prisma, clientId, "check-item", allItemIds)
+    ])
+    return rows.map((r) => {
+      const itemEvidence = r.items.flatMap((i) => itemAtt.get(i.id) ?? [])
+      const evidence = [...(checkAtt.get(r.id) ?? []), ...itemEvidence].sort((a, b) =>
+        b.uploadedAt.localeCompare(a.uploadedAt)
+      )
+      return { ...r, assignee: toUserDisplay(r.assignee), evidence }
+    })
   }
 
   async getForClient(clientId: string, id: string) {

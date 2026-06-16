@@ -1,5 +1,5 @@
 export type SemanticIntent =
-  | "success" | "active" | "warning" | "danger" | "neutral" | "info"
+  | "success" | "active" | "warning" | "danger" | "neutral" | "info" | "muted"
 
 export const uiText = {
   primary: "#0f172a",
@@ -42,6 +42,10 @@ export const semanticTokens: Record<SemanticIntent, { bg: string; text: string; 
   danger:  { bg: "#fee2e2", text: "#dc2626", solid: "#b91c1c" }, // red   — blocked / cancelled / overdue
   neutral: { bg: "#e2e8f0", text: "#475569", solid: "#475569" }, // slate — new / open / closed (terminal)
   info:    { bg: "#dbeafe", text: "#1d4ed8", solid: "#1d4ed8" }, // blue  — mirrors active
+  // muted — a lighter slate than `neutral`, for EXPLICIT-only "not-yet-actioned"
+  // states (e.g. a check item still Pending an answer). Deliberately NOT in the
+  // resolveIntent keyword scan, so it never auto-resolves — pass intent="muted".
+  muted:   { bg: "#f1f5f9", text: "#94a3b8", solid: "#94a3b8" },
 }
 
 export type RAGLevel = "RED" | "AMBER" | "GREEN"
@@ -87,13 +91,34 @@ export function resolveIntent(value: string): SemanticIntent {
     return "danger"
   if (["RESOLVED","COMPLETED","DONE","MITIGATED","ACCEPTED","PASS","GREEN"].some(k => v.includes(k)))
     return "success"
-  if (["WAITING","PENDING","ASSESSED","ON_HOLD","AMBER","MEDIUM"].some(k => v.includes(k)))
+  if (["WAITING","PENDING","ASSESSED","ON_HOLD","DEGRADED","AMBER","MEDIUM"].some(k => v.includes(k)))
     return "warning"
   if (["IN_PROGRESS","ASSIGNED","INVESTIGATING","MITIGATING","ACTIVE","SUBMITTED","APPROVED"].some(k => v.includes(k)))
     return "active"
   if (["NEW","DRAFT","OPEN","IDENTIFIED","PLANNED","SCHEDULED","CLOSED"].some(k => v.includes(k)))
     return "neutral"
   return "neutral"
+}
+
+// Operational-entity status -> intent. An EXPLICIT map (NOT the resolveIntent
+// keyword scan) for the non-workflow record types — Client, WorkPackage, Connection
+// and Asset lifecycle. Two reasons it can't share resolveIntent:
+//  - "ACTIVE" must read as operational/healthy (GREEN) here, not in-progress (blue).
+//  - "INACTIVE" CONTAINS the substring "ACTIVE", so any keyword scan mis-resolves it.
+// This is the single source of truth for entity-status colour — read via
+// entityStatusIntent(); unknown values fall through to neutral.
+const entityStatusIntentMap: Record<string, SemanticIntent> = {
+  ACTIVE:      "success", // green — operational / healthy / live
+  INACTIVE:    "neutral", // slate — disabled
+  DEGRADED:    "warning", // amber — impaired but live (connections)
+  PLANNED:     "neutral", // slate — not yet live
+  PROCUREMENT: "warning", // amber — in-flight provisioning (asset lifecycle)
+  STAGING:     "active",  // blue  — being brought up (asset lifecycle)
+  RETIRED:     "neutral", // slate — decommissioned (terminal)
+}
+
+export function entityStatusIntent(value: string): SemanticIntent {
+  return entityStatusIntentMap[(value ?? "").toUpperCase()] ?? "neutral"
 }
 
 // ── Extended tokens for Service Desk mid-fi ────────────────────────────────

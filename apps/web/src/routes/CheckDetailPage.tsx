@@ -18,7 +18,7 @@ import DescriptionIcon from "@mui/icons-material/Description"
 import CloudOffIcon from "@mui/icons-material/CloudOff"
 import ScheduleIcon from "@mui/icons-material/Schedule"
 import {
-  PropertiesPanel, chipSx, ragTokens, WorkflowStrip
+  PropertiesPanel, StatusPill, ragTokens, WorkflowStrip, type SemanticIntent
 } from "../components/shared"
 import { RightPanelSection } from "../components/detail"
 import { AttachmentsContent } from "../components/AttachmentsContent"
@@ -83,11 +83,14 @@ const STATUS_DESCRIPTIONS: Record<string, string> = {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function responseSx(response: string | null) {
-  if (response === "PASS") return { bgcolor: "#dcfce7", color: "#15803d", fontWeight: 700 }
-  if (response === "FAIL") return { bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }
-  if (response === "NA") return { bgcolor: "#f1f5f9", color: "#64748b", fontWeight: 700 }
-  return {}
+// Per-item check result -> canonical intent. EXPLICIT (not resolveIntent): an
+// unanswered item is "muted" (a lighter slate than neutral), so "Pending" can never
+// catch the warning keyword scan. Feeds the shared StatusPill — one colour source.
+function resultIntent(response: string | null): SemanticIntent {
+  if (response === "PASS") return "success"
+  if (response === "FAIL") return "danger"
+  if (response === "NA") return "neutral"
+  return "muted"
 }
 
 function formatElapsed(startedAt: string | null): string {
@@ -1013,7 +1016,7 @@ export default function CheckDetailPage() {
                 </IconButton>
               </Tooltip>
             </Stack>
-            <Chip size="small" sx={chipSx(check.status)} label={STATUS_LABELS[check.status]} />
+            <StatusPill value={check.status} label={STATUS_LABELS[check.status]} minWidth={112} />
             <Box sx={{ flex: 1 }} />
             {/* Sync indicator — offline-aware (Phase 4a) */}
             <SyncStatusPill status={sync.status} pendingCount={sync.pendingCount} />
@@ -1353,7 +1356,8 @@ export default function CheckDetailPage() {
   }
 
   const propertiesRows: { label: string; value: React.ReactNode }[] = [
-    { label: "Status", value: <Chip size="small" sx={chipSx(check.status)} label={STATUS_LABELS[check.status]} /> },
+    { label: "Reference", value: <Typography variant="caption" sx={{ fontFamily: "monospace", fontWeight: 600 }}>{check.reference}</Typography> },
+    { label: "Status", value: <StatusPill value={check.status} label={STATUS_LABELS[check.status]} size="sm" /> },
     { label: "Site", value: <Typography variant="caption" fontWeight={600}>{check.site.name}</Typography> },
     { label: "Template", value: <Typography variant="caption">{check.template.name}</Typography> },
     { label: "Assignee", value: <Typography variant="caption">{check.assignee?.displayName ?? "Unassigned"}</Typography> },
@@ -1387,20 +1391,13 @@ export default function CheckDetailPage() {
   // ── STANDARD LAYOUT (all other statuses) ──────────────────────────────
   return (
     <Box>
-      {/* Record header */}
+      {/* Record header — title + Start only. The ref lives in the breadcrumb and the
+          Details panel; Site/Template are Details rows (no duplicated subtitle here). */}
       <Box sx={{ mb: "16px" }}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
           <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
-            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: "8px" }}>
-              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
-                {check.reference}
-              </Typography>
-            </Stack>
             <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25 }}>
               {check.title}
-            </Typography>
-            <Typography sx={{ fontSize: 13, color: "#64748b", mt: "4px" }}>
-              {check.site.name}{check.template ? ` · ${check.template.name}` : ""}
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
@@ -1468,11 +1465,11 @@ export default function CheckDetailPage() {
                               <Box sx={{ flex: 1 }}>
                                 <Stack direction="row" spacing={1} alignItems="center">
                                   <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>{item.label}</Typography>
-                                  {item.response ? (
-                                    <Chip size="small" sx={{ ...responseSx(item.response), height: 20, fontSize: 10 }} label={item.response} />
-                                  ) : (
-                                    <Chip size="small" label="Pending" sx={{ height: 20, fontSize: 10, bgcolor: "#f1f5f9", color: "#94a3b8" }} />
-                                  )}
+                                  <StatusPill
+                                    intent={resultIntent(item.response)}
+                                    label={item.response ?? "Pending"}
+                                    size="sm"
+                                  />
                                 </Stack>
                                 {item.notes ? (
                                   <Typography variant="caption" color="text.secondary" sx={{ mt: "4px", display: "block" }}>{item.notes}</Typography>
@@ -1540,7 +1537,7 @@ export default function CheckDetailPage() {
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                       <Box sx={{ flex: 1 }}>
                         <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.5 }}>
-                          <Chip size="small" sx={{ ...responseSx("FAIL"), height: 20, fontSize: 10 }} label="FAIL" />
+                          <StatusPill intent="danger" label="FAIL" size="sm" />
                           <Typography variant="body2" fontWeight={600}>{item.label}</Typography>
                         </Stack>
                         {item.notes ? <Typography variant="caption" color="text.secondary">{item.notes}</Typography> : null}

@@ -3,71 +3,45 @@ import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Card, Chip, Dialog, DialogContent, DialogTitle,
-  MenuItem, Stack, Tab, Tabs, TextField, Typography
+  Box, Button, Dialog, DialogContent, DialogTitle,
+  MenuItem, Stack, TextField, Tooltip, Typography
 } from "@mui/material"
-import { chipSx, ResponsiveList, type ResponsiveColumn } from "../components/shared"
+import FactCheckIcon from "@mui/icons-material/FactCheck"
+import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline"
+import EventIcon from "@mui/icons-material/Event"
+import EditNoteIcon from "@mui/icons-material/EditNote"
+import HistoryIcon from "@mui/icons-material/History"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { semanticTokens } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { getCurrentUser } from "../lib/auth"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
-
-type Check = {
-  id: string
-  reference: string
-  title: string
-  checkType: string
-  status: string
-  priority: string
-  scheduledAt: string | null
-  passRate: number | null
-  createdAt: string
-  site: { id: string; name: string } | null
-  assignee: { id: string; displayName: string } | null
-  template: { id: string; name: string; checkType: string } | null
-  items: { id: string; response: string | null; isRequired: boolean }[]
-}
+import { useBreadcrumb } from "./Shell"
+import {
+  CheckCard,
+  QueueSection,
+  partitionChecks,
+  type Check,
+  type CheckView,
+} from "../components/checks/CheckCard"
 
 type Template = { id: string; name: string; checkType: string }
 type Site = { id: string; name: string }
 
-const CHECK_STATUSES = ["DRAFT", "SCHEDULED", "ASSIGNED", "IN_PROGRESS", "PENDING_REVIEW", "COMPLETED", "ALL"]
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Draft",
-  SCHEDULED: "Scheduled",
-  ASSIGNED: "Assigned",
-  IN_PROGRESS: "In progress",
-  PENDING_REVIEW: "Pending review",
-  COMPLETED: "Completed",
-  CLOSED: "Closed",
-  CANCELLED: "Cancelled",
-  ALL: "All"
-}
-
-function progressLabel(items: { response: string | null }[]) {
-  const total = items.length
-  if (total === 0) return null
-  const answered = items.filter(i => i.response !== null).length
-  return `${answered}/${total}`
-}
-
-function progressSx(items: { response: string | null }[]) {
-  const total = items.length
-  if (total === 0) return { bgcolor: "#f1f5f9", color: "#64748b" }
-  const answered = items.filter(i => i.response !== null).length
-  const failed = items.filter(i => i.response === "FAIL").length
-  if (answered === total && failed === 0) return { bgcolor: "#dcfce7", color: "#15803d", fontWeight: 700 }
-  if (failed > 0) return { bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }
-  if (answered > 0) return { bgcolor: "#fef3c7", color: "#b45309", fontWeight: 700 }
-  return { bgcolor: "#f1f5f9", color: "#64748b" }
-}
-
 export default function ChecksPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
+  const { setPageFullBleed } = useBreadcrumb()
 
-  const [filterStatus, setFilterStatus] = React.useState("IN_PROGRESS")
+  // Schedule-check gate == manager-tier, matching the controller's create role set
+  // (ORG_SUPER + SERVICE_MANAGER + SERVICE_DESK_ANALYST) so the UI never offers an
+  // action the API rejects.
+  const isManagerTier = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
+  const isEngineer = hasAnyRole([ROLES.ENGINEER])
+  const canManage = isManagerTier
+  const view: CheckView = isManagerTier ? "manager" : isEngineer ? "engineer" : "viewer"
+  const meId = getCurrentUser()?.userId ?? ""
+
   const [createOpen, setCreateOpen] = React.useState(false)
   const [templateId, setTemplateId] = React.useState("")
   const [siteId, setSiteId] = React.useState("")
@@ -75,6 +49,12 @@ export default function ChecksPage() {
   const [scheduledAt, setScheduledAt] = React.useState("")
   const [scopeNotes, setScopeNotes] = React.useState("")
   const [saving, setSaving] = React.useState(false)
+
+  // Active workday landing — a list page, so claim full-bleed (Shell drops its padding).
+  React.useEffect(() => {
+    setPageFullBleed(true)
+    return () => setPageFullBleed(false)
+  }, [setPageFullBleed])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["checks"],
@@ -96,66 +76,10 @@ export default function ChecksPage() {
   const { data: users } = useAssignableUsers()
 
   const all = data ?? []
-  const filtered = filterStatus === "ALL" ? all : all.filter(c => c.status === filterStatus)
+  const queues = React.useMemo(() => partitionChecks(all, view, meId), [all, view, meId])
+  const totalActive = queues.review.length + queues.progress.length + queues.upcoming.length + queues.drafts.length
 
-  const counts: Record<string, number> = { ALL: all.length }
-  CHECK_STATUSES.slice(0, -1).forEach(s => {
-    counts[s] = all.filter(c => c.status === s).length
-  })
-
-  const selectedTemplate = (templates ?? []).find(t => t.id === templateId)
-
-  // Column definitions reuse the exact original cell JSX, so the md+ table is
-  // byte-identical; `card` roles drive the xs (phone) card layout.
-  const columns: ResponsiveColumn<Check>[] = [
-    {
-      id: "reference", header: "Reference", card: { role: "meta" },
-      cellSx: { fontWeight: 700, fontFamily: "monospace", fontSize: 12 },
-      render: (check) => check.reference,
-    },
-    {
-      id: "title", header: "Title", card: { role: "title" },
-      render: (check) => <Typography variant="body2" fontWeight={600}>{check.title}</Typography>,
-    },
-    {
-      id: "type", header: "Type", card: { role: "meta" },
-      render: (check) => <Typography variant="caption" color="text.secondary">{check.checkType}</Typography>,
-    },
-    {
-      id: "site", header: "Site", card: { role: "meta" },
-      render: (check) => <Typography variant="caption">{check.site?.name ?? "—"}</Typography>,
-    },
-    {
-      id: "status", header: "Status", card: { role: "status" },
-      render: (check) => (
-        <Chip size="small" sx={chipSx(check.status)} label={STATUS_LABELS[check.status] ?? check.status} />
-      ),
-    },
-    {
-      id: "progress", header: "Progress", card: { role: "meta" },
-      render: (check) => check.items.length > 0 ? (
-        <Chip size="small" sx={progressSx(check.items)} label={progressLabel(check.items)} />
-      ) : (
-        <Typography variant="caption" color="text.secondary">No items</Typography>
-      ),
-    },
-    {
-      id: "scheduled", header: "Scheduled", card: { role: "meta" },
-      render: (check) => (
-        <Typography variant="caption" color="text.secondary">
-          {check.scheduledAt ? new Date(check.scheduledAt).toLocaleDateString("en-GB") : "—"}
-        </Typography>
-      ),
-    },
-    {
-      id: "assignee", header: "Assignee", card: { role: "meta" },
-      render: (check) => (
-        <Typography variant="caption" color="text.secondary">
-          {check.assignee?.displayName ?? "Unassigned"}
-        </Typography>
-      ),
-    },
-  ]
+  const openCheck = (id: string) => navigate(`/checks/${id}`)
 
   async function handleCreate() {
     if (!templateId || !siteId) return
@@ -180,70 +104,96 @@ export default function ChecksPage() {
 
   return (
     <Box>
-      <Card>
-        <Box sx={{ borderBottom: "1px solid #e2e8f0", px: 2, display: "flex", alignItems: "center" }}>
-          <Tabs
-            value={filterStatus}
-            onChange={(_, v) => setFilterStatus(v)}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{ minHeight: 44, flex: 1 }}
-            textColor="inherit"
-            TabIndicatorProps={{ style: { backgroundColor: "#0f172a" } }}
+      <Box sx={{ p: { xs: 1.5, sm: 2.5 }, display: "flex", flexDirection: "column", gap: 2.5 }}>
+        {/* Header — title + History (Part 2) + Schedule check */}
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          alignItems={{ xs: "stretch", sm: "center" }}
+          spacing={1.5}
+        >
+          <Typography
+            sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 20, fontWeight: 700, color: "#0f172a", flex: 1 }}
           >
-            {CHECK_STATUSES.map((s) => {
-              const showBadge = (counts[s] ?? 0) > 0 && s !== "ALL"
-              return (
-                <Tab
-                  key={s}
-                  value={s}
-                  sx={{ minHeight: 44, fontSize: 13 }}
-                  label={
-                    <Stack direction="row" spacing={0.75} alignItems="center">
-                      <span>{STATUS_LABELS[s]}</span>
-                      {showBadge ? (
-                        <Box sx={{
-                          bgcolor: filterStatus === s ? "#0f172a" : "#e2e8f0",
-                          color: filterStatus === s ? "#fff" : "#475569",
-                          borderRadius: 10, px: 0.75, py: 0.1,
-                          fontSize: 11, fontWeight: 700, lineHeight: 1.6
-                        }}>
-                          {counts[s]}
-                        </Box>
-                      ) : null}
-                    </Stack>
-                  }
-                />
-              )
-            })}
-          </Tabs>
+            Engineering checks
+          </Typography>
+          <Tooltip title="Completed-check history — coming soon">
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled
+                startIcon={<HistoryIcon sx={{ fontSize: 16 }} />}
+                sx={{ fontSize: 12 }}
+              >
+                History
+              </Button>
+            </span>
+          </Tooltip>
           {canManage ? (
-            <Button size="small" variant="contained" onClick={() => setCreateOpen(true)} sx={{ ml: 2, flexShrink: 0, fontSize: 12 }}>
+            <Button size="small" variant="contained" onClick={() => setCreateOpen(true)} sx={{ fontSize: 12 }}>
               Schedule check
             </Button>
           ) : null}
-        </Box>
+        </Stack>
 
-        {isLoading ? <Box sx={{ p: 2 }}><LoadingState /></Box> : null}
-        {error ? <Box sx={{ p: 2 }}><ErrorState title="Failed to load engineering checks" /></Box> : null}
-        {!isLoading && !error && filtered.length === 0 ? (
-          <Box sx={{ p: 2 }}>
-            <EmptyState
-              title={filterStatus === "ALL" ? "No checks yet" : `No ${STATUS_LABELS[filterStatus]?.toLowerCase()} checks`}
-              detail={filterStatus === "ALL" ? "Schedule a check to get started." : "Try a different status filter."}
-            />
-          </Box>
-        ) : null}
+        {isLoading ? <LoadingState /> : null}
+        {error ? <ErrorState title="Failed to load engineering checks" /> : null}
 
-        {filtered.length > 0 ? (
-          <ResponsiveList
-            columns={columns}
-            rows={filtered}
-            getRowKey={(check) => check.id}
-            onRowClick={(check) => navigate(`/checks/${check.id}`)}
+        {!isLoading && !error && totalActive === 0 ? (
+          <EmptyState
+            title="You're all caught up"
+            detail={canManage ? "No active checks. Schedule a check to get started." : "No active checks right now."}
           />
         ) : null}
-      </Card>
+
+        {!isLoading && !error && totalActive > 0 ? (
+          <Stack spacing={2.5}>
+            {view === "manager" ? (
+              <QueueSection
+                title="Awaiting your review"
+                count={queues.review.length}
+                icon={<FactCheckIcon sx={{ fontSize: 18, color: semanticTokens.warning.text }} />}
+              >
+                {queues.review.map((c) => (
+                  <CheckCard key={c.id} check={c} variant="review" onOpen={openCheck} />
+                ))}
+              </QueueSection>
+            ) : null}
+
+            <QueueSection
+              title={view === "engineer" ? "Your active work" : "In progress"}
+              count={queues.progress.length}
+              icon={<PlayCircleOutlineIcon sx={{ fontSize: 18, color: semanticTokens.active.text }} />}
+            >
+              {queues.progress.map((c) => (
+                <CheckCard key={c.id} check={c} variant="progress" onOpen={openCheck} />
+              ))}
+            </QueueSection>
+
+            <QueueSection
+              title="Upcoming"
+              count={queues.upcoming.length}
+              icon={<EventIcon sx={{ fontSize: 18, color: semanticTokens.neutral.text }} />}
+            >
+              {queues.upcoming.map((c) => (
+                <CheckCard key={c.id} check={c} variant="upcoming" onOpen={openCheck} />
+              ))}
+            </QueueSection>
+
+            {view === "manager" ? (
+              <QueueSection
+                title="Drafts"
+                count={queues.drafts.length}
+                icon={<EditNoteIcon sx={{ fontSize: 18, color: semanticTokens.neutral.text }} />}
+              >
+                {queues.drafts.map((c) => (
+                  <CheckCard key={c.id} check={c} variant="draft" onOpen={openCheck} />
+                ))}
+              </QueueSection>
+            ) : null}
+          </Stack>
+        ) : null}
+      </Box>
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Schedule engineering check</DialogTitle>
@@ -256,7 +206,6 @@ export default function ChecksPage() {
                 <MenuItem key={t.id} value={t.id}>{t.name} — {t.checkType}</MenuItem>
               ))}
             </TextField>
-            {templateId && (templates ?? []).find(t => t.id === templateId) === undefined ? null : null}
             <TextField select label="Site" value={siteId}
               onChange={(e) => setSiteId(e.target.value)} required fullWidth>
               <MenuItem value="">Select a site...</MenuItem>

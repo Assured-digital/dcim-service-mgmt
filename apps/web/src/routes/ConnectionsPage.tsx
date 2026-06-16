@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   Card,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -21,7 +20,7 @@ import HubIcon from "@mui/icons-material/Hub"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
-import { chipSx } from "../components/shared"
+import { StatusPill, entityStatusIntent } from "../components/shared"
 
 type Connection = {
   id: string
@@ -76,7 +75,13 @@ const connectionColumns: GridColDef<Connection>[] = [
   },
   {
     field: "status", headerName: "Status", width: 120,
-    renderCell: (p) => <Chip size="small" label={(p.value as string).toLowerCase()} sx={chipSx(p.value as string)} />,
+    renderCell: (p) => (
+      <StatusPill
+        intent={entityStatusIntent(p.value as string)}
+        label={(p.value as string).toLowerCase()}
+        size="sm"
+      />
+    ),
   },
   {
     field: "label", headerName: "Label", width: 160,
