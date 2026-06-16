@@ -1,6 +1,5 @@
 import React from "react"
 import { Box, Stack, Tooltip, Typography } from "@mui/material"
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
 import CheckIcon from "@mui/icons-material/Check"
 
 export interface WorkflowStage {
@@ -16,6 +15,11 @@ interface WorkflowStripProps {
   specialStageColors?: Record<string, string>
 }
 
+// A slim, passive lifecycle indicator — a single flat row of stages (dot + label) with
+// the current one highlighted. Deliberately non-interactive (cursor:default, no chip /
+// button affordance, no help-cursor icon): the record's editable status lives elsewhere
+// (e.g. the Details panel), so this is purely a visual cue of where the record sits in
+// its lifecycle and shouldn't read as clickable.
 export function WorkflowStrip({
   stages,
   currentStage,
@@ -27,30 +31,11 @@ export function WorkflowStrip({
   return (
     <Box sx={{
       border: "0.5px solid var(--color-border-tertiary)",
-      borderTop: "none",
-      borderBottomLeftRadius: 8, borderBottomRightRadius: 8,
+      borderRadius: 2,
       bgcolor: "var(--color-background-primary)",
-      px: 1.5, pt: 0.75, pb: 1, mb
+      px: 1.25, py: 0.6, mb
     }}>
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.75 }}>
-        <Typography sx={{
-          fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
-          color: "text.tertiary"
-        }}>
-          STATUS
-        </Typography>
-        <Tooltip
-          title="Lifecycle progress for this record."
-          placement="right"
-          arrow
-        >
-          <InfoOutlinedIcon sx={{
-            fontSize: 11, color: "text.tertiary", cursor: "help"
-          }} />
-        </Tooltip>
-      </Stack>
-
-      <Stack direction="row" spacing={0} alignItems="stretch">
+      <Stack direction="row" spacing={0} alignItems="center">
         {stages.map((stage, idx) => {
           const isCurrent = stage.id === currentStage
           const isPast = idx < currentIndex
@@ -64,64 +49,33 @@ export function WorkflowStrip({
                 arrow
                 disableHoverListener={!stage.description}
               >
-                <Box
-                  sx={{
-                    flex: 1, px: 1, py: 0.75, borderRadius: 1,
-                    cursor: "default",
-                    bgcolor: isCurrent
-                      ? specialColor!
-                      : isPast ? "#f1f5f9"
-                      : "transparent",
-                    border: "1px solid",
-                    borderColor: isCurrent
-                      ? specialColor!
-                      : isPast ? "var(--color-border-tertiary)"
-                      : "transparent",
-                    transition: "all 0.15s",
-                    "&:hover": {}
-                  }}
-                >
-                  <Stack direction="row" spacing={0.75} alignItems="center">
-                    {isCurrent ? (
-                      <Box sx={{
-                        width: 12, height: 12, borderRadius: "50%", bgcolor: "#fff",
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-                      }}>
-                        <CheckIcon sx={{ fontSize: 9, color: specialColor! }} />
-                      </Box>
-                    ) : isPast ? (
-                      <Box sx={{
-                        width: 12, height: 12, borderRadius: "50%", bgcolor: "#cbd5e1",
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-                      }}>
-                        <CheckIcon sx={{ fontSize: 9, color: "#fff" }} />
-                      </Box>
-                    ) : (
-                      <Box sx={{
-                        width: 12, height: 12, borderRadius: "50%",
-                        border: "1.25px solid #e2e8f0",
-                        flexShrink: 0
-                      }} />
-                    )}
-                    <Typography sx={{
-                      fontSize: 11, fontWeight: isCurrent ? 700 : 500,
-                      color: isCurrent ? "#fff"
-                        : isPast ? "#94a3b8"
-                        : "text.tertiary"
+                <Stack direction="row" spacing={0.6} alignItems="center" sx={{
+                  flex: 1, justifyContent: "center", px: 0.75, py: 0.3, cursor: "default"
+                }}>
+                  {isCurrent ? (
+                    <Box sx={{
+                      width: 14, height: 14, borderRadius: "50%", bgcolor: specialColor!,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
                     }}>
-                      {stage.label}
-                    </Typography>
-                  </Stack>
-                </Box>
+                      <CheckIcon sx={{ fontSize: 9, color: "#fff" }} />
+                    </Box>
+                  ) : isPast ? (
+                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: "#cbd5e1", flexShrink: 0 }} />
+                  ) : (
+                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", border: "1.25px solid #e2e8f0", flexShrink: 0 }} />
+                  )}
+                  <Typography sx={{
+                    fontSize: 10.5, fontWeight: isCurrent ? 700 : 500,
+                    color: isCurrent ? "#0f172a" : isPast ? "#94a3b8" : "text.tertiary",
+                    whiteSpace: "nowrap"
+                  }}>
+                    {stage.label}
+                  </Typography>
+                </Stack>
               </Tooltip>
 
               {idx < stages.length - 1 ? (
-                <Box sx={{
-                  width: 10, display: "flex", alignItems: "center",
-                  justifyContent: "center", flexShrink: 0
-                }}>
-                  <Box sx={{ width: 6, height: 1, bgcolor: "var(--color-border-tertiary)" }} />
-                </Box>
+                <Box sx={{ width: 12, height: 1, bgcolor: "var(--color-border-tertiary)", flexShrink: 0 }} />
               ) : null}
             </React.Fragment>
           )

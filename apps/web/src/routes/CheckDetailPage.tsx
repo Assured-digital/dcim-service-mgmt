@@ -313,7 +313,9 @@ export default function CheckDetailPage() {
   // standard (non-execution) layout stays padded, so full-bleed is released whenever
   // the check isn't executing and on unmount. (Mobile <main> ignores full-bleed —
   // it keeps its own padding + scroll, which is what the xs sticky-footer flow wants.)
-  const isExecLayout = !!check && ["IN_PROGRESS", "PENDING_REVIEW"].includes(check.status)
+  // Only IN_PROGRESS is the full-bleed editable execution pane. PENDING_REVIEW is now a
+  // read-only review surface on the (padded) standard layout, so full-bleed is released.
+  const isExecLayout = check?.status === "IN_PROGRESS"
   React.useEffect(() => {
     setPageFullBleed(isExecLayout)
     return () => setPageFullBleed(false)
@@ -546,7 +548,10 @@ export default function CheckDetailPage() {
   const allRequiredAnswered = check.items.filter(i => i.isRequired).every(i => i.response !== null)
 
   const canStart = ["DRAFT", "SCHEDULED", "ASSIGNED"].includes(check.status) && canExecute
-  const isExecuting = ["IN_PROGRESS", "PENDING_REVIEW"].includes(check.status)
+  // PENDING_REVIEW now renders the read-only review surface (standard layout) instead of
+  // the editable execution UI, so the approver attests to fixed evidence — they cannot
+  // alter responses/notes/photos. Only the engineer's IN_PROGRESS pass is editable.
+  const isExecuting = check.status === "IN_PROGRESS"
 
   // Group items by section — already computed above, just re-derive for the check guard
   // (sections/sectionNames are correct since check.items is now available)
@@ -1294,6 +1299,7 @@ export default function CheckDetailPage() {
   }
 
   const propertiesRows: { label: string; value: React.ReactNode }[] = [
+    { label: "Status", value: <Chip size="small" sx={chipSx(check.status)} label={STATUS_LABELS[check.status]} /> },
     { label: "Site", value: <Typography variant="caption" fontWeight={600}>{check.site.name}</Typography> },
     { label: "Template", value: <Typography variant="caption">{check.template.name}</Typography> },
     { label: "Assignee", value: <Typography variant="caption">{check.assignee?.displayName ?? "Unassigned"}</Typography> },
@@ -1335,12 +1341,6 @@ export default function CheckDetailPage() {
               <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
                 {check.reference}
               </Typography>
-              <Tooltip title={copied ? "Copied!" : "Copy reference"}>
-                <IconButton size="small" onClick={copyRef} sx={{ color: "#94a3b8", width: 20, height: 20 }}>
-                  <ContentCopyIcon sx={{ fontSize: 12 }} />
-                </IconButton>
-              </Tooltip>
-              <Chip size="small" sx={chipSx(check.status)} label={STATUS_LABELS[check.status]} />
             </Stack>
             <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25 }}>
               {check.title}
@@ -1521,7 +1521,39 @@ export default function CheckDetailPage() {
 
         {/* Right column */}
         <Stack spacing={2}>
+          {/* Review rail — PENDING_REVIEW only. The reviewer acts on the read-only
+              checklist + per-item photos (left) and the engineer summary below; editing
+              is disabled (the surface is read-only) so they attest to fixed evidence.
+              Reuses the shared review dialog via setReviewAction / setReviewOpen. */}
+          {check.status === "PENDING_REVIEW" ? (
+            <Card>
+              <CardContent>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 1.5 }}>REVIEW</Typography>
+                <Stack spacing={1}>
+                  <Button fullWidth variant="contained" size="small"
+                    onClick={() => { setReviewAction("approve"); setReviewOpen(true) }}
+                    sx={{ fontSize: 12, py: "10px" }}>
+                    Approve check
+                  </Button>
+                  <Button fullWidth variant="outlined" size="small" color="warning"
+                    onClick={() => { setReviewAction("return"); setReviewOpen(true) }}
+                    sx={{ fontSize: 12 }}>
+                    Return for rework
+                  </Button>
+                </Stack>
+                {check.engineerSummary ? (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 0.75 }}>ENGINEER SUMMARY</Typography>
+                    <Typography sx={{ fontSize: 12, color: "#334155", bgcolor: "#f8fafc", p: "10px", borderRadius: "6px", whiteSpace: "pre-wrap", lineHeight: 1.6, border: "1px solid #e2e8f0" }}>
+                      {check.engineerSummary}
+                    </Typography>
+                  </Box>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
           <PropertiesPanel
+            title="Details"
             rows={propertiesRows}
           />
 
@@ -1566,6 +1598,32 @@ export default function CheckDetailPage() {
           </Card>
         </Stack>
       </Box>
+
+      {/* Mobile sticky review bar — keeps Approve/Return reachable on phones without
+          scrolling past the full checklist (the right-rail Review card sits below the
+          checklist on xs). Mirrors the execution layout's sticky action bar. */}
+      {check.status === "PENDING_REVIEW" ? (
+        <Box sx={{
+          display: { xs: "flex", md: "none" },
+          position: "sticky", bottom: 0, zIndex: 2,
+          bgcolor: "#ffffff", borderTop: "1px solid #e2e8f0",
+          mx: "-12px", mt: 2, px: "12px", py: "12px",
+          boxShadow: "0 -2px 8px rgba(15,23,42,0.06)",
+        }}>
+          <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
+            <Button fullWidth variant="outlined" color="warning"
+              onClick={() => { setReviewAction("return"); setReviewOpen(true) }}
+              sx={{ py: "11px", fontSize: 14 }}>
+              Return
+            </Button>
+            <Button fullWidth variant="contained"
+              onClick={() => { setReviewAction("approve"); setReviewOpen(true) }}
+              sx={{ py: "11px", fontSize: 14 }}>
+              Approve
+            </Button>
+          </Stack>
+        </Box>
+      ) : null}
 
       {dialogs}
       <AttachmentPreviewModal open={!!previewAtt} attachment={previewAtt} onClose={() => setPreviewAtt(null)} />

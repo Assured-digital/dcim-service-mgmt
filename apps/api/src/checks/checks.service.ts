@@ -305,6 +305,9 @@ export class ChecksService {
 
   async updateItem(clientId: string, checkId: string, itemId: string, dto: any, actorUserId: string) {
     const check = await this.getForClient(clientId, checkId)
+    if (check.status === CheckStatus.PENDING_REVIEW) {
+      throw new BadRequestException("Cannot update items while the check is under review")
+    }
     if (check.status === CheckStatus.COMPLETED || check.status === CheckStatus.CLOSED) {
       throw new BadRequestException("Cannot update items on a completed check")
     }
