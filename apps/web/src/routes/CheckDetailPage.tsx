@@ -17,6 +17,7 @@ import ImageIcon from "@mui/icons-material/Image"
 import DescriptionIcon from "@mui/icons-material/Description"
 import CloudOffIcon from "@mui/icons-material/CloudOff"
 import ScheduleIcon from "@mui/icons-material/Schedule"
+import DownloadIcon from "@mui/icons-material/Download"
 import {
   PropertiesPanel, StatusPill, ragTokens, WorkflowStrip, type SemanticIntent
 } from "../components/shared"
@@ -24,6 +25,7 @@ import { RightPanelSection } from "../components/detail"
 import { AttachmentsContent } from "../components/AttachmentsContent"
 import { AttachmentPreviewModal } from "../components/AttachmentPreviewModal"
 import { type AttachmentSummary, deleteAttachment, isImageType } from "../lib/attachments"
+import { downloadCheckReport } from "../lib/checkReport"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -257,6 +259,7 @@ export default function CheckDetailPage() {
 
   const [error, setError] = React.useState("")
   const [transitioning, setTransitioning] = React.useState(false)
+  const [reportDownloading, setReportDownloading] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
   const [activeSection, setActiveSection] = React.useState<string | null>(null)
   const [activeTab, setActiveTab] = React.useState(0) // for standard layout
@@ -406,6 +409,21 @@ export default function CheckDetailPage() {
       qc.invalidateQueries({ queryKey: ["checks"] })
     } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to start")) }
     finally { setTransitioning(false) }
+  }
+
+  // Download the server-generated compliance PDF. Only surfaced for COMPLETED/CLOSED
+  // (the backend gates the same); the report embeds evidence images via the tenant-scoped
+  // download path, so this stays a plain authed request.
+  async function handleDownloadReport() {
+    if (!check || reportDownloading) return
+    setReportDownloading(true); setError("")
+    try {
+      await downloadCheckReport(check.id, check.reference)
+    } catch {
+      setError("Couldn't generate the report. Please try again.")
+    } finally {
+      setReportDownloading(false)
+    }
   }
 
   async function handleSubmit() {
@@ -1404,6 +1422,17 @@ export default function CheckDetailPage() {
             {canStart ? (
               <Button variant="contained" size="small" onClick={handleStart} disabled={transitioning}>
                 Start check
+              </Button>
+            ) : null}
+            {/* Finalised checks only — the shareable evidence PDF. Mirrors the history
+                page's row download; the backend gates COMPLETED/CLOSED. */}
+            {["COMPLETED", "CLOSED"].includes(check.status) ? (
+              <Button
+                variant="outlined" size="small"
+                startIcon={<DownloadIcon sx={{ fontSize: 16 }} />}
+                onClick={handleDownloadReport} disabled={reportDownloading}
+              >
+                {reportDownloading ? "Preparing…" : "Download report"}
               </Button>
             ) : null}
           </Stack>

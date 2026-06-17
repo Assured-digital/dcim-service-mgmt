@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Card, IconButton, MenuItem, TextField, Tooltip, Typography,
-  useMediaQuery, useTheme
+  Alert, Box, Button, Card, CircularProgress, IconButton, MenuItem, Snackbar, TextField,
+  Tooltip, Typography, useMediaQuery, useTheme
 } from "@mui/material"
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
 import { StatusPill, ragTokens } from "../components/shared"
 import { type Check } from "../components/checks/CheckCard"
+import { downloadCheckReport } from "../lib/checkReport"
 
 // History = the archive of finished checks (the inverse of the active landing's
 // partitionChecks filter). Reuses the SAME GET /checks payload + query cache as the
@@ -46,7 +47,9 @@ const DAY_MS = 86_400_000
 
 const HistoryToolbar = makeGridToolbar("checks-history")
 
-const historyColumns: GridColDef<Check>[] = [
+// Static columns. The Report column is appended inside the component so its cell can
+// reach the per-row download handler + downloading state (the old placeholder lived here).
+const baseColumns: GridColDef<Check>[] = [
   {
     field: "reference", headerName: "Ref", width: 120,
     renderCell: (p) => (
@@ -108,21 +111,6 @@ const historyColumns: GridColDef<Check>[] = [
     field: "status", headerName: "Status", width: 130,
     renderCell: (p) => <StatusPill value={p.value as string} label={STATUS_LABELS[p.value as string] ?? (p.value as string)} size="sm" />,
   },
-  {
-    // Placeholder for the per-check Download Report (Step 4) — disabled until built.
-    // stopPropagation so a click here never opens the row (and is harmless while disabled).
-    field: "report", headerName: "Report", width: 90, sortable: false, filterable: false, disableExport: true,
-    // Cancelled checks have nothing to report -> no affordance at all.
-    renderCell: (p) => p.row.status === "CANCELLED" ? null : (
-      <Box onClick={(e) => e.stopPropagation()}>
-        <Tooltip title="Download report — coming soon">
-          <span>
-            <IconButton size="small" disabled><DownloadIcon sx={{ fontSize: 16 }} /></IconButton>
-          </span>
-        </Tooltip>
-      </Box>
-    ),
-  },
 ]
 
 export default function CheckHistoryPage() {
@@ -130,12 +118,55 @@ export default function CheckHistoryPage() {
   const theme = useTheme()
   const isSmall = useMediaQuery(theme.breakpoints.down("sm"))
   const [windowKey, setWindowKey] = React.useState<keyof typeof WINDOW_DAYS>("90d")
+  // Per-row report download: which row is generating + a transient error toast. The PDF is
+  // generated server-side on demand and streamed back through the authed api client.
+  const [downloadingId, setDownloadingId] = React.useState<string | null>(null)
+  const [reportError, setReportError] = React.useState<string | null>(null)
 
   // Same key + endpoint as the landing -> shares the cache (instant cross-navigation).
   const { data, isLoading, error } = useQuery({
     queryKey: ["checks"],
     queryFn: async () => (await api.get<Check[]>("/checks")).data,
   })
+
+  async function handleDownloadReport(check: Check) {
+    if (downloadingId) return // one at a time — avoids hammering the on-demand generator
+    setDownloadingId(check.id)
+    setReportError(null)
+    try {
+      await downloadCheckReport(check.id, check.reference)
+    } catch {
+      setReportError(`Couldn't generate the report for ${check.reference}. Please try again.`)
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  // Report column lives here so its cell can reach the handler + downloading state.
+  // Cancelled checks have nothing to report -> no affordance (matches the columns above).
+  const columns = React.useMemo<GridColDef<Check>[]>(() => [
+    ...baseColumns,
+    {
+      field: "report", headerName: "Report", width: 90, sortable: false, filterable: false, disableExport: true,
+      renderCell: (p: GridRenderCellParams<Check>) => p.row.status === "CANCELLED" ? null : (
+        <Box onClick={(e) => e.stopPropagation()}>
+          <Tooltip title="Download report (PDF)">
+            <span>
+              <IconButton
+                size="small"
+                disabled={!!downloadingId}
+                onClick={() => handleDownloadReport(p.row)}
+              >
+                {downloadingId === p.row.id
+                  ? <CircularProgress size={16} />
+                  : <DownloadIcon sx={{ fontSize: 16 }} />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ], [downloadingId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = React.useMemo(() => {
     const days = WINDOW_DAYS[windowKey]
@@ -199,7 +230,7 @@ export default function CheckHistoryPage() {
           <Box sx={{ height: { xs: 520, md: 680 } }}>
             <DataGrid
               rows={rows}
-              columns={historyColumns}
+              columns={columns}
               density="compact"
               initialState={{
                 sorting: { sortModel: [{ field: "completedAt", sort: "desc" }] },
@@ -215,6 +246,17 @@ export default function CheckHistoryPage() {
           </Box>
         ) : null}
       </Card>
+
+      <Snackbar
+        open={!!reportError}
+        autoHideDuration={5000}
+        onClose={() => setReportError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" variant="filled" onClose={() => setReportError(null)}>
+          {reportError}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }

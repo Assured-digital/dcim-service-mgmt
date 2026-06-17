@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Req } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Req, Res } from "@nestjs/common"
+import type { Response } from "express"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { ChecksService } from "./checks.service"
+import { ChecksReportService } from "./checks-report.service"
 import {
   CreateCheckTemplateDto, CreateCheckTemplateItemDto, CreateCheckDto,
   UpdateCheckItemDto, CreateFollowOnDto, ReviewCheckDto, SubmitCheckDto, CancelCheckDto
@@ -11,6 +13,7 @@ import { UseGuards } from "@nestjs/common"
 import { JwtAuthGuard } from "../auth/jwt.guard"
 import { RolesGuard } from "../auth/roles.guard"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
+import { contentDispositionHeader } from "../attachments/content-policy"
 import { PrismaService } from "../prisma/prisma.service"
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,7 +21,11 @@ import { PrismaService } from "../prisma/prisma.service"
 @ApiBearerAuth()
 @Controller("checks")
 export class ChecksController {
-  constructor(private checks: ChecksService, private prisma: PrismaService) {}
+  constructor(
+    private checks: ChecksService,
+    private report: ChecksReportService,
+    private prisma: PrismaService
+  ) {}
 
   // ── Templates ──────────────────────────────────────────────────────
 
@@ -118,6 +125,30 @@ export class ChecksController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.checks.getForClient(clientId, id)
+  }
+
+  // Shareable compliance/evidence PDF for a finalised check. Same read-roles + clientId
+  // scope as GET :id; the service gates COMPLETED/CLOSED and rejects others (400). Streams
+  // the bytes with attachment headers, mirroring the CSV export. Tenant isolation: clientId
+  // is resolved here at the edge and the service fetches every embedded image byte through
+  // the clientId-scoped download path, so a spoofed x-client-id can never pull another
+  // client's check or its images (cross-client id → 404 from the scoped getForClient).
+  @Get(":id/report.pdf")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER, Role.CLIENT_VIEWER)
+  async reportPdf(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Res() res: Response,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    const { filename, buffer } = await this.report.generatePdf(clientId, id)
+    res.setHeader("Content-Type", "application/pdf")
+    res.setHeader("X-Content-Type-Options", "nosniff")
+    res.setHeader("Content-Length", String(buffer.length))
+    res.setHeader("Content-Disposition", contentDispositionHeader("attachment", filename))
+    res.send(buffer)
   }
 
   @Post()
