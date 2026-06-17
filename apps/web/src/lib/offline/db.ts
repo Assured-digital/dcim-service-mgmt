@@ -62,11 +62,19 @@ let dbPromise: Promise<IDBPDatabase<FieldWorkDB>> | null = null
 
 export function getDB(): Promise<IDBPDatabase<FieldWorkDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<FieldWorkDB>("dcms-field-work", 1, {
-      upgrade(db) {
-        db.createObjectStore("checkState", { keyPath: "checkId" })
-        const q = db.createObjectStore("mutationQueue", { keyPath: "seq", autoIncrement: true })
-        q.createIndex("by-check", "checkId")
+    // v2 briefly added an `editDrafts` store for a since-removed per-card Save/Discard
+    // buffer; v3 drops it (answering is immediate again). Guard each step on oldVersion so
+    // existing v1/v2 DBs upgrade in place without dropping queued work.
+    dbPromise = openDB<FieldWorkDB>("dcms-field-work", 3, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore("checkState", { keyPath: "checkId" })
+          const q = db.createObjectStore("mutationQueue", { keyPath: "seq", autoIncrement: true })
+          q.createIndex("by-check", "checkId")
+        }
+        // Drop the obsolete editDrafts store (present only on machines that opened v2).
+        const anyDb = db as unknown as IDBPDatabase
+        if (anyDb.objectStoreNames.contains("editDrafts")) anyDb.deleteObjectStore("editDrafts")
       },
     })
   }

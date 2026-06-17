@@ -3,7 +3,14 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // Docker-Desktop-on-Windows bind mount: host file edits do NOT emit inotify events
+    // inside the Linux container, so Vite's native watcher never invalidates a changed
+    // module and keeps serving a STALE transform (a "reported-as-built but not rendering"
+    // trap). Poll the filesystem so HMR reliably picks up host edits. See CLAUDE.md.
+    watch: { usePolling: true, interval: 200 },
+  },
   resolve: {
     dedupe: ["react", "react-dom"]
   },

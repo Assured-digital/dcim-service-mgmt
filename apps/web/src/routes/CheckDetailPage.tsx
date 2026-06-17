@@ -4,13 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, IconButton, MenuItem, Stack,
+  DialogContent, DialogTitle, Divider, Menu, MenuItem, Stack,
   Tab, Tabs, TextField, Tooltip, Typography
 } from "@mui/material"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import AddIcon from "@mui/icons-material/Add"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
-import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import CameraAltIcon from "@mui/icons-material/CameraAlt"
 import AttachFileIcon from "@mui/icons-material/AttachFile"
 import ImageIcon from "@mui/icons-material/Image"
@@ -18,6 +17,22 @@ import DescriptionIcon from "@mui/icons-material/Description"
 import CloudOffIcon from "@mui/icons-material/CloudOff"
 import ScheduleIcon from "@mui/icons-material/Schedule"
 import DownloadIcon from "@mui/icons-material/Download"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import NotesIcon from "@mui/icons-material/Notes"
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
+import BoltIcon from "@mui/icons-material/Bolt"
+import AcUnitIcon from "@mui/icons-material/AcUnit"
+import HubIcon from "@mui/icons-material/Hub"
+import LockIcon from "@mui/icons-material/Lock"
+import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment"
+import ThermostatIcon from "@mui/icons-material/Thermostat"
+import RuleFolderIcon from "@mui/icons-material/RuleFolder"
+import type { SvgIconComponent } from "@mui/icons-material"
+import { PhotoCaptureDialog } from "../components/checks/PhotoCaptureDialog"
 import {
   PropertiesPanel, StatusPill, ragTokens, WorkflowStrip, type SemanticIntent
 } from "../components/shared"
@@ -112,6 +127,52 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 type DetailRow = { label: string; value: string }
+
+// Estimated duration -> compact label. Returns null when not derivable so callers can
+// DROP the tile gracefully (the template's estimatedMinutes is optional).
+function formatEst(min: number | null | undefined): string | null {
+  if (!min || min <= 0) return null
+  if (min < 60) return `~${min}m`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m ? `~${h}h ${m}m` : `~${h}h`
+}
+
+// Short scheduled-date label (en-GB, day + month) for the draft stat tile.
+function formatScheduledShort(iso: string | null): string {
+  if (!iso) return "—"
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+}
+
+// Section name -> a representative icon. Sections are free-text strings (no icon/type in the
+// schema), so this is a best-effort keyword match with a GENERIC fallback — never throws,
+// always renders something. Purely decorative (the section summary degrades gracefully).
+const SECTION_ICON_RULES: { test: RegExp; Icon: SvgIconComponent }[] = [
+  { test: /power|ups|electric|pdu|battery/, Icon: BoltIcon },
+  { test: /cool|hvac|aircon|air con|crac|chill/, Icon: AcUnitIcon },
+  { test: /temp|environment|humidity|climate/, Icon: ThermostatIcon },
+  { test: /network|lan|switch|cabl|connectiv|fibre|fiber/, Icon: HubIcon },
+  { test: /security|access|door|lock|cctv|camera/, Icon: LockIcon },
+  { test: /fire|suppress|smoke|alarm/, Icon: LocalFireDepartmentIcon },
+]
+function sectionIcon(name: string): SvgIconComponent {
+  const n = name.toLowerCase()
+  for (const { test, Icon } of SECTION_ICON_RULES) if (test.test(n)) return Icon
+  return RuleFolderIcon
+}
+
+// Shared stat tile — the single context-number unit across the journey (draft, self-review).
+// Secondary-bg surface, 0.5px border, radius-lg; 13px muted label over a 20px value. The
+// value may take a semantic accent colour (e.g. green Pass / red Fail) while the chrome stays
+// identical, so every tile reads as one design language.
+function StatTile({ label, value, accent }: { label: string; value: React.ReactNode; accent?: string }) {
+  return (
+    <Box sx={{ bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", p: "12px 14px" }}>
+      <Typography sx={{ fontSize: 20, fontWeight: 700, color: accent ?? "#0f172a", lineHeight: 1.1 }}>{value}</Typography>
+      <Typography sx={{ fontSize: 13, color: "#64748b", mt: "4px", fontWeight: 500 }}>{label}</Typography>
+    </Box>
+  )
+}
 
 // ── Sync status pill (Phase 4a offline resilience) ─────────────────────────
 // Honest, minimal indicator: the engineer must trust that work captured offline is
@@ -260,22 +321,42 @@ export default function CheckDetailPage() {
   const [error, setError] = React.useState("")
   const [transitioning, setTransitioning] = React.useState(false)
   const [reportDownloading, setReportDownloading] = React.useState(false)
-  const [copied, setCopied] = React.useState(false)
   const [activeSection, setActiveSection] = React.useState<string | null>(null)
   const [activeTab, setActiveTab] = React.useState(0) // for standard layout
 
-  const [drafts, setDrafts] = React.useState<Record<string, { response: string; notes: string; notesOpen?: boolean }>>({})
+  // Optimistic answers (response + notes), saved IMMEDIATELY on tap/blur through the offline
+  // queue (the proven P4a path). Seeded from IDB on mount so un-synced work survives reload.
+  const [drafts, setDrafts] = React.useState<Record<string, { response: string; notes: string }>>({})
   // Per-item field-evidence photos persist to object storage as `check-item`
   // attachments; offline captures queue locally (see useCheckExecutionSync) and show
   // as pending thumbnails until they upload.
   const [previewAtt, setPreviewAtt] = React.useState<AttachmentSummary | null>(null)
-  // Local caption edits keyed by a stable id: an attachment id for persisted photos,
-  // `pending:<seq>` for not-yet-uploaded captures. Held until committed (on blur) so
-  // typing doesn't fire a write per keystroke. Falls back to the server/queued value.
+  // Photo capture confirm beat (Stage 3): a selected/captured image is previewed here with an
+  // optional caption BEFORE anything is committed. `files` holds the current batch (current at
+  // [0]); `url` is a local object URL owned here (created on select, revoked on attach/discard),
+  // so the preview is pure UI and works fully offline — Attach is the existing P4a enqueue point.
+  const [photoPreview, setPhotoPreview] = React.useState<{ itemId: string; files: File[]; url: string; caption: string } | null>(null)
+  const [photoAttaching, setPhotoAttaching] = React.useState(false)
+  // In-flight caption edits keyed by attachment id (persisted) or `pending:<seq>` (queued
+  // capture). Held until committed on blur so typing doesn't write per keystroke.
   const [captionDrafts, setCaptionDrafts] = React.useState<Record<string, string>>({})
+
+  // ── Inline answering UI state ───────────────────────────────────────────────
+  // openNotes = item ids whose note composer is revealed (on-demand "Add note", or
+  // auto-revealed when an item is marked Fail). Answers themselves are immediate — there is
+  // no per-card edit/Save mode.
+  const [openNotes, setOpenNotes] = React.useState<Set<string>>(new Set())
+  // The Pass/Fail/N-A buttons are always visible; only the secondary note/photo detail tucks.
+  // An item id in `editingItems` has its detail strip open. (Fail forces it open so the failure
+  // gets documented; Pass/N-A tuck to a compact row for a tighter, faster list.)
+  const [editingItems, setEditingItems] = React.useState<Set<string>>(new Set())
+  const [reviewMode, setReviewMode] = React.useState(false)
+  // Sections that all-answered but the user manually re-expanded (collapse is purely visual).
+  const [expandedComplete, setExpandedComplete] = React.useState<Set<string>>(new Set())
+  const [sectionMenuAnchor, setSectionMenuAnchor] = React.useState<HTMLElement | null>(null)
   const photoInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
+  const itemRefs = React.useRef<Record<string, HTMLElement | null>>({})
   const [followOnItem, setFollowOnItem] = React.useState<CheckItem | null>(null)
-  const [submitOpen, setSubmitOpen] = React.useState(false)
   const [engineerSummary, setEngineerSummary] = React.useState("")
   const [reviewOpen, setReviewOpen] = React.useState(false)
   const [reviewAction, setReviewAction] = React.useState<"approve" | "return">("approve")
@@ -364,42 +445,130 @@ export default function CheckDetailPage() {
     prevPendingRef.current = sync.pendingCount
   }, [sync.pendingCount, id, qc])
 
-  // Light guard: warn before unloading only if offline with un-synced work (online work
-  // is durable in IDB and replays on next load, so no warning needed there).
+  // The optimistic answer for an item — the immediate draft if present, else the server value.
+  function getDraft(item: CheckItem) {
+    return {
+      response: drafts[item.id]?.response ?? item.response ?? "",
+      notes: drafts[item.id]?.notes ?? item.notes ?? "",
+    }
+  }
+
+  // ── Inline answering (immediate save through the offline queue) ──────────────
+  // Answers/notes/photos write IMMEDIATELY via the existing P4a helpers (optimistic IDB +
+  // queued drain) — no per-card edit/Save mode. The refetch happens once the queue drains
+  // (the pendingCount effect above).
+  function openNote(id: string) { setOpenNotes(prev => new Set(prev).add(id)) }
+  function closeNote(id: string) {
+    setOpenNotes(prev => { const n = new Set(prev); n.delete(id); return n })
+  }
+  function startEdit(id: string) { setEditingItems(prev => new Set(prev).add(id)) }
+  function stopEdit(id: string) {
+    setEditingItems(prev => { const n = new Set(prev); n.delete(id); return n })
+  }
+
+  // One tap = answered + saved. Fail → open the detail strip and reveal the note composer to
+  // push the engineer to document the failure (a nudge, not a hard block); Pass/N-A → tuck the
+  // detail to a compact row so the list stays tight (buttons stay visible either way).
+  async function handleResponse(item: CheckItem, response: string) {
+    const currentNotes = getDraft(item).notes
+    setDrafts(prev => ({ ...prev, [item.id]: { response, notes: currentNotes } }))
+    if (response === "FAIL") { openNote(item.id); startEdit(item.id) }
+    else stopEdit(item.id)
+    await sync.saveItemAnswer(item.id, { response, notes: currentNotes || undefined })
+  }
+
+  function setNote(item: CheckItem, notes: string) {
+    setDrafts(prev => ({ ...prev, [item.id]: { response: getDraft(item).response, notes } }))
+  }
+  async function handleNotesBlur(item: CheckItem) {
+    const d = getDraft(item)
+    if (!d.response && !d.notes.trim()) return
+    await sync.saveItemAnswer(item.id, { response: d.response || undefined, notes: d.notes || undefined })
+  }
+
+  // Photo capture → preview → confirm → attach (Stage 3). Selecting/capturing opens a preview
+  // (image + optional caption) — NOTHING is committed until the engineer taps Attach. Multiple
+  // selected files are previewed one at a time. The actual durable enqueue is unchanged (the
+  // proven P4a path): a capture is never lost if signal drops mid-visit, and pending captures
+  // show as thumbnails until their upload drains.
+  function handlePhotoSelect(itemId: string, files: FileList | null) {
+    if (!files || files.length === 0) return
+    openPhotoPreview(itemId, Array.from(files))
+  }
+  function openPhotoPreview(itemId: string, files: File[]) {
+    if (files.length === 0) { setPhotoPreview(null); return }
+    setPhotoPreview({ itemId, files, url: URL.createObjectURL(files[0]), caption: "" })
+  }
+  // Drop the current preview and advance to the next file in the batch (the effect below
+  // revokes the outgoing object URL when `url` changes / on unmount).
+  function advancePhotoPreview() {
+    const p = photoPreview
+    if (!p) return
+    const rest = p.files.slice(1)
+    if (rest.length === 0) { setPhotoPreview(null); return }
+    setPhotoPreview({ itemId: p.itemId, files: rest, url: URL.createObjectURL(rest[0]), caption: "" })
+  }
+  // Attach = the confirm beat → existing P4a enqueue (caption rides the upload). Then advance.
+  async function attachPreviewPhoto() {
+    const p = photoPreview
+    if (!p) return
+    setPhotoAttaching(true)
+    try {
+      await sync.queuePhoto(p.itemId, p.files[0], p.caption.trim() || undefined)
+    } finally {
+      setPhotoAttaching(false)
+      advancePhotoPreview()
+    }
+  }
+  // Retake discards the whole current batch and reopens the picker for that item.
+  function retakePreviewPhoto() {
+    const p = photoPreview
+    if (!p) return
+    const itemId = p.itemId
+    setPhotoPreview(null)
+    setTimeout(() => photoInputRefs.current[itemId]?.click(), 0)
+  }
+  // Object-URL lifecycle: revoke the previewed image's URL when it changes or on unmount.
+  React.useEffect(() => {
+    const url = photoPreview?.url
+    return () => { if (url) URL.revokeObjectURL(url) }
+  }, [photoPreview?.url])
+
+  async function removePhoto(att: AttachmentSummary) {
+    try {
+      await deleteAttachment(att.id)
+      await qc.invalidateQueries({ queryKey: ["check-detail", id] })
+    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to remove photo")) }
+  }
+
+  // Caption value to show: the in-flight draft if the user has touched this input, else the
+  // persisted (attachment) / queued (pending) value.
+  function captionValue(key: string, fallback: string): string {
+    return key in captionDrafts ? captionDrafts[key] : fallback
+  }
+  // Commit a caption on blur. Persisted attachment → queued caption-edit (PATCH on drain,
+  // offline-safe); pending capture → caption stored on the queued photo (rides the upload).
+  // Both no-op when unchanged.
+  async function commitAttCaption(att: AttachmentSummary) {
+    if (!(att.id in captionDrafts)) return
+    const next = captionDrafts[att.id]
+    if ((att.caption ?? "") !== next) await sync.queueCaptionEdit(att.id, next)
+  }
+  async function commitPendingCaption(seq: number, current: string) {
+    const key = `pending:${seq}`
+    if (!(key in captionDrafts)) return
+    const next = captionDrafts[key]
+    if ((current ?? "") !== next) await sync.setPendingPhotoCaption(seq, next)
+  }
+
+  // Light guard: warn before unloading only if offline with un-synced work (online work is
+  // durable in IDB and replays on next load, so no warning needed there).
   React.useEffect(() => {
     if (online || sync.pendingCount === 0) return
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = "" }
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
   }, [online, sync.pendingCount])
-
-  function getDraft(item: CheckItem) {
-    return {
-      response: drafts[item.id]?.response ?? item.response ?? "",
-      notes: drafts[item.id]?.notes ?? item.notes ?? "",
-      notesOpen: drafts[item.id]?.notesOpen ?? false
-    }
-  }
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  // Writes are optimistic + durable: persisted to IndexedDB and queued for replay
-  // (survive disconnect/refresh), then synced immediately when online. The refetch
-  // happens once the queue drains (the pendingCount effect above), not inline here.
-  async function handleResponseClick(item: CheckItem, response: string) {
-    const currentNotes = getDraft(item).notes
-    const currentNotesOpen = getDraft(item).notesOpen
-    setDrafts(prev => ({ ...prev, [item.id]: { response, notes: currentNotes, notesOpen: currentNotesOpen } }))
-    await sync.saveItemAnswer(item.id, { response, notes: currentNotes || undefined })
-  }
-
-  async function handleNotesBlur(item: CheckItem, notes: string) {
-    const currentResponse = getDraft(item).response
-    if (!currentResponse && !notes.trim()) return
-    await sync.saveItemAnswer(item.id, {
-      response: currentResponse || undefined,
-      notes: notes || undefined,
-    })
-  }
 
   async function handleStart() {
     setTransitioning(true); setError("")
@@ -433,7 +602,7 @@ export default function CheckDetailPage() {
       // Submitted ⇒ no longer executing; drop the local draft/queue state for this check.
       // (Submit is gated on a drained queue, so nothing un-synced is discarded.)
       await checkSync.clearCheck(id!)
-      setSubmitOpen(false)
+      setReviewMode(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
     } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed")) }
@@ -473,47 +642,6 @@ export default function CheckDetailPage() {
     } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to add item")) }
   }
 
-  // Queue each selected photo durably (IndexedDB) and upload when online — a capture is
-  // never lost if signal drops mid-visit. Queued photos show as pending thumbnails and
-  // appear as `check-item` attachments once their upload drains.
-  async function handlePhotoSelect(itemId: string, files: FileList | null) {
-    if (!files || files.length === 0) return
-    for (const file of Array.from(files)) {
-      await sync.queuePhoto(itemId, file)
-    }
-  }
-
-  async function removePhoto(att: AttachmentSummary) {
-    try {
-      await deleteAttachment(att.id)
-      await qc.invalidateQueries({ queryKey: ["check-detail", id] })
-    } catch (e: unknown) {
-      setError(getApiErrorMessage(e, "Failed to remove photo"))
-    }
-  }
-
-  // Caption value to show: the in-flight draft if the user has touched this input, else
-  // the server (persisted) / queued (pending) value.
-  function captionValue(key: string, fallback: string): string {
-    return key in captionDrafts ? captionDrafts[key] : fallback
-  }
-
-  // Commit a caption on blur. Persisted attachment → queued caption-edit (PATCH on drain,
-  // offline-safe); pending capture → caption stored on the queued photo (rides the upload).
-  // Both no-op when unchanged. The drain's pendingCount→0 effect refetches persisted edits.
-  async function commitAttCaption(att: AttachmentSummary) {
-    const key = att.id
-    if (!(key in captionDrafts)) return
-    const next = captionDrafts[key]
-    if ((att.caption ?? "") !== next) await sync.queueCaptionEdit(att.id, next)
-  }
-  async function commitPendingCaption(seq: number, current: string) {
-    const key = `pending:${seq}`
-    if (!(key in captionDrafts)) return
-    const next = captionDrafts[key]
-    if ((current ?? "") !== next) await sync.setPendingPhotoCaption(seq, next)
-  }
-
   // Compute sections early so hooks can reference sectionNames safely
   const sections: Record<string, CheckItem[]> = {}
   ;(check?.items ?? []).forEach(item => {
@@ -523,76 +651,66 @@ export default function CheckDetailPage() {
   })
   const sectionNames = Object.keys(sections)
 
+  // Scroll an anchor to the top of whichever element is scrolling (the items column on md,
+  // the page on xs). scrollIntoView resolves the right scroller automatically; the anchors
+  // carry scroll-margin-top so the sticky header bars don't cover the section/item top.
   function scrollToSection(sectionName: string) {
     setActiveSection(sectionName)
     const el = sectionRefs.current[sectionName]
-    const container = itemsColumnRef.current
-    if (el && container) {
-      // Suppress the scroll listener while we're doing programmatic scrolling
-      isScrollingRef.current = true
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-
-      const containerRect = container.getBoundingClientRect()
-      const elRect = el.getBoundingClientRect()
-      const targetScrollTop = container.scrollTop + (elRect.top - containerRect.top) - 16
-      container.scrollTo({ top: Math.max(0, targetScrollTop), behavior: "smooth" })
-
-      // Re-enable listener after smooth scroll finishes (~600ms is enough for any section)
-      scrollTimeoutRef.current = setTimeout(() => {
-        isScrollingRef.current = false
-      }, 700)
-    }
+    if (!el) return
+    isScrollingRef.current = true
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+    el.scrollIntoView({ behavior: "smooth", block: "start" })
+    scrollTimeoutRef.current = setTimeout(() => { isScrollingRef.current = false }, 700)
   }
 
-  // Track active section as user manually scrolls — throttled with rAF
+  // Track the active section so the sticky header swaps as you scroll past one. Viewport-
+  // relative + a capture-phase scroll listener, so it works whether the items column scrolls
+  // (md) or the page scrolls (xs) — scroll events don't bubble, but capture sees inner ones.
   React.useEffect(() => {
-    const container = itemsColumnRef.current
-    if (!container || sectionNames.length <= 1) return
+    if (!isExecLayout || sectionNames.length <= 1) return
     let rafId: number | null = null
+    const THRESHOLD = 150 // px from viewport top: clears the app bar + exec header + sticky bar
 
+    function recompute() {
+      rafId = null
+      if (isScrollingRef.current) return
+      let current = sectionNames[0]
+      for (const name of sectionNames) {
+        const el = sectionRefs.current[name]
+        if (el && el.getBoundingClientRect().top <= THRESHOLD) current = name
+      }
+      setActiveSection(prev => (prev === current ? prev : current))
+    }
     function onScroll() {
-      if (isScrollingRef.current) return // skip during programmatic scroll
-      if (rafId !== null) return         // already queued
-      rafId = requestAnimationFrame(() => {
-        rafId = null
-        const containerRect = container!.getBoundingClientRect()
-        let current = sectionNames[0]
-        for (const name of sectionNames) {
-          const el = sectionRefs.current[name]
-          if (el) {
-            const elRect = el.getBoundingClientRect()
-            if (elRect.top - containerRect.top <= 32) current = name
-          }
-        }
-        setActiveSection(prev => prev === current ? prev : current)
-      })
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(recompute)
     }
 
-    container.addEventListener("scroll", onScroll, { passive: true })
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true })
+    recompute()
     return () => {
-      container.removeEventListener("scroll", onScroll)
+      window.removeEventListener("scroll", onScroll, true)
       if (rafId !== null) cancelAnimationFrame(rafId)
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
     }
-  }, [sectionNames.join(",")]) // eslint-disable-line
-
-  function copyRef() {
-    if (!check) return
-    navigator.clipboard.writeText(check.reference)
-    setCopied(true); setTimeout(() => setCopied(false), 1500)
-  }
+  }, [isExecLayout, sectionNames.join(",")]) // eslint-disable-line
 
   if (isLoading) return <LoadingState />
   if (!check) return <ErrorState title="Check not found" />
 
+  // Effective response = the committed optimistic draft (last Saved) if present, else the
+  // server value. Stats use this so counts stay correct offline before the queue drains.
+  // (On non-IN_PROGRESS layouts `drafts` is empty, so this is just the server value.)
+  const respOf = (i: CheckItem): string => (drafts[i.id]?.response ?? i.response ?? "") || ""
   const totalItems = check.items.length
-  const answeredItems = check.items.filter(i => i.response !== null).length
-  const passItems = check.items.filter(i => i.response === "PASS").length
-  const failItems = check.items.filter(i => i.response === "FAIL").length
-  const naItems = check.items.filter(i => i.response === "NA").length
-  const pendingItems = check.items.filter(i => !i.response).length
-  const failedItems = check.items.filter(i => i.response === "FAIL")
-  const allRequiredAnswered = check.items.filter(i => i.isRequired).every(i => i.response !== null)
+  const answeredItems = check.items.filter(i => respOf(i) !== "").length
+  const passItems = check.items.filter(i => respOf(i) === "PASS").length
+  const failItems = check.items.filter(i => respOf(i) === "FAIL").length
+  const naItems = check.items.filter(i => respOf(i) === "NA").length
+  const pendingItems = check.items.filter(i => respOf(i) === "").length
+  const failedItems = check.items.filter(i => respOf(i) === "FAIL")
+  const allRequiredAnswered = check.items.filter(i => i.isRequired).every(i => respOf(i) !== "")
 
   const canStart = ["DRAFT", "SCHEDULED", "ASSIGNED"].includes(check.status) && canExecute
   // PENDING_REVIEW now renders the read-only review surface (standard layout) instead of
@@ -607,42 +725,16 @@ export default function CheckDetailPage() {
   // Group items by section — already computed above, just re-derive for the check guard
   // (sections/sectionNames are correct since check.items is now available)
 
-  // Section completion stats
+  // Section completion stats (optimistic — counts the open card's last-Saved baseline).
   function getSectionStats(items: CheckItem[]) {
-    const answered = items.filter(i => {
-      const draft = drafts[i.id]
-      return draft ? !!draft.response : !!i.response
-    }).length
-    const failed = items.filter(i => {
-      const draft = drafts[i.id]
-      return (draft ? draft.response : i.response) === "FAIL"
-    }).length
+    const answered = items.filter(i => respOf(i) !== "").length
+    const failed = items.filter(i => respOf(i) === "FAIL").length
     return { answered, failed, total: items.length }
   }
 
   // ── Shared dialogs (rendered in both layouts) ──────────────────────────
   const dialogs = (
     <>
-      <Dialog open={submitOpen} onClose={() => setSubmitOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Submit check for review</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
-              Once submitted the check will be reviewed by a service manager before being marked complete.
-            </Typography>
-            <TextField label="Engineer summary (optional)" multiline rows={3} fullWidth
-              value={engineerSummary} onChange={e => setEngineerSummary(e.target.value)}
-              placeholder="Overall observations from the visit..." />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSubmitOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSubmit} disabled={transitioning}>
-            {transitioning ? "Submitting..." : "Submit for review"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       <Dialog open={reviewOpen} onClose={() => setReviewOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>{reviewAction === "approve" ? "Approve check" : "Return for rework"}</DialogTitle>
         <DialogContent>
@@ -722,30 +814,56 @@ export default function CheckDetailPage() {
     </>
   )
 
-  // ── Item card (execution mode) ─────────────────────────────────────────
+  // ── Item card (execution surface — inline, immediate) ──────────────────────
+  // Pass/Fail/N-A is ALWAYS visible and saves on tap (one action, no open-card step). Notes
+  // and photos expand on demand once answered; marking Fail auto-reveals the note composer +
+  // a gentle evidence nudge. Every write goes straight through the offline queue (P4a).
   function renderItemCard(item: CheckItem, idx: number) {
     const draft = getDraft(item)
-    const isFail = draft.response === "FAIL"
-    const isPass = draft.response === "PASS"
-    const isNA = draft.response === "NA"
-    const isUnansweredRequired = item.isRequired && !draft.response
+    const response = draft.response
+    const isFail = response === "FAIL"
+    const isPass = response === "PASS"
+    const isNA = response === "NA"
+    const isUnansweredRequired = item.isRequired && !response
+    const accent = isUnansweredRequired ? "#f59e0b"
+      : isPass ? "#15803d" : isFail ? "#b91c1c" : isNA ? "#94a3b8" : "#e2e8f0"
+    const noteOpen = openNotes.has(item.id)
+    const photoCount = (item.attachments?.length ?? 0) + (sync.photosByItem[item.id]?.length ?? 0)
+    const hasNote = draft.notes.trim().length > 0
+    const needsEvidence = isFail && !hasNote && photoCount === 0
+    const answered = response !== ""
+    // The Pass/Fail/N-A buttons are ALWAYS visible (the filled button is the answer state, so
+    // re-answering is one tap). Only the secondary note/photo detail tucks away: it's open while
+    // unanswered-then-failed or while the engineer is editing. Fail forces it open AND keeps it
+    // open (even after "Done") so an undocumented failure keeps its evidence nudge.
+    const detailOpen = !!response && (isFail || editingItems.has(item.id))
+    const num = String(idx + 1).padStart(2, "0")
+
+    const respBtn = (value: string, label: string, on: boolean, onCol: string, onBg: string, onText: string) => (
+      <Button size="small" disabled={!canExecute} onClick={() => handleResponse(item, value)}
+        sx={{
+          flex: { xs: 1, md: "0 1 auto" }, minWidth: { xs: 0, md: 78 },
+          fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
+          border: "1.5px solid", py: { xs: "11px", md: "7px" },
+          borderColor: on ? onCol : "#e2e8f0", bgcolor: on ? onBg : "#ffffff", color: on ? onText : "#64748b",
+          "&.Mui-disabled": { color: on ? onText : "#cbd5e1", borderColor: on ? onCol : "#eef2f6" },
+          "&:hover": { bgcolor: on ? onBg : "#f8fafc", borderColor: onCol, color: onText },
+        }}>
+        {label}
+      </Button>
+    )
 
     return (
-      <Box key={item.id} sx={{
-        bgcolor: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderLeft: isUnansweredRequired
-          ? "3px solid #f59e0b"
-          : isPass ? "3px solid #15803d"
-          : isFail ? "3px solid #b91c1c"
-          : "1px solid #e2e8f0",
-        borderRadius: "8px", p: "14px 16px", mb: "8px",
-        transition: "border-color 0.15s"
-      }}>
+      <Box key={item.id}
+        ref={(el: HTMLDivElement | null) => { itemRefs.current[item.id] = el }}
+        sx={{
+          bgcolor: "#ffffff", border: "1px solid #e2e8f0",
+          borderLeft: (response || isUnansweredRequired) ? `3px solid ${accent}` : "1px solid #e2e8f0",
+          borderRadius: "8px", p: "14px 16px", mb: "8px", transition: "border-color 0.15s",
+        }}>
         <Stack direction="row" spacing={1.5} alignItems="flex-start">
-          {/* Item number */}
           <Typography sx={{ fontSize: 11, fontWeight: 500, color: "#94a3b8", mt: "3px", flexShrink: 0, minWidth: 22, fontFamily: "monospace" }}>
-            {String(idx + 1).padStart(2, "0")}
+            {num}
           </Typography>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {/* Label + badges */}
@@ -753,122 +871,77 @@ export default function CheckDetailPage() {
               <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: "#0f172a", flex: 1, lineHeight: 1.4 }}>
                 {item.label}
               </Typography>
-              {item.isRequired ? (
-                <Chip size="small" label="Required" sx={{ height: 18, fontSize: 10, bgcolor: "#fef3c7", color: "#92400e", flexShrink: 0 }} />
-              ) : null}
-              {item.isCritical ? (
-                <Chip size="small" label="Critical" sx={{ height: 18, fontSize: 10, bgcolor: "#fee2e2", color: "#b91c1c", flexShrink: 0 }} />
-              ) : null}
-              {item.isAdHoc ? (
-                <Chip size="small" label="Ad hoc" sx={{ height: 18, fontSize: 10, bgcolor: "#f0f9ff", color: "#0369a1", flexShrink: 0 }} />
-              ) : null}
+              {item.isRequired ? <Chip size="small" label="Required" sx={{ height: 18, fontSize: 10, bgcolor: "#fef3c7", color: "#92400e" }} /> : null}
+              {item.isCritical ? <Chip size="small" label="Critical" sx={{ height: 18, fontSize: 10, bgcolor: "#fee2e2", color: "#b91c1c" }} /> : null}
+              {item.isAdHoc ? <Chip size="small" label="Ad hoc" sx={{ height: 18, fontSize: 10, bgcolor: "#f0f9ff", color: "#0369a1" }} /> : null}
             </Stack>
 
-            {/* Guidance */}
             {item.guidance ? (
-              <Typography sx={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, mb: "10px" }}>
-                {item.guidance}
-              </Typography>
+              <Typography sx={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, mb: "10px" }}>{item.guidance}</Typography>
             ) : null}
 
-            {/* Response buttons */}
-            <Stack direction="row" spacing={0.75} sx={{ mb: (isFail || draft.notes !== undefined) ? "12px" : 0 }}>
-              <Button size="small"
-                onClick={() => handleResponseClick(item, "PASS")}
-                sx={{
-                  flex: { xs: 1, md: "0 1 auto" },
-                  minWidth: { xs: 0, md: 72 },
-                  fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
-                  border: "1.5px solid", py: { xs: "11px", md: "7px" },
-                  borderColor: isPass ? "#15803d" : "#e2e8f0",
-                  bgcolor: isPass ? "#dcfce7" : "#ffffff",
-                  color: isPass ? "#15803d" : "#64748b",
-                  "&:hover": { bgcolor: isPass ? "#d1fae5" : "#f8fafc", borderColor: "#15803d", color: "#15803d" }
-                }}>
-                ✓ Pass
-              </Button>
-              <Button size="small"
-                onClick={() => handleResponseClick(item, "FAIL")}
-                sx={{
-                  flex: { xs: 1, md: "0 1 auto" },
-                  minWidth: { xs: 0, md: 72 },
-                  fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
-                  border: "1.5px solid", py: { xs: "11px", md: "7px" },
-                  borderColor: isFail ? "#b91c1c" : "#e2e8f0",
-                  bgcolor: isFail ? "#fee2e2" : "#ffffff",
-                  color: isFail ? "#b91c1c" : "#64748b",
-                  "&:hover": { bgcolor: isFail ? "#fecaca" : "#f8fafc", borderColor: "#b91c1c", color: "#b91c1c" }
-                }}>
-                ✕ Fail
-              </Button>
-              {item.responseType !== "PASS_FAIL" ? (
-                <Button size="small"
-                  onClick={() => handleResponseClick(item, "NA")}
-                  sx={{
-                    flex: { xs: 1, md: "0 1 auto" },
-                    minWidth: { xs: 0, md: 72 },
-                    fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
-                    border: "1.5px solid", py: { xs: "11px", md: "7px" },
-                    borderColor: isNA ? "#64748b" : "#e2e8f0",
-                    bgcolor: isNA ? "#f1f5f9" : "#ffffff",
-                    color: isNA ? "#475569" : "#64748b",
-                    "&:hover": { bgcolor: "#f1f5f9", borderColor: "#64748b", color: "#475569" }
-                  }}>
-                  N/A
-                </Button>
-              ) : null}
+            {/* Response — ALWAYS visible; the filled button is the answer state, so re-answering
+                is one tap and an answer never "vanishes" on selection */}
+            <Stack direction="row" spacing={0.75}>
+              {respBtn("PASS", "✓ Pass", isPass, "#15803d", "#dcfce7", "#15803d")}
+              {respBtn("FAIL", "✕ Fail", isFail, "#b91c1c", "#fee2e2", "#b91c1c")}
+              {item.responseType !== "PASS_FAIL" ? respBtn("NA", "N/A", isNA, "#64748b", "#f1f5f9", "#475569") : null}
             </Stack>
 
-            {/* Notes + Photo row — appears once item is answered */}
-            {draft.response ? (
-              <Box sx={{ borderTop: "1px dashed #e2e8f0", pt: "10px", mt: "2px" }}>
-
-                {/* Existing note display — click to edit */}
-                {draft.notes && !drafts[item.id]?.notesOpen ? (
-                  <Box
-                    onClick={() => setDrafts(prev => ({ ...prev, [item.id]: { ...getDraft(item), notesOpen: true } }))}
-                    sx={{ mb: "10px", cursor: "text", bgcolor: "#f8fafc", borderRadius: "6px", px: "10px", py: "7px", border: "1px solid #e2e8f0", "&:hover": { borderColor: "#cbd5e1" } }}
-                  >
-                    <Typography sx={{ fontSize: 12, color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-                      {draft.notes}
-                    </Typography>
+            {/* Secondary detail — the evidence strip when open (Fail auto-opens it), else a compact
+                tucked row for answered Pass/N-A. Unanswered shows nothing but the buttons. */}
+            {detailOpen ? (
+              <Box sx={{ borderTop: "1px dashed #e2e8f0", pt: "10px", mt: "12px" }}>
+                {/* Fail nudge — gentle, not a hard block; clears once a note or photo exists */}
+                {needsEvidence ? (
+                  <Box sx={{ mb: "10px", px: "10px", py: "7px", bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "6px" }}>
+                    <Typography sx={{ fontSize: 11.5, color: "#92400e" }}>Add a note or photo for this failure.</Typography>
                   </Box>
                 ) : null}
 
-                {/* Note input when expanded */}
-                {drafts[item.id]?.notesOpen ? (
+                {/* Existing note — click to edit */}
+                {draft.notes && !noteOpen ? (
+                  <Box onClick={canExecute ? () => openNote(item.id) : undefined}
+                    sx={{ mb: "10px", cursor: canExecute ? "text" : "default", bgcolor: "#f8fafc", borderRadius: "6px", px: "10px", py: "7px", border: "1px solid #e2e8f0", "&:hover": canExecute ? { borderColor: "#cbd5e1" } : {} }}>
+                    <Typography sx={{ fontSize: 12, color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{draft.notes}</Typography>
+                  </Box>
+                ) : null}
+
+                {/* Note composer (comment-box styling) — saves on blur */}
+                {noteOpen ? (
                   <Box sx={{ mb: "10px" }}>
-                    <TextField
-                      size="small" fullWidth multiline rows={2} autoFocus
-                      placeholder={isFail ? "Describe the issue..." : "Add a note..."}
-                      value={draft.notes}
-                      onChange={e => setDrafts(prev => ({ ...prev, [item.id]: { ...getDraft(item), notes: e.target.value } }))}
-                      onBlur={e => handleNotesBlur(item, e.target.value)}
-                      sx={{ "& .MuiInputBase-root": { fontSize: { xs: 16, md: 12 }, bgcolor: "#ffffff" } }}
-                    />
+                    <Box sx={{
+                      borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "#fff",
+                      px: 1.25, py: 0.5, transition: "border-color 120ms ease",
+                      "&:focus-within": { borderColor: "primary.main" },
+                    }}>
+                      <TextField
+                        variant="standard" fullWidth multiline minRows={2} autoFocus={!draft.notes}
+                        placeholder={isFail ? "Describe the issue…" : "Add a note…"}
+                        value={draft.notes}
+                        onChange={e => setNote(item, e.target.value)}
+                        onBlur={() => handleNotesBlur(item)}
+                        InputProps={{ disableUnderline: true }}
+                        sx={{ "& .MuiInputBase-input": { fontSize: { xs: 16, md: 13 }, lineHeight: 1.5 } }}
+                      />
+                    </Box>
                     <Stack direction="row" justifyContent="flex-end" sx={{ mt: "6px" }}>
-                      <Button size="small" variant="text"
-                        onClick={() => setDrafts(prev => ({ ...prev, [item.id]: { ...getDraft(item), notesOpen: false } }))}
-                        sx={{ fontSize: 11, color: "#64748b" }}>
+                      <Button size="small" variant="text" onClick={() => { void handleNotesBlur(item); closeNote(item.id) }} sx={{ fontSize: 11, color: "#64748b" }}>
                         Done
                       </Button>
                     </Stack>
                   </Box>
                 ) : null}
 
-                {/* Action row: captioned photo cells + Add photo + Add note — same style.
-                    flex-start so the ghost buttons align to the thumbnails, not the taller
-                    captioned cells. */}
+                {/* Photos + on-demand controls — capture saves immediately */}
                 <Box sx={{ display: "flex", alignItems: "flex-start", gap: "8px", flexWrap: "wrap" }}>
-                  {/* Hidden file input — `capture` opens the camera on mobile, the file
-                      picker on desktop. Value reset so re-selecting the same file fires. */}
                   <input
                     type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }}
                     ref={el => { photoInputRefs.current[item.id] = el }}
-                    onChange={e => { handlePhotoSelect(item.id, e.target.files); e.target.value = "" }}
+                    onChange={e => { void handlePhotoSelect(item.id, e.target.files); e.target.value = "" }}
                   />
-                  {/* Persisted evidence cells — thumbnail (click to preview, × to delete) +
-                      optional caption input beneath. Caption editable while IN_PROGRESS. */}
+
+                  {/* Persisted (uploaded) evidence — caption editable until lock */}
                   {(item.attachments ?? []).map((att) => (
                     <Box key={att.id} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
                       <Tooltip title={att.filename}>
@@ -876,21 +949,22 @@ export default function CheckDetailPage() {
                           <Box onClick={() => setPreviewAtt(att)} sx={{
                             width: 48, height: 48, borderRadius: "4px", border: "1px solid #e2e8f0",
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            bgcolor: "#f8fafc", cursor: "pointer",
-                            "&:hover": { borderColor: "#cbd5e1" }
+                            bgcolor: "#f8fafc", cursor: "pointer", "&:hover": { borderColor: "#cbd5e1" },
                           }}>
                             {isImageType(att.contentType)
                               ? <ImageIcon sx={{ fontSize: 20, color: "#64748b" }} />
                               : <DescriptionIcon sx={{ fontSize: 20, color: "#64748b" }} />}
                           </Box>
-                          <Box onClick={() => removePhoto(att)} sx={{
-                            position: "absolute", top: -4, right: -4,
-                            width: { xs: 18, md: 14 }, height: { xs: 18, md: 14 }, borderRadius: "50%",
-                            bgcolor: "#475569", color: "#fff",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: { xs: 11, md: 9 }, cursor: "pointer", fontWeight: 700,
-                            "&:hover": { bgcolor: "#0f172a" }
-                          }}>×</Box>
+                          {canExecute ? (
+                            <Box onClick={() => removePhoto(att)} sx={{
+                              position: "absolute", top: -4, right: -4,
+                              width: { xs: 18, md: 14 }, height: { xs: 18, md: 14 }, borderRadius: "50%",
+                              bgcolor: "#475569", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: { xs: 11, md: 9 }, cursor: "pointer", fontWeight: 700, "&:hover": { bgcolor: "#0f172a" },
+                            }}>×</Box>
+                          ) : null}
+                          {/* Attached confirmation — uploaded evidence (vs the pending clock badge) */}
+                          <CheckCircleIcon sx={{ position: "absolute", bottom: -4, right: -4, fontSize: 15, color: "#15803d", bgcolor: "#fff", borderRadius: "50%" }} />
                         </Box>
                       </Tooltip>
                       <TextField
@@ -904,10 +978,7 @@ export default function CheckDetailPage() {
                     </Box>
                   ))}
 
-                  {/* Queued (offline) photo cells — captured on-device, awaiting upload.
-                      Shown from a local object URL with a pending badge; the caption is
-                      stored on the queued capture so it replays with the upload. Replaced
-                      by the persisted cell once it drains. */}
+                  {/* Queued (offline) captures — caption rides the upload */}
                   {(sync.photosByItem[item.id] ?? []).map((p) => (
                     <Box key={p.seq} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
                       <Tooltip title={`${p.filename} — saved on this device, will upload when online`}>
@@ -929,63 +1000,89 @@ export default function CheckDetailPage() {
                     </Box>
                   ))}
 
-                  {/* Add photo — ghost button */}
-                  <Box onClick={() => photoInputRefs.current[item.id]?.click()} sx={{
-                    display: "flex", alignItems: "center", gap: "5px",
-                    px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
-                    border: "1px solid #e2e8f0", color: "#64748b",
-                    fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500,
-                    transition: "all 0.1s",
-                    "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }
-                  }}>
-                    <CameraAltIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
-                    {((item.attachments ?? []).length > 0 || (sync.photosByItem[item.id]?.length ?? 0) > 0) ? "Add more" : "Add photo"}
-                  </Box>
-
-                  {/* Add note — same ghost button style, only show if no note yet */}
-                  {!draft.notes && !drafts[item.id]?.notesOpen ? (
-                    <Box onClick={() => setDrafts(prev => ({ ...prev, [item.id]: { ...getDraft(item), notesOpen: true } }))} sx={{
+                  {/* Add photo (opens camera/picker) */}
+                  {canExecute ? (
+                    <Box onClick={() => photoInputRefs.current[item.id]?.click()} sx={{
                       display: "flex", alignItems: "center", gap: "5px",
                       px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
                       border: "1px solid #e2e8f0", color: "#64748b",
-                      fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500,
-                      transition: "all 0.1s",
-                      "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" }
+                      fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500, transition: "all 0.1s",
+                      "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" },
+                    }}>
+                      <CameraAltIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
+                      {photoCount > 0 ? "Add more" : "Add photo"}
+                    </Box>
+                  ) : null}
+
+                  {/* Add note (reveals composer) — only when there's no note yet */}
+                  {canExecute && !draft.notes && !noteOpen ? (
+                    <Box onClick={() => openNote(item.id)} sx={{
+                      display: "flex", alignItems: "center", gap: "5px",
+                      px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
+                      border: "1px solid #e2e8f0", color: "#64748b",
+                      fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500, transition: "all 0.1s",
+                      "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" },
                     }}>
                       <AddIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
                       Add note{isFail ? " (recommended)" : ""}
                     </Box>
                   ) : null}
                 </Box>
+
+                {/* Done — collapse this answered item back to its pill */}
+                {canExecute ? (
+                  <Stack direction="row" justifyContent="flex-end" sx={{ mt: "10px" }}>
+                    <Button size="small" onClick={() => { void handleNotesBlur(item); closeNote(item.id); stopEdit(item.id) }}
+                      sx={{ fontSize: 11.5, color: "#1d4ed8", fontWeight: 600 }}>
+                      Done
+                    </Button>
+                  </Stack>
+                ) : null}
               </Box>
+            ) : answered ? (
+              /* Answered Pass/N-A — the buttons stay above; only the detail tucks to this compact
+                 row (evidence indicators + a quiet affordance to re-open/add note or photo) */
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: "10px", flexWrap: "wrap", rowGap: "6px" }}>
+                {hasNote ? (
+                  <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 15, color: "#94a3b8" }} /></Tooltip>
+                ) : null}
+                {photoCount > 0 ? (
+                  <Stack direction="row" alignItems="center" spacing={0.3}>
+                    <CameraAltIcon sx={{ fontSize: 15, color: "#94a3b8" }} />
+                    <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{photoCount}</Typography>
+                  </Stack>
+                ) : null}
+                {item.followOns.length > 0 ? (
+                  <Chip size="small" label={`${item.followOns.length} follow-on${item.followOns.length === 1 ? "" : "s"}`}
+                    sx={{ height: 18, fontSize: 10, bgcolor: "#e0f2fe", color: "#0369a1" }} />
+                ) : null}
+                <Box sx={{ flex: 1 }} />
+                {canExecute ? (
+                  <Button size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />} onClick={() => startEdit(item.id)}
+                    sx={{ fontSize: 11.5, color: "#64748b" }}>
+                    {hasNote || photoCount > 0 ? "Edit evidence" : "Add note or photo"}
+                  </Button>
+                ) : null}
+              </Stack>
             ) : null}
 
-            {/* Follow-on prompt for failed items */}
-            {isFail && check?.status === "IN_PROGRESS" && canExecute ? (
-              <Box sx={{ mt: "10px", p: "10px 12px", bgcolor: "#fef9e7", border: "1px solid #fcd34d", borderRadius: "6px" }}>
+            {/* Follow-on prompt for failed items (detail open — always true for a Fail) */}
+            {isFail && canExecute && detailOpen ? (
+              <Box sx={{ mt: "12px", p: "10px 12px", bgcolor: "#fef9e7", border: "1px solid #fcd34d", borderRadius: "6px" }}>
                 {item.followOns.length > 0 ? (
                   <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
                     {item.followOns.map(fo => (
-                      <Chip key={fo.id} size="small" label={fo.entityType}
-                        sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10 }} />
+                      <Chip key={fo.id} size="small" label={fo.entityType} sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10 }} />
                     ))}
-                    <Button size="small" onClick={() => setFollowOnItem(item)}
-                      sx={{ fontSize: 11, color: "#92400e", ml: "auto" }}>
-                      Add another
-                    </Button>
+                    <Button size="small" onClick={() => setFollowOnItem(item)} sx={{ fontSize: 11, color: "#92400e", ml: "auto" }}>Add another</Button>
                   </Stack>
                 ) : (
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography sx={{ fontSize: 12, color: "#92400e" }}>
-                      ⚠ This item failed — create a follow-on action?
-                    </Typography>
-                    <Stack direction="row" spacing={0.75}>
-                      <Button size="small"
-                        onClick={() => setFollowOnItem(item)}
-                        sx={{ fontSize: 11, bgcolor: "#f59e0b", color: "#fff", px: "10px", py: "4px", borderRadius: "4px", "&:hover": { bgcolor: "#d97706" } }}>
-                        Create
-                      </Button>
-                    </Stack>
+                    <Typography sx={{ fontSize: 12, color: "#92400e" }}>⚠ This item failed — create a follow-on action?</Typography>
+                    <Button size="small" onClick={() => setFollowOnItem(item)}
+                      sx={{ fontSize: 11, bgcolor: "#f59e0b", color: "#fff", px: "10px", py: "4px", borderRadius: "4px", "&:hover": { bgcolor: "#d97706" } }}>
+                      Create
+                    </Button>
                   </Stack>
                 )}
               </Box>
@@ -996,22 +1093,59 @@ export default function CheckDetailPage() {
     )
   }
 
-  // ── EXECUTION LAYOUT (IN_PROGRESS + PENDING_REVIEW) ────────────────────
+  // ── EXECUTION LAYOUT (IN_PROGRESS only) ────────────────────────────────
+  // The engineer's working surface: full-width rich cards (one-at-a-time edit), a sticky
+  // per-section progress header (replacing the old left rail), lightweight section collapse,
+  // and a self-review screen gating submit. Read-only review/completed render below.
   if (isExecuting) {
     const passPercent = totalItems > 0 ? (passItems / totalItems) * 100 : 0
     const failPercent = totalItems > 0 ? (failItems / totalItems) * 100 : 0
     const naPercent = totalItems > 0 ? (naItems / totalItems) * 100 : 0
+    const remainingRequired = check.items.filter(i => i.isRequired && respOf(i) === "")
+    const canSubmit = allRequiredAnswered && sync.pendingCount === 0
+    const showSticky = sectionNames.length > 1
+    const stickyName = activeSection ?? sectionNames[0] ?? ""
+    const stickyStats = stickyName ? getSectionStats(sections[stickyName] ?? []) : { answered: 0, failed: 0, total: 0 }
+    const detailRows = [
+      { label: "Site", value: check.site.name },
+      { label: "Template", value: check.template.name },
+      check.scheduledAt ? { label: "Scheduled", value: new Date(check.scheduledAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) } : null,
+      check.startedAt ? { label: "Elapsed", value: formatElapsed(check.startedAt) } : null,
+      check.assignee ? { label: "Engineer", value: check.assignee.displayName } : null,
+      check.passRate !== null ? { label: "Pass rate", value: `${check.passRate}%` } : null,
+    ].filter((row): row is DetailRow => row !== null)
+    // Live pass rate — mirrors the server's calcPassRate (PASS / (PASS+FAIL); N/A excluded;
+    // null when nothing answered; 100 when every answered item is N/A) so the tile reads the
+    // same as the report/history figure.
+    const livePassRate = answeredItems === 0
+      ? null
+      : (passItems + failItems) === 0 ? 100 : Math.round((passItems / (passItems + failItems)) * 100)
+    const statTiles: { label: string; value: React.ReactNode; accent?: string }[] = [
+      { label: "Pass", value: passItems, accent: "#15803d" },
+      { label: "Fail", value: failItems, accent: "#b91c1c" },
+      { label: "N/A", value: naItems, accent: "#475569" },
+      { label: "Pass rate", value: livePassRate === null ? "—" : `${livePassRate}%`, accent: livePassRate === null ? "#94a3b8" : "#1d4ed8" },
+    ]
+    // Self-review "Needs attention" set — the actionable items, fixed IN-PLACE on the review
+    // screen (no jump-back). Required-but-unanswered (hard-blocks submit) + failed-without-evidence
+    // (the soft nudge). Computed from optimistic state (respOf/drafts/photosByItem) so an item
+    // drops out of the zone the instant it's resolved, before the queue drains.
+    const needsAttention = check.items.filter(i => {
+      const r = respOf(i)
+      if (i.isRequired && r === "") return true
+      if (r === "FAIL") {
+        const note = (drafts[i.id]?.notes ?? i.notes ?? "").trim()
+        const photos = (i.attachments?.length ?? 0) + (sync.photosByItem[i.id]?.length ?? 0)
+        return !note && photos === 0
+      }
+      return false
+    })
 
     return (
       <Box sx={{
-        // md+: the page is full-bleed (the effect above flips Shell <main> to p:0 +
-        // overflow:hidden + flex column), so there's NO padding to escape — we just
-        // fill the pane with flex:1 and the columns scroll internally. (The old
-        // md -24px bleed against <main>'s 20px padding was the horizontal-scroll bug.)
-        // xs: the mobile Shell <main> keeps its 12px padding and is the scroll
-        // container, so we bleed -12px to go edge-to-edge, grow naturally, and pin the
-        // action bar with position:sticky (B3) — this avoids the 56px-header + 12px-
-        // padding double-count that would clip a fixed-height flex footer on phones.
+        // md+: full-bleed pane (Shell <main> is p:0 + overflow:hidden + flex column), so we
+        // fill with flex:1 and scroll internally. xs: <main> keeps 12px padding + is the
+        // scroller, so we bleed -12px edge-to-edge and pin the action bar with sticky.
         mx: { xs: "-12px", md: 0 },
         mt: { xs: "-12px", md: 0 },
         mb: { xs: "-12px", md: 0 },
@@ -1020,49 +1154,44 @@ export default function CheckDetailPage() {
         overflow: { xs: "visible", md: "hidden" },
         bgcolor: "var(--color-background-tertiary)"
       }}>
-        {/* ── Exec header ─────────────────────────────────────────────── */}
-        <Box sx={{ bgcolor: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-primary)", px: "28px", pt: "16px", pb: "14px", flexShrink: 0 }}>
-          {/* Meta row */}
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "10px" }}>
-            <Stack direction="row" alignItems="center" spacing={0.5}>
-              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 600 }}>
-                {check.reference}
-              </Typography>
-              <Tooltip title={copied ? "Copied!" : "Copy"}>
-                <IconButton size="small" onClick={copyRef} sx={{ color: "#94a3b8", width: 18, height: 18 }}>
-                  <ContentCopyIcon sx={{ fontSize: 11 }} />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-            <StatusPill value={check.status} label={STATUS_LABELS[check.status]} minWidth={112} />
-            <Box sx={{ flex: 1 }} />
-            {/* Sync indicator — offline-aware (Phase 4a) */}
-            <SyncStatusPill status={sync.status} pendingCount={sync.pendingCount} />
-          </Stack>
-
-          {/* Title + actions */}
+        {/* ── Exec header (decluttered: title + key indicators + actions; ref/status
+            live in the breadcrumb + Details, not here) ─────────────────── */}
+        <Box sx={{ bgcolor: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-primary)", px: { xs: "16px", md: "28px" }, pt: "14px", pb: "12px", flexShrink: 0 }}>
           <Stack direction="row" alignItems="flex-start" spacing={2}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ fontSize: 20, fontWeight: 500, color: "#0f172a", lineHeight: 1.3 }}>
+              <Typography sx={{ fontSize: { xs: 17, md: 20 }, fontWeight: 500, color: "#0f172a", lineHeight: 1.3 }}>
                 {check.title}
               </Typography>
+              <Typography sx={{ fontSize: 13, color: "#64748b", mt: "3px" }}>
+                {check.site.name} · {check.assignee?.displayName ?? "Unassigned"}
+              </Typography>
               {check.scopeNotes ? (
-                <Typography sx={{ fontSize: 13, color: "#64748b", mt: "3px" }}>
-                  {check.scopeNotes}
-                </Typography>
+                <Typography sx={{ fontSize: 12.5, color: "#94a3b8", mt: "2px" }}>{check.scopeNotes}</Typography>
               ) : null}
             </Box>
+            {/* Status indicator cluster + primary action (md+) */}
+            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flexShrink: 0, pt: "2px" }}>
+              <SyncStatusPill status={sync.status} pendingCount={sync.pendingCount} />
+              {canExecute && !reviewMode ? (
+                <Button variant="contained" size="small" disableElevation
+                  endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => setReviewMode(true)}
+                  sx={{ display: { xs: "none", md: "inline-flex" }, fontSize: 12, py: "7px" }}>
+                  Review &amp; submit
+                </Button>
+              ) : null}
+            </Stack>
           </Stack>
 
           {/* Progress bar */}
           {totalItems > 0 ? (
-            <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: "14px" }}>
+            <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: "12px" }}>
               <Box sx={{ flex: 1, height: 7, bgcolor: "#f1f5f9", borderRadius: "4px", overflow: "hidden", display: "flex" }}>
                 <Box sx={{ width: `${passPercent}%`, bgcolor: "#15803d", height: "100%", transition: "width 0.3s" }} />
                 <Box sx={{ width: `${failPercent}%`, bgcolor: "#b91c1c", height: "100%", transition: "width 0.3s" }} />
                 <Box sx={{ width: `${naPercent}%`, bgcolor: "#94a3b8", height: "100%", transition: "width 0.3s" }} />
               </Box>
-              <Stack direction="row" spacing={2} sx={{ flexShrink: 0 }}>
+              <Stack direction="row" spacing={2} sx={{ flexShrink: 0, display: { xs: "none", sm: "flex" } }}>
                 {[
                   { dot: "#15803d", label: "Pass", value: passItems },
                   { dot: "#b91c1c", label: "Fail", value: failItems },
@@ -1081,294 +1210,352 @@ export default function CheckDetailPage() {
                   <strong style={{ color: "#0f172a" }}>{answeredItems}/{totalItems}</strong> answered
                 </Typography>
               </Stack>
+              <Typography sx={{ fontSize: 11.5, color: "#64748b", flexShrink: 0, display: { xs: "block", sm: "none" } }}>
+                <strong style={{ color: "#0f172a" }}>{answeredItems}/{totalItems}</strong>
+              </Typography>
             </Stack>
           ) : null}
 
           {error ? <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert> : null}
         </Box>
 
-        {/* ── 3-column body (stacks to a single column on xs) ──────────── */}
-        <Box sx={{
-          flex: 1, display: "flex",
-          flexDirection: { xs: "column", md: "row" },
-          overflow: { xs: "visible", md: "hidden" },
-          minHeight: { md: 0 },
-        }}>
+        {reviewMode ? (
+          /* ── SELF-REVIEW / SUBMIT SCREEN ─────────────────────────────── */
+          <Box sx={{ flex: 1, overflowY: { xs: "visible", md: "auto" }, p: { xs: "16px 12px 24px", md: "24px 28px" }, minWidth: 0 }}>
+            <Box sx={{ maxWidth: 760, mx: "auto" }}>
+              <Button startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />} onClick={() => setReviewMode(false)}
+                sx={{ fontSize: 12.5, color: "#64748b", mb: "12px", px: "6px" }}>
+                Checklist
+              </Button>
+              <Typography sx={{ fontSize: 18, fontWeight: 600, color: "#0f172a", mb: "16px" }}>Review &amp; submit</Typography>
 
-          {/* Section rail — hidden on xs (inline section headers cover context;
-              jump-nav is low value on a linear phone scroll) */}
-          {sectionNames.length > 1 ? (
-            <Box sx={{ display: { xs: "none", md: "block" }, width: 220, minWidth: 220, bgcolor: "#ffffff", borderRight: "1px solid #e2e8f0", overflowY: "auto", flexShrink: 0, py: "16px" }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", px: "20px", pb: "10px" }}>
-                Sections
-              </Typography>
-              {sectionNames.map(sectionName => {
-                const stats = getSectionStats(sections[sectionName])
-                const isComplete = stats.answered === stats.total && stats.total > 0
-                const hasFails = stats.failed > 0
-                const isPartial = stats.answered > 0 && stats.answered < stats.total
-                const isActive = activeSection === sectionName || (activeSection === null && sectionNames.indexOf(sectionName) === 0)
-
-                return (
-                  <Box key={sectionName} onClick={() => scrollToSection(sectionName)}
-                    sx={{
-                      display: "flex", alignItems: "center", gap: "10px",
-                      px: "16px", py: "9px", cursor: "pointer",
-                      borderLeft: "2px solid", borderLeftColor: isActive ? "primary.main" : "transparent",
-                      bgcolor: isActive ? "#f0f6ff" : "transparent",
-                      "&:hover": { bgcolor: isActive ? "#f0f6ff" : "#f8fafc" },
-                      transition: "all 0.15s"
-                    }}>
-                    {/* Status icon */}
-                    <Box sx={{
-                      width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 10, fontWeight: 600,
-                      bgcolor: isComplete && !hasFails ? "#dcfce7" : hasFails ? "#fee2e2" : isPartial ? "#fef3c7" : "#f1f5f9",
-                      color: isComplete && !hasFails ? "#15803d" : hasFails ? "#b91c1c" : isPartial ? "#b45309" : "#94a3b8"
-                    }}>
-                      {isComplete && !hasFails ? (
-                        <CheckCircleIcon sx={{ fontSize: 13 }} />
-                      ) : hasFails ? "!" : isPartial ? stats.answered : (
-                        <Typography sx={{ fontSize: 10, fontWeight: 600 }}>{sectionNames.indexOf(sectionName) + 1}</Typography>
-                      )}
-                    </Box>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, color: isActive ? "primary.main" : "#0f172a", lineHeight: 1.3 }}>
-                        {sectionName}
-                      </Typography>
-                      <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: "1px" }}>
-                        {stats.answered} of {stats.total}
-                        {hasFails ? ` · ${stats.failed} fail` : isComplete ? " · done" : ""}
-                      </Typography>
-                    </Box>
-                  </Box>
-                )
-              })}
-            </Box>
-          ) : null}
-
-          {/* Items column */}
-          <Box ref={itemsColumnRef} sx={{ flex: 1, overflowY: { xs: "visible", md: "auto" }, p: { xs: "16px 12px", md: "24px 28px" }, minWidth: 0 }}>
-            {totalItems === 0 ? (
-              <Box sx={{ py: 6, textAlign: "center" }}>
-                <Typography variant="body2" color="text.secondary">No checklist items. This check was created without a template.</Typography>
-              </Box>
-            ) : null}
-
-            {sectionNames.map(sectionName => {
-              return (
-              <Box key={sectionName} ref={(el: HTMLDivElement | null) => { sectionRefs.current[sectionName] = el }}
-                sx={{ mb: "8px" }}>
-                {sectionNames.length > 1 ? (
-                  <Box sx={{ px: "4px", py: "6px", mb: "8px" }}>
-                    <Typography sx={{
-                      fontSize: 10, fontWeight: 600, letterSpacing: "0.08em",
-                      textTransform: "uppercase", color: "#94a3b8"
-                    }}>
-                      {sectionName} · {getSectionStats(sections[sectionName]).answered}/{sections[sectionName].length}
+              {/* ── Zone 1: Needs attention — fix it HERE (the editable execution card, not a
+                  jump-back). Each item drops out the instant it's resolved. ─────────── */}
+              {needsAttention.length > 0 ? (
+                <Box sx={{ mb: "24px" }}>
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "6px" }}>
+                    <WarningAmberIcon sx={{ fontSize: 16, color: "#b45309" }} />
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: "#0f172a" }}>
+                      Needs attention ({needsAttention.length})
                     </Typography>
-                  </Box>
-                ) : null}
-                <Box sx={{ mb: "20px" }}>
-                  {sections[sectionName].map((item, idx) => renderItemCard(item, idx))}
-                </Box>
-              </Box>
-              )
-            })}
-
-            {/* Completion hint */}
-            {check.status === "IN_PROGRESS" && !allRequiredAnswered ? (
-              <Box sx={{ p: "12px 14px", borderRadius: "8px", bgcolor: "#fffbeb", border: "1px solid #fde68a" }}>
-                <Typography sx={{ fontSize: 12, color: "#92400e" }}>
-                  {check.items.filter(i => i.isRequired && !i.response).length} required item(s) still need a response before this check can be submitted.
-                </Typography>
-              </Box>
-            ) : null}
-
-            {/* Add ad-hoc item — dashed button at the bottom */}
-            {canExecute && check.status === "IN_PROGRESS" ? (
-              <Box
-                onClick={() => setAdHocOpen(true)}
-                sx={{
-                  mt: "8px", mb: "80px",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                  p: "11px 16px", width: "100%",
-                  border: "1.5px dashed #cbd5e1", borderRadius: "8px",
-                  color: "#64748b", fontSize: 12.5, fontWeight: 500, cursor: "pointer",
-                  bgcolor: "transparent", transition: "all 0.1s",
-                  "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "#f8fafc" }
-                }}>
-                <AddIcon sx={{ fontSize: 15 }} />
-                Add ad-hoc item
-              </Box>
-            ) : null}
-          </Box>
-
-          {/* Context column (240px on md+; full-width, stacked below items on xs) */}
-          <Box sx={{
-            width: { xs: "100%", md: 240 }, minWidth: { xs: 0, md: 240 },
-            bgcolor: "#ffffff",
-            borderLeft: { xs: "none", md: "1px solid #e2e8f0" },
-            borderTop: { xs: "1px solid #e2e8f0", md: "none" },
-            overflowY: { xs: "visible", md: "auto" }, flexShrink: 0, p: "20px",
-          }}>
-
-            {/* Check details */}
-            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
-              Details
-            </Typography>
-            {[
-              { label: "Site", value: check.site.name },
-              { label: "Template", value: check.template.name },
-              check.scheduledAt ? { label: "Scheduled", value: new Date(check.scheduledAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) } : null,
-              check.startedAt ? { label: "Elapsed", value: formatElapsed(check.startedAt) } : null,
-              check.assignee ? { label: "Engineer", value: check.assignee.displayName } : null,
-              check.passRate !== null ? { label: "Pass rate", value: `${check.passRate}%` } : null,
-            ].filter((row): row is DetailRow => row !== null).map((row) => (
-              <Box key={row.label} sx={{ display: "flex", justifyContent: "space-between", py: "6px", fontSize: 12, borderBottom: "1px solid #f1f5f9" }}>
-                <Typography sx={{ fontSize: 12, color: "#64748b" }}>{row.label}</Typography>
-                <Typography sx={{ fontSize: 12, color: "#0f172a", fontWeight: 400, textAlign: "right", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.value}</Typography>
-              </Box>
-            ))}
-
-            <Divider sx={{ my: 2 }} />
-
-            {/* Submit / review area */}
-            {check.status === "IN_PROGRESS" ? (
-              <Box sx={{ display: { xs: "none", md: "block" } }}>
-                <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
-                  Submit
-                </Typography>
-                <Box sx={{ bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", p: "12px", textAlign: "center" }}>
-                  <Typography sx={{ fontSize: 11.5, color: "#64748b", mb: "10px" }}>
-                    {allRequiredAnswered ? (
-                      <><strong style={{ color: "#15803d" }}>Ready to submit</strong> — all required items answered</>
-                    ) : (
-                      <><strong style={{ color: "#0f172a" }}>{check.items.filter(i => i.isRequired && !i.response).length}</strong> required item(s) remaining</>
-                    )}
+                  </Stack>
+                  <Typography sx={{ fontSize: 12, color: "#64748b", mb: "12px" }}>
+                    Answer, add a note or photo, or change the response right here — items clear as you resolve them.
                   </Typography>
-                  {!allRequiredAnswered ? (
-                    <Box sx={{ bgcolor: "#fef3c7", color: "#92400e", p: "6px 10px", borderRadius: "5px", fontSize: 11, mb: "10px" }}>
-                      Complete all required items first
-                    </Box>
-                  ) : sync.pendingCount > 0 ? (
-                    <Box sx={{ bgcolor: "#fef3c7", color: "#92400e", p: "6px 10px", borderRadius: "5px", fontSize: 11, mb: "10px" }}>
-                      {sync.pendingCount} change(s) still to sync — submit once saved
-                    </Box>
-                  ) : null}
-                  <Button fullWidth variant="contained" size="small"
-                    disabled={!allRequiredAnswered || sync.pendingCount > 0}
-                    onClick={() => setSubmitOpen(true)}
-                    sx={{ fontSize: 12, py: "10px" }}>
-                    Submit for review →
-                  </Button>
+                  {needsAttention.map((item, idx) => renderItemCard(item, idx))}
                 </Box>
+              ) : (
+                <Box sx={{ mb: "24px", display: "flex", alignItems: "center", gap: 1, bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", px: "14px", py: "12px" }}>
+                  <CheckCircleIcon sx={{ fontSize: 18, color: "#15803d" }} />
+                  <Typography sx={{ fontSize: 13, color: "#15803d", fontWeight: 500 }}>Nothing needs attention — every required item is answered and each failure has evidence.</Typography>
+                </Box>
+              )}
+
+              {/* ── Zone 2: Full checklist review — read-only final scan of every item ── */}
+              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "8px" }}>
+                Full checklist review
+              </Typography>
+              <Box sx={{ mb: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                {sectionNames.map(sectionName => (
+                  <Box key={sectionName} sx={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+                    {sectionNames.length > 1 ? (
+                      <Box sx={{ bgcolor: "#f8fafc", px: "12px", py: "8px", borderBottom: "1px solid #e2e8f0" }}>
+                        <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "#475569" }}>{sectionName}</Typography>
+                      </Box>
+                    ) : null}
+                    <Stack divider={<Divider />}>
+                      {sections[sectionName].map(item => {
+                        const r = respOf(item)
+                        const note = (drafts[item.id]?.notes ?? item.notes ?? "").trim()
+                        const photos = (item.attachments?.length ?? 0) + (sync.photosByItem[item.id]?.length ?? 0)
+                        return (
+                          <Stack key={item.id} direction="row" alignItems="center" spacing={1} sx={{ px: "12px", py: "9px", bgcolor: "#fff" }}>
+                            <StatusPill intent={resultIntent(r || null)}
+                              label={r === "NA" ? "N/A" : r === "PASS" ? "Pass" : r === "FAIL" ? "Fail" : "—"} size="sm" />
+                            <Typography sx={{ fontSize: 12.5, color: "#0f172a", flex: 1, minWidth: 0, lineHeight: 1.4 }}>{item.label}</Typography>
+                            {note ? <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 14, color: "#94a3b8" }} /></Tooltip> : null}
+                            {photos > 0 ? (
+                              <Stack direction="row" alignItems="center" spacing={0.3}>
+                                <CameraAltIcon sx={{ fontSize: 14, color: "#94a3b8" }} />
+                                <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{photos}</Typography>
+                              </Stack>
+                            ) : null}
+                          </Stack>
+                        )
+                      })}
+                    </Stack>
+                  </Box>
+                ))}
+              </Box>
+
+              {/* ── Zone 3: Submit ──────────────────────────────────────────── */}
+              {/* Stat tiles — shared design-language tile (secondary bg, accented value) */}
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)" }, gap: "10px", mb: "20px" }}>
+                {statTiles.map(t => (
+                  <StatTile key={t.label} label={t.label} value={t.value} accent={t.accent} />
+                ))}
+              </Box>
+
+              {/* Readiness banner — gates submit on all required items answered */}
+              {remainingRequired.length > 0 ? (
+                <Box sx={{ mb: "20px", display: "flex", alignItems: "center", gap: 1, bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", px: "14px", py: "12px" }}>
+                  <WarningAmberIcon sx={{ fontSize: 18, color: "#b45309" }} />
+                  <Typography sx={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                    {remainingRequired.length} required item{remainingRequired.length === 1 ? "" : "s"} still to answer before you can submit.
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ mb: "20px", display: "flex", alignItems: "center", gap: 1, bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", px: "14px", py: "12px" }}>
+                  <CheckCircleIcon sx={{ fontSize: 18, color: "#15803d" }} />
+                  <Typography sx={{ fontSize: 13, color: "#15803d", fontWeight: 500 }}>All required items answered — ready to submit.</Typography>
+                </Box>
+              )}
+
+              {/* Details */}
+              <Box sx={{ mb: "20px", border: "1px solid #e2e8f0", borderRadius: "10px", p: "12px 16px" }}>
+                {detailRows.map((row, i) => (
+                  <Box key={row.label} sx={{ display: "flex", justifyContent: "space-between", py: "6px", fontSize: 12, borderBottom: i < detailRows.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+                    <Typography sx={{ fontSize: 12, color: "#64748b" }}>{row.label}</Typography>
+                    <Typography sx={{ fontSize: 12, color: "#0f172a", textAlign: "right", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.value}</Typography>
+                  </Box>
+                ))}
+              </Box>
+
+              {/* Engineer summary */}
+              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "8px" }}>
+                Engineer summary (optional)
+              </Typography>
+              <TextField multiline minRows={3} fullWidth value={engineerSummary}
+                onChange={e => setEngineerSummary(e.target.value)}
+                placeholder="Overall observations from the visit…"
+                sx={{ mb: "20px", "& .MuiInputBase-root": { fontSize: { xs: 16, md: 13 } } }} />
+
+              {/* Submit (md+; xs uses the sticky bar below) */}
+              <Box sx={{ display: { xs: "none", md: "block" } }}>
+                {!allRequiredAnswered ? (
+                  <Typography sx={{ fontSize: 12, color: "#92400e", mb: "8px" }}>
+                    Answer the remaining {remainingRequired.length} required item{remainingRequired.length === 1 ? "" : "s"} to submit.
+                  </Typography>
+                ) : sync.pendingCount > 0 ? (
+                  <Typography sx={{ fontSize: 12, color: "#92400e", mb: "8px" }}>
+                    {sync.pendingCount} change(s) still syncing — submit once saved.
+                  </Typography>
+                ) : null}
+                <Button variant="contained" disableElevation disabled={!canSubmit || transitioning}
+                  onClick={handleSubmit} endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                  sx={{ fontSize: 13, py: "10px", px: "20px" }}>
+                  {transitioning ? "Submitting…" : "Submit for review"}
+                </Button>
+                <Typography sx={{ fontSize: 11.5, color: "#94a3b8", mt: "8px" }}>
+                  Sends for review and locks your answers.
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        ) : (
+          /* ── CHECKLIST BODY (full width) ─────────────────────────────── */
+          <>
+            {/* Sticky section header — current section + progress + jump menu */}
+            {showSticky ? (
+              <Box sx={{
+                position: { xs: "sticky", md: "static" }, top: 0, zIndex: 5, flexShrink: 0,
+                bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0",
+                px: { xs: "16px", md: "28px" }, py: "9px",
+                display: "flex", alignItems: "center", gap: 1,
+              }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {stickyName}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>
+                    {stickyStats.answered} of {stickyStats.total} answered
+                    {stickyStats.failed > 0 ? ` · ${stickyStats.failed} fail` : ""}
+                  </Typography>
+                </Box>
+                <Button size="small" endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 16 }} />}
+                  onClick={e => setSectionMenuAnchor(e.currentTarget)}
+                  sx={{ fontSize: 11.5, color: "#64748b", flexShrink: 0 }}>
+                  Jump to section
+                </Button>
+                <Menu anchorEl={sectionMenuAnchor} open={!!sectionMenuAnchor} onClose={() => setSectionMenuAnchor(null)}>
+                  {sectionNames.map(name => {
+                    const s = getSectionStats(sections[name])
+                    return (
+                      <MenuItem key={name} selected={name === stickyName}
+                        onClick={() => { setSectionMenuAnchor(null); scrollToSection(name) }}
+                        sx={{ fontSize: 13, gap: 2, justifyContent: "space-between" }}>
+                        <span>{name}</span>
+                        <Typography component="span" sx={{ fontSize: 11, color: s.failed > 0 ? "#b91c1c" : "#94a3b8" }}>
+                          {s.answered}/{s.total}{s.failed > 0 ? ` · ${s.failed} fail` : ""}
+                        </Typography>
+                      </MenuItem>
+                    )
+                  })}
+                </Menu>
               </Box>
             ) : null}
 
-            {check.status === "PENDING_REVIEW" ? (
-              <Box sx={{ display: { xs: "none", md: "block" } }}>
-                <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
-                  Review
-                </Typography>
-                <Stack spacing={1}>
-                  <Button fullWidth variant="contained" size="small"
-                    onClick={() => { setReviewAction("approve"); setReviewOpen(true) }}
-                    sx={{ fontSize: 12, py: "10px" }}>
-                    Approve check
-                  </Button>
-                  <Button fullWidth variant="outlined" size="small" color="warning"
-                    onClick={() => { setReviewAction("return"); setReviewOpen(true) }}
-                    sx={{ fontSize: 12 }}>
-                    Return for rework
-                  </Button>
-                </Stack>
-                {check.engineerSummary ? (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "8px" }}>
-                      Engineer summary
-                    </Typography>
-                    <Typography sx={{ fontSize: 12, color: "#334155", bgcolor: "#f8fafc", p: "10px", borderRadius: "6px", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-                      {check.engineerSummary}
-                    </Typography>
+            {/* Items column */}
+            <Box ref={itemsColumnRef} sx={{ flex: 1, overflowY: { xs: "visible", md: "auto" }, p: { xs: "16px 12px", md: "20px 28px" }, minWidth: 0 }}>
+              <Box sx={{ maxWidth: 900, mx: "auto" }}>
+                {totalItems === 0 ? (
+                  <Box sx={{ py: 6, textAlign: "center" }}>
+                    <Typography variant="body2" color="text.secondary">No checklist items. This check was created without a template.</Typography>
                   </Box>
                 ) : null}
-              </Box>
-            ) : null}
 
-            {/* Failed items summary */}
-            {failItems > 0 ? (
-              <Box sx={{ mt: 2 }}>
-                <Divider sx={{ mb: 2 }} />
-                <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
-                  Failed items ({failItems})
-                </Typography>
-                <Stack spacing={0.75}>
-                  {failedItems.slice(0, 5).map(item => (
-                    <Box key={item.id} sx={{ p: "8px 10px", bgcolor: "#fff5f5", borderRadius: "6px", border: "1px solid #fecaca" }}>
-                      <Typography sx={{ fontSize: 11.5, color: "#7f1d1d", lineHeight: 1.4 }}>{item.label}</Typography>
-                      {item.followOns.length > 0 ? (
-                        <Typography sx={{ fontSize: 10, color: "#64748b", mt: "2px" }}>{item.followOns.length} follow-on(s) created</Typography>
+                {sectionNames.map(sectionName => {
+                  const items = sections[sectionName]
+                  const stats = getSectionStats(items)
+                  const complete = stats.total > 0 && stats.answered === stats.total
+                  const collapsed = showSticky && complete && !expandedComplete.has(sectionName)
+                  const toggle = () => setExpandedComplete(prev => {
+                    const n = new Set(prev)
+                    if (n.has(sectionName)) n.delete(sectionName); else n.add(sectionName)
+                    return n
+                  })
+                  return (
+                    <Box key={sectionName} ref={(el: HTMLDivElement | null) => { sectionRefs.current[sectionName] = el }}
+                      sx={{ mb: "8px", scrollMarginTop: { xs: "120px", md: "16px" } }}>
+                      {/* Section header — slim Complete bar when done, else label (+ collapse toggle) */}
+                      {showSticky ? (
+                        collapsed ? (
+                          <Box onClick={toggle} sx={{
+                            display: "flex", alignItems: "center", gap: 1, cursor: "pointer",
+                            px: "12px", py: "9px", mb: "8px", borderRadius: "8px",
+                            bgcolor: stats.failed > 0 ? "#fff5f5" : "#f0fdf4",
+                            border: `1px solid ${stats.failed > 0 ? "#fecaca" : "#bbf7d0"}`,
+                            "&:hover": { borderColor: stats.failed > 0 ? "#fca5a5" : "#86efac" },
+                          }}>
+                            <CheckCircleIcon sx={{ fontSize: 15, color: stats.failed > 0 ? "#b91c1c" : "#15803d" }} />
+                            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "#0f172a", flex: 1, minWidth: 0 }}>
+                              {sectionName}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11.5, color: stats.failed > 0 ? "#b91c1c" : "#15803d", fontWeight: 500 }}>
+                              {stats.failed > 0 ? `Complete · ${stats.failed} fail` : "Complete"} · {stats.answered}/{stats.total}
+                            </Typography>
+                            <ExpandMoreIcon sx={{ fontSize: 18, color: "#94a3b8" }} />
+                          </Box>
+                        ) : (
+                          <Stack direction="row" alignItems="center" spacing={1} sx={{ px: "4px", py: "6px", mb: "8px" }}>
+                            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#94a3b8", flex: 1 }}>
+                              {sectionName} · {stats.answered}/{stats.total}{stats.failed > 0 ? ` · ${stats.failed} fail` : ""}
+                            </Typography>
+                            {complete ? (
+                              <Button size="small" onClick={toggle} sx={{ fontSize: 11, color: "#64748b", minWidth: 0, py: 0 }}>Collapse</Button>
+                            ) : null}
+                          </Stack>
+                        )
+                      ) : null}
+                      {!collapsed ? (
+                        <Box sx={{ mb: "12px" }}>
+                          {items.map((item, idx) => renderItemCard(item, idx))}
+                        </Box>
                       ) : null}
                     </Box>
-                  ))}
-                  {failItems > 5 ? (
-                    <Typography sx={{ fontSize: 11, color: "#64748b", textAlign: "center" }}>+{failItems - 5} more</Typography>
-                  ) : null}
-                </Stack>
-              </Box>
-            ) : null}
-          </Box>
-        </Box>
+                  )
+                })}
 
-        {/* ── Sticky action bar (xs only) — keeps submit/review reachable
-            without scrolling the whole form; the in-panel block above is
-            hidden on xs to avoid duplication. ──────────────────────────── */}
-        <Box sx={{
-          display: { xs: "flex", md: "none" },
-          position: "sticky", bottom: 0, zIndex: 2, flexShrink: 0,
-          bgcolor: "#ffffff", borderTop: "1px solid #e2e8f0",
-          p: "12px", gap: 1, alignItems: "center",
-          boxShadow: "0 -2px 8px rgba(15,23,42,0.06)",
-        }}>
-          {check.status === "IN_PROGRESS" ? (
-            <Stack spacing={0.5} sx={{ width: "100%" }}>
-              {!allRequiredAnswered ? (
-                <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
-                  {check.items.filter(i => i.isRequired && !i.response).length} required item(s) remaining
-                </Typography>
-              ) : sync.pendingCount > 0 ? (
-                <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
-                  {sync.pendingCount} change(s) still to sync…
-                </Typography>
-              ) : null}
-              <Button fullWidth variant="contained" size="large"
-                disabled={!allRequiredAnswered || sync.pendingCount > 0}
-                onClick={() => setSubmitOpen(true)}
-                sx={{ py: "12px", fontSize: 15 }}>
-                Submit for review →
-              </Button>
-            </Stack>
-          ) : null}
-          {check.status === "PENDING_REVIEW" ? (
-            <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
-              <Button fullWidth variant="outlined" color="warning"
-                onClick={() => { setReviewAction("return"); setReviewOpen(true) }}
-                sx={{ py: "11px", fontSize: 14 }}>
-                Return
-              </Button>
-              <Button fullWidth variant="contained"
-                onClick={() => { setReviewAction("approve"); setReviewOpen(true) }}
-                sx={{ py: "11px", fontSize: 14 }}>
-                Approve
-              </Button>
-            </Stack>
-          ) : null}
-        </Box>
+                {/* Completion hint */}
+                {!allRequiredAnswered ? (
+                  <Box sx={{ p: "12px 14px", borderRadius: "8px", bgcolor: "#fffbeb", border: "1px solid #fde68a" }}>
+                    <Typography sx={{ fontSize: 12, color: "#92400e" }}>
+                      {remainingRequired.length} required item(s) still need a response before this check can be submitted.
+                    </Typography>
+                  </Box>
+                ) : null}
+
+                {/* Add ad-hoc item */}
+                {canExecute ? (
+                  <Box onClick={() => setAdHocOpen(true)} sx={{
+                    mt: "8px", mb: { xs: "96px", md: "8px" },
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                    p: "11px 16px", width: "100%",
+                    border: "1.5px dashed #cbd5e1", borderRadius: "8px",
+                    color: "#64748b", fontSize: 12.5, fontWeight: 500, cursor: "pointer",
+                    bgcolor: "transparent", transition: "all 0.1s",
+                    "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "#f8fafc" }
+                  }}>
+                    <AddIcon sx={{ fontSize: 15 }} />
+                    Add ad-hoc item
+                  </Box>
+                ) : null}
+              </Box>
+            </Box>
+          </>
+        )}
+
+        {/* ── Sticky action bar (xs only) — Review&submit, or submit from the review screen */}
+        {canExecute ? (
+          <Box sx={{
+            display: { xs: "flex", md: "none" },
+            position: "sticky", bottom: 0, zIndex: 6, flexShrink: 0,
+            bgcolor: "#ffffff", borderTop: "1px solid #e2e8f0",
+            p: "12px", gap: 1, alignItems: "center",
+            boxShadow: "0 -2px 8px rgba(15,23,42,0.06)",
+          }}>
+            {reviewMode ? (
+              <Stack spacing={0.5} sx={{ width: "100%" }}>
+                {!allRequiredAnswered ? (
+                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                    Answer {remainingRequired.length} required item{remainingRequired.length === 1 ? "" : "s"} to submit
+                  </Typography>
+                ) : sync.pendingCount > 0 ? (
+                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                    {sync.pendingCount} change(s) still syncing…
+                  </Typography>
+                ) : (
+                  <Typography sx={{ fontSize: 11, color: "#94a3b8", textAlign: "center" }}>
+                    Sends for review and locks your answers.
+                  </Typography>
+                )}
+                <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
+                  <Button variant="outlined" onClick={() => setReviewMode(false)} sx={{ py: "11px", fontSize: 14, flexShrink: 0 }}>
+                    Back
+                  </Button>
+                  <Button fullWidth variant="contained" disabled={!canSubmit || transitioning} onClick={handleSubmit} sx={{ py: "11px", fontSize: 14 }}>
+                    {transitioning ? "Submitting…" : "Submit"}
+                  </Button>
+                </Stack>
+              </Stack>
+            ) : (
+              <Stack spacing={0.5} sx={{ width: "100%" }}>
+                {!allRequiredAnswered ? (
+                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                    {remainingRequired.length} required item(s) remaining
+                  </Typography>
+                ) : sync.pendingCount > 0 ? (
+                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                    {sync.pendingCount} change(s) still to sync…
+                  </Typography>
+                ) : null}
+                <Button fullWidth variant="contained" size="large"
+                  endIcon={<ArrowForwardIcon sx={{ fontSize: 18 }} />}
+                  onClick={() => setReviewMode(true)}
+                  sx={{ py: "12px", fontSize: 15 }}>
+                  Review &amp; submit
+                </Button>
+              </Stack>
+            )}
+          </Box>
+        ) : null}
 
         {dialogs}
         <AttachmentPreviewModal open={!!previewAtt} attachment={previewAtt} onClose={() => setPreviewAtt(null)} />
+        <PhotoCaptureDialog
+          open={!!photoPreview}
+          url={photoPreview?.url ?? null}
+          caption={photoPreview?.caption ?? ""}
+          onCaptionChange={(value) => setPhotoPreview(prev => (prev ? { ...prev, caption: value } : prev))}
+          onRetake={retakePreviewPhoto}
+          onDiscard={advancePhotoPreview}
+          onAttach={attachPreviewPhoto}
+          attaching={photoAttaching}
+          recommended={(() => {
+            const it = photoPreview ? check.items.find(i => i.id === photoPreview.itemId) : null
+            return it ? respOf(it) === "FAIL" : false
+          })()}
+        />
       </Box>
     )
   }
@@ -1405,6 +1592,78 @@ export default function CheckDetailPage() {
     propertiesRows.push({ label: "Completed", value: <Typography variant="caption">{new Date(check.completedAt).toLocaleDateString("en-GB")}</Typography> })
   }
   propertiesRows.push({ label: "Created", value: <Typography variant="caption">{new Date(check.createdAt).toLocaleDateString("en-GB")}</Typography> })
+
+  // ── DRAFT / PRE-START PAGE (engineer journey — focused context) ─────────
+  // For pre-start states (DRAFT/SCHEDULED/ASSIGNED) the engineer gets a decluttered
+  // briefing — what the visit covers + a single Start action — NOT the inert full
+  // checklist. Gated on canStart (pre-start ∧ execute role), so non-execute viewers
+  // (e.g. CLIENT_VIEWER) fall through to the unchanged read-only standard layout below.
+  if (canStart) {
+    const est = formatEst(check.template.estimatedMinutes)
+    const draftTiles: { label: string; value: React.ReactNode }[] = [
+      { label: "Items", value: totalItems },
+      { label: "Sections", value: sectionNames.length },
+      { label: "Scheduled", value: formatScheduledShort(check.scheduledAt) },
+      ...(est ? [{ label: "Est. time", value: est }] : []),
+    ]
+    return (
+      <Box sx={{ maxWidth: 720, mx: "auto", pb: "24px" }}>
+        {/* Header — title + site/assignee + status chip + Start (ref lives in the breadcrumb) */}
+        <Stack direction="row" alignItems="flex-start" spacing={2} sx={{ mb: "22px" }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, color: "#0f172a", lineHeight: 1.25 }}>
+              {check.title}
+            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: "8px", flexWrap: "wrap", rowGap: "6px" }}>
+              <StatusPill value={check.status} label={STATUS_LABELS[check.status] ?? check.status} size="sm" />
+              <Typography sx={{ fontSize: 13.5, color: "#64748b" }}>
+                {check.site.name} · {check.assignee?.displayName ?? "Unassigned"}
+              </Typography>
+            </Stack>
+          </Box>
+          <Button variant="contained" disableElevation size="small" onClick={handleStart} disabled={transitioning}
+            sx={{ flexShrink: 0, fontSize: 13, py: "9px", px: "18px" }}>
+            {transitioning ? "Starting…" : "Start check"}
+          </Button>
+        </Stack>
+
+        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+
+        {/* Context stat tiles (Est. time dropped gracefully when the template has none) */}
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: `repeat(${draftTiles.length}, 1fr)` }, gap: "10px", mb: "26px" }}>
+          {draftTiles.map(t => <StatTile key={t.label} label={t.label} value={t.value} />)}
+        </Box>
+
+        {/* What this check covers — section summary (icons are a best-effort heuristic) */}
+        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
+          What this check covers
+        </Typography>
+        <Stack spacing={1} sx={{ mb: "24px" }}>
+          {sectionNames.map(name => {
+            const Icon = sectionIcon(name)
+            const count = sections[name].length
+            return (
+              <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", px: "14px", py: "12px" }}>
+                <Box sx={{ width: 34, height: 34, borderRadius: "8px", bgcolor: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon sx={{ fontSize: 18, color: "#1d4ed8" }} />
+                </Box>
+                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#0f172a", flex: 1, minWidth: 0 }}>{name}</Typography>
+                <Typography sx={{ fontSize: 13, color: "#64748b", flexShrink: 0 }}>{count} item{count === 1 ? "" : "s"}</Typography>
+              </Box>
+            )
+          })}
+        </Stack>
+
+        {/* Offline reassurance */}
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", px: "14px", py: "12px" }}>
+          <InfoOutlinedIcon sx={{ fontSize: 17, color: "#94a3b8", mt: "1px", flexShrink: 0 }} />
+          <Typography sx={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+            Your answers save automatically as you go. You can pause and resume any time — even offline.
+          </Typography>
+        </Box>
+      </Box>
+    )
+  }
 
   // ── STANDARD LAYOUT (all other statuses) ──────────────────────────────
   return (

@@ -330,13 +330,20 @@ function drawFooters(doc: PDFKit.PDFDocument, m: CheckReportModel): void {
   const generated = `Generated ${fmtDateTime(m.generatedAt)}`;
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(range.start + i);
-    const y = doc.page.height - doc.page.margins.bottom + 18;
+    const bottomMargin = doc.page.margins.bottom;
+    const y = doc.page.height - bottomMargin + 18;
     const w = doc.page.width - MARGIN * 2;
+    // The footer sits 18pt INTO the bottom margin. Writing text below the content area
+    // makes pdfkit's line-wrapper auto-paginate (continueOnNewPage), appending a blank
+    // page per footer line. Temporarily zero the bottom margin so the whole page is
+    // writable and the stamp never triggers a page break; restore it afterwards.
+    doc.page.margins.bottom = 0;
     doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.faint);
     doc.text(generated, MARGIN, y, { width: w / 2, lineBreak: false });
     doc.text(`${m.reference}   ·   Page ${i + 1} of ${range.count}`, MARGIN + w / 2, y, {
       width: w / 2, align: "right", lineBreak: false
     });
+    doc.page.margins.bottom = bottomMargin;
   }
 }
 
