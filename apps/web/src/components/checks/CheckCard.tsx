@@ -1,8 +1,12 @@
 import React from "react"
-import { Box, Stack, Typography } from "@mui/material"
+import { Box, CircularProgress, IconButton, Stack, Tooltip, Typography } from "@mui/material"
+import DownloadIcon from "@mui/icons-material/Download"
 import {
   AssigneeCell,
   IntentPill,
+  StatusPill,
+  ragTokens,
+  resolveIntent,
   semanticTokens,
   type SemanticIntent,
 } from "../shared"
@@ -35,7 +39,10 @@ export type Check = {
 }
 
 export type CheckView = "manager" | "engineer" | "viewer"
-export type CheckCardVariant = "review" | "progress" | "upcoming" | "draft"
+// "history" is the archive variant (CheckHistoryPage) — terminal checks
+// (COMPLETED/CLOSED/CANCELLED) shown as the SAME card as the active landing, with a
+// status pill + completed date + pass rate + fails + per-card Download Report.
+export type CheckCardVariant = "review" | "progress" | "upcoming" | "draft" | "history"
 
 // Terminal statuses (COMPLETED/CLOSED/CANCELLED) never appear on the active landing —
 // they move to the Part 2 History page; DRAFT surfaces only in the manager drafts
@@ -49,6 +56,17 @@ export function daysUntil(iso: string | null): number | null {
   const t = new Date(iso).getTime()
   if (Number.isNaN(t)) return null
   return Math.floor((t - Date.now()) / DAY_MS)
+}
+
+// Effective "completed" date for a terminal (archive) check — completedAt is set on
+// completion and retained through CLOSED; the fallbacks cover any legacy/edge row that
+// reached a terminal state without one. Drives the history card's date, default sort
+// and the window filter (CheckHistoryPage), and the date shown on the history variant.
+export function effectiveCompleted(c: Check): Date | null {
+  const iso = c.completedAt ?? c.closedAt ?? c.submittedAt ?? c.updatedAt
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
 // Null-dated active work counts as upcoming (it's live work still needing a date) and
@@ -119,11 +137,21 @@ export function dueState(iso: string | null): { label: string; intent: SemanticI
   return { label: dateLabel, intent: "neutral" }
 }
 
-const ACCENT: Record<CheckCardVariant, string> = {
+const ACCENT: Record<Exclude<CheckCardVariant, "history">, string> = {
   review: semanticTokens.warning.text, // amber
   progress: semanticTokens.active.text, // blue
   upcoming: semanticTokens.neutral.text, // slate
   draft: semanticTokens.neutral.text,
+}
+
+// History cards aren't a single accent — they colour-code by terminal status (green
+// COMPLETED / slate CLOSED / red CANCELLED) via the shared intent scale, so the archive
+// reads its outcome at a glance. resolveIntent maps each terminal status to that hue.
+const TERMINAL_LABEL: Record<string, string> = { COMPLETED: "Completed", CLOSED: "Closed", CANCELLED: "Cancelled" }
+
+// Pass-rate -> RAG band (matches the prior history table): >=80 green, >=60 amber, else red.
+function passRateRag(v: number) {
+  return v >= 80 ? ragTokens.GREEN : v >= 60 ? ragTokens.AMBER : ragTokens.RED
 }
 
 function IntentChip({ intent, label }: { intent: SemanticIntent; label: string }) {
@@ -137,22 +165,42 @@ export function CheckCard({
   check,
   variant,
   onOpen,
+  onDownloadReport,
+  downloading,
 }: {
   check: Check
   variant: CheckCardVariant
+  // eslint-disable-next-line no-unused-vars
   onOpen: (id: string) => void
+  // History variant only — the per-card Download Report action + its in-flight state.
+  // Logic/state stays in the page (CheckHistoryPage); the card just renders + delegates.
+  // eslint-disable-next-line no-unused-vars
+  onDownloadReport?: (check: Check) => void
+  downloading?: boolean
 }) {
   const fail = variant === "review" ? failCount(check.items) : null
   const due = variant === "upcoming" ? dueState(check.scheduledAt) : null
   const { answered, total } = progressFraction(check.items)
   const submitted = variant === "review" ? formatRelativeTime(check.submittedAt ?? check.createdAt) : null
 
+  // History-variant derived signals: status accent + pill, completed date, pass rate, fails.
+  const isHistory = variant === "history"
+  const isCancelled = check.status === "CANCELLED"
+  const accent = isHistory ? semanticTokens[resolveIntent(check.status)].text : ACCENT[variant]
+  const completedDate = isHistory ? effectiveCompleted(check) : null
+  const completedLabel = completedDate
+    ? completedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+    : null
+  // Cancelled checks were never scored -> pass rate "—" (never a misleading 0%) and no fails.
+  const passRate = isCancelled ? null : check.passRate
+  const fails = isHistory && !isCancelled ? check.items.filter((i) => i.response === "FAIL").length : 0
+
   return (
     <Box
       onClick={() => onOpen(check.id)}
       sx={{
         border: "1px solid #e2e8f0",
-        borderLeft: `3px solid ${ACCENT[variant]}`,
+        borderLeft: `3px solid ${accent}`,
         borderRadius: "8px",
         bgcolor: "#ffffff",
         px: { xs: 1.5, sm: 2 },
@@ -177,6 +225,9 @@ export function CheckCard({
           {due ? <IntentChip intent={due.intent} label={due.label} /> : null}
           {submitted ? (
             <Typography sx={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>{submitted}</Typography>
+          ) : null}
+          {isHistory ? (
+            <StatusPill value={check.status} label={TERMINAL_LABEL[check.status] ?? check.status} size="sm" />
           ) : null}
         </Box>
       </Stack>
@@ -243,6 +294,42 @@ export function CheckCard({
             />
           </Box>
         </Box>
+      ) : null}
+
+      {variant === "history" ? (
+        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{completedLabel ?? "—"}</Typography>
+          {passRate == null ? (
+            // Cancelled / never-scored -> "—", never a misleading 0%.
+            <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>—</Typography>
+          ) : (
+            <IntentPill {...passRateRag(passRate)} label={`${Math.round(passRate)}%`} size="sm" />
+          )}
+          {!isCancelled ? (
+            <Typography
+              sx={{ fontSize: 11.5, fontWeight: fails > 0 ? 600 : 400, color: fails > 0 ? ragTokens.RED.text : "#94a3b8" }}
+            >
+              {fails} fail{fails === 1 ? "" : "s"}
+            </Typography>
+          ) : null}
+          {/* Cancelled checks have nothing to report -> no download affordance. */}
+          {!isCancelled && onDownloadReport ? (
+            <Box sx={{ ml: "auto" }} onClick={(e) => e.stopPropagation()}>
+              <Tooltip title="Download report (PDF)">
+                <span>
+                  <IconButton
+                    size="small"
+                    disabled={!!downloading}
+                    onClick={() => onDownloadReport(check)}
+                    sx={{ color: "#64748b", "&:hover": { color: "#1d4ed8", bgcolor: "#e8f1ff" } }}
+                  >
+                    {downloading ? <CircularProgress size={16} /> : <DownloadIcon sx={{ fontSize: 16 }} />}
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
+          ) : null}
+        </Stack>
       ) : null}
     </Box>
   )

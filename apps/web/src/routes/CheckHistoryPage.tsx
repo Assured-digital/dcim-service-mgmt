@@ -3,122 +3,116 @@ import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Box, Button, Card, CircularProgress, IconButton, MenuItem, Snackbar, TextField,
-  Tooltip, Typography, useMediaQuery, useTheme
+  Alert, Box, Button, InputAdornment, MenuItem, Pagination, Snackbar, Stack,
+  TextField, Tooltip, Typography
 } from "@mui/material"
-import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
-import DownloadIcon from "@mui/icons-material/Download"
+import FileDownloadIcon from "@mui/icons-material/FileDownload"
+import SearchIcon from "@mui/icons-material/Search"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
-import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
-import { StatusPill, ragTokens } from "../components/shared"
-import { type Check } from "../components/checks/CheckCard"
+import { CheckCard, effectiveCompleted, type Check } from "../components/checks/CheckCard"
 import { downloadCheckReport } from "../lib/checkReport"
 
 // History = the archive of finished checks (the inverse of the active landing's
 // partitionChecks filter). Reuses the SAME GET /checks payload + query cache as the
 // landing — listForClient returns every status; the landing keeps the active set,
-// this page keeps the terminal set. This is the reporting surface; the per-check
-// Download Report (Step 4) will land in the placeholder column below.
-// CANCELLED is included so abandoned checks remain findable in the archive (they
-// appear on neither the active landing nor as a completed record otherwise). They
-// have no completedAt and no meaningful pass rate — the columns below render "—".
+// this page keeps the terminal set, presented as the SAME CheckCard (variant="history")
+// so the archive reads as the same surface. The volume concern is handled by pagination
+// (never the whole archive at once), so the card view scales. This is the reporting
+// surface; the per-card Download Report + CSV export are the reporting actions.
+// CANCELLED is included so abandoned checks remain findable (they appear on neither the
+// active landing nor as a completed record otherwise) — no report, "—" pass rate.
 const TERMINAL_STATUSES = new Set(["COMPLETED", "CLOSED", "CANCELLED"])
 const STATUS_LABELS: Record<string, string> = { COMPLETED: "Completed", CLOSED: "Closed", CANCELLED: "Cancelled" }
-
-// Effective "completed" date for a terminal check — completedAt is set on completion
-// and retained through CLOSED; the fallbacks cover any legacy/edge row that reached a
-// terminal state without one. Used for the column, the default sort and the window.
-function effectiveCompleted(c: Check): Date | null {
-  const iso = c.completedAt ?? c.closedAt ?? c.submittedAt ?? c.updatedAt
-  if (!iso) return null
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
-function failCount(items: { response: string | null }[]): number {
-  return items.filter((i) => i.response === "FAIL").length
-}
 
 // Default to a bounded window so history never loads unbounded; "All time" is the
 // show-all escape hatch. (v1 — a full date-range picker can follow.)
 const WINDOW_DAYS: Record<string, number | null> = { "90d": 90, "365d": 365, all: null }
 const DAY_MS = 86_400_000
 
-const HistoryToolbar = makeGridToolbar("checks-history")
+// Each page is a bounded, modest set of cards regardless of total archive size.
+const PAGE_SIZE = 16
 
-// Static columns. The Report column is appended inside the component so its cell can
-// reach the per-row download handler + downloading state (the old placeholder lived here).
-const baseColumns: GridColDef<Check>[] = [
-  {
-    field: "reference", headerName: "Ref", width: 120,
-    renderCell: (p) => (
-      <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#475569" }}>
-        {p.value as string}
-      </Typography>
-    ),
+type SortKey = "completed" | "passRate" | "site"
+
+function failCount(items: { response: string | null }[]): number {
+  return items.filter((i) => i.response === "FAIL").length
+}
+
+// Sort comparators — the reporting orders a table's column headers would have given.
+// Cancelled/never-scored checks (null pass rate) sink to the end of a pass-rate sort;
+// site-less checks sink to the end of a site sort.
+// eslint-disable-next-line no-unused-vars
+const SORTERS: Record<SortKey, (a: Check, b: Check) => number> = {
+  completed: (a, b) => (effectiveCompleted(b)?.getTime() ?? 0) - (effectiveCompleted(a)?.getTime() ?? 0),
+  passRate: (a, b) => {
+    const av = a.status === "CANCELLED" ? null : a.passRate
+    const bv = b.status === "CANCELLED" ? null : b.passRate
+    if (av == null && bv == null) return 0
+    if (av == null) return 1
+    if (bv == null) return -1
+    return av - bv // low -> high: surfaces the checks that need attention first
   },
-  {
-    field: "title", headerName: "Title", flex: 1, minWidth: 200,
-    renderCell: (p: GridRenderCellParams<Check>) => (
-      <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>
-        {p.value as string}
-      </Typography>
-    ),
+  site: (a, b) => {
+    const an = a.site?.name ?? ""
+    const bn = b.site?.name ?? ""
+    if (!an && !bn) return 0
+    if (!an) return 1 // site-less checks sink to the end
+    if (!bn) return -1
+    return an.localeCompare(bn)
   },
-  {
-    field: "site", headerName: "Site", width: 150,
-    valueGetter: (_v, row) => row.site?.name ?? "—",
-  },
-  {
-    field: "template", headerName: "Template", width: 170,
-    valueGetter: (_v, row) => row.template?.name ?? "—",
-  },
-  {
-    field: "assignee", headerName: "Engineer", width: 150,
-    valueGetter: (_v, row) => row.assignee?.displayName ?? "Unassigned",
-  },
-  {
-    field: "completedAt", headerName: "Completed", width: 130, type: "date",
-    valueGetter: (_v, row) => effectiveCompleted(row),
-    renderCell: (p) => (
-      <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>
-        {p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}
-      </Typography>
-    ),
-  },
-  {
-    field: "passRate", headerName: "Pass rate", width: 110, type: "number", align: "right", headerAlign: "right",
-    renderCell: (p) => {
-      const v = p.row.passRate
-      // Cancelled checks were never scored -> "—", never a misleading 0%/value.
-      if (p.row.status === "CANCELLED" || v == null) return <Typography sx={{ fontSize: 12.5, color: "#94a3b8" }}>—</Typography>
-      const color = v >= 80 ? ragTokens.GREEN.text : v >= 60 ? ragTokens.AMBER.text : ragTokens.RED.text
-      return <Typography sx={{ fontSize: 12.5, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{Math.round(v)}%</Typography>
-    },
-  },
-  {
-    field: "fails", headerName: "Fails", width: 90, type: "number", align: "right", headerAlign: "right",
-    // null for cancelled -> sorts as empty and renders "—" (no responses to fail).
-    valueGetter: (_v, row) => row.status === "CANCELLED" ? null : failCount(row.items),
-    renderCell: (p) => {
-      if (p.row.status === "CANCELLED" || p.value == null) return <Typography sx={{ fontSize: 12.5, color: "#94a3b8" }}>—</Typography>
-      const n = p.value as number
-      return <Typography sx={{ fontSize: 12.5, fontWeight: n > 0 ? 700 : 500, color: n > 0 ? ragTokens.RED.text : "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{n}</Typography>
-    },
-  },
-  {
-    field: "status", headerName: "Status", width: 130,
-    renderCell: (p) => <StatusPill value={p.value as string} label={STATUS_LABELS[p.value as string] ?? (p.value as string)} size="sm" />,
-  },
-]
+}
+
+// CSV cell — quote + escape anything containing a comma, quote or newline.
+function csvCell(v: string | number | null | undefined): string {
+  const s = v == null ? "" : String(v)
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+// Export the FULL filtered/sorted set (every page, not just the visible one) — the
+// reporting export the DataGrid toolbar used to give. BOM + CRLF so Excel opens it clean.
+function exportCsv(rows: Check[]) {
+  const header = ["Ref", "Title", "Site", "Template", "Engineer", "Completed", "Pass rate", "Fails", "Status"]
+  const lines = [header.join(",")]
+  for (const c of rows) {
+    const d = effectiveCompleted(c)
+    const cancelled = c.status === "CANCELLED"
+    lines.push([
+      csvCell(c.reference),
+      csvCell(c.title),
+      csvCell(c.site?.name ?? ""),
+      csvCell(c.template?.name ?? ""),
+      csvCell(c.assignee?.displayName ?? "Unassigned"),
+      csvCell(d ? d.toLocaleDateString("en-GB") : ""),
+      csvCell(cancelled || c.passRate == null ? "" : `${Math.round(c.passRate)}%`),
+      csvCell(cancelled ? "" : failCount(c.items)),
+      csvCell(STATUS_LABELS[c.status] ?? c.status),
+    ].join(","))
+  }
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `checks-history-${new Date().toISOString().split("T")[0]}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(url)
+}
+
+const selectSx = {
+  minWidth: 168,
+  "& .MuiOutlinedInput-root": { bgcolor: "#ffffff" },
+  "& .MuiSelect-select": { fontSize: 12, fontWeight: 500, color: "#475569", py: "8.5px" },
+}
 
 export default function CheckHistoryPage() {
   const navigate = useNavigate()
-  const theme = useTheme()
-  const isSmall = useMediaQuery(theme.breakpoints.down("sm"))
   const [windowKey, setWindowKey] = React.useState<keyof typeof WINDOW_DAYS>("90d")
-  // Per-row report download: which row is generating + a transient error toast. The PDF is
+  const [sortKey, setSortKey] = React.useState<SortKey>("completed")
+  const [search, setSearch] = React.useState("")
+  const [page, setPage] = React.useState(1)
+  // Per-card report download: which row is generating + a transient error toast. The PDF is
   // generated server-side on demand and streamed back through the authed api client.
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null)
   const [reportError, setReportError] = React.useState<string | null>(null)
@@ -142,35 +136,11 @@ export default function CheckHistoryPage() {
     }
   }
 
-  // Report column lives here so its cell can reach the handler + downloading state.
-  // Cancelled checks have nothing to report -> no affordance (matches the columns above).
-  const columns = React.useMemo<GridColDef<Check>[]>(() => [
-    ...baseColumns,
-    {
-      field: "report", headerName: "Report", width: 90, sortable: false, filterable: false, disableExport: true,
-      renderCell: (p: GridRenderCellParams<Check>) => p.row.status === "CANCELLED" ? null : (
-        <Box onClick={(e) => e.stopPropagation()}>
-          <Tooltip title="Download report (PDF)">
-            <span>
-              <IconButton
-                size="small"
-                disabled={!!downloadingId}
-                onClick={() => handleDownloadReport(p.row)}
-              >
-                {downloadingId === p.row.id
-                  ? <CircularProgress size={16} />
-                  : <DownloadIcon sx={{ fontSize: 16 }} />}
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Box>
-      ),
-    },
-  ], [downloadingId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const rows = React.useMemo(() => {
+  // Terminal set, filtered by window + search, then sorted. Pagination slices this below.
+  const filtered = React.useMemo(() => {
     const days = WINDOW_DAYS[windowKey]
     const cutoff = days == null ? null : new Date(Date.now() - days * DAY_MS)
+    const q = search.trim().toLowerCase()
     return (data ?? [])
       .filter((c) => TERMINAL_STATUSES.has(c.status))
       .filter((c) => {
@@ -178,74 +148,145 @@ export default function CheckHistoryPage() {
         const d = effectiveCompleted(c)
         return d ? d >= cutoff : false
       })
-  }, [data, windowKey])
+      .filter((c) => {
+        if (!q) return true
+        return (
+          c.reference.toLowerCase().includes(q) ||
+          c.title.toLowerCase().includes(q) ||
+          (c.site?.name ?? "").toLowerCase().includes(q)
+        )
+      })
+      .sort(SORTERS[sortKey])
+  }, [data, windowKey, search, sortKey])
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  // Any filter/sort change re-pages to the first page (the active set just changed).
+  const resetPage = () => setPage(1)
 
   return (
-    <Box>
-      <Card>
-        <Box
-          sx={{
-            borderBottom: "1px solid #e2e8f0",
-            px: 2, py: 1.25,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            gap: 1.5, flexWrap: "wrap",
-          }}
-        >
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {/* Header — mirrors the active landing: back + context left, actions right */}
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        alignItems={{ xs: "stretch", sm: "center" }}
+        spacing={1.5}
+      >
+        <Tooltip title="Back to active checks">
           <Button
             size="small"
+            variant="outlined"
             startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
             onClick={() => navigate("/checks")}
             sx={{ fontSize: 12 }}
           >
             Active checks
           </Button>
-          <TextField
-            select
-            size="small"
-            label="Window"
-            value={windowKey}
-            onChange={(e) => setWindowKey(e.target.value as keyof typeof WINDOW_DAYS)}
-            sx={{ minWidth: 160 }}
-          >
-            <MenuItem value="90d">Last 90 days</MenuItem>
-            <MenuItem value="365d">Last 12 months</MenuItem>
-            <MenuItem value="all">All time</MenuItem>
-          </TextField>
-        </Box>
+        </Tooltip>
+        <Typography
+          sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 20, fontWeight: 700, color: "#0f172a", flex: 1 }}
+        >
+          Check history
+        </Typography>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
+          disabled={filtered.length === 0}
+          onClick={() => exportCsv(filtered)}
+          sx={{ fontSize: 12 }}
+        >
+          Export CSV
+        </Button>
+      </Stack>
 
-        {isLoading ? <Box sx={{ p: 2 }}><LoadingState /></Box> : null}
-        {error ? <Box sx={{ p: 2 }}><ErrorState title="Failed to load check history" /></Box> : null}
-        {!isLoading && !error && rows.length === 0 ? (
-          <Box sx={{ p: 2 }}>
-            <EmptyState
-              title="No completed checks"
-              detail={windowKey === "all"
-                ? "No checks have been completed or closed yet."
-                : "No checks completed in this window. Widen the window to see older records."}
-            />
-          </Box>
-        ) : null}
+      {/* Controls — search (ref / title / site) + sort + window */}
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
+        <TextField
+          size="small"
+          placeholder="Search ref, title or site"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); resetPage() }}
+          sx={{ flex: 1, "& .MuiOutlinedInput-root": { bgcolor: "#ffffff" }, "& .MuiInputBase-input": { fontSize: 12.5 } }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 18, color: "#94a3b8" }} />
+              </InputAdornment>
+            ),
+          }}
+        />
+        <TextField
+          select
+          size="small"
+          value={sortKey}
+          onChange={(e) => { setSortKey(e.target.value as SortKey); resetPage() }}
+          sx={selectSx}
+        >
+          <MenuItem value="completed">Completed · newest</MenuItem>
+          <MenuItem value="passRate">Pass rate · low to high</MenuItem>
+          <MenuItem value="site">Site · A–Z</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          value={windowKey}
+          onChange={(e) => { setWindowKey(e.target.value as keyof typeof WINDOW_DAYS); resetPage() }}
+          sx={selectSx}
+        >
+          <MenuItem value="90d">Last 90 days</MenuItem>
+          <MenuItem value="365d">Last 12 months</MenuItem>
+          <MenuItem value="all">All time</MenuItem>
+        </TextField>
+      </Stack>
 
-        {rows.length > 0 ? (
-          <Box sx={{ height: { xs: 520, md: 680 } }}>
-            <DataGrid
-              rows={rows}
-              columns={columns}
-              density="compact"
-              initialState={{
-                sorting: { sortModel: [{ field: "completedAt", sort: "desc" }] },
-                pagination: { paginationModel: { pageSize: 25 } },
-                columns: { columnVisibilityModel: isSmall ? { template: false, passRate: false, fails: false } : {} },
-              }}
-              pageSizeOptions={[25, 50, 100]}
-              disableRowSelectionOnClick
-              onRowClick={(params) => navigate(`/checks/${(params.row as Check).id}`)}
-              slots={{ toolbar: HistoryToolbar }}
-              sx={dataGridSx(true)}
-            />
-          </Box>
-        ) : null}
-      </Card>
+      {isLoading ? <LoadingState /> : null}
+      {error ? <ErrorState title="Failed to load check history" /> : null}
+
+      {!isLoading && !error && filtered.length === 0 ? (
+        <EmptyState
+          title={search.trim() ? "No matching checks" : "No completed checks"}
+          detail={search.trim()
+            ? "No archived checks match your search in this window."
+            : windowKey === "all"
+              ? "No checks have been completed, closed or cancelled yet."
+              : "No checks completed in this window. Widen the window to see older records."}
+        />
+      ) : null}
+
+      {!isLoading && !error && filtered.length > 0 ? (
+        <>
+          <Typography sx={{ fontSize: 12, color: "#64748b" }}>
+            {filtered.length} {filtered.length === 1 ? "check" : "checks"}
+          </Typography>
+          <Stack spacing={1}>
+            {pageRows.map((c) => (
+              <CheckCard
+                key={c.id}
+                check={c}
+                variant="history"
+                onOpen={(id) => navigate(`/checks/${id}`)}
+                onDownloadReport={handleDownloadReport}
+                downloading={downloadingId === c.id}
+              />
+            ))}
+          </Stack>
+          {pageCount > 1 ? (
+            <Stack direction="row" justifyContent="center" sx={{ pt: 0.5 }}>
+              <Pagination
+                count={pageCount}
+                page={safePage}
+                onChange={(_e, p) => setPage(p)}
+                size="small"
+                shape="rounded"
+                color="primary"
+              />
+            </Stack>
+          ) : null}
+        </>
+      ) : null}
 
       <Snackbar
         open={!!reportError}
