@@ -1,11 +1,11 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Req, Res } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Req, Res } from "@nestjs/common"
 import type { Response } from "express"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { ChecksService } from "./checks.service"
 import { ChecksReportService } from "./checks-report.service"
 import {
   CreateCheckTemplateDto, CreateCheckTemplateItemDto, CreateCheckDto,
-  UpdateCheckItemDto, CreateFollowOnDto, ReviewCheckDto, SubmitCheckDto, CancelCheckDto
+  UpdateCheckItemDto, UpdateCheckDto, CreateFollowOnDto, ReviewCheckDto, SubmitCheckDto, CancelCheckDto
 } from "./dto"
 import { Roles } from "../auth/roles.decorator"
 import { Role } from "@prisma/client"
@@ -161,6 +161,21 @@ export class ChecksController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.checks.createForClient(clientId, user.userId, dto)
+  }
+
+  // Pre-start reschedule / reassign (draft briefing page). Manager-tier only (matches create),
+  // so the same actors who schedule a check can fix its date/assignee. clientId-scoped at the edge.
+  @Patch(":id")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST)
+  async update(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: UpdateCheckDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.checks.updateForClient(clientId, id, dto, user.userId)
   }
 
   @Post(":id/start")

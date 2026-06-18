@@ -16,6 +16,7 @@ import { semanticTokens } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { PAGE_GUTTER } from "../lib/layout"
 import { useBreadcrumb } from "./Shell"
 import {
   CheckCard,
@@ -104,7 +105,9 @@ export default function ChecksPage() {
 
   return (
     <Box>
-      <Box sx={{ p: { xs: 1.5, sm: 2.5 }, display: "flex", flexDirection: "column", gap: 2.5 }}>
+      {/* Full-bleed page re-adds the standard gutter for its card content — via the
+          shared constant so it matches the Shell value AND breakpoint (md, not sm). */}
+      <Box sx={{ p: PAGE_GUTTER, display: "flex", flexDirection: "column", gap: 2.5 }}>
         {/* Header — title + History (Part 2) + Schedule check */}
         <Stack
           direction={{ xs: "column", sm: "row" }}

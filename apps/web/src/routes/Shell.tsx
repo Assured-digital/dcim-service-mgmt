@@ -37,6 +37,7 @@ import AccountTreeIcon from "@mui/icons-material/AccountTree"
 import ViewListIcon from "@mui/icons-material/ViewList"
 import InsightsIcon from "@mui/icons-material/Insights"
 import { api, revokeAndLogout } from "../lib/api"
+import { PAGE_GUTTER } from "../lib/layout"
 import NotificationBell from "../components/NotificationBell"
 import { LoadingState } from "../components/PageState"
 import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
@@ -1068,7 +1069,7 @@ export default function Shell() {
           sx={{
             flex: 1, bgcolor: "#f8fafc",
             overflow: pageFullBleed ? "hidden" : "auto",
-            p: pageFullBleed ? 0 : { xs: "12px", md: "20px" },
+            p: pageFullBleed ? 0 : PAGE_GUTTER,
             display: pageFullBleed ? "flex" : undefined,
             flexDirection: pageFullBleed ? "column" : undefined,
             minHeight: 0,

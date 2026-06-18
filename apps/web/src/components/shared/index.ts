@@ -13,6 +13,7 @@ export type { TicketKind, BadgeKind } from "./primitives/TypeBadge"
 export { PriorityDot } from "./primitives/PriorityDot"
 export { Avatar } from "./primitives/Avatar"
 export type { AvatarVariant, AvatarSize } from "./primitives/Avatar"
+export { BackButton } from "./primitives/BackButton"
 
 // Presentational list cells (engine-agnostic — <TableCell> or DataGrid renderCell).
 // One shared pill: IntentPill is the base; StatusPill/PriorityPill are thin wrappers.

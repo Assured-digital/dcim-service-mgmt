@@ -34,7 +34,7 @@ import RuleFolderIcon from "@mui/icons-material/RuleFolder"
 import type { SvgIconComponent } from "@mui/icons-material"
 import { PhotoCaptureDialog } from "../components/checks/PhotoCaptureDialog"
 import {
-  PropertiesPanel, StatusPill, ragTokens, WorkflowStrip, type SemanticIntent
+  BackButton, PropertiesPanel, StatusPill, ragTokens, WorkflowStrip, type SemanticIntent
 } from "../components/shared"
 import { RightPanelSection } from "../components/detail"
 import { AttachmentsContent } from "../components/AttachmentsContent"
@@ -45,6 +45,7 @@ import { userLabel } from "../lib/userDisplay"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { checkSync } from "../lib/offline/checkQueue"
 import { useCheckExecutionSync, type CheckSyncStatus } from "../lib/offline/useCheckExecutionSync"
 import { useOnlineStatus } from "../lib/useOnlineStatus"
@@ -321,6 +322,10 @@ export default function CheckDetailPage() {
   const goBack = () => (cameFromHistory ? navigate(-1) : navigate("/checks"))
 
   const canExecute = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
+  // Manager-tier can reschedule/reassign a pre-start check (matches the PATCH /checks/:id roles).
+  const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
+  // Assignee picker source — operational-callable & client-scoped (never raw /users).
+  const { data: assignableUsers } = useAssignableUsers()
 
   // Phase 4a: durable offline resilience for in-progress execution. The sync manager
   // persists answers/notes/photos to IndexedDB and replays them when online; the page
@@ -588,6 +593,19 @@ export default function CheckDetailPage() {
       qc.invalidateQueries({ queryKey: ["checks"] })
     } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to start")) }
     finally { setTransitioning(false) }
+  }
+
+  // Pre-start reschedule / reassign (draft briefing page). PATCH then refetch so the date/assignee
+  // + recomputed status reflect server truth; the landing query is invalidated too (it shares cache).
+  const [savingMeta, setSavingMeta] = React.useState(false)
+  async function patchCheck(body: { scheduledAt?: string | null; assigneeId?: string | null }) {
+    setSavingMeta(true); setError("")
+    try {
+      await api.patch(`/checks/${id}`, body)
+      await qc.invalidateQueries({ queryKey: ["check-detail", id] })
+      qc.invalidateQueries({ queryKey: ["checks"] })
+    } catch (e: unknown) { setError(getApiErrorMessage(e, "Couldn't update the check")) }
+    finally { setSavingMeta(false) }
   }
 
   // Download the server-generated compliance PDF. Only surfaced for COMPLETED/CLOSED
@@ -1613,11 +1631,19 @@ export default function CheckDetailPage() {
     const draftTiles: { label: string; value: React.ReactNode }[] = [
       { label: "Items", value: totalItems },
       { label: "Sections", value: sectionNames.length },
-      { label: "Scheduled", value: formatScheduledShort(check.scheduledAt) },
+      // Managers edit the date inline below, so the read-only Scheduled tile is theirs-only dropped.
+      ...(canManage ? [] : [{ label: "Scheduled", value: formatScheduledShort(check.scheduledAt) }]),
       ...(est ? [{ label: "Est. time", value: est }] : []),
     ]
     return (
       <Box sx={{ maxWidth: 720, mx: "auto", pb: "24px" }}>
+        {/* Origin-aware back (no tooltip — the label is self-evident) */}
+        <BackButton
+          label={cameFromHistory ? "Back to history" : "Back to checks"}
+          onClick={goBack}
+          sx={{ mb: "10px" }}
+        />
+
         {/* Header — title + site/assignee + status chip + Start (ref lives in the breadcrumb) */}
         <Stack direction="row" alignItems="flex-start" spacing={2} sx={{ mb: "22px" }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1626,8 +1652,9 @@ export default function CheckDetailPage() {
             </Typography>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: "8px", flexWrap: "wrap", rowGap: "6px" }}>
               <StatusPill value={check.status} label={STATUS_LABELS[check.status] ?? check.status} size="sm" />
+              {/* Managers edit the assignee below, so the subtitle drops it to avoid duplication. */}
               <Typography sx={{ fontSize: 13.5, color: "#64748b" }}>
-                {check.site.name} · {userLabel(check.assignee)}
+                {canManage ? check.site.name : `${check.site.name} · ${userLabel(check.assignee)}`}
               </Typography>
             </Stack>
           </Box>
@@ -1636,6 +1663,37 @@ export default function CheckDetailPage() {
             {transitioning ? "Starting…" : "Start check"}
           </Button>
         </Stack>
+
+        {/* Editable schedule + assignee (manager-tier) — a date with no date set can be fixed here;
+            both auto-save (PATCH /checks/:id) and the picker is the assignable set, never raw /users. */}
+        {canManage ? (
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: "12px", mb: "22px" }}>
+            <TextField
+              type="date"
+              label="Scheduled date"
+              size="small"
+              InputLabelProps={{ shrink: true }}
+              value={check.scheduledAt ? check.scheduledAt.slice(0, 10) : ""}
+              onChange={e => patchCheck({ scheduledAt: e.target.value || null })}
+              disabled={savingMeta}
+              fullWidth
+            />
+            <TextField
+              select
+              label="Assigned engineer"
+              size="small"
+              value={check.assignee?.id ?? ""}
+              onChange={e => patchCheck({ assigneeId: e.target.value || null })}
+              disabled={savingMeta}
+              fullWidth
+            >
+              <MenuItem value="">Unassigned</MenuItem>
+              {(assignableUsers ?? []).map(u => (
+                <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>
+              ))}
+            </TextField>
+          </Box>
+        ) : null}
 
         {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
@@ -1681,14 +1739,11 @@ export default function CheckDetailPage() {
       {/* Record header — title + Start only. The ref lives in the breadcrumb and the
           Details panel; Site/Template are Details rows (no duplicated subtitle here). */}
       <Box sx={{ mb: "16px" }}>
-        <Button
+        <BackButton
+          label={cameFromHistory ? "Back to history" : "Back to checks"}
           onClick={goBack}
-          startIcon={<ArrowBackIcon sx={{ fontSize: 15 }} />}
-          size="small"
-          sx={{ mb: "10px", ml: "-6px", color: "#64748b", fontSize: 12.5, textTransform: "none", "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}
-        >
-          {cameFromHistory ? "Back to history" : "Back to checks"}
-        </Button>
+          sx={{ mb: "10px" }}
+        />
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
           <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
             <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25 }}>

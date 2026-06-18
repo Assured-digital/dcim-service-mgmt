@@ -2,6 +2,7 @@ import React from "react"
 import { Box, CircularProgress, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from "@mui/material"
 import DownloadIcon from "@mui/icons-material/Download"
 import MoreVertIcon from "@mui/icons-material/MoreVert"
+import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import {
   AssigneeCell,
   IntentPill,
@@ -13,7 +14,6 @@ import {
 } from "../shared"
 import { formatRelativeTime } from "../../lib/notifications"
 import type { AttachmentSummary } from "../../lib/attachments"
-import { EvidenceThumbs } from "./EvidenceThumbs"
 
 // One Check as consumed by the active landing. Mirrors the backend list payload
 // (checks.service.ts listForClient) — every scalar field is returned via Prisma
@@ -26,6 +26,7 @@ export type Check = {
   status: string
   priority: string
   scheduledAt: string | null
+  startedAt: string | null
   submittedAt: string | null
   completedAt: string | null
   closedAt: string | null
@@ -35,7 +36,7 @@ export type Check = {
   site: { id: string; name: string } | null
   assignee: { id: string; displayName: string } | null
   template: { id: string; name: string; checkType: string } | null
-  items: { id: string; response: string | null; isRequired: boolean }[]
+  items: { id: string; response: string | null; isRequired: boolean; isCritical: boolean }[]
   evidence: AttachmentSummary[]
 }
 
@@ -127,15 +128,15 @@ function progressFraction(items: { response: string | null }[]): { answered: num
   return { answered, total }
 }
 
-// Due-date chip for upcoming cards: overdue (red) / due within 3 days (amber) /
-// further out (neutral) / no date set (amber — needs scheduling).
-export function dueState(iso: string | null): { label: string; intent: SemanticIntent } {
+// Upcoming urgency chip — colour-coded urgency ONLY (the scheduled date itself sits on the
+// card's line-3 date slot, so the chip never repeats the date). Returns null when the work is
+// simply scheduled and not yet near-due — the plain date alone carries it.
+export function dueUrgency(iso: string | null): { label: string; intent: SemanticIntent } | null {
   const d = daysUntil(iso)
   if (d === null) return { label: "No date set", intent: "warning" }
-  const dateLabel = new Date(iso as string).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
-  if (d < 0) return { label: `Overdue · ${dateLabel}`, intent: "danger" }
-  if (d <= 3) return { label: `Due ${dateLabel}`, intent: "warning" }
-  return { label: dateLabel, intent: "neutral" }
+  if (d < 0) return { label: "Overdue", intent: "danger" }
+  if (d <= 3) return { label: "Due soon", intent: "warning" }
+  return null
 }
 
 const ACCENT: Record<Exclude<CheckCardVariant, "history">, string> = {
@@ -145,14 +146,46 @@ const ACCENT: Record<Exclude<CheckCardVariant, "history">, string> = {
   draft: semanticTokens.neutral.text,
 }
 
-// History cards aren't a single accent — they colour-code by terminal status (green
-// COMPLETED / slate CLOSED / red CANCELLED) via the shared intent scale, so the archive
-// reads its outcome at a glance. resolveIntent maps each terminal status to that hue.
-const TERMINAL_LABEL: Record<string, string> = { COMPLETED: "Completed", CLOSED: "Closed", CANCELLED: "Cancelled" }
+// Full status label set — every card shows a status pill (top-right), so every status that can
+// reach a card needs a humanised label. StatusPill derives the colour from the status value.
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  SCHEDULED: "Scheduled",
+  ASSIGNED: "Assigned",
+  IN_PROGRESS: "In progress",
+  PENDING_REVIEW: "Pending review",
+  COMPLETED: "Completed",
+  CLOSED: "Closed",
+  CANCELLED: "Cancelled",
+}
 
 // Pass-rate -> RAG band (matches the prior history table): >=80 green, >=60 amber, else red.
 function passRateRag(v: number) {
   return v >= 80 ? ragTokens.GREEN : v >= 60 ? ragTokens.AMBER : ragTokens.RED
+}
+
+// Uniform short date for the card's line-3 date slot (en-GB, day + short month + year).
+function fmtDate(d: Date | null): string {
+  return d && !Number.isNaN(d.getTime())
+    ? d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+    : "—"
+}
+function shortDate(iso: string | null): string {
+  return fmtDate(iso ? new Date(iso) : null)
+}
+
+// Compact elapsed-time label (e.g. "47m", "2h 15m") from start→end timestamps. Returns null
+// when either bound is missing or non-positive, so callers DROP the stat gracefully (e.g. a
+// cancelled check that never started/completed).
+function formatDuration(startIso: string | null, endIso: string | null): string | null {
+  if (!startIso || !endIso) return null
+  const ms = new Date(endIso).getTime() - new Date(startIso).getTime()
+  if (!Number.isFinite(ms) || ms <= 0) return null
+  const mins = Math.round(ms / 60000)
+  if (mins < 60) return `${mins}m`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `${h}h ${m}m` : `${h}h`
 }
 
 function IntentChip({ intent, label }: { intent: SemanticIntent; label: string }) {
@@ -160,8 +193,12 @@ function IntentChip({ intent, label }: { intent: SemanticIntent; label: string }
   return <IntentPill bg={tok.bg} text={tok.text} label={label} />
 }
 
-// One card for every queue state — the accent, header, title, site and person are
-// shared; only the footer differs by `variant`. Click opens the check.
+// One card for EVERY queue state, rendered as a uniform three-line skeleton so the list reads
+// as one consistent surface:
+//   line 1 — ref + template (left) · status pill (right)
+//   line 2 — title
+//   line 3 — assignee · date (left) · variant signal + ⋮ actions menu (right)
+// Only the line-3 signal + the date differ by `variant`; the skeleton is shared. Click opens.
 export function CheckCard({
   check,
   variant,
@@ -179,48 +216,72 @@ export function CheckCard({
   onDownloadReport?: (check: Check) => void
   downloading?: boolean
 }) {
-  const fail = variant === "review" ? failCount(check.items) : null
-  const due = variant === "upcoming" ? dueState(check.scheduledAt) : null
-  const { answered, total } = progressFraction(check.items)
-  const submitted = variant === "review" ? formatRelativeTime(check.submittedAt ?? check.createdAt) : null
-
-  // History per-card actions live behind a ⋮ menu (a deliberate two-step) rather than a bare
-  // one-tap icon, so a report download can't fire by accident on a tightly-packed card.
+  // ⋮ actions menu (a deliberate two-step, never a hair-trigger). Sits bottom-right on every
+  // variant for a consistent action slot; today it carries Open + (history) Download report.
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
 
-  // History-variant derived signals: status accent + pill, completed date, pass rate, fails.
   const isHistory = variant === "history"
   const isCancelled = check.status === "CANCELLED"
+  // History colour-codes its accent by terminal status (green/slate/red); active queues keep
+  // their per-variant accent. The coloured left-accent is preserved either way.
   const accent = isHistory ? semanticTokens[resolveIntent(check.status)].text : ACCENT[variant]
-  const completedDate = isHistory ? effectiveCompleted(check) : null
-  const completedLabel = completedDate
-    ? completedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-    : null
+
+  // Line-3 derived data — the date (left, after the assignee) and the signal (right).
+  const { answered, total } = progressFraction(check.items)
+  const fail = variant === "review" ? failCount(check.items) : null
+  const submitted = variant === "review" ? formatRelativeTime(check.submittedAt ?? check.createdAt) : null
+  const due = variant === "upcoming" ? dueUrgency(check.scheduledAt) : null
   // Cancelled checks were never scored -> pass rate "—" (never a misleading 0%) and no fails.
   const passRate = isCancelled ? null : check.passRate
   const fails = isHistory && !isCancelled ? check.items.filter((i) => i.response === "FAIL").length : 0
+  // Extra at-a-glance history stats (omit gracefully): how long the visit took (started→completed)
+  // and how many of the fails were on CRITICAL items — surfaced separately, in danger colour.
+  const duration = isHistory && !isCancelled ? formatDuration(check.startedAt, check.completedAt) : null
+  const criticalFails = isHistory && !isCancelled
+    ? check.items.filter((i) => i.response === "FAIL" && i.isCritical).length
+    : 0
 
-  // The variant's trailing signal — the one cluster that differs per queue. Lives on the
-  // RIGHT at width (vertically centred against the identity block) and reflows BELOW it on
-  // narrow screens. Built once here, placed by the responsive Stack below.
+  // Variant-appropriate date for the line-3 date slot (startedAt isn't in the list payload,
+  // so in-progress falls back to its scheduled date).
+  const dateLabel =
+    variant === "history"
+      ? fmtDate(effectiveCompleted(check))
+      : variant === "review"
+        ? shortDate(check.submittedAt ?? check.createdAt)
+        : variant === "upcoming"
+          ? shortDate(check.scheduledAt)
+          : shortDate(check.scheduledAt ?? check.createdAt) // progress + draft
+
+  // Line-3 right signal — variant-specific content in one consistent slot (status pill follows).
   const signal =
-    variant === "review" ? (
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
-        {fail ? <IntentChip intent={fail.intent} label={fail.label} /> : null}
-        {check.evidence.length > 0 ? (
-          <EvidenceThumbs attachments={check.evidence} max={2} />
-        ) : (
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>No evidence</Typography>
-        )}
-        {submitted ? (
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>{submitted}</Typography>
+    variant === "history" ? (
+      <>
+        {duration ? (
+          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{duration}</Typography>
         ) : null}
-      </Stack>
+        {passRate == null ? (
+          // Cancelled / never-scored -> "—", never a misleading 0%.
+          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>—</Typography>
+        ) : (
+          <IntentPill {...passRateRag(passRate)} label={`Pass rate ${Math.round(passRate)}%`} size="sm" />
+        )}
+        {!isCancelled ? (
+          <Typography
+            sx={{ fontSize: 11.5, fontWeight: fails > 0 ? 600 : 400, color: fails > 0 ? ragTokens.RED.text : "#94a3b8" }}
+          >
+            {fails} fail{fails === 1 ? "" : "s"}
+          </Typography>
+        ) : null}
+        {/* Critical fails — distinct from total fails, danger colour, only when there are any. */}
+        {criticalFails > 0 ? (
+          <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: ragTokens.RED.text }}>
+            {criticalFails} critical
+          </Typography>
+        ) : null}
+      </>
     ) : variant === "progress" ? (
-      // Inline bar + count (the "Progress" label is dropped — the bar is self-evident). Fixed
-      // width at sm so bars line up across cards; full-width when stacked on narrow.
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ width: { xs: "100%", sm: 200 } }}>
-        <Box sx={{ flex: 1, minWidth: 80, height: 6, bgcolor: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
+      <Stack direction="row" alignItems="center" spacing={0.75}>
+        <Box sx={{ width: 64, height: 6, bgcolor: "#f1f5f9", borderRadius: 999, overflow: "hidden", flexShrink: 0 }}>
           <Box
             sx={{
               width: total > 0 ? `${(answered / total) * 100}%` : "0%",
@@ -234,68 +295,62 @@ export function CheckCard({
           {total > 0 ? `${answered}/${total}` : "No items"}
         </Typography>
       </Stack>
+    ) : variant === "review" ? (
+      <>
+        {fail ? <IntentChip intent={fail.intent} label={fail.label} /> : null}
+        {submitted ? (
+          <Typography sx={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>{submitted}</Typography>
+        ) : null}
+      </>
     ) : variant === "upcoming" ? (
       due ? <IntentChip intent={due.intent} label={due.label} /> : null
-    ) : variant === "history" ? (
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
-        <StatusPill value={check.status} label={TERMINAL_LABEL[check.status] ?? check.status} size="sm" />
-        <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{completedLabel ?? "—"}</Typography>
-        {passRate == null ? (
-          // Cancelled / never-scored -> "—", never a misleading 0%.
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>—</Typography>
-        ) : (
-          <IntentPill {...passRateRag(passRate)} label={`${Math.round(passRate)}%`} size="sm" />
-        )}
-        {!isCancelled ? (
-          <Typography
-            sx={{ fontSize: 11.5, fontWeight: fails > 0 ? 600 : 400, color: fails > 0 ? ragTokens.RED.text : "#94a3b8" }}
-          >
-            {fails} fail{fails === 1 ? "" : "s"}
-          </Typography>
-        ) : null}
-        {/* Per-card actions behind a ⋮ menu — a deliberate two-step (open → pick), never a
-            hair-trigger one-tap. The trigger shows a spinner while the report generates.
-            Cancelled checks have nothing to report -> no menu at all. */}
-        {!isCancelled && onDownloadReport ? (
-          <Box onClick={(e) => e.stopPropagation()}>
-            <Tooltip title="Actions">
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={!!downloading}
-                  onClick={(e) => setMenuAnchor(e.currentTarget)}
-                  sx={{ color: "#64748b", "&:hover": { color: "#1d4ed8", bgcolor: "#e8f1ff" } }}
-                >
-                  {downloading ? <CircularProgress size={16} /> : <MoreVertIcon sx={{ fontSize: 18 }} />}
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Menu
-              anchorEl={menuAnchor}
-              open={!!menuAnchor}
-              onClose={() => setMenuAnchor(null)}
-              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-              transformOrigin={{ vertical: "top", horizontal: "right" }}
-            >
-              <MenuItem
-                onClick={() => { setMenuAnchor(null); onDownloadReport(check) }}
-                sx={{ fontSize: 13, gap: 1 }}
-              >
-                <DownloadIcon sx={{ fontSize: 16, color: "#64748b" }} />
-                Download report
-              </MenuItem>
-            </Menu>
-          </Box>
-        ) : null}
-      </Stack>
-    ) : null // draft — identity only, no trailing signal
+    ) : null // draft — no signal; just assignee · date + the ⋮ menu
 
-  // Identity meta line: template · site, collapsed to one muted truncating line so the card
-  // stays ~2 lines tall. The assignee (knownAs name via the shared AssigneeCell) rides
-  // alongside it and never truncates away.
-  const metaText = [check.template?.name, check.site?.name ?? "No site"]
-    .filter(Boolean)
-    .join("  ·  ")
+  // ⋮ menu items — Open is the universal baseline (and the slot for future per-card actions);
+  // history non-cancelled adds Download report. Built as data so the menu render stays flat.
+  const menuItems: { label: string; icon: React.ReactNode; onClick: () => void }[] = [
+    { label: "Open check", icon: <OpenInNewIcon sx={{ fontSize: 16, color: "#64748b" }} />, onClick: () => onOpen(check.id) },
+    ...(isHistory && !isCancelled && onDownloadReport
+      ? [{ label: "Download report", icon: <DownloadIcon sx={{ fontSize: 16, color: "#64748b" }} />, onClick: () => onDownloadReport(check) }]
+      : []),
+  ]
+
+  // ⋮ actions menu — sits top-right (line 1). A deliberate two-step (open → pick), with a spinner
+  // on the trigger while a report generates. stopPropagation so opening it never opens the check.
+  const actionsMenu = (
+    <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0, ml: 0.5, mr: "-6px", mt: "-4px" }}>
+      <Tooltip title="Actions">
+        <span>
+          <IconButton
+            size="small"
+            disabled={!!downloading}
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            sx={{ color: "#64748b", "&:hover": { color: "#1d4ed8", bgcolor: "#e8f1ff" } }}
+          >
+            {downloading ? <CircularProgress size={16} /> : <MoreVertIcon sx={{ fontSize: 18 }} />}
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Menu
+        anchorEl={menuAnchor}
+        open={!!menuAnchor}
+        onClose={() => setMenuAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        {menuItems.map((item) => (
+          <MenuItem
+            key={item.label}
+            onClick={() => { setMenuAnchor(null); item.onClick() }}
+            sx={{ fontSize: 13, gap: 1 }}
+          >
+            {item.icon}
+            {item.label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </Box>
+  )
 
   return (
     <Box
@@ -306,73 +361,56 @@ export function CheckCard({
         borderRadius: "8px",
         bgcolor: "#ffffff",
         px: { xs: 1.5, sm: 2 },
-        py: { xs: 1.25, sm: 1 },
+        py: 1.25,
+        // Uniform height so cards align in a clean list; grows only if line 3 wraps on a phone.
+        minHeight: 96,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
         cursor: "pointer",
         transition: "background-color 0.12s",
         "&:hover": { bgcolor: "#f8fafc" },
       }}
     >
-      {/* Compact-horizontal at width (identity left, signal right, centred); reflows to a
-          tight vertical stack on narrow screens. One layout for every variant. */}
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={{ xs: 1, sm: 2 }}
-        alignItems={{ xs: "stretch", sm: "center" }}
-      >
-        {/* Identity — ref + title, then the meta line + assignee. Grows and truncates so a
-            long title/template never pushes the signal off the card. */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack direction="row" alignItems="baseline" spacing={1} sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "#475569", flexShrink: 0 }}>
-              {check.reference}
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: 13.5,
-                fontWeight: 600,
-                color: "#0f172a",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
-              }}
-            >
-              {check.title}
-            </Typography>
-          </Stack>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.4, minWidth: 0 }}>
-            <Typography
-              sx={{
-                fontSize: 12,
-                color: "#64748b",
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {metaText}
-            </Typography>
-            <Box sx={{ flexShrink: 0 }}>
-              <AssigneeCell user={check.assignee} />
-            </Box>
-          </Stack>
-        </Box>
-
-        {/* Signal — variant footer, right-aligned at width / below the identity on narrow. */}
-        {signal ? (
-          <Box
-            sx={{
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: { xs: "flex-start", sm: "flex-end" },
-              width: { xs: "100%", sm: "auto" },
-            }}
+      <Stack spacing={0.5}>
+        {/* Line 1 — ref + template (truncating meta), ⋮ actions menu top-right */}
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography
+            sx={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           >
+            <Box component="span" sx={{ fontFamily: "monospace", fontWeight: 700, color: "#475569" }}>
+              {check.reference}
+            </Box>
+            {check.template?.name ? `  ·  ${check.template.name}` : ""}
+          </Typography>
+          {actionsMenu}
+        </Stack>
+
+        {/* Line 2 — title */}
+        <Typography
+          sx={{ fontSize: 13.5, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          {check.title}
+        </Typography>
+
+        {/* Line 3 — assignee · date (left); variant signal + status pill (right). Wraps on a phone. */}
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ flexWrap: { xs: "wrap", sm: "nowrap" }, rowGap: 0.5 }}
+        >
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flex: 1, minWidth: 0 }}>
+            <AssigneeCell user={check.assignee} />
+            <Typography sx={{ fontSize: 11.5, color: "#cbd5e1", flexShrink: 0 }}>·</Typography>
+            <Typography sx={{ fontSize: 11.5, color: "#94a3b8", flexShrink: 0 }}>{dateLabel}</Typography>
+          </Stack>
+
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
             {signal}
-          </Box>
-        ) : null}
+            <StatusPill value={check.status} label={STATUS_LABEL[check.status] ?? check.status} size="sm" />
+          </Stack>
+        </Stack>
       </Stack>
     </Box>
   )

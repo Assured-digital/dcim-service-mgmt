@@ -91,6 +91,19 @@ export class UpdateCheckItemDto {
   notes?: string
 }
 
+// Pre-start reschedule / reassign (the draft briefing page). Both optional and nullable:
+// omit a field to leave it; send null/"" to clear it. @IsOptional skips validation for
+// null, so an explicit clear is accepted. Service rejects non-pre-start checks.
+export class UpdateCheckDto {
+  @IsOptional()
+  @IsString()
+  scheduledAt?: string | null
+
+  @IsOptional()
+  @IsString()
+  assigneeId?: string | null
+}
+
 export class CreateFollowOnDto {
   @IsIn(["Task", "Risk", "Issue"])
   entityType!: string

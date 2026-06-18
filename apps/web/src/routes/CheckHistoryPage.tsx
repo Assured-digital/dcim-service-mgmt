@@ -4,13 +4,13 @@ import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, InputAdornment, MenuItem, Pagination, Snackbar, Stack,
-  TextField, Tooltip, Typography
+  TextField, Typography
 } from "@mui/material"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import FileDownloadIcon from "@mui/icons-material/FileDownload"
 import SearchIcon from "@mui/icons-material/Search"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { CheckCard, effectiveCompleted, type Check } from "../components/checks/CheckCard"
+import { BackButton } from "../components/shared"
 import { downloadCheckReport } from "../lib/checkReport"
 import { userLabel } from "../lib/userDisplay"
 
@@ -195,17 +195,7 @@ export default function CheckHistoryPage() {
         alignItems={{ xs: "stretch", sm: "center" }}
         spacing={1.5}
       >
-        <Tooltip title="Back to active checks">
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
-            onClick={() => navigate("/checks")}
-            sx={{ fontSize: 12 }}
-          >
-            Active checks
-          </Button>
-        </Tooltip>
+        <BackButton label="Active checks" onClick={() => navigate("/checks")} />
         <Typography
           sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 20, fontWeight: 700, color: "#0f172a", flex: 1 }}
         >

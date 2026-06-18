@@ -305,6 +305,49 @@ export class ChecksService {
     return { ...check, assignee: toUserDisplay(check.assignee) }
   }
 
+  // Pre-start reschedule / reassign. Only DRAFT/SCHEDULED/ASSIGNED can be edited — once a check
+  // has started its schedule/assignee are fixed (400 otherwise). Status is recomputed from the
+  // resulting fields so a draft that gains a date/engineer promotes (and clearing demotes) within
+  // the pre-start band; start() still transitions out of all three. clientId-scoped fetch + update.
+  async updateForClient(clientId: string, id: string, dto: any, actorUserId: string | null) {
+    this.assertClientScope(clientId)
+    const existing = await this.prisma.check.findFirst({
+      where: { id, clientId },
+      select: { id: true, status: true, scheduledAt: true, assigneeId: true, reference: true, title: true }
+    })
+    if (!existing) throw new NotFoundException("Check not found")
+    if (!["DRAFT", "SCHEDULED", "ASSIGNED"].includes(existing.status)) {
+      throw new BadRequestException("Only checks that haven't started can be rescheduled or reassigned")
+    }
+    // undefined = leave as-is; null/"" = clear.
+    const nextScheduledAt = dto.scheduledAt === undefined
+      ? existing.scheduledAt
+      : (dto.scheduledAt ? new Date(dto.scheduledAt) : null)
+    const nextAssigneeId = dto.assigneeId === undefined
+      ? existing.assigneeId
+      : (dto.assigneeId || null)
+    const nextStatus = nextAssigneeId
+      ? CheckStatus.ASSIGNED
+      : nextScheduledAt
+        ? CheckStatus.SCHEDULED
+        : CheckStatus.DRAFT
+
+    await this.prisma.check.update({
+      where: { id: existing.id },
+      data: { scheduledAt: nextScheduledAt, assigneeId: nextAssigneeId, status: nextStatus }
+    })
+    await emitAudit(this.prisma, {
+      entityType: "Check",
+      entityId: existing.id,
+      action: "UPDATED",
+      actorUserId,
+      clientId,
+      reference: existing.reference,
+      title: existing.title
+    })
+    return this.getForClient(clientId, id)
+  }
+
   async startCheck(clientId: string, id: string, actorUserId: string) {
     const check = await this.getForClient(clientId, id)
     if (check.status === CheckStatus.IN_PROGRESS) return check
