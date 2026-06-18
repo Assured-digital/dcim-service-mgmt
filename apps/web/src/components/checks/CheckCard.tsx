@@ -1,6 +1,7 @@
 import React from "react"
-import { Box, CircularProgress, IconButton, Stack, Tooltip, Typography } from "@mui/material"
+import { Box, CircularProgress, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from "@mui/material"
 import DownloadIcon from "@mui/icons-material/Download"
+import MoreVertIcon from "@mui/icons-material/MoreVert"
 import {
   AssigneeCell,
   IntentPill,
@@ -183,6 +184,10 @@ export function CheckCard({
   const { answered, total } = progressFraction(check.items)
   const submitted = variant === "review" ? formatRelativeTime(check.submittedAt ?? check.createdAt) : null
 
+  // History per-card actions live behind a ⋮ menu (a deliberate two-step) rather than a bare
+  // one-tap icon, so a report download can't fire by accident on a tightly-packed card.
+  const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
+
   // History-variant derived signals: status accent + pill, completed date, pass rate, fails.
   const isHistory = variant === "history"
   const isCancelled = check.status === "CANCELLED"
@@ -195,6 +200,103 @@ export function CheckCard({
   const passRate = isCancelled ? null : check.passRate
   const fails = isHistory && !isCancelled ? check.items.filter((i) => i.response === "FAIL").length : 0
 
+  // The variant's trailing signal — the one cluster that differs per queue. Lives on the
+  // RIGHT at width (vertically centred against the identity block) and reflows BELOW it on
+  // narrow screens. Built once here, placed by the responsive Stack below.
+  const signal =
+    variant === "review" ? (
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+        {fail ? <IntentChip intent={fail.intent} label={fail.label} /> : null}
+        {check.evidence.length > 0 ? (
+          <EvidenceThumbs attachments={check.evidence} max={2} />
+        ) : (
+          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>No evidence</Typography>
+        )}
+        {submitted ? (
+          <Typography sx={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>{submitted}</Typography>
+        ) : null}
+      </Stack>
+    ) : variant === "progress" ? (
+      // Inline bar + count (the "Progress" label is dropped — the bar is self-evident). Fixed
+      // width at sm so bars line up across cards; full-width when stacked on narrow.
+      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ width: { xs: "100%", sm: 200 } }}>
+        <Box sx={{ flex: 1, minWidth: 80, height: 6, bgcolor: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
+          <Box
+            sx={{
+              width: total > 0 ? `${(answered / total) * 100}%` : "0%",
+              height: "100%",
+              bgcolor: "primary.main",
+              borderRadius: 999,
+            }}
+          />
+        </Box>
+        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#475569", flexShrink: 0 }}>
+          {total > 0 ? `${answered}/${total}` : "No items"}
+        </Typography>
+      </Stack>
+    ) : variant === "upcoming" ? (
+      due ? <IntentChip intent={due.intent} label={due.label} /> : null
+    ) : variant === "history" ? (
+      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+        <StatusPill value={check.status} label={TERMINAL_LABEL[check.status] ?? check.status} size="sm" />
+        <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{completedLabel ?? "—"}</Typography>
+        {passRate == null ? (
+          // Cancelled / never-scored -> "—", never a misleading 0%.
+          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>—</Typography>
+        ) : (
+          <IntentPill {...passRateRag(passRate)} label={`${Math.round(passRate)}%`} size="sm" />
+        )}
+        {!isCancelled ? (
+          <Typography
+            sx={{ fontSize: 11.5, fontWeight: fails > 0 ? 600 : 400, color: fails > 0 ? ragTokens.RED.text : "#94a3b8" }}
+          >
+            {fails} fail{fails === 1 ? "" : "s"}
+          </Typography>
+        ) : null}
+        {/* Per-card actions behind a ⋮ menu — a deliberate two-step (open → pick), never a
+            hair-trigger one-tap. The trigger shows a spinner while the report generates.
+            Cancelled checks have nothing to report -> no menu at all. */}
+        {!isCancelled && onDownloadReport ? (
+          <Box onClick={(e) => e.stopPropagation()}>
+            <Tooltip title="Actions">
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!!downloading}
+                  onClick={(e) => setMenuAnchor(e.currentTarget)}
+                  sx={{ color: "#64748b", "&:hover": { color: "#1d4ed8", bgcolor: "#e8f1ff" } }}
+                >
+                  {downloading ? <CircularProgress size={16} /> : <MoreVertIcon sx={{ fontSize: 18 }} />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Menu
+              anchorEl={menuAnchor}
+              open={!!menuAnchor}
+              onClose={() => setMenuAnchor(null)}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
+            >
+              <MenuItem
+                onClick={() => { setMenuAnchor(null); onDownloadReport(check) }}
+                sx={{ fontSize: 13, gap: 1 }}
+              >
+                <DownloadIcon sx={{ fontSize: 16, color: "#64748b" }} />
+                Download report
+              </MenuItem>
+            </Menu>
+          </Box>
+        ) : null}
+      </Stack>
+    ) : null // draft — identity only, no trailing signal
+
+  // Identity meta line: template · site, collapsed to one muted truncating line so the card
+  // stays ~2 lines tall. The assignee (knownAs name via the shared AssigneeCell) rides
+  // alongside it and never truncates away.
+  const metaText = [check.template?.name, check.site?.name ?? "No site"]
+    .filter(Boolean)
+    .join("  ·  ")
+
   return (
     <Box
       onClick={() => onOpen(check.id)}
@@ -204,133 +306,74 @@ export function CheckCard({
         borderRadius: "8px",
         bgcolor: "#ffffff",
         px: { xs: 1.5, sm: 2 },
-        py: 1.25,
+        py: { xs: 1.25, sm: 1 },
         cursor: "pointer",
         transition: "background-color 0.12s",
         "&:hover": { bgcolor: "#f8fafc" },
       }}
     >
-      {/* Header — reference + type, with the variant's trailing signal */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1}
-        sx={{ flexWrap: "wrap", rowGap: 0.5, mb: 0.5 }}
-      >
-        <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "#475569" }}>
-          {check.reference}
-        </Typography>
-        <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{check.checkType}</Typography>
-        <Box sx={{ ml: "auto" }}>
-          {due ? <IntentChip intent={due.intent} label={due.label} /> : null}
-          {submitted ? (
-            <Typography sx={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>{submitted}</Typography>
-          ) : null}
-          {isHistory ? (
-            <StatusPill value={check.status} label={TERMINAL_LABEL[check.status] ?? check.status} size="sm" />
-          ) : null}
-        </Box>
-      </Stack>
-
-      {/* Title */}
-      <Typography
-        sx={{
-          fontSize: 13.5,
-          fontWeight: 600,
-          color: "#0f172a",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          mb: 0.5,
-        }}
-      >
-        {check.title}
-      </Typography>
-
-      {/* Meta — site + person (the assignee; on review cards this is the submitter) */}
+      {/* Compact-horizontal at width (identity left, signal right, centred); reflows to a
+          tight vertical stack on narrow screens. One layout for every variant. */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
-        alignItems={{ xs: "flex-start", sm: "center" }}
-        spacing={{ xs: 0.5, sm: 1.25 }}
-        sx={{ mb: variant === "draft" ? 0 : 0.75 }}
+        spacing={{ xs: 1, sm: 2 }}
+        alignItems={{ xs: "stretch", sm: "center" }}
       >
-        <Typography sx={{ fontSize: 12, color: "#64748b" }}>{check.site?.name ?? "No site"}</Typography>
-        <AssigneeCell user={check.assignee} />
-      </Stack>
-
-      {/* Footer — variant-specific */}
-      {variant === "review" ? (
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1}
-          sx={{ flexWrap: "wrap", rowGap: 0.75 }}
-        >
-          {fail ? <IntentChip intent={fail.intent} label={fail.label} /> : null}
-          {check.evidence.length > 0 ? (
-            <EvidenceThumbs attachments={check.evidence} />
-          ) : (
-            <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>No evidence attached</Typography>
-          )}
-        </Stack>
-      ) : null}
-
-      {variant === "progress" ? (
-        <Box>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-            <Typography sx={{ fontSize: 11.5, color: "#64748b", flex: 1 }}>Progress</Typography>
-            <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>
-              {total > 0 ? `${answered}/${total}` : "No items"}
+        {/* Identity — ref + title, then the meta line + assignee. Grows and truncates so a
+            long title/template never pushes the signal off the card. */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" alignItems="baseline" spacing={1} sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "#475569", flexShrink: 0 }}>
+              {check.reference}
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: 13.5,
+                fontWeight: 600,
+                color: "#0f172a",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+            >
+              {check.title}
             </Typography>
           </Stack>
-          <Box sx={{ height: 6, bgcolor: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
-            <Box
-              sx={{
-                width: total > 0 ? `${(answered / total) * 100}%` : "0%",
-                height: "100%",
-                bgcolor: "primary.main",
-                borderRadius: 999,
-              }}
-            />
-          </Box>
-        </Box>
-      ) : null}
-
-      {variant === "history" ? (
-        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{completedLabel ?? "—"}</Typography>
-          {passRate == null ? (
-            // Cancelled / never-scored -> "—", never a misleading 0%.
-            <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>—</Typography>
-          ) : (
-            <IntentPill {...passRateRag(passRate)} label={`${Math.round(passRate)}%`} size="sm" />
-          )}
-          {!isCancelled ? (
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.4, minWidth: 0 }}>
             <Typography
-              sx={{ fontSize: 11.5, fontWeight: fails > 0 ? 600 : 400, color: fails > 0 ? ragTokens.RED.text : "#94a3b8" }}
+              sx={{
+                fontSize: 12,
+                color: "#64748b",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
             >
-              {fails} fail{fails === 1 ? "" : "s"}
+              {metaText}
             </Typography>
-          ) : null}
-          {/* Cancelled checks have nothing to report -> no download affordance. */}
-          {!isCancelled && onDownloadReport ? (
-            <Box sx={{ ml: "auto" }} onClick={(e) => e.stopPropagation()}>
-              <Tooltip title="Download report (PDF)">
-                <span>
-                  <IconButton
-                    size="small"
-                    disabled={!!downloading}
-                    onClick={() => onDownloadReport(check)}
-                    sx={{ color: "#64748b", "&:hover": { color: "#1d4ed8", bgcolor: "#e8f1ff" } }}
-                  >
-                    {downloading ? <CircularProgress size={16} /> : <DownloadIcon sx={{ fontSize: 16 }} />}
-                  </IconButton>
-                </span>
-              </Tooltip>
+            <Box sx={{ flexShrink: 0 }}>
+              <AssigneeCell user={check.assignee} />
             </Box>
-          ) : null}
-        </Stack>
-      ) : null}
+          </Stack>
+        </Box>
+
+        {/* Signal — variant footer, right-aligned at width / below the identity on narrow. */}
+        {signal ? (
+          <Box
+            sx={{
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: { xs: "flex-start", sm: "flex-end" },
+              width: { xs: "100%", sm: "auto" },
+            }}
+          >
+            {signal}
+          </Box>
+        ) : null}
+      </Stack>
     </Box>
   )
 }

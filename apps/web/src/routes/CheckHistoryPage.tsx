@@ -1,5 +1,5 @@
 import React from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -12,6 +12,7 @@ import SearchIcon from "@mui/icons-material/Search"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { CheckCard, effectiveCompleted, type Check } from "../components/checks/CheckCard"
 import { downloadCheckReport } from "../lib/checkReport"
+import { userLabel } from "../lib/userDisplay"
 
 // History = the archive of finished checks (the inverse of the active landing's
 // partitionChecks filter). Reuses the SAME GET /checks payload + query cache as the
@@ -82,7 +83,7 @@ function exportCsv(rows: Check[]) {
       csvCell(c.title),
       csvCell(c.site?.name ?? ""),
       csvCell(c.template?.name ?? ""),
-      csvCell(c.assignee?.displayName ?? "Unassigned"),
+      csvCell(userLabel(c.assignee)),
       csvCell(d ? d.toLocaleDateString("en-GB") : ""),
       csvCell(cancelled || c.passRate == null ? "" : `${Math.round(c.passRate)}%`),
       csvCell(cancelled ? "" : failCount(c.items)),
@@ -108,10 +109,33 @@ const selectSx = {
 
 export default function CheckHistoryPage() {
   const navigate = useNavigate()
-  const [windowKey, setWindowKey] = React.useState<keyof typeof WINDOW_DAYS>("90d")
-  const [sortKey, setSortKey] = React.useState<SortKey>("completed")
-  const [search, setSearch] = React.useState("")
-  const [page, setPage] = React.useState(1)
+  // View state (page/sort/search/window) lives in the URL — so a return from a check detail
+  // restores exactly where the user was, and a history view is shareable/bookmarkable. Defaults
+  // are omitted from the URL (no ?window=90d noise); an invalid value falls back to its default.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rawWindow = searchParams.get("window")
+  const windowKey: keyof typeof WINDOW_DAYS = rawWindow && rawWindow in WINDOW_DAYS ? (rawWindow as keyof typeof WINDOW_DAYS) : "90d"
+  const rawSort = searchParams.get("sort")
+  const sortKey: SortKey = rawSort && rawSort in SORTERS ? (rawSort as SortKey) : "completed"
+  const search = searchParams.get("q") ?? ""
+  const rawPage = Number(searchParams.get("page"))
+  const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1
+
+  // Patch the URL view-state. replace: true so adjusting filters/paging never stacks browser-
+  // history entries — Back from the opened check lands on the history view at these exact params.
+  function patchParams(patch: Partial<{ q: string; sort: SortKey; window: string; page: number }>) {
+    const next = new URLSearchParams(searchParams)
+    const setOrDel = (key: string, value: string, isDefault: boolean) => {
+      if (!value || isDefault) next.delete(key)
+      else next.set(key, value)
+    }
+    if ("q" in patch) setOrDel("q", patch.q ?? "", !patch.q)
+    if ("sort" in patch) setOrDel("sort", patch.sort ?? "", patch.sort === "completed")
+    if ("window" in patch) setOrDel("window", patch.window ?? "", patch.window === "90d")
+    if ("page" in patch) setOrDel("page", String(patch.page ?? 1), (patch.page ?? 1) <= 1)
+    setSearchParams(next, { replace: true })
+  }
+
   // Per-card report download: which row is generating + a transient error toast. The PDF is
   // generated server-side on demand and streamed back through the authed api client.
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null)
@@ -163,9 +187,6 @@ export default function CheckHistoryPage() {
   const safePage = Math.min(page, pageCount)
   const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  // Any filter/sort change re-pages to the first page (the active set just changed).
-  const resetPage = () => setPage(1)
-
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Header — mirrors the active landing: back + context left, actions right */}
@@ -208,7 +229,7 @@ export default function CheckHistoryPage() {
           size="small"
           placeholder="Search ref, title or site"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); resetPage() }}
+          onChange={(e) => patchParams({ q: e.target.value, page: 1 })}
           sx={{ flex: 1, "& .MuiOutlinedInput-root": { bgcolor: "#ffffff" }, "& .MuiInputBase-input": { fontSize: 12.5 } }}
           InputProps={{
             startAdornment: (
@@ -222,7 +243,7 @@ export default function CheckHistoryPage() {
           select
           size="small"
           value={sortKey}
-          onChange={(e) => { setSortKey(e.target.value as SortKey); resetPage() }}
+          onChange={(e) => patchParams({ sort: e.target.value as SortKey, page: 1 })}
           sx={selectSx}
         >
           <MenuItem value="completed">Completed · newest</MenuItem>
@@ -233,7 +254,7 @@ export default function CheckHistoryPage() {
           select
           size="small"
           value={windowKey}
-          onChange={(e) => { setWindowKey(e.target.value as keyof typeof WINDOW_DAYS); resetPage() }}
+          onChange={(e) => patchParams({ window: e.target.value, page: 1 })}
           sx={selectSx}
         >
           <MenuItem value="90d">Last 90 days</MenuItem>
@@ -267,7 +288,9 @@ export default function CheckHistoryPage() {
                 key={c.id}
                 check={c}
                 variant="history"
-                onOpen={(id) => navigate(`/checks/${id}`)}
+                // Tag the origin so the check detail offers a "Back to history" return; the
+                // history view-state rides in the URL, so Back lands here at these exact params.
+                onOpen={(id) => navigate(`/checks/${id}`, { state: { from: "history" } })}
                 onDownloadReport={handleDownloadReport}
                 downloading={downloadingId === c.id}
               />
@@ -278,7 +301,7 @@ export default function CheckHistoryPage() {
               <Pagination
                 count={pageCount}
                 page={safePage}
-                onChange={(_e, p) => setPage(p)}
+                onChange={(_e, p) => patchParams({ page: p })}
                 size="small"
                 shape="rounded"
                 color="primary"

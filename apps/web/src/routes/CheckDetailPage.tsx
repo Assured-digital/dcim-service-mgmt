@@ -1,5 +1,5 @@
 import React from "react"
-import { useParams } from "react-router-dom"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
@@ -41,6 +41,7 @@ import { AttachmentsContent } from "../components/AttachmentsContent"
 import { AttachmentPreviewModal } from "../components/AttachmentPreviewModal"
 import { type AttachmentSummary, deleteAttachment, isImageType } from "../lib/attachments"
 import { downloadCheckReport } from "../lib/checkReport"
+import { userLabel } from "../lib/userDisplay"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -307,8 +308,17 @@ function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function CheckDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
   const qc = useQueryClient()
   const { setRecordLabel, setPageFullBleed } = useBreadcrumb()
+
+  // Origin-aware back: a check opened from the history archive carries from:"history" in
+  // router state, so Back returns to that archive view (navigate(-1) -> the history page at
+  // its preserved URL params + browser scroll). Any other origin (active landing, direct
+  // link) returns to the active checks landing.
+  const cameFromHistory = (location.state as { from?: string } | null)?.from === "history"
+  const goBack = () => (cameFromHistory ? navigate(-1) : navigate("/checks"))
 
   const canExecute = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
@@ -1111,7 +1121,7 @@ export default function CheckDetailPage() {
       { label: "Template", value: check.template.name },
       check.scheduledAt ? { label: "Scheduled", value: new Date(check.scheduledAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) } : null,
       check.startedAt ? { label: "Elapsed", value: formatElapsed(check.startedAt) } : null,
-      check.assignee ? { label: "Engineer", value: check.assignee.displayName } : null,
+      check.assignee ? { label: "Engineer", value: userLabel(check.assignee) } : null,
       check.passRate !== null ? { label: "Pass rate", value: `${check.passRate}%` } : null,
     ].filter((row): row is DetailRow => row !== null)
     // Live pass rate — mirrors the server's calcPassRate (PASS / (PASS+FAIL); N/A excluded;
@@ -1163,7 +1173,7 @@ export default function CheckDetailPage() {
                 {check.title}
               </Typography>
               <Typography sx={{ fontSize: 13, color: "#64748b", mt: "3px" }}>
-                {check.site.name} · {check.assignee?.displayName ?? "Unassigned"}
+                {check.site.name} · {userLabel(check.assignee)}
               </Typography>
               {check.scopeNotes ? (
                 <Typography sx={{ fontSize: 12.5, color: "#94a3b8", mt: "2px" }}>{check.scopeNotes}</Typography>
@@ -1565,7 +1575,7 @@ export default function CheckDetailPage() {
     { label: "Status", value: <StatusPill value={check.status} label={STATUS_LABELS[check.status]} size="sm" /> },
     { label: "Site", value: <Typography variant="caption" fontWeight={600}>{check.site.name}</Typography> },
     { label: "Template", value: <Typography variant="caption">{check.template.name}</Typography> },
-    { label: "Assignee", value: <Typography variant="caption">{check.assignee?.displayName ?? "Unassigned"}</Typography> },
+    { label: "Assignee", value: <Typography variant="caption">{userLabel(check.assignee)}</Typography> },
   ]
   if (check.passRate !== null) {
     // Pass rate is a RAG metric, not a record status — keep it on the quiet RAG palette
@@ -1617,7 +1627,7 @@ export default function CheckDetailPage() {
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: "8px", flexWrap: "wrap", rowGap: "6px" }}>
               <StatusPill value={check.status} label={STATUS_LABELS[check.status] ?? check.status} size="sm" />
               <Typography sx={{ fontSize: 13.5, color: "#64748b" }}>
-                {check.site.name} · {check.assignee?.displayName ?? "Unassigned"}
+                {check.site.name} · {userLabel(check.assignee)}
               </Typography>
             </Stack>
           </Box>
@@ -1671,6 +1681,14 @@ export default function CheckDetailPage() {
       {/* Record header — title + Start only. The ref lives in the breadcrumb and the
           Details panel; Site/Template are Details rows (no duplicated subtitle here). */}
       <Box sx={{ mb: "16px" }}>
+        <Button
+          onClick={goBack}
+          startIcon={<ArrowBackIcon sx={{ fontSize: 15 }} />}
+          size="small"
+          sx={{ mb: "10px", ml: "-6px", color: "#64748b", fontSize: 12.5, textTransform: "none", "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}
+        >
+          {cameFromHistory ? "Back to history" : "Back to checks"}
+        </Button>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
           <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
             <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25 }}>
