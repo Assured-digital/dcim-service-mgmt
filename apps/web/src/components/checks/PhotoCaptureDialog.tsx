@@ -7,10 +7,11 @@ import ReplayIcon from "@mui/icons-material/Replay"
 
 // Photo capture confirm beat (Stage 3 of the engineer check journey). A captured/selected
 // image is previewed HERE before anything is committed — the engineer adds an optional
-// caption and explicitly Attaches, or Retakes / Discards. Nothing is enqueued until "Attach
-// photo" (the parent calls the existing offline queue then). This is pure UI on top of the
-// proven P4a path, so it works fully offline: the preview is a local object URL the parent
-// owns (created on select, revoked on attach/discard).
+// caption and explicitly adds it to the evidence draft, or Retakes / Discards. "Add to
+// evidence" STAGES the photo into the open evidence composer (local, not yet queued); the
+// composer's Save is the single P4a enqueue point. This is pure UI: the preview is a local
+// object URL the parent owns (created on select, revoked on attach/discard), so it works
+// fully offline.
 //
 // fullScreen on phones (one-handed capture review); a centred card on desktop.
 export function PhotoCaptureDialog({
@@ -27,6 +28,7 @@ export function PhotoCaptureDialog({
   open: boolean
   url: string | null
   caption: string
+  // eslint-disable-next-line no-unused-vars
   onCaptionChange: (value: string) => void
   onRetake: () => void
   onDiscard: () => void
@@ -87,7 +89,7 @@ export function PhotoCaptureDialog({
           />
           <Typography sx={{ fontSize: 12, color: recommended ? "#b45309" : "#94a3b8", mt: "6px" }}>
             {recommended
-              ? "Recommended for failures — the caption appears in the report."
+              ? "Expected for failures — the caption appears in the report."
               : "Optional — captions appear in the report."}
           </Typography>
         </Box>
@@ -118,7 +120,7 @@ export function PhotoCaptureDialog({
             startIcon={<CheckIcon sx={{ fontSize: 16 }} />}
             sx={{ fontSize: 13, py: "8px", px: "16px" }}
           >
-            {attaching ? "Attaching…" : "Attach photo"}
+            {attaching ? "Adding…" : "Add to evidence"}
           </Button>
         </Stack>
       </Box>

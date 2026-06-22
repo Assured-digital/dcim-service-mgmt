@@ -12,6 +12,7 @@ import EventIcon from "@mui/icons-material/Event"
 import EditNoteIcon from "@mui/icons-material/EditNote"
 import HistoryIcon from "@mui/icons-material/History"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { semanticTokens } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
@@ -32,6 +33,7 @@ type Site = { id: string; name: string }
 export default function ChecksPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const { setPageFullBleed } = useBreadcrumb()
 
   // Schedule-check gate == manager-tier, matching the controller's create role set
@@ -97,7 +99,12 @@ export default function ChecksPage() {
       setTemplateId(""); setSiteId(""); setAssigneeId("")
       setScheduledAt(""); setScopeNotes("")
       qc.invalidateQueries({ queryKey: ["checks"] })
+      // Navigates to the new check, so the toast (app-level) is the lasting confirmation.
+      notify.success("Check scheduled")
       navigate(`/checks/${res.data.id}`)
+    } catch {
+      // Was fully silent on failure (dialog just stayed open) — surface it.
+      notify.error("Couldn't schedule the check — please try again")
     } finally {
       setSaving(false)
     }

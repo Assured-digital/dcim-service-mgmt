@@ -85,6 +85,43 @@ export function humaniseAuditEvent(
     case "REPLIED":
       return { lines: ["replied"] }
 
+    // ── Check item-level events (entityType "Check", so they share the per-check timeline). ──
+    // `title` carries the item label; the note (flag reason / follow-on note) shows as a comment.
+    case "ITEM_FLAGGED": {
+      const item = readStr(data, "title")
+      return {
+        lines: [item ? `flagged “${item}” for rework` : "flagged an item for rework"],
+        note: readStr(data, "comment") ?? undefined,
+      }
+    }
+
+    case "ITEM_UNFLAGGED": {
+      const item = readStr(data, "title")
+      return { lines: [item ? `cleared the rework flag on “${item}”` : "cleared a rework flag"] }
+    }
+
+    case "ITEM_ADDED": {
+      const item = readStr(data, "title")
+      return { lines: [item ? `added an ad-hoc item “${item}”` : "added an ad-hoc item"] }
+    }
+
+    case "ITEM_REANSWERED": {
+      const item = readStr(data, "title")
+      const ch = changes[0]
+      const lead = item ? `re-answered “${item}”` : "re-answered an item"
+      return { lines: [ch ? `${lead}: ${dash(ch.from)} → ${dash(ch.to)}` : lead] }
+    }
+
+    case "FOLLOW_ON_CREATED": {
+      const item = readStr(data, "title")
+      const raised = changes[0]?.to ?? null // e.g. "Task TSK-2026-1234"
+      const from = item ? ` from “${item}”` : ""
+      return {
+        lines: [raised ? `raised ${raised}${from}` : `raised a follow-on${from}`],
+        note: readStr(data, "comment") ?? undefined,
+      }
+    }
+
     default:
       // Unknown/other actions (DELETED, CLOSED, APPROVAL_RECORDED, …) — degrade gracefully.
       if (changeLines.length) return { lines: changeLines }

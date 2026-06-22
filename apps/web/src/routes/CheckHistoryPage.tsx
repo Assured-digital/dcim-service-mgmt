@@ -3,12 +3,13 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Alert, Box, Button, InputAdornment, MenuItem, Pagination, Snackbar, Stack,
+  Box, Button, InputAdornment, MenuItem, Pagination, Stack,
   TextField, Typography
 } from "@mui/material"
 import FileDownloadIcon from "@mui/icons-material/FileDownload"
 import SearchIcon from "@mui/icons-material/Search"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { useNotification } from "../components/NotificationProvider"
 import { CheckCard, effectiveCompleted, type Check } from "../components/checks/CheckCard"
 import { BackButton } from "../components/shared"
 import { downloadCheckReport } from "../lib/checkReport"
@@ -109,6 +110,7 @@ const selectSx = {
 
 export default function CheckHistoryPage() {
   const navigate = useNavigate()
+  const { notify } = useNotification()
   // View state (page/sort/search/window) lives in the URL — so a return from a check detail
   // restores exactly where the user was, and a history view is shareable/bookmarkable. Defaults
   // are omitted from the URL (no ?window=90d noise); an invalid value falls back to its default.
@@ -136,10 +138,9 @@ export default function CheckHistoryPage() {
     setSearchParams(next, { replace: true })
   }
 
-  // Per-card report download: which row is generating + a transient error toast. The PDF is
-  // generated server-side on demand and streamed back through the authed api client.
+  // Per-card report download: which row is generating. The PDF is generated server-side on
+  // demand and streamed back through the authed api client; failures toast (shared component).
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null)
-  const [reportError, setReportError] = React.useState<string | null>(null)
 
   // Same key + endpoint as the landing -> shares the cache (instant cross-navigation).
   const { data, isLoading, error } = useQuery({
@@ -150,11 +151,10 @@ export default function CheckHistoryPage() {
   async function handleDownloadReport(check: Check) {
     if (downloadingId) return // one at a time — avoids hammering the on-demand generator
     setDownloadingId(check.id)
-    setReportError(null)
     try {
       await downloadCheckReport(check.id, check.reference)
     } catch {
-      setReportError(`Couldn't generate the report for ${check.reference}. Please try again.`)
+      notify.error(`Couldn't generate the report for ${check.reference} — please try again`)
     } finally {
       setDownloadingId(null)
     }
@@ -206,7 +206,10 @@ export default function CheckHistoryPage() {
           variant="outlined"
           startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
           disabled={filtered.length === 0}
-          onClick={() => exportCsv(filtered)}
+          onClick={() => {
+            try { exportCsv(filtered) }
+            catch { notify.error("Couldn't export the CSV — please try again") }
+          }}
           sx={{ fontSize: 12 }}
         >
           Export CSV
@@ -300,17 +303,6 @@ export default function CheckHistoryPage() {
           ) : null}
         </>
       ) : null}
-
-      <Snackbar
-        open={!!reportError}
-        autoHideDuration={5000}
-        onClose={() => setReportError(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity="error" variant="filled" onClose={() => setReportError(null)}>
-          {reportError}
-        </Alert>
-      </Snackbar>
     </Box>
   )
 }

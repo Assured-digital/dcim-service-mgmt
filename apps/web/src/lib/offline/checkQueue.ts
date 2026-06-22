@@ -29,6 +29,20 @@ export interface SyncSnapshot {
   pendingByCheck: Record<string, CheckPending>
 }
 
+// A queued write the server PERMANENTLY rejected (4xx) — dropped from the queue so it
+// can't wedge everything behind it. Emitted so the UI can warn the engineer that the
+// write was lost (esp. evidence: a silent photo-upload drop is the worst case). Transient
+// failures (offline / 5xx) are NOT dead-letters — they stay queued and the SyncStatusPill
+// already shows them, so they emit nothing here.
+export interface DeadLetteredMutation {
+  kind: QueuedMutation["kind"]
+  checkId: string
+  itemId: string
+}
+
+// eslint-disable-next-line no-unused-vars
+export type DeadLetterListener = (mutation: DeadLetteredMutation) => void
+
 const EMPTY_PENDING: CheckPending = { count: 0, photosByItem: {} }
 
 // The api response interceptor normalises errors to { statusCode }. A network/offline
@@ -41,6 +55,7 @@ function isTransient(err: unknown): boolean {
 
 class CheckSyncManager {
   private listeners = new Set<() => void>()
+  private deadLetterListeners = new Set<DeadLetterListener>()
   private snapshot: SyncSnapshot = { draining: false, pendingByCheck: {} }
   private photoUrls = new Map<number, string>() // seq -> object URL (lifecycle owner)
   private draining = false
@@ -75,6 +90,19 @@ class CheckSyncManager {
   getSnapshot = (): SyncSnapshot => this.snapshot
   private emit() {
     this.listeners.forEach((fn) => fn())
+  }
+
+  // ── Dead-letter notifications ───────────────────────────────────────────────
+  // Subscribe to permanently-rejected (4xx) writes so the UI can toast the loss. The
+  // consumer filters by checkId. Returns an unsubscribe.
+  onDeadLetter = (fn: DeadLetterListener): (() => void) => {
+    this.deadLetterListeners.add(fn)
+    return () => {
+      this.deadLetterListeners.delete(fn)
+    }
+  }
+  private emitDeadLetter(m: DeadLetteredMutation) {
+    this.deadLetterListeners.forEach((fn) => fn(m))
   }
 
   getCheckPending(checkId: string): CheckPending {
@@ -257,9 +285,11 @@ class CheckSyncManager {
             if (m.seq !== undefined) await db.put("mutationQueue", { ...m, attempts: m.attempts + 1 })
             return
           }
-          // Permanent (4xx): dead-letter so one bad write can't block everything behind it.
+          // Permanent (4xx): dead-letter so one bad write can't block everything behind it,
+          // and emit so the UI can warn that this write was dropped (it won't retry).
           console.warn("[field-work] dropping rejected mutation", m.kind, m.itemId, err)
           if (m.seq !== undefined) await db.delete("mutationQueue", m.seq)
+          this.emitDeadLetter({ kind: m.kind, checkId: m.checkId, itemId: m.itemId })
         }
       }
     } finally {

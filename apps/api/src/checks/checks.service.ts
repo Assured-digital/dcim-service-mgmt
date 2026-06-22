@@ -26,6 +26,16 @@ const CHECK_STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled"
 }
 
+// Humanised CheckItem response values for item-level audit `changes` (raw value fallback for
+// non PASS/FAIL response types). Mirrors CHECK_STATUS_LABELS — humanise at emit time so a
+// history line survives a later label change.
+const RESPONSE_LABELS: Record<string, string> = {
+  PASS: "Pass",
+  FAIL: "Fail",
+  NA: "N/A"
+}
+const respLabel = (v: string | null): string | null => (v ? RESPONSE_LABELS[v] ?? v : null)
+
 function calcPassRate(items: { response: string | null; isRequired: boolean }[]): number {
   const answered = items.filter(i => i.response !== null)
   if (answered.length === 0) return 0
@@ -69,6 +79,33 @@ export class ChecksService {
         }
       ],
       comment: comment?.trim() || null
+    })
+  }
+
+  // Single-writer item-level emit for a Check. entityType/entityId are fixed to the PARENT check
+  // so item events (flag/unflag/ad-hoc add/follow-on/rework re-answer) share the one per-check
+  // timeline with the status transitions. clientId carries tenant scope; `title` the item label
+  // (line context), `comment` the note, `changes` an optional humanised from→to.
+  private async emitCheckItemAudit(
+    clientId: string,
+    checkId: string,
+    actorUserId: string | null,
+    action: string,
+    opts: {
+      title?: string | null
+      comment?: string | null
+      changes?: { field: string; label: string; from: string | null; to: string | null }[]
+    }
+  ) {
+    await emitAudit(this.prisma, {
+      entityType: "Check",
+      entityId: checkId,
+      action,
+      actorUserId,
+      clientId,
+      title: opts.title ?? null,
+      comment: opts.comment?.trim() || null,
+      changes: opts.changes
     })
   }
 
@@ -241,13 +278,62 @@ export class ChecksService {
       "check-item",
       check.items.map((i) => i.id)
     )
+    // Resolve each follow-on's linked Task/Risk/Issue (ref + title + status) so the UI can
+    // render "Task created · {title}" instead of a bare type. clientId-scoped so a dangling
+    // cross-tenant id resolves to null, never a foreign record.
+    const followOnLinks = await this.resolveFollowOnLinks(
+      clientId,
+      check.items.flatMap((i) => i.followOns)
+    )
     return {
       ...check,
       assignee: toUserDisplay(check.assignee),
       reviewer: toUserDisplay(check.reviewer),
-      items: check.items.map((i) => ({ ...i, attachments: itemAttachments.get(i.id) ?? [] })),
+      items: check.items.map((i) => ({
+        ...i,
+        attachments: itemAttachments.get(i.id) ?? [],
+        followOns: i.followOns.map((fo) => ({
+          ...fo,
+          linked: followOnLinks.get(`${fo.entityType}:${fo.entityId}`) ?? null
+        }))
+      })),
       attachments
     }
+  }
+
+  // Batch-resolve follow-on targets to { reference, title, status }, grouped by entityType so
+  // each underlying table is queried once (≤3 queries total). Every query is clientId-scoped —
+  // a follow-on pointing at another tenant's id simply yields no entry (→ null at the call site).
+  private async resolveFollowOnLinks(
+    clientId: string,
+    followOns: { entityType: string; entityId: string }[]
+  ): Promise<Map<string, { reference: string; title: string; status: string }>> {
+    const map = new Map<string, { reference: string; title: string; status: string }>()
+    if (followOns.length === 0) return map
+
+    const idsByType = (type: string) =>
+      Array.from(new Set(followOns.filter((f) => f.entityType === type).map((f) => f.entityId)))
+    const select = { id: true, reference: true, title: true, status: true } as const
+    const taskIds = idsByType("Task")
+    const riskIds = idsByType("Risk")
+    const issueIds = idsByType("Issue")
+
+    const [tasks, risks, issues] = await Promise.all([
+      taskIds.length
+        ? this.prisma.task.findMany({ where: { id: { in: taskIds }, clientId }, select })
+        : Promise.resolve([]),
+      riskIds.length
+        ? this.prisma.risk.findMany({ where: { id: { in: riskIds }, clientId }, select })
+        : Promise.resolve([]),
+      issueIds.length
+        ? this.prisma.issue.findMany({ where: { id: { in: issueIds }, clientId }, select })
+        : Promise.resolve([])
+    ])
+
+    for (const t of tasks) map.set(`Task:${t.id}`, { reference: t.reference, title: t.title, status: String(t.status) })
+    for (const r of risks) map.set(`Risk:${r.id}`, { reference: r.reference, title: r.title, status: String(r.status) })
+    for (const i of issues) map.set(`Issue:${i.id}`, { reference: i.reference, title: i.title, status: String(i.status) })
+    return map
   }
 
   async createForClient(clientId: string, actorUserId: string | null, dto: any) {
@@ -376,7 +462,7 @@ export class ChecksService {
     })
     if (!item) throw new NotFoundException("Check item not found")
 
-    return this.prisma.checkItem.update({
+    const updated = await this.prisma.checkItem.update({
       where: { id: itemId },
       data: {
         response: dto.response ?? item.response,
@@ -385,15 +471,71 @@ export class ChecksService {
         respondedById: dto.response ? actorUserId : item.respondedById
       }
     })
+
+    // Answer audit policy: audit a response CHANGE only on a rework cycle. `submittedAt` is set on
+    // the first submit and never cleared on return, so it marks a check that has been through ≥1
+    // review round. Initial-fill answers are deliberately NOT audited — one event per item would
+    // swamp the timeline, and the submit event already records the completed state. A re-answer
+    // after a return is the consequential, audit-worthy change.
+    if (dto.response != null && dto.response !== item.response && check.submittedAt) {
+      await this.emitCheckItemAudit(clientId, check.id, actorUserId, "ITEM_REANSWERED", {
+        title: item.label,
+        changes: [
+          { field: "response", label: "Response", from: respLabel(item.response), to: respLabel(dto.response) }
+        ]
+      })
+    }
+    return updated
   }
 
-  async addAdHocItem(clientId: string, checkId: string, dto: any) {
+  // Reviewer flags one item for rework (PENDING_REVIEW only). Note is required — the engineer
+  // sees it on return. Distinct from updateItem (the engineer's path, which is locked under
+  // review): this is the only item mutation allowed at PENDING_REVIEW, reviewer-gated at the
+  // controller. clientId-scoped via getForClient + the checkId-bound item lookup.
+  async flagItem(clientId: string, checkId: string, itemId: string, dto: any, actorUserId: string) {
+    const check = await this.getForClient(clientId, checkId)
+    if (check.status !== CheckStatus.PENDING_REVIEW) {
+      throw new BadRequestException("Items can only be flagged while the check is pending review")
+    }
+    const note = (dto.reworkNote ?? "").trim()
+    if (!note) throw new BadRequestException("A note is required when flagging an item")
+    const item = await this.prisma.checkItem.findFirst({ where: { id: itemId, checkId: check.id } })
+    if (!item) throw new NotFoundException("Check item not found")
+    const updated = await this.prisma.checkItem.update({
+      where: { id: itemId },
+      data: { reworkFlagged: true, reworkNote: note }
+    })
+    await this.emitCheckItemAudit(clientId, check.id, actorUserId, "ITEM_FLAGGED", {
+      title: item.label,
+      comment: note
+    })
+    return updated
+  }
+
+  async unflagItem(clientId: string, checkId: string, itemId: string, actorUserId: string) {
+    const check = await this.getForClient(clientId, checkId)
+    if (check.status !== CheckStatus.PENDING_REVIEW) {
+      throw new BadRequestException("Items can only be unflagged while the check is pending review")
+    }
+    const item = await this.prisma.checkItem.findFirst({ where: { id: itemId, checkId: check.id } })
+    if (!item) throw new NotFoundException("Check item not found")
+    const updated = await this.prisma.checkItem.update({
+      where: { id: itemId },
+      data: { reworkFlagged: false, reworkNote: null }
+    })
+    await this.emitCheckItemAudit(clientId, check.id, actorUserId, "ITEM_UNFLAGGED", {
+      title: item.label
+    })
+    return updated
+  }
+
+  async addAdHocItem(clientId: string, checkId: string, dto: any, actorUserId: string) {
     const check = await this.getForClient(clientId, checkId)
     if (!["IN_PROGRESS", "DRAFT", "SCHEDULED", "ASSIGNED"].includes(check.status)) {
       throw new BadRequestException("Cannot add items to this check")
     }
     const maxOrder = check.items.reduce((max, i) => Math.max(max, i.sortOrder), 0)
-    return this.prisma.checkItem.create({
+    const created = await this.prisma.checkItem.create({
       data: {
         checkId: check.id,
         sortOrder: maxOrder + 1,
@@ -405,6 +547,10 @@ export class ChecksService {
         isAdHoc: true
       }
     })
+    await this.emitCheckItemAudit(clientId, check.id, actorUserId, "ITEM_ADDED", {
+      title: created.label
+    })
+    return created
   }
 
   async submitForReview(clientId: string, id: string, dto: any, actorUserId: string) {
@@ -424,15 +570,23 @@ export class ChecksService {
 
     const passRate = calcPassRate(check.items)
 
-    const updated = await this.prisma.check.update({
-      where: { id: check.id },
-      data: {
-        status: CheckStatus.PENDING_REVIEW,
-        submittedAt: new Date(),
-        engineerSummary: dto.engineerSummary,
-        passRate
-      }
-    })
+    // Submitting opens a fresh review round, so any rework flags from a prior review are
+    // cleared in the same transaction as the status transition — the reviewer starts clean.
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.check.update({
+        where: { id: check.id },
+        data: {
+          status: CheckStatus.PENDING_REVIEW,
+          submittedAt: new Date(),
+          engineerSummary: dto.engineerSummary,
+          passRate
+        }
+      }),
+      this.prisma.checkItem.updateMany({
+        where: { checkId: check.id },
+        data: { reworkFlagged: false, reworkNote: null }
+      })
+    ])
     await this.emitCheckStatus(clientId, check.id, actorUserId, check.status, CheckStatus.PENDING_REVIEW, dto.engineerSummary)
     return updated
   }
@@ -502,6 +656,7 @@ export class ChecksService {
     if (!item) throw new NotFoundException("Check item not found")
 
     let entityId: string
+    let entityRef: string
 
     if (dto.entityType === "Task") {
       const task = await this.prisma.task.create({
@@ -517,6 +672,7 @@ export class ChecksService {
         }
       })
       entityId = task.id
+      entityRef = task.reference
     } else if (dto.entityType === "Risk") {
       const risk = await this.prisma.risk.create({
         data: {
@@ -531,6 +687,7 @@ export class ChecksService {
         }
       })
       entityId = risk.id
+      entityRef = risk.reference
     } else if (dto.entityType === "Issue") {
       const issue = await this.prisma.issue.create({
         data: {
@@ -543,6 +700,7 @@ export class ChecksService {
         }
       })
       entityId = issue.id
+      entityRef = issue.reference
     } else {
       throw new BadRequestException("Invalid entity type")
     }
@@ -555,6 +713,12 @@ export class ChecksService {
         note: dto.note,
         createdById: actorUserId ?? undefined
       }
+    })
+
+    await this.emitCheckItemAudit(clientId, check.id, actorUserId, "FOLLOW_ON_CREATED", {
+      title: item.label,
+      comment: dto.note,
+      changes: [{ field: "followOn", label: "Raised", from: null, to: `${dto.entityType} ${entityRef}` }]
     })
 
     return { followOn, entityId, entityType: dto.entityType }

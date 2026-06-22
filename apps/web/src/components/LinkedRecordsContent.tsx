@@ -50,7 +50,7 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
           const tone = statusTone(link.status)
           return (
             <Box
-              key={link.linkId}
+              key={link.linkId || `${link.type}:${link.id}`}
               onClick={() =>
                 drill
                   ? drill(navSegmentForType(link.type), link.id, link.linkId)

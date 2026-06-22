@@ -206,7 +206,7 @@ export default function App() {
           {/* Field Work — Engineering Checks */}
           <Route path="checks" element={<ChecksPage />} />
           <Route path="checks/history" element={<CheckHistoryPage />} />
-          <Route path="checks/:id" element={<CheckDetailPage />} />
+          <Route path="checks/:id/*" element={<CheckDetailPage />} />
           <Route path="check-templates" element={<CheckTemplatesPage />} />
           <Route path="check-templates/:id" element={<CheckTemplateDetailPage />} />
 

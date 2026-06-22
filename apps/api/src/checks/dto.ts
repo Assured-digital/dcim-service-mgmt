@@ -142,6 +142,13 @@ export class ReviewCheckDto {
   reviewerNotes?: string
 }
 
+// Reviewer flags a single item for rework — the note is required (the engineer needs to
+// know why). Service trims + rejects an empty note.
+export class FlagItemDto {
+  @IsString()
+  reworkNote!: string
+}
+
 export class SubmitCheckDto {
   @IsOptional()
   @IsString()

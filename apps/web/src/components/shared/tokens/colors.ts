@@ -157,6 +157,11 @@ export const radii = {
 // than the old fully-rounded lozenge. Reduce/raise here and both pills follow.
 export const PILL_RADIUS = radii.sm
 
+// Shared tag radius — small metadata tags (Required / Critical / Ad hoc) and any
+// little close/remove badge. A touch rounder than the pill (8px) but still squared
+// off, so tags read as the unified aesthetic rather than fully-rounded lozenges.
+export const TAG_RADIUS = radii.md
+
 export const shadows = {
   card: "0 10px 28px rgba(15,23,42,0.06)",
   hover: "0 2px 8px rgba(15,23,42,0.06)",

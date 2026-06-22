@@ -1,10 +1,10 @@
 import React from "react"
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate, useLocation, Routes, Route } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, Menu, MenuItem, Stack,
+  DialogContent, DialogTitle, Divider, Drawer, IconButton, Menu, MenuItem, Stack,
   Tab, Tabs, TextField, Tooltip, Typography
 } from "@mui/material"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
@@ -17,10 +17,12 @@ import DescriptionIcon from "@mui/icons-material/Description"
 import CloudOffIcon from "@mui/icons-material/CloudOff"
 import ScheduleIcon from "@mui/icons-material/Schedule"
 import DownloadIcon from "@mui/icons-material/Download"
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import NotesIcon from "@mui/icons-material/Notes"
+import OutlinedFlagIcon from "@mui/icons-material/OutlinedFlag"
+import AddTaskIcon from "@mui/icons-material/AddTask"
+import MoreVertIcon from "@mui/icons-material/MoreVert"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
@@ -31,16 +33,28 @@ import LockIcon from "@mui/icons-material/Lock"
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment"
 import ThermostatIcon from "@mui/icons-material/Thermostat"
 import RuleFolderIcon from "@mui/icons-material/RuleFolder"
+import HistoryIcon from "@mui/icons-material/History"
+import CloseIcon from "@mui/icons-material/Close"
 import type { SvgIconComponent } from "@mui/icons-material"
 import { PhotoCaptureDialog } from "../components/checks/PhotoCaptureDialog"
+import { PhotoDetailDialog, type PhotoDetailTarget } from "../components/checks/PhotoDetailDialog"
+import { FlagNoteDialog } from "../components/checks/FlagNoteDialog"
 import {
-  BackButton, PropertiesPanel, StatusPill, ragTokens, WorkflowStrip, type SemanticIntent
+  Avatar, PropertiesPanel, StatusPill, ragTokens, radii, TAG_RADIUS, WorkflowStrip, type SemanticIntent
 } from "../components/shared"
-import { RightPanelSection } from "../components/detail"
+import { RightPanelSection, DetailNarrowProvider, DetailDrawerChromeProvider } from "../components/detail"
+import { DrillNavContext, type DrillFn } from "../lib/drillNav"
+import TaskDetailPage from "./TaskDetailPage"
+import RiskDetailPage from "./RiskDetailPage"
+import IssueDetailPage from "./IssueDetailPage"
+import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
 import { AttachmentsContent } from "../components/AttachmentsContent"
+import { EntityHistoryDialog } from "../components/EntityHistoryDialog"
 import { AttachmentPreviewModal } from "../components/AttachmentPreviewModal"
+import { useNotification } from "../components/NotificationProvider"
 import { type AttachmentSummary, deleteAttachment, isImageType } from "../lib/attachments"
 import { downloadCheckReport } from "../lib/checkReport"
+import { type ResolvedLink, type LinkRecordType, typeLabel, routeForSegment } from "../lib/linkedRecords"
 import { userLabel } from "../lib/userDisplay"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
@@ -63,7 +77,12 @@ type CheckItem = {
   response: string | null
   notes: string | null
   sortOrder: number
-  followOns: { id: string; entityType: string; entityId: string; note: string | null }[]
+  reworkFlagged?: boolean | null
+  reworkNote?: string | null
+  followOns: {
+    id: string; entityType: string; entityId: string; note: string | null
+    linked?: { reference: string; title: string; status: string } | null
+  }[]
   attachments?: AttachmentSummary[]
 }
 
@@ -81,6 +100,47 @@ type Check = {
   template: { id: string; name: string; checkType: string; estimatedMinutes: number | null }
   items: CheckItem[]
   attachments?: AttachmentSummary[]
+}
+
+// A photo added to the evidence composer but NOT yet Saved — held locally (a File + a local
+// object URL for the thumbnail) until the composer's Save flushes it through the P4a queue.
+// Discard drops it (and revokes the URL).
+type StagedPhoto = { key: string; file: File; url: string; caption: string }
+// The unsaved evidence draft for one item: a note + any staged photos. Local until Save.
+type EvidenceDraft = { note: string; photos: StagedPhoto[] }
+
+// A follow-on chip label: prefer the server-resolved "{REF · title}" of the linked
+// Task/Risk/Issue (so the reviewer/engineer recognises what was raised — "Task created · …");
+// fall back to the bare entity type before the link resolves (or if it can't).
+function followOnLabel(fo: { entityType: string; linked?: { reference: string; title: string; status: string } | null }): string {
+  return fo.linked ? `${fo.linked.reference} · ${fo.linked.title}` : fo.entityType
+}
+
+// A follow-on (Task/Risk/Issue raised from a failed item) presented as a linked record, so it
+// renders through the shared LinkedRecordsContent card (type icon + title + ref + status pill,
+// clickable to the record) — consistent with linked records elsewhere, not an ad-hoc chip.
+// linkId is empty: a follow-on is NOT a RecordLink and can't be unlinked here, and an empty
+// linkId suppresses LinkedRecordsContent's inline unlink affordance (its "hard-relation rows:
+// shown but not unlinkable" path). entityType is capitalised on the wire ("Task"); lower-case it
+// to the LinkRecordType the per-type visuals + route table key on. entityId is the real record id.
+function followOnAsLink(fo: CheckItem["followOns"][number]): ResolvedLink {
+  const type = fo.entityType.toLowerCase() as LinkRecordType
+  return {
+    linkId: "",
+    type,
+    id: fo.entityId,
+    reference: fo.linked?.reference ?? "",
+    title: fo.linked?.title ?? fo.note ?? typeLabel(type),
+    status: fo.linked?.status ?? "",
+  }
+}
+
+// Calm absolute timestamp for the engineer-note attribution header (en-GB, the app convention).
+function formatNoteTime(iso: string | null): string | null {
+  if (!iso) return null
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  })
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -256,12 +316,20 @@ function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
       <DialogTitle>Create follow-on action</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fff5f5", border: "1px solid #fecaca" }}>
-            <Stack direction="row" spacing={0.75} alignItems="center">
-              <WarningAmberIcon sx={{ fontSize: 14, color: "#b91c1c" }} />
-              <Typography variant="caption" color="#b91c1c" fontWeight={600}>Failed: {item.label}</Typography>
-            </Stack>
-          </Box>
+          {/* Source-item banner — red "Failed: …" for the engineer's failed-item flow; neutral
+              for any other response (a reviewer can raise a follow-on from a pass/N-A too). */}
+          {item.response === "FAIL" ? (
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fff5f5", border: "1px solid #fecaca" }}>
+              <Stack direction="row" spacing={0.75} alignItems="center">
+                <WarningAmberIcon sx={{ fontSize: 14, color: "#b91c1c" }} />
+                <Typography variant="caption" color="#b91c1c" fontWeight={600}>Failed: {item.label}</Typography>
+              </Stack>
+            </Box>
+          ) : (
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <Typography variant="caption" sx={{ color: "#475569", fontWeight: 600 }}>From: {item.label}</Typography>
+            </Box>
+          )}
           <Stack direction="row" spacing={1}>
             {(["Task", "Risk", "Issue"] as const).map(t => (
               <Button key={t} size="small" variant={type === t ? "contained" : "outlined"}
@@ -308,10 +376,11 @@ function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function CheckDetailPage() {
-  const { id } = useParams()
+  const { id, "*": drawerSplat = "" } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const qc = useQueryClient()
+  const { notify } = useNotification()
   const { setRecordLabel, setPageFullBleed } = useBreadcrumb()
 
   // Origin-aware back: a check opened from the history archive carries from:"history" in
@@ -321,9 +390,31 @@ export default function CheckDetailPage() {
   const cameFromHistory = (location.state as { from?: string } | null)?.from === "history"
   const goBack = () => (cameFromHistory ? navigate(-1) : navigate("/checks"))
 
+  // Local record-peek drawer. A follow-on (Task/Risk/Issue) raised from a failed item opens in a
+  // right-hand panel instead of navigating away — reusing the SAME contract as the Service Desk
+  // navigator's depth-2 drawer (DrillNavContext + the unchanged detail pages + DetailNarrow/
+  // DrawerChrome), the only other place a record peeks in. The route is checks/:id/* (App.tsx) so
+  // a peek changes only the splat — this page stays mounted (no refetch / no lost draft). The
+  // splat is [seg, recId] when a record is open; closing drops it back to /checks/:id.
+  const [drawerSeg, drawerRecId] = drawerSplat.split("/").filter(Boolean)
+  const drawerOpen = !!drawerSeg && !!drawerRecId
+  const drillPush = React.useCallback<DrillFn>(
+    (navType, recId) => navigate(`/checks/${id}/${navType}/${recId}`), [navigate, id])
+  const closeDrawer = React.useCallback(() => navigate(`/checks/${id}`), [navigate, id])
+  const [drawerHeaderSlot, setDrawerHeaderSlot] = React.useState<HTMLElement | null>(null)
+  const onOpenFull = React.useCallback(
+    () => navigate(routeForSegment(drawerSeg, drawerRecId)), [navigate, drawerSeg, drawerRecId])
+  // No onRemoveLink: follow-ons aren't RecordLinks (linkId is ""), so the shell hides "Remove link".
+  const drawerChrome = React.useMemo(
+    () => ({ headerSlot: drawerHeaderSlot, onOpenFull }), [drawerHeaderSlot, onOpenFull])
+
   const canExecute = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
   // Manager-tier can reschedule/reassign a pre-start check (matches the PATCH /checks/:id roles).
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST])
+  // Reviewer actions (approve / return / flag / create-task on the review surface) share the
+  // same role set as the backend approve/return endpoints (no ENGINEER) — gate the review-only
+  // buttons on this so an engineer viewing a PENDING_REVIEW check never sees a control that 403s.
+  const canReview = canManage
   // Assignee picker source — operational-callable & client-scoped (never raw /users).
   const { data: assignableUsers } = useAssignableUsers()
 
@@ -342,36 +433,49 @@ export default function CheckDetailPage() {
   // Optimistic answers (response + notes), saved IMMEDIATELY on tap/blur through the offline
   // queue (the proven P4a path). Seeded from IDB on mount so un-synced work survives reload.
   const [drafts, setDrafts] = React.useState<Record<string, { response: string; notes: string }>>({})
-  // Per-item field-evidence photos persist to object storage as `check-item`
-  // attachments; offline captures queue locally (see useCheckExecutionSync) and show
-  // as pending thumbnails until they upload.
+  // Per-item field-evidence photos persist to object storage as `check-item` attachments;
+  // offline captures queue locally (see useCheckExecutionSync) and show as pending thumbnails
+  // until they upload. Thumbnails are VIEW-ONLY — tapping one opens it in the PhotoDetailDialog
+  // (closer look + caption edit + deliberate, confirmed delete), so a stray tap can't destroy
+  // evidence the way the old inline × could.
+  const [photoDetail, setPhotoDetail] = React.useState<PhotoDetailTarget | null>(null)
+  // When a photo is opened for a quick LOOK (from a closed/answered row, not the composer) we
+  // suppress caption-edit/delete — editing stays behind "Edit evidence". The composer opens the
+  // same dialog with this false (the default), so its edit affordances are unchanged.
+  const [photoDetailViewOnly, setPhotoDetailViewOnly] = React.useState(false)
+  const openPhotoView = (target: PhotoDetailTarget) => { setPhotoDetailViewOnly(true); setPhotoDetail(target) }
+  // Read-only per-item photo viewer for the STANDARD (PENDING_REVIEW / COMPLETED) layout — that
+  // surface stays view-only (no edit/delete), so it keeps the simpler AttachmentPreviewModal.
   const [previewAtt, setPreviewAtt] = React.useState<AttachmentSummary | null>(null)
   // Photo capture confirm beat (Stage 3): a selected/captured image is previewed here with an
-  // optional caption BEFORE anything is committed. `files` holds the current batch (current at
-  // [0]); `url` is a local object URL owned here (created on select, revoked on attach/discard),
-  // so the preview is pure UI and works fully offline — Attach is the existing P4a enqueue point.
+  // optional caption BEFORE it joins the evidence draft. `files` holds the current batch
+  // (current at [0]); `url` is a local object URL owned here (created on select, revoked on
+  // attach/discard). "Add to evidence" STAGES it into the open composer (see evidenceDrafts) —
+  // the composer's Save is the single P4a enqueue point.
   const [photoPreview, setPhotoPreview] = React.useState<{ itemId: string; files: File[]; url: string; caption: string } | null>(null)
-  const [photoAttaching, setPhotoAttaching] = React.useState(false)
-  // In-flight caption edits keyed by attachment id (persisted) or `pending:<seq>` (queued
-  // capture). Held until committed on blur so typing doesn't write per keystroke.
-  const [captionDrafts, setCaptionDrafts] = React.useState<Record<string, string>>({})
 
-  // ── Inline answering UI state ───────────────────────────────────────────────
-  // openNotes = item ids whose note composer is revealed (on-demand "Add note", or
-  // auto-revealed when an item is marked Fail). Answers themselves are immediate — there is
-  // no per-card edit/Save mode.
-  const [openNotes, setOpenNotes] = React.useState<Set<string>>(new Set())
-  // The Pass/Fail/N-A buttons are always visible; only the secondary note/photo detail tucks.
-  // An item id in `editingItems` has its detail strip open. (Fail forces it open so the failure
-  // gets documented; Pass/N-A tuck to a compact row for a tighter, faster list.)
-  const [editingItems, setEditingItems] = React.useState<Set<string>>(new Set())
+  // ── Evidence composer (Save/Discard draft) ──────────────────────────────────
+  // The ANSWER (Pass/Fail/N-A) is an immediate toggle — committed on tap via saveItemAnswer,
+  // re-tap changes it, never lost. EVIDENCE (note + photos + captions) is a separate
+  // Save/Discard composer: a local draft per item, durable only once Saved — Save flushes
+  // through the P4a queue (saveItemAnswer for the note, queuePhoto per staged photo); Discard
+  // reverts. Only ONE composer is open at a time; opening another with an unsaved draft prompts
+  // (leavePrompt) — the answer is already committed, so only the evidence draft is ever at risk.
+  const [evidenceDrafts, setEvidenceDrafts] = React.useState<Record<string, EvidenceDraft>>({})
+  const [openComposer, setOpenComposer] = React.useState<string | null>(null)
+  const [leavePrompt, setLeavePrompt] = React.useState<{ fromItemId: string; next: () => void } | null>(null)
+  const stagedSeq = React.useRef(0) // monotonic key source for staged (not-yet-Saved) photos
+
   const [reviewMode, setReviewMode] = React.useState(false)
-  // Sections that all-answered but the user manually re-expanded (collapse is purely visual).
-  const [expandedComplete, setExpandedComplete] = React.useState<Set<string>>(new Set())
   const [sectionMenuAnchor, setSectionMenuAnchor] = React.useState<HTMLElement | null>(null)
   const photoInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
   const itemRefs = React.useRef<Record<string, HTMLElement | null>>({})
   const [followOnItem, setFollowOnItem] = React.useState<CheckItem | null>(null)
+  // Reviewer flag-for-rework: the item being flagged (drives the note dialog) + an in-flight guard.
+  const [flagItem, setFlagItem] = React.useState<CheckItem | null>(null)
+  const [flagSaving, setFlagSaving] = React.useState(false)
+  // Per-row ⋮ menu (review surface compact passes) — Flag/Task stay reachable on every item.
+  const [rowMenu, setRowMenu] = React.useState<{ anchor: HTMLElement; item: CheckItem } | null>(null)
   const [engineerSummary, setEngineerSummary] = React.useState("")
   const [reviewOpen, setReviewOpen] = React.useState(false)
   const [reviewAction, setReviewAction] = React.useState<"approve" | "return">("approve")
@@ -381,6 +485,7 @@ export default function CheckDetailPage() {
   const [adHocOpen, setAdHocOpen] = React.useState(false)
   const [adHocLabel, setAdHocLabel] = React.useState("")
   const [adHocSection, setAdHocSection] = React.useState("")
+  const [historyOpen, setHistoryOpen] = React.useState(false)
 
   // Section scroll refs
   const sectionRefs = React.useRef<Record<string, HTMLElement | null>>({})
@@ -460,6 +565,20 @@ export default function CheckDetailPage() {
     prevPendingRef.current = sync.pendingCount
   }, [sync.pendingCount, id, qc])
 
+  // Surface PERMANENTLY-dropped queued writes (4xx dead-letters) for THIS check. These fail
+  // silently otherwise — worst of all for evidence (a rejected photo) — and the SyncStatusPill
+  // would falsely read "All changes saved" once the count drains to 0. Transient failures
+  // (offline / 5xx) stay queued and the pill already shows them, so they never reach here.
+  React.useEffect(() => {
+    if (!id) return
+    return checkSync.onDeadLetter((m) => {
+      if (m.checkId !== id) return
+      if (m.kind === "photo") notify.error("Couldn't upload a photo — it may be too large or an unsupported format")
+      else if (m.kind === "caption") notify.error("Couldn't save a photo caption")
+      else notify.error("Couldn't save an answer — please check and re-enter it")
+    })
+  }, [id, notify])
+
   // The optimistic answer for an item — the immediate draft if present, else the server value.
   function getDraft(item: CheckItem) {
     return {
@@ -468,44 +587,95 @@ export default function CheckDetailPage() {
     }
   }
 
-  // ── Inline answering (immediate save through the offline queue) ──────────────
-  // Answers/notes/photos write IMMEDIATELY via the existing P4a helpers (optimistic IDB +
-  // queued drain) — no per-card edit/Save mode. The refetch happens once the queue drains
-  // (the pendingCount effect above).
-  function openNote(id: string) { setOpenNotes(prev => new Set(prev).add(id)) }
-  function closeNote(id: string) {
-    setOpenNotes(prev => { const n = new Set(prev); n.delete(id); return n })
+  // ── Answer (immediate) + Evidence composer (Save/Discard draft) ──────────────
+  // The ANSWER commits immediately on tap (saveItemAnswer); it's never part of Save/Discard.
+  // EVIDENCE (note + staged photos) is a local draft per item, durable only on Save — which
+  // flushes through the existing P4a helpers. Only ONE composer is open at a time.
+
+  // Is this item's open draft different from what's committed (note edited or a photo staged)?
+  // Drives the Save button + the leave-prompt.
+  function draftIsDirty(item: CheckItem): boolean {
+    const d = evidenceDrafts[item.id]
+    if (!d) return false
+    return d.note !== getDraft(item).notes || d.photos.length > 0
   }
-  function startEdit(id: string) { setEditingItems(prev => new Set(prev).add(id)) }
-  function stopEdit(id: string) {
-    setEditingItems(prev => { const n = new Set(prev); n.delete(id); return n })
+  // Open the composer for an item, seeding a fresh draft (note = the committed note, no staged
+  // photos) unless one's already in progress.
+  function openComposerFor(item: CheckItem) {
+    setEvidenceDrafts(prev => (prev[item.id] ? prev : { ...prev, [item.id]: { note: getDraft(item).notes, photos: [] } }))
+    setOpenComposer(item.id)
+  }
+  // Gate opening a composer: if a DIFFERENT item's draft is open and dirty, prompt first
+  // (Save/Discard/Stay) — only the evidence draft is at risk, the answer is already committed.
+  // A clean open composer just closes silently.
+  function requestOpenComposer(item: CheckItem) {
+    if (openComposer && openComposer !== item.id) {
+      const current = check?.items.find(i => i.id === openComposer)
+      if (current && draftIsDirty(current)) {
+        setLeavePrompt({ fromItemId: current.id, next: () => openComposerFor(item) })
+        return
+      }
+      discardDraft(openComposer) // clean → drop the seeded (unchanged) draft and close it
+    }
+    openComposerFor(item)
+  }
+  // Drop a draft (revoke its staged photo URLs) and close its composer. Used by Discard and the
+  // clean-close path. Note: revoking a staged URL is safe pre-queue — queuePhoto uses the File.
+  function discardDraft(itemId: string) {
+    const d = evidenceDrafts[itemId]
+    if (d) d.photos.forEach(p => URL.revokeObjectURL(p.url))
+    setEvidenceDrafts(prev => { const n = { ...prev }; delete n[itemId]; return n })
+    setOpenComposer(curr => (curr === itemId ? null : curr))
+  }
+  function setComposerNote(itemId: string, note: string) {
+    setEvidenceDrafts(prev => ({ ...prev, [itemId]: { note, photos: prev[itemId]?.photos ?? [] } }))
+  }
+  // Save = the single P4a enqueue point for evidence: the note via saveItemAnswer, each staged
+  // photo via queuePhoto (caption rides). Commit the note to the optimistic layer so the
+  // collapsed row shows it, then close (discardDraft clears the draft + revokes staged URLs;
+  // the captured `d` still holds the Files, which queuePhoto persists).
+  async function saveEvidence(item: CheckItem) {
+    const d = evidenceDrafts[item.id]
+    if (!d) { setOpenComposer(curr => (curr === item.id ? null : curr)); return }
+    const response = getDraft(item).response
+    setDrafts(prev => ({ ...prev, [item.id]: { response, notes: d.note } }))
+    discardDraft(item.id)
+    await sync.saveItemAnswer(item.id, { response: response || undefined, notes: d.note || undefined })
+    for (const p of d.photos) {
+      await sync.queuePhoto(item.id, p.file, p.caption.trim() || undefined)
+    }
+  }
+  // Leave-prompt resolution (opening another item with an unsaved draft).
+  async function resolveLeaveSave() {
+    if (!leavePrompt) return
+    const item = check?.items.find(i => i.id === leavePrompt.fromItemId)
+    const next = leavePrompt.next
+    setLeavePrompt(null)
+    if (item) await saveEvidence(item)
+    next()
+  }
+  function resolveLeaveDiscard() {
+    if (!leavePrompt) return
+    const { fromItemId, next } = leavePrompt
+    discardDraft(fromItemId)
+    setLeavePrompt(null)
+    next()
   }
 
-  // One tap = answered + saved. Fail → open the detail strip and reveal the note composer to
-  // push the engineer to document the failure (a nudge, not a hard block); Pass/N-A → tuck the
-  // detail to a compact row so the list stays tight (buttons stay visible either way).
+  // One tap = answered + saved (immediate, never lost). Fail also opens the evidence composer —
+  // framed as expected — to push the engineer to document the failure (a nudge, not a hard
+  // block). Pass/N-A leave the composer alone (no auto-open; the compact row offers it on demand).
   async function handleResponse(item: CheckItem, response: string) {
-    const currentNotes = getDraft(item).notes
-    setDrafts(prev => ({ ...prev, [item.id]: { response, notes: currentNotes } }))
-    if (response === "FAIL") { openNote(item.id); startEdit(item.id) }
-    else stopEdit(item.id)
-    await sync.saveItemAnswer(item.id, { response, notes: currentNotes || undefined })
+    const committedNotes = getDraft(item).notes
+    setDrafts(prev => ({ ...prev, [item.id]: { response, notes: committedNotes } }))
+    if (response === "FAIL") requestOpenComposer(item)
+    await sync.saveItemAnswer(item.id, { response, notes: committedNotes || undefined })
   }
 
-  function setNote(item: CheckItem, notes: string) {
-    setDrafts(prev => ({ ...prev, [item.id]: { response: getDraft(item).response, notes } }))
-  }
-  async function handleNotesBlur(item: CheckItem) {
-    const d = getDraft(item)
-    if (!d.response && !d.notes.trim()) return
-    await sync.saveItemAnswer(item.id, { response: d.response || undefined, notes: d.notes || undefined })
-  }
-
-  // Photo capture → preview → confirm → attach (Stage 3). Selecting/capturing opens a preview
-  // (image + optional caption) — NOTHING is committed until the engineer taps Attach. Multiple
-  // selected files are previewed one at a time. The actual durable enqueue is unchanged (the
-  // proven P4a path): a capture is never lost if signal drops mid-visit, and pending captures
-  // show as thumbnails until their upload drains.
+  // Photo capture → preview → "Add to evidence" → STAGE (Stage 3). Selecting/capturing opens a
+  // preview (image + optional caption); "Add to evidence" stages it into the open composer's
+  // draft (local — see attachPreviewPhoto). Multiple selected files are previewed one at a time.
+  // The draft is durable only on the composer's Save, which is the single P4a enqueue point.
   function handlePhotoSelect(itemId: string, files: FileList | null) {
     if (!files || files.length === 0) return
     openPhotoPreview(itemId, Array.from(files))
@@ -523,17 +693,26 @@ export default function CheckDetailPage() {
     if (rest.length === 0) { setPhotoPreview(null); return }
     setPhotoPreview({ itemId: p.itemId, files: rest, url: URL.createObjectURL(rest[0]), caption: "" })
   }
-  // Attach = the confirm beat → existing P4a enqueue (caption rides the upload). Then advance.
-  async function attachPreviewPhoto() {
+  // "Add to evidence" = the confirm beat → STAGE into the open composer's draft (NOT queued
+  // yet; the composer's Save is the P4a enqueue point). Each staged photo keeps its own object
+  // URL for the thumbnail. Then advance through any remaining selected files.
+  function attachPreviewPhoto() {
     const p = photoPreview
     if (!p) return
-    setPhotoAttaching(true)
-    try {
-      await sync.queuePhoto(p.itemId, p.files[0], p.caption.trim() || undefined)
-    } finally {
-      setPhotoAttaching(false)
-      advancePhotoPreview()
+    const file = p.files[0]
+    const staged: StagedPhoto = {
+      key: `staged-${stagedSeq.current++}`,
+      file,
+      url: URL.createObjectURL(file),
+      caption: p.caption.trim(),
     }
+    setEvidenceDrafts(prev => {
+      const item = check?.items.find(i => i.id === p.itemId)
+      const base = prev[p.itemId] ?? { note: item ? getDraft(item).notes : "", photos: [] }
+      return { ...prev, [p.itemId]: { ...base, photos: [...base.photos, staged] } }
+    })
+    if (openComposer !== p.itemId) setOpenComposer(p.itemId)
+    advancePhotoPreview()
   }
   // Retake discards the whole current batch and reopens the picker for that item.
   function retakePreviewPhoto() {
@@ -553,37 +732,77 @@ export default function CheckDetailPage() {
     try {
       await deleteAttachment(att.id)
       await qc.invalidateQueries({ queryKey: ["check-detail", id] })
-    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed to remove photo")) }
+      notify.success("Photo removed")
+    } catch (e: unknown) { notify.error(getApiErrorMessage(e, "Couldn't remove the photo")) }
   }
 
-  // Caption value to show: the in-flight draft if the user has touched this input, else the
-  // persisted (attachment) / queued (pending) value.
-  function captionValue(key: string, fallback: string): string {
-    return key in captionDrafts ? captionDrafts[key] : fallback
+  // Caption commit from the PhotoDetailDialog. Staged → update the draft; pending → caption
+  // rides the queued upload; uploaded → queued caption-edit (PATCH on drain, offline-safe).
+  function commitPhotoCaption(target: PhotoDetailTarget, caption: string) {
+    if (target.source === "staged") {
+      setEvidenceDrafts(prev => {
+        const next = { ...prev }
+        for (const itemId of Object.keys(next)) {
+          const d = next[itemId]
+          const idx = d.photos.findIndex(ph => ph.key === target.key)
+          if (idx >= 0) {
+            const photos = d.photos.slice()
+            photos[idx] = { ...photos[idx], caption }
+            next[itemId] = { ...d, photos }
+            break
+          }
+        }
+        return next
+      })
+    } else if (target.source === "pending") {
+      void sync.setPendingPhotoCaption(target.seq, caption)
+    } else {
+      void sync.queueCaptionEdit(target.attachment.id, caption)
+    }
   }
-  // Commit a caption on blur. Persisted attachment → queued caption-edit (PATCH on drain,
-  // offline-safe); pending capture → caption stored on the queued photo (rides the upload).
-  // Both no-op when unchanged.
-  async function commitAttCaption(att: AttachmentSummary) {
-    if (!(att.id in captionDrafts)) return
-    const next = captionDrafts[att.id]
-    if ((att.caption ?? "") !== next) await sync.queueCaptionEdit(att.id, next)
-  }
-  async function commitPendingCaption(seq: number, current: string) {
-    const key = `pending:${seq}`
-    if (!(key in captionDrafts)) return
-    const next = captionDrafts[key]
-    if ((current ?? "") !== next) await sync.setPendingPhotoCaption(seq, next)
+  // Delete from the PhotoDetailDialog (already confirmed there). Staged → drop from the draft
+  // (revoke its URL); uploaded → delete the attachment. Pending captures aren't deletable (the
+  // dialog hides Delete for them) — they upload shortly and can then be removed.
+  function deletePhoto(target: PhotoDetailTarget) {
+    if (target.source === "staged") {
+      URL.revokeObjectURL(target.url)
+      setEvidenceDrafts(prev => {
+        const next = { ...prev }
+        for (const itemId of Object.keys(next)) {
+          const d = next[itemId]
+          if (d.photos.some(ph => ph.key === target.key)) {
+            next[itemId] = { ...d, photos: d.photos.filter(ph => ph.key !== target.key) }
+            break
+          }
+        }
+        return next
+      })
+    } else if (target.source === "uploaded") {
+      void removePhoto(target.attachment)
+    }
   }
 
-  // Light guard: warn before unloading only if offline with un-synced work (online work is
-  // durable in IDB and replays on next load, so no warning needed there).
+  // On unmount, revoke any still-staged (unsaved) photo object URLs so they don't leak.
+  const evidenceDraftsRef = React.useRef(evidenceDrafts)
+  evidenceDraftsRef.current = evidenceDrafts
+  React.useEffect(() => () => {
+    Object.values(evidenceDraftsRef.current).forEach(d => d.photos.forEach(p => URL.revokeObjectURL(p.url)))
+  }, [])
+
+  // Light guard: warn before unloading when something un-durable is at risk — an UNSAVED
+  // evidence draft (note edited / photo staged, local-only until Save), OR offline with un-synced
+  // queued work. (Saved-while-online work is durable in IDB and replays on next load.)
   React.useEffect(() => {
-    if (online || sync.pendingCount === 0) return
+    const anyDraftDirty = Object.entries(evidenceDrafts).some(([itemId, d]) => {
+      const item = check?.items.find(i => i.id === itemId)
+      const base = item ? (drafts[itemId]?.notes ?? item.notes ?? "") : ""
+      return d.note !== base || d.photos.length > 0
+    })
+    if (!anyDraftDirty && (online || sync.pendingCount === 0)) return
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = "" }
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
-  }, [online, sync.pendingCount])
+  }, [online, sync.pendingCount, evidenceDrafts, drafts, check])
 
   async function handleStart() {
     setTransitioning(true); setError("")
@@ -599,12 +818,15 @@ export default function CheckDetailPage() {
   // + recomputed status reflect server truth; the landing query is invalidated too (it shares cache).
   const [savingMeta, setSavingMeta] = React.useState(false)
   async function patchCheck(body: { scheduledAt?: string | null; assigneeId?: string | null }) {
-    setSavingMeta(true); setError("")
+    setSavingMeta(true)
     try {
       await api.patch(`/checks/${id}`, body)
       await qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
-    } catch (e: unknown) { setError(getApiErrorMessage(e, "Couldn't update the check")) }
+      // Quiet auto-save fields — a toast is their only feedback, so confirm which one saved.
+      if ("assigneeId" in body) notify.success("Assignee updated")
+      else if ("scheduledAt" in body) notify.success("Scheduled date saved")
+    } catch (e: unknown) { notify.error(getApiErrorMessage(e, "Couldn't update the check")) }
     finally { setSavingMeta(false) }
   }
 
@@ -613,18 +835,18 @@ export default function CheckDetailPage() {
   // download path, so this stays a plain authed request.
   async function handleDownloadReport() {
     if (!check || reportDownloading) return
-    setReportDownloading(true); setError("")
+    setReportDownloading(true)
     try {
       await downloadCheckReport(check.id, check.reference)
     } catch {
-      setError("Couldn't generate the report. Please try again.")
+      notify.error("Couldn't generate the report — please try again")
     } finally {
       setReportDownloading(false)
     }
   }
 
   async function handleSubmit() {
-    setTransitioning(true); setError("")
+    setTransitioning(true)
     try {
       await api.post(`/checks/${id}/submit`, { engineerSummary: engineerSummary || undefined })
       // Submitted ⇒ no longer executing; drop the local draft/queue state for this check.
@@ -633,12 +855,13 @@ export default function CheckDetailPage() {
       setReviewMode(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
-    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed")) }
+      notify.success("Check submitted for review")
+    } catch (e: unknown) { notify.error(getApiErrorMessage(e, "Couldn't submit the check")) }
     finally { setTransitioning(false) }
   }
 
   async function handleReview() {
-    setTransitioning(true); setError("")
+    setTransitioning(true)
     try {
       await api.post(`/checks/${id}/${reviewAction === "approve" ? "approve" : "return"}`, {
         reviewerNotes: reviewerNotes || undefined
@@ -646,8 +869,35 @@ export default function CheckDetailPage() {
       setReviewOpen(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
-    } catch (e: unknown) { setError(getApiErrorMessage(e, "Failed")) }
-    finally { setTransitioning(false) }
+      notify.success(reviewAction === "approve" ? "Check approved" : "Returned for rework")
+    } catch (e: unknown) {
+      notify.error(getApiErrorMessage(e, reviewAction === "approve" ? "Couldn't approve the check" : "Couldn't return the check"))
+    } finally { setTransitioning(false) }
+  }
+
+  // Reviewer flag-for-rework — persisted immediately (durable, survives reload) so the
+  // flagged state is a first-class item state, not session-only. Online-only reviewer action
+  // (not queued). Only the check-detail query changes — flags don't affect any list.
+  async function flagItemAction(item: CheckItem, note: string) {
+    setFlagSaving(true)
+    try {
+      await api.post(`/checks/${id}/items/${item.id}/flag`, { reworkNote: note })
+      setFlagItem(null)
+      qc.invalidateQueries({ queryKey: ["check-detail", id] })
+      notify.success("Item flagged for rework")
+    } catch (e: unknown) {
+      notify.error(getApiErrorMessage(e, "Couldn't flag the item"))
+    } finally { setFlagSaving(false) }
+  }
+
+  async function unflagItemAction(item: CheckItem) {
+    try {
+      await api.delete(`/checks/${id}/items/${item.id}/flag`)
+      qc.invalidateQueries({ queryKey: ["check-detail", id] })
+      notify.success("Flag removed")
+    } catch (e: unknown) {
+      notify.error(getApiErrorMessage(e, "Couldn't remove the flag"))
+    }
   }
 
   async function handleCancel() {
@@ -658,6 +908,9 @@ export default function CheckDetailPage() {
       setCancelOpen(false)
       qc.invalidateQueries({ queryKey: ["check-detail", id] })
       qc.invalidateQueries({ queryKey: ["checks"] })
+      notify.success("Check cancelled")
+    } catch (e: unknown) {
+      notify.error(getApiErrorMessage(e, "Couldn't cancel the check"))
     } finally { setTransitioning(false) }
   }
 
@@ -739,6 +992,10 @@ export default function CheckDetailPage() {
   const pendingItems = check.items.filter(i => respOf(i) === "").length
   const failedItems = check.items.filter(i => respOf(i) === "FAIL")
   const allRequiredAnswered = check.items.filter(i => i.isRequired).every(i => respOf(i) !== "")
+  // Reviewer flag-for-rework: items the reviewer marked. Drives the Return count, the Approve
+  // warning, and the engineer-side visibility (briefing banner + execution markers).
+  const flaggedItems = check.items.filter(i => i.reworkFlagged)
+  const flaggedCount = flaggedItems.length
 
   const canStart = ["DRAFT", "SCHEDULED", "ASSIGNED"].includes(check.status) && canExecute
   // PENDING_REVIEW now renders the read-only review surface (standard layout) instead of
@@ -749,6 +1006,10 @@ export default function CheckDetailPage() {
   // goes read-only (no Attach file / no delete), mirroring the backend attachment lock.
   // (Per-item photos are already preview-only in the standard-layout checklist below.)
   const attachmentsLocked = ["COMPLETED", "CLOSED"].includes(check.status)
+  // A reviewer attests to the engineer's FIXED evidence — they don't add to (or remove from)
+  // the check's own attachment record. So the check-level Attachments panel is read-only on the
+  // review surface (PENDING_REVIEW) too, not only once signed off (attachmentsLocked above).
+  const checkAttachmentsReadOnly = attachmentsLocked || check.status === "PENDING_REVIEW"
 
   // Group items by section — already computed above, just re-derive for the check guard
   // (sections/sectionNames are correct since check.items is now available)
@@ -760,6 +1021,71 @@ export default function CheckDetailPage() {
     return { answered, failed, total: items.length }
   }
 
+  // ── History (on-demand timeline) ───────────────────────────────────────
+  // Header button → shared EntityHistoryDialog (entityType "Check"), so status transitions and
+  // item-level events share ONE on-demand stream — never an always-open inline panel. The dialog
+  // fetches on open; global staleTime is 30s, so we invalidate its key on open to guarantee the
+  // freshest timeline right after a flag/return/re-answer rather than a 30s-stale read.
+  const openHistory = () => {
+    qc.invalidateQueries({ queryKey: ["entity-history", "Check", check.id] })
+    setHistoryOpen(true)
+  }
+  const historyButton = (
+    <Tooltip title="History">
+      <IconButton size="small" onClick={openHistory}
+        sx={{ color: "#64748b", flexShrink: 0, "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+        <HistoryIcon sx={{ fontSize: 20 }} />
+      </IconButton>
+    </Tooltip>
+  )
+  const historyDialog = (
+    <EntityHistoryDialog
+      open={historyOpen}
+      onClose={() => setHistoryOpen(false)}
+      entityType="Check"
+      entityId={check.id}
+      title="History"
+    />
+  )
+
+  // The record-peek drawer — mirrors ServiceDeskNavigator's depth-2 drawer (minus link removal).
+  // Inner Routes re-scope :id to the peeked record so the UNCHANGED detail pages resolve it;
+  // DetailNarrowProvider both single-columns the shell AND trips its narrow-guards so the peeked
+  // record won't overwrite this page's breadcrumb / full-bleed / title. Deliberately NOT wrapped in
+  // a DrillNavContext provider, so a linked row inside the drawer falls back to standalone nav —
+  // the drawer is a drill dead-end (no drawer-opens-drawer), matching the navigator's depth cap.
+  const drawer = (
+    <Drawer
+      anchor="right"
+      open={drawerOpen}
+      onClose={closeDrawer}
+      PaperProps={{ sx: { width: { xs: "100%", sm: "50vw" }, display: "flex", flexDirection: "column" } }}
+    >
+      {drawerOpen && (
+        <>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: "1px solid #e2e8f0", flexShrink: 0, minHeight: 48 }}>
+            <IconButton aria-label="Close" size="small" onClick={closeDrawer}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+            <Box sx={{ flex: 1 }} />
+            <Box ref={setDrawerHeaderSlot} sx={{ display: "flex", alignItems: "center" }} />
+          </Box>
+          <DetailNarrowProvider value={true}>
+            <DetailDrawerChromeProvider value={drawerChrome}>
+              <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                <Routes>
+                  <Route path="task/:id/*" element={<TaskDetailPage />} />
+                  <Route path="risk/:id/*" element={<RiskDetailPage />} />
+                  <Route path="issue/:id/*" element={<IssueDetailPage />} />
+                </Routes>
+              </Box>
+            </DetailDrawerChromeProvider>
+          </DetailNarrowProvider>
+        </>
+      )}
+    </Drawer>
+  )
+
   // ── Shared dialogs (rendered in both layouts) ──────────────────────────
   const dialogs = (
     <>
@@ -769,7 +1095,21 @@ export default function CheckDetailPage() {
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             {reviewAction === "return" ? (
               <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fef3c7", border: "1px solid #fde68a" }}>
-                <Typography variant="caption" color="#92400e">The check will be returned to the engineer for corrections.</Typography>
+                <Typography variant="caption" color="#92400e">
+                  The check will be returned to the engineer for corrections
+                  {flaggedCount > 0 ? `, with ${flaggedCount} flagged item${flaggedCount === 1 ? "" : "s"} marked for rework` : ""}.
+                </Typography>
+              </Box>
+            ) : null}
+            {/* Approve-with-flags: warn (the flagged items won't be addressed) but don't block —
+                a reviewer may sign off with minor notes recorded for history. */}
+            {reviewAction === "approve" && flaggedCount > 0 ? (
+              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fffbeb", border: "1px solid #fde68a" }}>
+                <Typography variant="caption" color="#92400e">
+                  {flaggedCount} item{flaggedCount === 1 ? " is" : "s are"} flagged for rework. Approving signs
+                  off the check anyway — the flag{flaggedCount === 1 ? "" : "s"} stay on the record but won't be
+                  sent back. Use Return for rework to send {flaggedCount === 1 ? "it" : "them"} to the engineer.
+                </Typography>
               </Box>
             ) : null}
             <TextField
@@ -828,6 +1168,33 @@ export default function CheckDetailPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Leaving an item with an unsaved evidence draft (opening another's composer). The answer
+          is already committed — only the note/photo draft is at risk. */}
+      <Dialog open={!!leavePrompt} onClose={() => setLeavePrompt(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard unsaved note?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            You have unsaved evidence (a note or photo) on this item. Your answer is already saved —
+            only this evidence draft is unsaved.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLeavePrompt(null)}>Stay</Button>
+          <Button color="inherit" onClick={resolveLeaveDiscard}>Discard</Button>
+          <Button variant="contained" disableElevation onClick={() => void resolveLeaveSave()}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Image detail — caption edit + deliberate (confirmed) delete for any evidence photo. */}
+      <PhotoDetailDialog
+        open={!!photoDetail}
+        target={photoDetail}
+        canEdit={canExecute && !photoDetailViewOnly}
+        onClose={() => { setPhotoDetail(null); setPhotoDetailViewOnly(false) }}
+        onCaptionCommit={commitPhotoCaption}
+        onDelete={deletePhoto}
+      />
+
       {followOnItem ? (
         <FollowOnModal open={!!followOnItem} onClose={() => setFollowOnItem(null)}
           checkId={check.id} item={followOnItem}
@@ -839,13 +1206,25 @@ export default function CheckDetailPage() {
             qc.invalidateQueries({ queryKey: ["issues"] })
           }} />
       ) : null}
+
+      {/* Reviewer flag-for-rework note (required) — flagging persists immediately. */}
+      <FlagNoteDialog
+        open={!!flagItem}
+        itemLabel={flagItem?.label ?? ""}
+        saving={flagSaving}
+        onClose={() => setFlagItem(null)}
+        onSave={(note) => { if (flagItem) void flagItemAction(flagItem, note) }}
+      />
+
+      {historyDialog}
     </>
   )
 
-  // ── Item card (execution surface — inline, immediate) ──────────────────────
-  // Pass/Fail/N-A is ALWAYS visible and saves on tap (one action, no open-card step). Notes
-  // and photos expand on demand once answered; marking Fail auto-reveals the note composer +
-  // a gentle evidence nudge. Every write goes straight through the offline queue (P4a).
+  // ── Item card (execution surface) ──────────────────────────────────────────
+  // Pass/Fail/N-A is ALWAYS visible and commits on tap (immediate toggle, never lost). EVIDENCE
+  // (note + photos) is a separate Save/Discard composer: same on pass and fail; Fail auto-opens
+  // it framed as expected; Pass/N-A offer it on demand from the compact row. Thumbnails are
+  // view-only — tap one to open the PhotoDetailDialog (caption + deliberate delete).
   function renderItemCard(item: CheckItem, idx: number) {
     const draft = getDraft(item)
     const response = draft.response
@@ -853,18 +1232,19 @@ export default function CheckDetailPage() {
     const isPass = response === "PASS"
     const isNA = response === "NA"
     const isUnansweredRequired = item.isRequired && !response
-    const accent = isUnansweredRequired ? "#f59e0b"
+    const accent = item.reworkFlagged ? "#f59e0b"
+      : isUnansweredRequired ? "#f59e0b"
       : isPass ? "#15803d" : isFail ? "#b91c1c" : isNA ? "#94a3b8" : "#e2e8f0"
-    const noteOpen = openNotes.has(item.id)
-    const photoCount = (item.attachments?.length ?? 0) + (sync.photosByItem[item.id]?.length ?? 0)
+    const composerOpen = openComposer === item.id
+    const ev = evidenceDrafts[item.id]
+    const stagedPhotos = ev?.photos ?? []
+    const uploaded = item.attachments ?? []
+    const pending = sync.photosByItem[item.id] ?? []
+    const photoCount = uploaded.length + pending.length + stagedPhotos.length
     const hasNote = draft.notes.trim().length > 0
     const needsEvidence = isFail && !hasNote && photoCount === 0
     const answered = response !== ""
-    // The Pass/Fail/N-A buttons are ALWAYS visible (the filled button is the answer state, so
-    // re-answering is one tap). Only the secondary note/photo detail tucks away: it's open while
-    // unanswered-then-failed or while the engineer is editing. Fail forces it open AND keeps it
-    // open (even after "Done") so an undocumented failure keeps its evidence nudge.
-    const detailOpen = !!response && (isFail || editingItems.has(item.id))
+    const dirty = draftIsDirty(item)
     const num = String(idx + 1).padStart(2, "0")
 
     const respBtn = (value: string, label: string, on: boolean, onCol: string, onBg: string, onText: string) => (
@@ -881,6 +1261,23 @@ export default function CheckDetailPage() {
       </Button>
     )
 
+    // A single view-only evidence thumbnail (52px tile). Tapping opens the PhotoDetailDialog;
+    // there is NO inline × or caption — deleting/captioning is deliberate, inside the opened image.
+    const photoThumb = (opts: { key: string; onClick: () => void; img?: string; icon?: React.ReactNode; dashed?: boolean; badge?: React.ReactNode }) => (
+      <Box key={opts.key} onClick={opts.onClick}
+        sx={{
+          position: "relative", width: 52, height: 52, borderRadius: `${radii.md}px`, overflow: "hidden",
+          border: opts.dashed ? "1px dashed #cbd5e1" : "1px solid #e2e8f0", bgcolor: "#f8fafc", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          transition: "border-color 0.1s", "&:hover": { borderColor: "#94a3b8" },
+        }}>
+        {opts.img
+          ? <img src={opts.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          : opts.icon}
+        {opts.badge}
+      </Box>
+    )
+
     return (
       <Box key={item.id}
         ref={(el: HTMLDivElement | null) => { itemRefs.current[item.id] = el }}
@@ -894,15 +1291,26 @@ export default function CheckDetailPage() {
             {num}
           </Typography>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* Label + badges */}
+            {/* Label + badges (squared-off TAG_RADIUS, not fully-rounded pills) */}
             <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ mb: "6px", flexWrap: "wrap" }}>
               <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: "#0f172a", flex: 1, lineHeight: 1.4 }}>
                 {item.label}
               </Typography>
-              {item.isRequired ? <Chip size="small" label="Required" sx={{ height: 18, fontSize: 10, bgcolor: "#fef3c7", color: "#92400e" }} /> : null}
-              {item.isCritical ? <Chip size="small" label="Critical" sx={{ height: 18, fontSize: 10, bgcolor: "#fee2e2", color: "#b91c1c" }} /> : null}
-              {item.isAdHoc ? <Chip size="small" label="Ad hoc" sx={{ height: 18, fontSize: 10, bgcolor: "#f0f9ff", color: "#0369a1" }} /> : null}
+              {item.isRequired ? <Chip size="small" label="Required" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: "#fef3c7", color: "#92400e" }} /> : null}
+              {item.isCritical ? <Chip size="small" label="Critical" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: "#fee2e2", color: "#b91c1c" }} /> : null}
+              {item.isAdHoc ? <Chip size="small" label="Ad hoc" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: "#f0f9ff", color: "#0369a1" }} /> : null}
             </Stack>
+            {/* Reviewer flag-for-rework — surfaced to the engineer while they rework (the other
+                half of the flag flow). Amber, with the reviewer's note so they know exactly why. */}
+            {item.reworkFlagged ? (
+              <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mb: "8px", px: "10px", py: "7px", bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "6px" }}>
+                <OutlinedFlagIcon sx={{ fontSize: 15, color: "#d97706", mt: "1px", flexShrink: 0 }} />
+                <Typography sx={{ fontSize: 12, color: "#92400e", lineHeight: 1.45 }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>Reviewer flagged</Box>
+                  {item.reworkNote ? ` · ${item.reworkNote}` : ""}
+                </Typography>
+              </Stack>
+            ) : null}
 
             {item.guidance ? (
               <Typography sx={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, mb: "10px" }}>{item.guidance}</Typography>
@@ -916,191 +1324,173 @@ export default function CheckDetailPage() {
               {item.responseType !== "PASS_FAIL" ? respBtn("NA", "N/A", isNA, "#64748b", "#f1f5f9", "#475569") : null}
             </Stack>
 
-            {/* Secondary detail — the evidence strip when open (Fail auto-opens it), else a compact
-                tucked row for answered Pass/N-A. Unanswered shows nothing but the buttons. */}
-            {detailOpen ? (
-              <Box sx={{ borderTop: "1px dashed #e2e8f0", pt: "10px", mt: "12px" }}>
-                {/* Fail nudge — gentle, not a hard block; clears once a note or photo exists */}
+            {/* Evidence composer (Save/Discard) when open; else the compact answered row. */}
+            {composerOpen ? (
+              <Box sx={{ borderTop: "1px dashed #e2e8f0", pt: "12px", mt: "12px" }}>
+                {/* Fail framing — evidence is expected, not optional (a nudge, not a hard block) */}
                 {needsEvidence ? (
                   <Box sx={{ mb: "10px", px: "10px", py: "7px", bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "6px" }}>
-                    <Typography sx={{ fontSize: 11.5, color: "#92400e" }}>Add a note or photo for this failure.</Typography>
+                    <Typography sx={{ fontSize: 11.5, color: "#92400e" }}>A note and photo are expected for failed items.</Typography>
                   </Box>
                 ) : null}
 
-                {/* Existing note — click to edit */}
-                {draft.notes && !noteOpen ? (
-                  <Box onClick={canExecute ? () => openNote(item.id) : undefined}
-                    sx={{ mb: "10px", cursor: canExecute ? "text" : "default", bgcolor: "#f8fafc", borderRadius: "6px", px: "10px", py: "7px", border: "1px solid #e2e8f0", "&:hover": canExecute ? { borderColor: "#cbd5e1" } : {} }}>
-                    <Typography sx={{ fontSize: 12, color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{draft.notes}</Typography>
+                {/* Note draft (comment-box styling) — local until Save */}
+                <Box sx={{ mb: "10px" }}>
+                  <Box sx={{
+                    borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "#fff",
+                    px: 1.25, py: 0.5, transition: "border-color 120ms ease",
+                    "&:focus-within": { borderColor: "primary.main" },
+                  }}>
+                    <TextField
+                      variant="standard" fullWidth multiline minRows={2} autoFocus={!draft.notes}
+                      placeholder={isFail ? "Describe the issue…" : "Add a note…"}
+                      value={ev?.note ?? ""}
+                      disabled={!canExecute}
+                      onChange={e => setComposerNote(item.id, e.target.value)}
+                      InputProps={{ disableUnderline: true }}
+                      sx={{ "& .MuiInputBase-input": { fontSize: { xs: 16, md: 13 }, lineHeight: 1.5 } }}
+                    />
                   </Box>
-                ) : null}
+                </Box>
 
-                {/* Note composer (comment-box styling) — saves on blur */}
-                {noteOpen ? (
-                  <Box sx={{ mb: "10px" }}>
-                    <Box sx={{
-                      borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "#fff",
-                      px: 1.25, py: 0.5, transition: "border-color 120ms ease",
-                      "&:focus-within": { borderColor: "primary.main" },
-                    }}>
-                      <TextField
-                        variant="standard" fullWidth multiline minRows={2} autoFocus={!draft.notes}
-                        placeholder={isFail ? "Describe the issue…" : "Add a note…"}
-                        value={draft.notes}
-                        onChange={e => setNote(item, e.target.value)}
-                        onBlur={() => handleNotesBlur(item)}
-                        InputProps={{ disableUnderline: true }}
-                        sx={{ "& .MuiInputBase-input": { fontSize: { xs: 16, md: 13 }, lineHeight: 1.5 } }}
-                      />
-                    </Box>
-                    <Stack direction="row" justifyContent="flex-end" sx={{ mt: "6px" }}>
-                      <Button size="small" variant="text" onClick={() => { void handleNotesBlur(item); closeNote(item.id) }} sx={{ fontSize: 11, color: "#64748b" }}>
-                        Done
-                      </Button>
-                    </Stack>
-                  </Box>
-                ) : null}
-
-                {/* Photos + on-demand controls — capture saves immediately */}
-                <Box sx={{ display: "flex", alignItems: "flex-start", gap: "8px", flexWrap: "wrap" }}>
+                {/* Photos — view-only thumbnails (tap to open) + an Add tile */}
+                <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <input
                     type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }}
                     ref={el => { photoInputRefs.current[item.id] = el }}
                     onChange={e => { void handlePhotoSelect(item.id, e.target.files); e.target.value = "" }}
                   />
 
-                  {/* Persisted (uploaded) evidence — caption editable until lock */}
-                  {(item.attachments ?? []).map((att) => (
-                    <Box key={att.id} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
-                      <Tooltip title={att.filename}>
-                        <Box sx={{ position: "relative", width: 48, height: 48 }}>
-                          <Box onClick={() => setPreviewAtt(att)} sx={{
-                            width: 48, height: 48, borderRadius: "4px", border: "1px solid #e2e8f0",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            bgcolor: "#f8fafc", cursor: "pointer", "&:hover": { borderColor: "#cbd5e1" },
-                          }}>
-                            {isImageType(att.contentType)
-                              ? <ImageIcon sx={{ fontSize: 20, color: "#64748b" }} />
-                              : <DescriptionIcon sx={{ fontSize: 20, color: "#64748b" }} />}
-                          </Box>
-                          {canExecute ? (
-                            <Box onClick={() => removePhoto(att)} sx={{
-                              position: "absolute", top: -4, right: -4,
-                              width: { xs: 18, md: 14 }, height: { xs: 18, md: 14 }, borderRadius: "50%",
-                              bgcolor: "#475569", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: { xs: 11, md: 9 }, cursor: "pointer", fontWeight: 700, "&:hover": { bgcolor: "#0f172a" },
-                            }}>×</Box>
-                          ) : null}
-                          {/* Attached confirmation — uploaded evidence (vs the pending clock badge) */}
-                          <CheckCircleIcon sx={{ position: "absolute", bottom: -4, right: -4, fontSize: 15, color: "#15803d", bgcolor: "#fff", borderRadius: "50%" }} />
-                        </Box>
-                      </Tooltip>
-                      <TextField
-                        variant="standard" placeholder="Caption — optional"
-                        value={captionValue(att.id, att.caption ?? "")}
-                        onChange={e => setCaptionDrafts(prev => ({ ...prev, [att.id]: e.target.value }))}
-                        onBlur={() => commitAttCaption(att)}
-                        inputProps={{ maxLength: 280 }}
-                        sx={{ "& .MuiInput-input": { fontSize: { xs: 16, md: 11 }, py: "1px", color: "#0f172a" } }}
-                      />
-                    </Box>
-                  ))}
+                  {/* Uploaded evidence (icon placeholder; real bytes shown in the detail dialog) */}
+                  {uploaded.map(att => photoThumb({
+                    key: att.id,
+                    onClick: () => setPhotoDetail({ source: "uploaded", attachment: att }),
+                    icon: isImageType(att.contentType)
+                      ? <ImageIcon sx={{ fontSize: 22, color: "#64748b" }} />
+                      : <DescriptionIcon sx={{ fontSize: 22, color: "#64748b" }} />,
+                    badge: <CheckCircleIcon sx={{ position: "absolute", bottom: 1, right: 1, fontSize: 15, color: "#15803d", bgcolor: "#fff", borderRadius: "50%" }} />,
+                  }))}
 
-                  {/* Queued (offline) captures — caption rides the upload */}
-                  {(sync.photosByItem[item.id] ?? []).map((p) => (
-                    <Box key={p.seq} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
-                      <Tooltip title={`${p.filename} — saved on this device, will upload when online`}>
-                        <Box sx={{ position: "relative", width: 48, height: 48, borderRadius: "4px", overflow: "hidden", border: "1px dashed #cbd5e1", opacity: 0.85 }}>
-                          <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                          <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "2px", py: "1px", display: "flex", alignItems: "center" }}>
-                            <ScheduleIcon sx={{ fontSize: 10 }} />
-                          </Box>
-                        </Box>
-                      </Tooltip>
-                      <TextField
-                        variant="standard" placeholder="Caption — optional"
-                        value={captionValue(`pending:${p.seq}`, p.caption ?? "")}
-                        onChange={e => setCaptionDrafts(prev => ({ ...prev, [`pending:${p.seq}`]: e.target.value }))}
-                        onBlur={() => commitPendingCaption(p.seq, p.caption ?? "")}
-                        inputProps={{ maxLength: 280 }}
-                        sx={{ "& .MuiInput-input": { fontSize: { xs: 16, md: 11 }, py: "1px", color: "#0f172a" } }}
-                      />
-                    </Box>
-                  ))}
+                  {/* Queued (offline) captures — pending upload */}
+                  {pending.map(p => photoThumb({
+                    key: `p-${p.seq}`,
+                    onClick: () => setPhotoDetail({ source: "pending", seq: p.seq, url: p.url, filename: p.filename, caption: p.caption ?? "" }),
+                    img: p.url, dashed: true,
+                    badge: (
+                      <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "3px", py: "1px", display: "flex", alignItems: "center" }}>
+                        <ScheduleIcon sx={{ fontSize: 11 }} />
+                      </Box>
+                    ),
+                  }))}
 
-                  {/* Add photo (opens camera/picker) */}
+                  {/* Staged (this composer session, not yet Saved) */}
+                  {stagedPhotos.map(p => photoThumb({
+                    key: p.key,
+                    onClick: () => setPhotoDetail({ source: "staged", key: p.key, url: p.url, filename: p.file.name, caption: p.caption }),
+                    img: p.url,
+                    badge: <Box sx={{ position: "absolute", top: 3, left: 3, width: 7, height: 7, borderRadius: "50%", bgcolor: "#2563eb" }} />,
+                  }))}
+
+                  {/* Add photo (opens camera/picker → capture beat → stages into this draft) */}
                   {canExecute ? (
                     <Box onClick={() => photoInputRefs.current[item.id]?.click()} sx={{
-                      display: "flex", alignItems: "center", gap: "5px",
-                      px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
-                      border: "1px solid #e2e8f0", color: "#64748b",
-                      fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500, transition: "all 0.1s",
-                      "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" },
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "2px",
+                      width: 52, height: 52, borderRadius: `${radii.md}px`, border: "1px dashed #cbd5e1", color: "#64748b",
+                      cursor: "pointer", flexShrink: 0, transition: "all 0.1s",
+                      "&:hover": { borderColor: "#94a3b8", color: "#0f172a", bgcolor: "#f8fafc" },
                     }}>
-                      <CameraAltIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
-                      {photoCount > 0 ? "Add more" : "Add photo"}
-                    </Box>
-                  ) : null}
-
-                  {/* Add note (reveals composer) — only when there's no note yet */}
-                  {canExecute && !draft.notes && !noteOpen ? (
-                    <Box onClick={() => openNote(item.id)} sx={{
-                      display: "flex", alignItems: "center", gap: "5px",
-                      px: "10px", py: { xs: "9px", md: "5px" }, borderRadius: "5px",
-                      border: "1px solid #e2e8f0", color: "#64748b",
-                      fontSize: { xs: 13, md: 11.5 }, cursor: "pointer", fontWeight: 500, transition: "all 0.1s",
-                      "&:hover": { bgcolor: "#ffffff", borderColor: "#cbd5e1", color: "#0f172a" },
-                    }}>
-                      <AddIcon sx={{ fontSize: { xs: 15, md: 13 } }} />
-                      Add note{isFail ? " (recommended)" : ""}
+                      <CameraAltIcon sx={{ fontSize: 18 }} />
+                      <Typography sx={{ fontSize: 9, fontWeight: 500, lineHeight: 1 }}>{photoCount > 0 ? "More" : "Add"}</Typography>
                     </Box>
                   ) : null}
                 </Box>
 
-                {/* Done — collapse this answered item back to its pill */}
+                {/* Save / Discard — the single evidence commit (no per-element Done buttons).
+                    Discard backs out (and reverts); Save flushes note + staged photos through P4a. */}
                 {canExecute ? (
-                  <Stack direction="row" justifyContent="flex-end" sx={{ mt: "10px" }}>
-                    <Button size="small" onClick={() => { void handleNotesBlur(item); closeNote(item.id); stopEdit(item.id) }}
-                      sx={{ fontSize: 11.5, color: "#1d4ed8", fontWeight: 600 }}>
-                      Done
+                  <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: "12px" }}>
+                    <Button size="small" onClick={() => discardDraft(item.id)} sx={{ fontSize: 12, color: "#64748b" }}>
+                      Discard
+                    </Button>
+                    <Button size="small" variant="contained" disableElevation disabled={!dirty} onClick={() => void saveEvidence(item)}
+                      sx={{ fontSize: 12, px: "16px" }}>
+                      Save
                     </Button>
                   </Stack>
                 ) : null}
               </Box>
             ) : answered ? (
-              /* Answered Pass/N-A — the buttons stay above; only the detail tucks to this compact
-                 row (evidence indicators + a quiet affordance to re-open/add note or photo) */
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: "10px", flexWrap: "wrap", rowGap: "6px" }}>
-                {hasNote ? (
-                  <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 15, color: "#94a3b8" }} /></Tooltip>
+              /* Answered + composer closed. Evidence shows as view-only thumbnails (tap to preview
+                 WITHOUT opening the composer — editing stays behind "Edit evidence"); below, a
+                 left-grouped affordance line joins present fragments with "·" — the separator only
+                 ever renders BETWEEN two present fragments, so there is no orphan leading "·". */
+              <Box sx={{ mt: "10px" }}>
+                {needsEvidence ? (
+                  <Typography sx={{ fontSize: 11.5, color: "#b45309", fontWeight: 500, mb: "8px" }}>Note &amp; photo expected</Typography>
                 ) : null}
-                {photoCount > 0 ? (
-                  <Stack direction="row" alignItems="center" spacing={0.3}>
-                    <CameraAltIcon sx={{ fontSize: 15, color: "#94a3b8" }} />
-                    <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{photoCount}</Typography>
-                  </Stack>
+                {uploaded.length > 0 || pending.length > 0 ? (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", mb: "8px" }}>
+                    {uploaded.map(att => photoThumb({
+                      key: att.id,
+                      onClick: () => openPhotoView({ source: "uploaded", attachment: att }),
+                      icon: isImageType(att.contentType)
+                        ? <ImageIcon sx={{ fontSize: 22, color: "#64748b" }} />
+                        : <DescriptionIcon sx={{ fontSize: 22, color: "#64748b" }} />,
+                      badge: <CheckCircleIcon sx={{ position: "absolute", bottom: 1, right: 1, fontSize: 15, color: "#15803d", bgcolor: "#fff", borderRadius: "50%" }} />,
+                    }))}
+                    {pending.map(p => photoThumb({
+                      key: `p-${p.seq}`,
+                      onClick: () => openPhotoView({ source: "pending", seq: p.seq, url: p.url, filename: p.filename, caption: p.caption ?? "" }),
+                      img: p.url, dashed: true,
+                      badge: (
+                        <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "3px", py: "1px", display: "flex", alignItems: "center" }}>
+                          <ScheduleIcon sx={{ fontSize: 11 }} />
+                        </Box>
+                      ),
+                    }))}
+                  </Box>
                 ) : null}
-                {item.followOns.length > 0 ? (
-                  <Chip size="small" label={`${item.followOns.length} follow-on${item.followOns.length === 1 ? "" : "s"}`}
-                    sx={{ height: 18, fontSize: 10, bgcolor: "#e0f2fe", color: "#0369a1" }} />
-                ) : null}
-                <Box sx={{ flex: 1 }} />
-                {canExecute ? (
-                  <Button size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />} onClick={() => startEdit(item.id)}
-                    sx={{ fontSize: 11.5, color: "#64748b" }}>
-                    {hasNote || photoCount > 0 ? "Edit evidence" : "Add note or photo"}
-                  </Button>
-                ) : null}
-              </Stack>
+                {(() => {
+                  // Build the present fragments in order, then interleave a "·" only between them.
+                  const frags: React.ReactNode[] = []
+                  if (hasNote) frags.push(
+                    <Stack key="note" direction="row" alignItems="center" spacing={0.4}>
+                      <NotesIcon sx={{ fontSize: 15, color: "#94a3b8" }} />
+                      <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>Note</Typography>
+                    </Stack>
+                  )
+                  if (item.followOns.length > 0) frags.push(
+                    <Chip key="fo" size="small" label={`${item.followOns.length} follow-on${item.followOns.length === 1 ? "" : "s"}`}
+                      sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: "#e0f2fe", color: "#0369a1" }} />
+                  )
+                  if (canExecute) frags.push(
+                    <Button key="edit" size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />} onClick={() => requestOpenComposer(item)}
+                      sx={{ fontSize: 11.5, color: needsEvidence ? "#b45309" : "#64748b", minWidth: 0 }}>
+                      {hasNote || photoCount > 0 ? "Edit evidence" : "Add note or photo"}
+                    </Button>
+                  )
+                  if (frags.length === 0) return null
+                  return (
+                    <Stack direction="row" alignItems="center" sx={{ flexWrap: "wrap", rowGap: "4px" }}>
+                      {frags.map((node, i) => (
+                        <React.Fragment key={i}>
+                          {i > 0 ? <Box component="span" sx={{ mx: "8px", color: "#cbd5e1", fontSize: 12 }}>·</Box> : null}
+                          {node}
+                        </React.Fragment>
+                      ))}
+                    </Stack>
+                  )
+                })()}
+              </Box>
             ) : null}
 
-            {/* Follow-on prompt for failed items (detail open — always true for a Fail) */}
-            {isFail && canExecute && detailOpen ? (
+            {/* Follow-on prompt for failed items */}
+            {isFail && canExecute ? (
               <Box sx={{ mt: "12px", p: "10px 12px", bgcolor: "#fef9e7", border: "1px solid #fcd34d", borderRadius: "6px" }}>
                 {item.followOns.length > 0 ? (
                   <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
                     {item.followOns.map(fo => (
-                      <Chip key={fo.id} size="small" label={fo.entityType} sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10 }} />
+                      <Chip key={fo.id} size="small" label={followOnLabel(fo)} sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10, borderRadius: `${TAG_RADIUS}px`, maxWidth: "100%" }} />
                     ))}
                     <Button size="small" onClick={() => setFollowOnItem(item)} sx={{ fontSize: 11, color: "#92400e", ml: "auto" }}>Add another</Button>
                   </Stack>
@@ -1155,10 +1545,12 @@ export default function CheckDetailPage() {
       { label: "Pass rate", value: livePassRate === null ? "—" : `${livePassRate}%`, accent: livePassRate === null ? "#94a3b8" : "#1d4ed8" },
     ]
     // Self-review "Needs attention" set — the actionable items, fixed IN-PLACE on the review
-    // screen (no jump-back). Required-but-unanswered (hard-blocks submit) + failed-without-evidence
-    // (the soft nudge). Computed from optimistic state (respOf/drafts/photosByItem) so an item
-    // drops out of the zone the instant it's resolved, before the queue drains.
+    // screen (no jump-back). Reviewer-flagged-for-rework (the engineer must address what was
+    // returned) + required-but-unanswered (hard-blocks submit) + failed-without-evidence (the
+    // soft nudge). Computed from optimistic state (respOf/drafts/photosByItem) so an item drops
+    // out of the zone the instant it's resolved, before the queue drains.
     const needsAttention = check.items.filter(i => {
+      if (i.reworkFlagged) return true
       const r = respOf(i)
       if (i.isRequired && r === "") return true
       if (r === "FAIL") {
@@ -1170,6 +1562,7 @@ export default function CheckDetailPage() {
     })
 
     return (
+      <DrillNavContext.Provider value={drillPush}>
       <Box sx={{
         // md+: full-bleed pane (Shell <main> is p:0 + overflow:hidden + flex column), so we
         // fill with flex:1 and scroll internally. xs: <main> keeps 12px padding + is the
@@ -1200,13 +1593,24 @@ export default function CheckDetailPage() {
             {/* Status indicator cluster + primary action (md+) */}
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flexShrink: 0, pt: "2px" }}>
               <SyncStatusPill status={sync.status} pendingCount={sync.pendingCount} />
+              {historyButton}
               {canExecute && !reviewMode ? (
-                <Button variant="contained" size="small" disableElevation
-                  endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
-                  onClick={() => setReviewMode(true)}
-                  sx={{ display: { xs: "none", md: "inline-flex" }, fontSize: 12, py: "7px" }}>
-                  Review &amp; submit
-                </Button>
+                /* Always visible so "finish" is discoverable, but disabled until every required
+                   item is answered (same gate as the self-review readiness banner). When blocked,
+                   the tooltip surfaces HOW close they are — the remaining required count — rather
+                   than restating the label. Wrapped in a span so the tooltip still fires while the
+                   button is disabled (a disabled MUI button swallows pointer events). */
+                <Tooltip title={!allRequiredAnswered ? `${remainingRequired.length} required item${remainingRequired.length === 1 ? "" : "s"} remaining` : ""}>
+                  <Box component="span" sx={{ display: { xs: "none", md: "inline-flex" } }}>
+                    <Button variant="contained" size="small" disableElevation
+                      disabled={!allRequiredAnswered}
+                      endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => setReviewMode(true)}
+                      sx={{ fontSize: 12, py: "7px" }}>
+                      Review &amp; submit
+                    </Button>
+                  </Box>
+                </Tooltip>
               ) : null}
             </Stack>
           </Stack>
@@ -1369,14 +1773,16 @@ export default function CheckDetailPage() {
                     {sync.pendingCount} change(s) still syncing — submit once saved.
                   </Typography>
                 ) : null}
-                <Button variant="contained" disableElevation disabled={!canSubmit || transitioning}
-                  onClick={handleSubmit} endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
-                  sx={{ fontSize: 13, py: "10px", px: "20px" }}>
-                  {transitioning ? "Submitting…" : "Submit for review"}
-                </Button>
-                <Typography sx={{ fontSize: 11.5, color: "#94a3b8", mt: "8px" }}>
-                  Sends for review and locks your answers.
-                </Typography>
+                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                  <Button variant="contained" disableElevation disabled={!canSubmit || transitioning}
+                    onClick={handleSubmit} endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                    sx={{ fontSize: 13, py: "10px", px: "20px" }}>
+                    {transitioning ? "Submitting…" : "Submit for review"}
+                  </Button>
+                  <Typography sx={{ fontSize: 11.5, color: "#94a3b8", mt: "8px" }}>
+                    Sends for review and locks your answers.
+                  </Typography>
+                </Box>
               </Box>
             </Box>
           </Box>
@@ -1435,51 +1841,21 @@ export default function CheckDetailPage() {
                 {sectionNames.map(sectionName => {
                   const items = sections[sectionName]
                   const stats = getSectionStats(items)
-                  const complete = stats.total > 0 && stats.answered === stats.total
-                  const collapsed = showSticky && complete && !expandedComplete.has(sectionName)
-                  const toggle = () => setExpandedComplete(prev => {
-                    const n = new Set(prev)
-                    if (n.has(sectionName)) n.delete(sectionName); else n.add(sectionName)
-                    return n
-                  })
                   return (
                     <Box key={sectionName} ref={(el: HTMLDivElement | null) => { sectionRefs.current[sectionName] = el }}
                       sx={{ mb: "8px", scrollMarginTop: { xs: "120px", md: "16px" } }}>
-                      {/* Section header — slim Complete bar when done, else label (+ collapse toggle) */}
+                      {/* Section header — label + progress. Sections stay expanded as you work;
+                          wayfinding is the sticky header + jump-to-section menu (no auto-collapse). */}
                       {showSticky ? (
-                        collapsed ? (
-                          <Box onClick={toggle} sx={{
-                            display: "flex", alignItems: "center", gap: 1, cursor: "pointer",
-                            px: "12px", py: "9px", mb: "8px", borderRadius: "8px",
-                            bgcolor: stats.failed > 0 ? "#fff5f5" : "#f0fdf4",
-                            border: `1px solid ${stats.failed > 0 ? "#fecaca" : "#bbf7d0"}`,
-                            "&:hover": { borderColor: stats.failed > 0 ? "#fca5a5" : "#86efac" },
-                          }}>
-                            <CheckCircleIcon sx={{ fontSize: 15, color: stats.failed > 0 ? "#b91c1c" : "#15803d" }} />
-                            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "#0f172a", flex: 1, minWidth: 0 }}>
-                              {sectionName}
-                            </Typography>
-                            <Typography sx={{ fontSize: 11.5, color: stats.failed > 0 ? "#b91c1c" : "#15803d", fontWeight: 500 }}>
-                              {stats.failed > 0 ? `Complete · ${stats.failed} fail` : "Complete"} · {stats.answered}/{stats.total}
-                            </Typography>
-                            <ExpandMoreIcon sx={{ fontSize: 18, color: "#94a3b8" }} />
-                          </Box>
-                        ) : (
-                          <Stack direction="row" alignItems="center" spacing={1} sx={{ px: "4px", py: "6px", mb: "8px" }}>
-                            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#94a3b8", flex: 1 }}>
-                              {sectionName} · {stats.answered}/{stats.total}{stats.failed > 0 ? ` · ${stats.failed} fail` : ""}
-                            </Typography>
-                            {complete ? (
-                              <Button size="small" onClick={toggle} sx={{ fontSize: 11, color: "#64748b", minWidth: 0, py: 0 }}>Collapse</Button>
-                            ) : null}
-                          </Stack>
-                        )
+                        <Stack direction="row" alignItems="center" spacing={1} sx={{ px: "4px", py: "6px", mb: "8px" }}>
+                          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#94a3b8", flex: 1 }}>
+                            {sectionName} · {stats.answered}/{stats.total}{stats.failed > 0 ? ` · ${stats.failed} fail` : ""}
+                          </Typography>
+                        </Stack>
                       ) : null}
-                      {!collapsed ? (
-                        <Box sx={{ mb: "12px" }}>
-                          {items.map((item, idx) => renderItemCard(item, idx))}
-                        </Box>
-                      ) : null}
+                      <Box sx={{ mb: "12px" }}>
+                        {items.map((item, idx) => renderItemCard(item, idx))}
+                      </Box>
                     </Box>
                   )
                 })}
@@ -1558,6 +1934,7 @@ export default function CheckDetailPage() {
                   </Typography>
                 ) : null}
                 <Button fullWidth variant="contained" size="large"
+                  disabled={!allRequiredAnswered}
                   endIcon={<ArrowForwardIcon sx={{ fontSize: 18 }} />}
                   onClick={() => setReviewMode(true)}
                   sx={{ py: "12px", fontSize: 15 }}>
@@ -1569,7 +1946,6 @@ export default function CheckDetailPage() {
         ) : null}
 
         {dialogs}
-        <AttachmentPreviewModal open={!!previewAtt} attachment={previewAtt} onClose={() => setPreviewAtt(null)} />
         <PhotoCaptureDialog
           open={!!photoPreview}
           url={photoPreview?.url ?? null}
@@ -1578,13 +1954,14 @@ export default function CheckDetailPage() {
           onRetake={retakePreviewPhoto}
           onDiscard={advancePhotoPreview}
           onAttach={attachPreviewPhoto}
-          attaching={photoAttaching}
           recommended={(() => {
             const it = photoPreview ? check.items.find(i => i.id === photoPreview.itemId) : null
             return it ? respOf(it) === "FAIL" : false
           })()}
         />
       </Box>
+      {drawer}
+      </DrillNavContext.Provider>
     )
   }
 
@@ -1637,15 +2014,15 @@ export default function CheckDetailPage() {
     ]
     return (
       <Box sx={{ maxWidth: 720, mx: "auto", pb: "24px" }}>
-        {/* Origin-aware back (no tooltip — the label is self-evident) */}
-        <BackButton
-          label={cameFromHistory ? "Back to history" : "Back to checks"}
-          onClick={goBack}
-          sx={{ mb: "10px" }}
-        />
-
-        {/* Header — title + site/assignee + status chip + Start (ref lives in the breadcrumb) */}
-        <Stack direction="row" alignItems="flex-start" spacing={2} sx={{ mb: "22px" }}>
+        {/* Header — origin-aware back arrow + title on ONE line (consistent with the review
+            surface), then status + site/assignee; Start on the right. */}
+        <Stack direction="row" alignItems="flex-start" spacing={1.5} sx={{ mb: "22px" }}>
+          <Tooltip title={cameFromHistory ? "Back to history" : "Back to checks"}>
+            <IconButton onClick={goBack} size="small"
+              sx={{ color: "#64748b", mt: "2px", flexShrink: 0, "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+              <ArrowBackIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, color: "#0f172a", lineHeight: 1.25 }}>
               {check.title}
@@ -1658,11 +2035,13 @@ export default function CheckDetailPage() {
               </Typography>
             </Stack>
           </Box>
+          {historyButton}
           <Button variant="contained" disableElevation size="small" onClick={handleStart} disabled={transitioning}
             sx={{ flexShrink: 0, fontSize: 13, py: "9px", px: "18px" }}>
             {transitioning ? "Starting…" : "Start check"}
           </Button>
         </Stack>
+        {historyDialog}
 
         {/* Editable schedule + assignee (manager-tier) — a date with no date set can be fixed here;
             both auto-save (PATCH /checks/:id) and the picker is the assignable set, never raw /users. */}
@@ -1696,6 +2075,37 @@ export default function CheckDetailPage() {
         ) : null}
 
         {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+
+        {/* Returned-for-rework summary — the first thing the engineer sees after a reviewer
+            sends the check back. The briefing has no item list, so the flagged items (+ the
+            reviewer's per-item notes) are surfaced here, alongside any overall return note.
+            Once the engineer starts, each flagged item is also marked in its execution card. */}
+        {flaggedCount > 0 ? (
+          <Box sx={{ mb: "22px", p: "14px", bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "12px" }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: "8px" }}>
+              <OutlinedFlagIcon sx={{ fontSize: 18, color: "#d97706" }} />
+              <Typography sx={{ fontSize: 14, fontWeight: 700, color: "#92400e" }}>
+                Returned for rework · {flaggedCount} item{flaggedCount === 1 ? "" : "s"} flagged
+              </Typography>
+            </Stack>
+            {check.reviewerNotes ? (
+              <Typography sx={{ fontSize: 13, color: "#92400e", mb: "10px", lineHeight: 1.5 }}>
+                {check.reviewerNotes}
+              </Typography>
+            ) : null}
+            <Stack spacing={0.75}>
+              {flaggedItems.map(fi => (
+                <Box key={fi.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                  <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#d97706", mt: "7px", flexShrink: 0 }} />
+                  <Typography sx={{ fontSize: 13, color: "#0f172a", lineHeight: 1.45 }}>
+                    <Box component="span" sx={{ fontWeight: 600 }}>{fi.label}</Box>
+                    {fi.reworkNote ? <Box component="span" sx={{ color: "#92400e" }}>{` — ${fi.reworkNote}`}</Box> : null}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+        ) : null}
 
         {/* Context stat tiles (Est. time dropped gracefully when the template has none) */}
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: `repeat(${draftTiles.length}, 1fr)` }, gap: "10px", mb: "26px" }}>
@@ -1733,24 +2143,217 @@ export default function CheckDetailPage() {
     )
   }
 
+  // ── Read-only checklist item (review / completed surfaces) ──────────────────
+  // Exception-based hierarchy: passes (and N/A) recede to a compact one-line row — a small
+  // result pill + the question + quiet evidence indicators (note / photo count / follow-ons).
+  // Fails (and reviewer-flagged items) auto-expand: heavier weight (left accent), with the
+  // note + photo evidence inline (no click needed) since that's what gets scrutinised. On the
+  // REVIEW surface (PENDING_REVIEW + reviewer) the per-item Flag / Task actions stay reachable
+  // on EVERY item — inline on expanded items, via a per-row ⋮ menu on compact passes (so a pass
+  // can still be flagged). COMPLETED passes reviewing=false ⇒ read-only, no actions.
+  function renderReviewItem(item: CheckItem, reviewing: boolean) {
+    const resp = item.response
+    const flagged = !!item.reworkFlagged
+    const isFail = resp === "FAIL"
+    const hasNote = !!item.notes?.trim()
+    // The per-item note is the engineer's field comment — attribute it to the check's
+    // assignee (the executor) with a calm submitted-at timestamp. Display only (NOT the
+    // threaded comment system) — see the attributed-comment block below.
+    const noteAuthor = userLabel(check?.assignee, "Engineer")
+    const noteTime = formatNoteTime(check?.submittedAt ?? null)
+    const photos = item.attachments ?? []
+    const respLabel = resp === "NA" ? "N/A" : resp === "PASS" ? "Pass" : resp === "FAIL" ? "Fail" : "Pending"
+    // A pass/NA item with evidence of its own (note, photo, or a raised follow-on) also expands, so
+    // that content is revealed inline rather than hidden behind a dead indicator glyph. Fails and
+    // flagged items expand as before; a content-less pass/NA stays compact.
+    const hasContent = hasNote || photos.length > 0 || item.followOns.length > 0
+    const expanded = isFail || flagged || hasContent
+
+    if (!expanded) {
+      // Compact pass / N/A row — glanceable, low weight.
+      return (
+        <Box key={item.id} sx={{ px: "12px", py: "9px", bgcolor: "#fff", display: "flex", alignItems: "center", gap: 1 }}>
+          <StatusPill intent={resultIntent(resp)} label={respLabel} size="sm" />
+          <Typography sx={{ fontSize: 12.5, color: "#0f172a", flex: 1, minWidth: 0, lineHeight: 1.4 }}>{item.label}</Typography>
+          {hasNote ? <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 14, color: "#94a3b8" }} /></Tooltip> : null}
+          {photos.length > 0 ? (
+            <Stack direction="row" alignItems="center" spacing={0.3}>
+              <CameraAltIcon sx={{ fontSize: 14, color: "#94a3b8" }} />
+              <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{photos.length}</Typography>
+            </Stack>
+          ) : null}
+          {item.followOns.length > 0 ? (
+            <Tooltip title={`${item.followOns.length} follow-on${item.followOns.length === 1 ? "" : "s"}`}>
+              <Stack direction="row" alignItems="center" spacing={0.3}>
+                <AddTaskIcon sx={{ fontSize: 14, color: "#94a3b8" }} />
+                <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{item.followOns.length}</Typography>
+              </Stack>
+            </Tooltip>
+          ) : null}
+          {reviewing ? (
+            <Tooltip title="Item actions">
+              <IconButton size="small" onClick={e => setRowMenu({ anchor: e.currentTarget, item })}
+                sx={{ ml: "2px", color: "#94a3b8", "&:hover": { color: "#475569" } }}>
+                <MoreVertIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+        </Box>
+      )
+    }
+
+    // Expanded item — evidence inline. Three visual tiers: flagged (amber) and fail (red) keep
+    // their attention-grabbing treatment; a pass/NA revealed only because it carries content gets
+    // a calm, neutral tier (white, thin slate rule) so a clean pass never reads as a problem.
+    const accent = flagged ? "#f59e0b" : isFail ? "#b91c1c" : "#e2e8f0"
+    const bg = flagged ? "#fffdf7" : isFail ? "#fffafa" : "#fff"
+    const showFooterActions = reviewing
+    return (
+      <Box key={item.id} sx={{ bgcolor: bg, borderLeft: `3px solid ${accent}` }}>
+        {/* Flagged-for-rework strip — amber, above the question so it's unmissable (unchanged). */}
+        {flagged ? (
+          <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ px: "14px", py: "8px", bgcolor: "#fffbeb", borderBottom: "1px solid #fde68a" }}>
+            <OutlinedFlagIcon sx={{ fontSize: 15, color: "#d97706", mt: "1px", flexShrink: 0 }} />
+            <Typography sx={{ fontSize: 12, color: "#92400e", lineHeight: 1.45 }}>
+              <Box component="span" sx={{ fontWeight: 700 }}>Flagged for rework</Box>
+              {item.reworkNote ? ` · ${item.reworkNote}` : ""}
+            </Typography>
+          </Stack>
+        ) : null}
+        <Box sx={{ px: "14px", py: "12px" }}>
+          {/* Header zone — result pill + question, top-aligned. */}
+          <Stack direction="row" spacing={1} alignItems="flex-start">
+            <StatusPill intent={resultIntent(resp)} label={respLabel} size="sm" />
+            <Typography variant="body2" fontWeight={600} sx={{ flex: 1, minWidth: 0, color: "#0f172a", lineHeight: 1.45 }}>
+              {item.label}
+            </Typography>
+          </Stack>
+          {/* Note zone — engineer note as an attributed comment: shared Avatar + name + muted
+              "noted · {time}", then the note as plain text indented under the name. No input-style
+              box. Display only (NOT the threaded comment system) — the simple per-item note field. */}
+          {hasNote ? (
+            <Box sx={{ display: "flex", gap: 1, mt: "10px" }}>
+              <Avatar name={noteAuthor} size="sm" variant="engineer" />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Stack direction="row" spacing={0.75} alignItems="baseline" flexWrap="wrap">
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "#0f172a", lineHeight: 1.4 }}>{noteAuthor}</Typography>
+                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>{noteTime ? `noted · ${noteTime}` : "noted"}</Typography>
+                </Stack>
+                <Typography sx={{ mt: 0.25, fontSize: 12.5, color: "#334155", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{item.notes}</Typography>
+              </Box>
+            </Box>
+          ) : null}
+          {/* Evidence + linked-task zone — two labelled sub-columns (stack on xs). Collapses
+              entirely when there's neither photo evidence nor a follow-on, so no empty band. */}
+          {photos.length > 0 || item.followOns.length > 0 ? (
+            <>
+              <Divider sx={{ my: "12px" }} />
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="flex-start">
+                {photos.length > 0 ? (
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.6px", textTransform: "uppercase", color: "text.secondary", mb: "8px" }}>Evidence</Typography>
+                    {/* Read-only captioned cards; click the thumbnail to preview the auth'd blob via
+                        the shared modal (the execution UI owns editing). */}
+                    <Box sx={{ display: "flex", alignItems: "flex-start", gap: "10px", flexWrap: "wrap" }}>
+                      {photos.map(att => (
+                        <Box key={att.id} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
+                          <Tooltip title={att.filename}>
+                            <Box onClick={() => setPreviewAtt(att)} sx={{
+                              width: 48, height: 48, borderRadius: "4px", border: "1px solid #e2e8f0",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              bgcolor: "#f8fafc", cursor: "pointer", "&:hover": { borderColor: "#cbd5e1" }
+                            }}>
+                              {isImageType(att.contentType)
+                                ? <ImageIcon sx={{ fontSize: 20, color: "#64748b" }} />
+                                : <DescriptionIcon sx={{ fontSize: 20, color: "#64748b" }} />}
+                            </Box>
+                          </Tooltip>
+                          {att.caption ? (
+                            <Typography sx={{ fontSize: 11, color: "#334155", lineHeight: 1.3, wordBreak: "break-word" }}>{att.caption}</Typography>
+                          ) : (
+                            <Typography sx={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.3, wordBreak: "break-word" }}>
+                              {att.filename} · {new Date(att.uploadedAt).toLocaleDateString("en-GB")}
+                            </Typography>
+                          )}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                ) : null}
+                {item.followOns.length > 0 ? (
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.6px", textTransform: "uppercase", color: "text.secondary", mb: "4px" }}>Linked task</Typography>
+                    {/* Follow-on (Task/Risk/Issue raised from this item) → shared LinkedRecordsContent
+                        card. With the page's DrillNavContext provider in scope it opens the record in
+                        the right-hand peek drawer (not a navigation), reusing the Service Desk drill path. */}
+                    <LinkedRecordsContent
+                      links={item.followOns.map(followOnAsLink)}
+                      showAddButton={false}
+                      onAddLink={() => {}}
+                      onUnlink={() => {}}
+                    />
+                  </Box>
+                ) : null}
+              </Stack>
+            </>
+          ) : null}
+          {/* Actions zone — subtle tertiary-tinted footer flush to the card edges (negative margins
+              cancel the content gutter); the top border is the zone divider. Reviewer-only
+              (PENDING_REVIEW). Behaviour unchanged — Flag feeds Return-gating, Task creates a linked task. */}
+          {showFooterActions ? (
+            <Stack direction="row" spacing={1} justifyContent="flex-end"
+              sx={{ mx: "-14px", mb: "-12px", mt: "12px", px: "14px", py: "8px",
+                    bgcolor: "rgba(15, 23, 42, 0.02)", borderTop: "1px solid", borderColor: "divider" }}>
+              {flagged ? (
+                <Button size="small" startIcon={<OutlinedFlagIcon sx={{ fontSize: 16 }} />} onClick={() => unflagItemAction(item)}
+                  sx={{ fontSize: 11.5, color: "#92400e", textTransform: "none" }}>Unflag</Button>
+              ) : (
+                <Button size="small" startIcon={<OutlinedFlagIcon sx={{ fontSize: 16 }} />} onClick={() => setFlagItem(item)}
+                  sx={{ fontSize: 11.5, color: "#b45309", textTransform: "none" }}>Flag for rework</Button>
+              )}
+              <Button size="small" startIcon={<AddTaskIcon sx={{ fontSize: 16 }} />} onClick={() => setFollowOnItem(item)}
+                sx={{ fontSize: 11.5, color: "#1d4ed8", textTransform: "none" }}>Task</Button>
+            </Stack>
+          ) : null}
+        </Box>
+      </Box>
+    )
+  }
+
   // ── STANDARD LAYOUT (all other statuses) ──────────────────────────────
   return (
+    <DrillNavContext.Provider value={drillPush}>
     <Box>
       {/* Record header — title + Start only. The ref lives in the breadcrumb and the
           Details panel; Site/Template are Details rows (no duplicated subtitle here). */}
       <Box sx={{ mb: "16px" }}>
-        <BackButton
-          label={cameFromHistory ? "Back to history" : "Back to checks"}
-          onClick={goBack}
-          sx={{ mb: "10px" }}
-        />
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-          <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
-            <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25 }}>
+        {/* Back arrow + title on ONE line (origin-aware destination on the tooltip) — the
+            dedicated back row is reclaimed, matching the denser header density elsewhere. */}
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
+          <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+            {check.status === "PENDING_REVIEW" ? (
+              /* Review surface — make the neutral exit unmistakable and clearly distinct from the
+                 warning-coloured "Return for rework" in the side-card: keep the back arrow but
+                 surface it as a labelled text control. */
+              <Button onClick={goBack} size="small" startIcon={<ArrowBackIcon sx={{ fontSize: 18 }} />}
+                sx={{ color: "#64748b", textTransform: "none", fontSize: 13, fontWeight: 500, flexShrink: 0, mt: "-3px", px: "6px",
+                      "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+                {cameFromHistory ? "Back to history" : "Back to Field Work"}
+              </Button>
+            ) : (
+              <Tooltip title={cameFromHistory ? "Back to history" : "Back to checks"}>
+                <IconButton onClick={goBack} size="small"
+                  sx={{ color: "#64748b", mt: "1px", flexShrink: 0, "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+                  <ArrowBackIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25, minWidth: 0 }}>
               {check.title}
             </Typography>
-          </Box>
-          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+          </Stack>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+            {historyButton}
             {canStart ? (
               <Button variant="contained" size="small" onClick={handleStart} disabled={transitioning}>
                 Start check
@@ -1805,85 +2408,31 @@ export default function CheckDetailPage() {
                 </Box>
               ) : (
                 <Stack spacing={2}>
-                  {sectionNames.map(sectionName => (
-                    <Box key={sectionName}>
-                      {sectionNames.length > 1 ? (
-                        <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 1, mt: 0.5 }}>
-                          {sectionName.toUpperCase()} — {sections[sectionName].filter(i => i.response).length}/{sections[sectionName].length}
-                        </Typography>
-                      ) : null}
-                      <Stack spacing={0.75}>
-                        {sections[sectionName].map((item, idx) => (
-                          <Box key={item.id} sx={{
-                            p: "12px 14px", borderRadius: 1.5, border: "1px solid",
-                            borderColor: item.response === "PASS" ? "#d1fae5" : item.response === "FAIL" ? "#fecaca" : "#e2e8f0",
-                            bgcolor: item.response === "PASS" ? "#f0fdf4" : item.response === "FAIL" ? "#fff5f5" : "#ffffff"
-                          }}>
-                            <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                              <Typography sx={{ fontSize: 11, fontWeight: 500, color: "#94a3b8", mt: "2px", flexShrink: 0, minWidth: 22, fontFamily: "monospace" }}>
-                                {String(idx + 1).padStart(2, "0")}
-                              </Typography>
-                              <Box sx={{ flex: 1 }}>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>{item.label}</Typography>
-                                  <StatusPill
-                                    intent={resultIntent(item.response)}
-                                    label={item.response ?? "Pending"}
-                                    size="sm"
-                                  />
-                                </Stack>
-                                {item.notes ? (
-                                  <Typography variant="caption" color="text.secondary" sx={{ mt: "4px", display: "block" }}>{item.notes}</Typography>
-                                ) : null}
-                                {item.followOns.length > 0 ? (
-                                  <Stack direction="row" spacing={0.5} sx={{ mt: "6px" }}>
-                                    {item.followOns.map(fo => (
-                                      <Chip key={fo.id} size="small" label={fo.entityType} sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10, height: 18 }} />
-                                    ))}
-                                  </Stack>
-                                ) : null}
-                                {/* Per-item field-evidence — read-only captioned cards; click the
-                                    thumbnail to preview the auth'd blob via the shared modal. The
-                                    caption (when set) labels the evidence; otherwise fall back to
-                                    filename + capture date. No editing here (the execution UI owns it).
-                                    Without this the captured evidence is invisible once a check leaves
-                                    the execution screen. */}
-                                {(item.attachments ?? []).length > 0 ? (
-                                  <Box sx={{ display: "flex", alignItems: "flex-start", gap: "10px", flexWrap: "wrap", mt: "8px" }}>
-                                    {(item.attachments ?? []).map((att) => (
-                                      <Box key={att.id} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
-                                        <Tooltip title={att.filename}>
-                                          <Box onClick={() => setPreviewAtt(att)} sx={{
-                                            width: 48, height: 48, borderRadius: "4px", border: "1px solid #e2e8f0",
-                                            display: "flex", alignItems: "center", justifyContent: "center",
-                                            bgcolor: "#f8fafc", cursor: "pointer",
-                                            "&:hover": { borderColor: "#cbd5e1" }
-                                          }}>
-                                            {isImageType(att.contentType)
-                                              ? <ImageIcon sx={{ fontSize: 20, color: "#64748b" }} />
-                                              : <DescriptionIcon sx={{ fontSize: 20, color: "#64748b" }} />}
-                                          </Box>
-                                        </Tooltip>
-                                        {att.caption ? (
-                                          <Typography sx={{ fontSize: 11, color: "#334155", lineHeight: 1.3, wordBreak: "break-word" }}>
-                                            {att.caption}
-                                          </Typography>
-                                        ) : (
-                                          <Typography sx={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.3, wordBreak: "break-word" }}>
-                                            {att.filename} · {new Date(att.uploadedAt).toLocaleDateString("en-GB")}
-                                          </Typography>
-                                        )}
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                ) : null}
-                              </Box>
-                            </Stack>
+                  {sectionNames.map(sectionName => {
+                    const items = sections[sectionName]
+                    const reviewing = check.status === "PENDING_REVIEW" && canReview
+                    const secFailed = items.filter(i => i.response === "FAIL").length
+                    const secAnswered = items.filter(i => i.response).length
+                    return (
+                      // One bordered container per section; passes are a quiet divided list,
+                      // fails/flagged break out as heavier accented rows within it.
+                      <Box key={sectionName} sx={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+                        {sectionNames.length > 1 ? (
+                          <Box sx={{ bgcolor: "#f8fafc", px: "12px", py: "8px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 1 }}>
+                            <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "#475569", flex: 1, minWidth: 0 }}>
+                              {sectionName}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11, color: secFailed > 0 ? "#b91c1c" : "#94a3b8", flexShrink: 0 }}>
+                              {secAnswered}/{items.length}{secFailed > 0 ? ` · ${secFailed} fail` : ""}
+                            </Typography>
                           </Box>
-                        ))}
-                      </Stack>
-                    </Box>
-                  ))}
+                        ) : null}
+                        <Stack divider={<Divider />}>
+                          {items.map(item => renderReviewItem(item, reviewing))}
+                        </Stack>
+                      </Box>
+                    )
+                  })}
                 </Stack>
               )
             ) : null}
@@ -1905,7 +2454,7 @@ export default function CheckDetailPage() {
                         {item.followOns.length > 0 ? (
                           <Stack direction="row" spacing={0.75} sx={{ mt: 0.75 }}>
                             {item.followOns.map(fo => (
-                              <Chip key={fo.id} size="small" label={fo.entityType} sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10 }} />
+                              <Chip key={fo.id} size="small" label={followOnLabel(fo)} sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10, maxWidth: "100%" }} />
                             ))}
                           </Stack>
                         ) : null}
@@ -1950,7 +2499,7 @@ export default function CheckDetailPage() {
               checklist + per-item photos (left) and the engineer summary below; editing
               is disabled (the surface is read-only) so they attest to fixed evidence.
               Reuses the shared review dialog via setReviewAction / setReviewOpen. */}
-          {check.status === "PENDING_REVIEW" ? (
+          {check.status === "PENDING_REVIEW" && canReview ? (
             <Card>
               <CardContent>
                 <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 1.5 }}>REVIEW</Typography>
@@ -1960,11 +2509,21 @@ export default function CheckDetailPage() {
                     sx={{ fontSize: 12, py: "10px" }}>
                     Approve check
                   </Button>
+                  {/* Return is gated on the flagged-count (the single source of truth that also
+                      drives the "· N flagged" label), mirroring the Submit gate: a return must
+                      carry at least one flagged item. Visible-but-disabled with an informative
+                      hint, never hidden. Approve stays always-enabled (it needs no flags). */}
                   <Button fullWidth variant="outlined" size="small" color="warning"
+                    disabled={flaggedCount === 0}
                     onClick={() => { setReviewAction("return"); setReviewOpen(true) }}
                     sx={{ fontSize: 12 }}>
-                    Return for rework
+                    {flaggedCount > 0 ? `Return for rework · ${flaggedCount} flagged` : "Return for rework"}
                   </Button>
+                  {flaggedCount === 0 ? (
+                    <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>
+                      Flag an item to return.
+                    </Typography>
+                  ) : null}
                 </Stack>
                 {check.engineerSummary ? (
                   <Box sx={{ mt: 2 }}>
@@ -2017,7 +2576,7 @@ export default function CheckDetailPage() {
                 attachments={check?.attachments ?? []}
                 recordType="check"
                 recordId={check?.id ?? ""}
-                readOnly={attachmentsLocked}
+                readOnly={checkAttachmentsReadOnly}
                 onChanged={() => qc.invalidateQueries({ queryKey: ["check-detail", id] })}
               />
             </RightPanelSection>
@@ -2028,19 +2587,25 @@ export default function CheckDetailPage() {
       {/* Mobile sticky review bar — keeps Approve/Return reachable on phones without
           scrolling past the full checklist (the right-rail Review card sits below the
           checklist on xs). Mirrors the execution layout's sticky action bar. */}
-      {check.status === "PENDING_REVIEW" ? (
+      {check.status === "PENDING_REVIEW" && canReview ? (
         <Box sx={{
-          display: { xs: "flex", md: "none" },
+          display: { xs: "block", md: "none" },
           position: "sticky", bottom: 0, zIndex: 2,
           bgcolor: "#ffffff", borderTop: "1px solid #e2e8f0",
           mx: "-12px", mt: 2, px: "12px", py: "12px",
           boxShadow: "0 -2px 8px rgba(15,23,42,0.06)",
         }}>
+          {flaggedCount === 0 ? (
+            <Typography sx={{ fontSize: 11.5, color: "#94a3b8", textAlign: "center", mb: "8px" }}>
+              Flag an item to return.
+            </Typography>
+          ) : null}
           <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
             <Button fullWidth variant="outlined" color="warning"
+              disabled={flaggedCount === 0}
               onClick={() => { setReviewAction("return"); setReviewOpen(true) }}
               sx={{ py: "11px", fontSize: 14 }}>
-              Return
+              {flaggedCount > 0 ? `Return · ${flaggedCount}` : "Return"}
             </Button>
             <Button fullWidth variant="contained"
               onClick={() => { setReviewAction("approve"); setReviewOpen(true) }}
@@ -2051,8 +2616,26 @@ export default function CheckDetailPage() {
         </Box>
       ) : null}
 
+      {/* Per-row actions (review surface compact passes) — Flag/Task on any item, incl. a pass. */}
+      <Menu anchorEl={rowMenu?.anchor ?? null} open={!!rowMenu} onClose={() => setRowMenu(null)}>
+        {rowMenu?.item.reworkFlagged ? (
+          <MenuItem onClick={() => { const it = rowMenu.item; setRowMenu(null); void unflagItemAction(it) }} sx={{ fontSize: 13 }}>
+            <OutlinedFlagIcon sx={{ fontSize: 16, mr: 1, color: "#92400e" }} /> Unflag
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={() => { const it = rowMenu!.item; setRowMenu(null); setFlagItem(it) }} sx={{ fontSize: 13 }}>
+            <OutlinedFlagIcon sx={{ fontSize: 16, mr: 1, color: "#b45309" }} /> Flag for rework
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => { const it = rowMenu!.item; setRowMenu(null); setFollowOnItem(it) }} sx={{ fontSize: 13 }}>
+          <AddTaskIcon sx={{ fontSize: 16, mr: 1, color: "#1d4ed8" }} /> Create task
+        </MenuItem>
+      </Menu>
+
       {dialogs}
       <AttachmentPreviewModal open={!!previewAtt} attachment={previewAtt} onClose={() => setPreviewAtt(null)} />
     </Box>
+    {drawer}
+    </DrillNavContext.Provider>
   )
 }

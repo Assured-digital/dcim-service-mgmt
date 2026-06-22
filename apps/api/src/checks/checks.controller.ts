@@ -5,7 +5,8 @@ import { ChecksService } from "./checks.service"
 import { ChecksReportService } from "./checks-report.service"
 import {
   CreateCheckTemplateDto, CreateCheckTemplateItemDto, CreateCheckDto,
-  UpdateCheckItemDto, UpdateCheckDto, CreateFollowOnDto, ReviewCheckDto, SubmitCheckDto, CancelCheckDto
+  UpdateCheckItemDto, UpdateCheckDto, CreateFollowOnDto, ReviewCheckDto, SubmitCheckDto, CancelCheckDto,
+  FlagItemDto
 } from "./dto"
 import { Roles } from "../auth/roles.decorator"
 import { Role } from "@prisma/client"
@@ -210,7 +211,7 @@ export class ChecksController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.checks.addAdHocItem(clientId, id, dto)
+    return this.checks.addAdHocItem(clientId, id, dto, user.userId)
   }
 
   @Post(":id/submit")
@@ -285,6 +286,35 @@ export class ChecksController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.checks.createFollowOn(clientId, id, itemId, dto, user.userId)
+  }
+
+  // Reviewer flag-for-rework (PENDING_REVIEW only). Same reviewer role set as approve/return
+  // (no ENGINEER) — the engineer sees the flag + note on the returned check, but doesn't set it.
+  @Post(":id/items/:itemId/flag")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST)
+  async flagItem(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @Body() dto: FlagItemDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.checks.flagItem(clientId, id, itemId, dto, user.userId)
+  }
+
+  @Delete(":id/items/:itemId/flag")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST)
+  async unflagItem(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.checks.unflagItem(clientId, id, itemId, user.userId)
   }
 
   @Put("templates/:id")

@@ -265,6 +265,11 @@ model CheckItem {
   notes          String?
   respondedAt    DateTime?
   respondedById  String?
+  // Reviewer flag-for-rework (set on the PENDING_REVIEW surface; the engineer sees it on
+  // return). Nullable/no-default so the migration is a pure ADD COLUMN — treat null as
+  // not-flagged. Cleared on the next submit-for-review (fresh review round).
+  reworkFlagged  Boolean?
+  reworkNote     String?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
 
