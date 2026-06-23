@@ -2,6 +2,7 @@ import React from "react"
 import {
   Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography,
 } from "@mui/material"
+import { useThemeMode } from "../../lib/theme"
 
 // Reviewer flag-for-rework note. Flagging an item on the PENDING_REVIEW review surface always
 // captures a short note (required — the engineer needs to know why) before the flag is written.
@@ -21,6 +22,7 @@ export function FlagNoteDialog({
   // eslint-disable-next-line no-unused-vars
   onSave: (note: string) => void
 }) {
+  const { mode } = useThemeMode()
   const [note, setNote] = React.useState("")
 
   // Reset to an empty note each time the dialog opens for a (possibly different) item.
@@ -35,8 +37,8 @@ export function FlagNoteDialog({
       <DialogTitle>Flag for rework</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fffbeb", border: "1px solid #fde68a" }}>
-            <Typography variant="caption" sx={{ color: "#92400e", lineHeight: 1.5 }}>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: mode === "dark" ? "#3a2c0f" : "#fffbeb", border: `1px solid ${mode === "dark" ? "#5b4420" : "#fde68a"}` }}>
+            <Typography variant="caption" sx={{ color: mode === "dark" ? "#fbbf24" : "#92400e", lineHeight: 1.5 }}>
               {itemLabel}
             </Typography>
           </Box>

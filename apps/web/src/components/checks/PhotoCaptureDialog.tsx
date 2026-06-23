@@ -4,6 +4,7 @@ import {
 } from "@mui/material"
 import CheckIcon from "@mui/icons-material/Check"
 import ReplayIcon from "@mui/icons-material/Replay"
+import { semanticToken } from "../shared"
 
 // Photo capture confirm beat (Stage 3 of the engineer check journey). A captured/selected
 // image is previewed HERE before anything is committed — the engineer adds an optional
@@ -37,6 +38,7 @@ export function PhotoCaptureDialog({
   recommended?: boolean
 }) {
   const theme = useTheme()
+  const mode = theme.palette.mode
   const fullScreen = useMediaQuery(theme.breakpoints.down("sm"))
 
   return (
@@ -51,7 +53,7 @@ export function PhotoCaptureDialog({
       <Box sx={{ display: "flex", flexDirection: "column", height: fullScreen ? "100%" : "auto" }}>
         {/* Header */}
         <Box sx={{ px: "20px", pt: "18px", pb: "12px" }}>
-          <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#0f172a" }}>Add photo evidence</Typography>
+          <Typography sx={{ fontSize: 16, fontWeight: 600, color: "text.primary" }}>Add photo evidence</Typography>
         </Box>
 
         {/* Image preview */}
@@ -87,7 +89,7 @@ export function PhotoCaptureDialog({
             inputProps={{ maxLength: 280 }}
             sx={{ "& .MuiInputBase-root": { fontSize: { xs: 16, md: 14 } } }}
           />
-          <Typography sx={{ fontSize: 12, color: recommended ? "#b45309" : "#94a3b8", mt: "6px" }}>
+          <Typography sx={{ fontSize: 12, color: recommended ? semanticToken("warning", mode).text : "text.tertiary", mt: "6px" }}>
             {recommended
               ? "Expected for failures — the caption appears in the report."
               : "Optional — captions appear in the report."}
@@ -99,7 +101,7 @@ export function PhotoCaptureDialog({
           <Button
             onClick={onDiscard}
             disabled={attaching}
-            sx={{ fontSize: 13, color: "#64748b" }}
+            sx={{ fontSize: 13, color: "var(--color-text-muted)" }}
           >
             Discard
           </Button>
@@ -108,7 +110,7 @@ export function PhotoCaptureDialog({
             onClick={onRetake}
             disabled={attaching}
             startIcon={<ReplayIcon sx={{ fontSize: 16 }} />}
-            sx={{ fontSize: 13, color: "#475569" }}
+            sx={{ fontSize: 13, color: "text.secondary" }}
           >
             Retake
           </Button>

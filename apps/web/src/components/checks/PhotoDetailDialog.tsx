@@ -5,6 +5,7 @@ import {
 } from "@mui/material"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
 import { type AttachmentSummary, fetchAttachmentBlob } from "../../lib/attachments"
+import { semanticToken } from "../shared"
 
 // The image-detail beat: tapping any evidence thumbnail (staged draft, queued-pending, or
 // uploaded) opens it HERE for a closer look, caption edit, and a deliberate — confirmed —
@@ -48,6 +49,7 @@ export function PhotoDetailDialog({
   onDelete: (target: PhotoDetailTarget) => void
 }) {
   const theme = useTheme()
+  const mode = theme.palette.mode
   const fullScreen = useMediaQuery(theme.breakpoints.down("sm"))
   const [caption, setCaption] = React.useState("")
   const [confirmingDelete, setConfirmingDelete] = React.useState(false)
@@ -104,8 +106,8 @@ export function PhotoDetailDialog({
       <Box sx={{ display: "flex", flexDirection: "column", height: fullScreen ? "100%" : "auto" }}>
         {/* Header */}
         <Box sx={{ px: "20px", pt: "18px", pb: "12px" }}>
-          <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#0f172a" }}>Photo evidence</Typography>
-          <Typography sx={{ fontSize: 12, color: "#94a3b8", mt: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <Typography sx={{ fontSize: 16, fontWeight: 600, color: "text.primary" }}>Photo evidence</Typography>
+          <Typography sx={{ fontSize: 12, color: "text.tertiary", mt: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {targetFilename(target)}
           </Typography>
         </Box>
@@ -147,17 +149,17 @@ export function PhotoDetailDialog({
             inputProps={{ maxLength: 280 }}
             sx={{ "& .MuiInputBase-root": { fontSize: { xs: 16, md: 14 } } }}
           />
-          <Typography sx={{ fontSize: 12, color: "#94a3b8", mt: "6px" }}>Captions appear in the report.</Typography>
+          <Typography sx={{ fontSize: 12, color: "text.tertiary", mt: "6px" }}>Captions appear in the report.</Typography>
         </Box>
 
         {/* Delete confirm (deliberate, two-step) */}
         {confirmingDelete ? (
-          <Box sx={{ mx: "20px", mt: "16px", p: "12px 14px", bgcolor: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px" }}>
-            <Typography sx={{ fontSize: 13, color: "#991b1b", mb: "10px" }}>
+          <Box sx={{ mx: "20px", mt: "16px", p: "12px 14px", bgcolor: mode === "dark" ? "#3a1a1a" : "#fef2f2", border: `1px solid ${mode === "dark" ? "#5b2626" : "#fecaca"}`, borderRadius: "8px" }}>
+            <Typography sx={{ fontSize: 13, color: mode === "dark" ? "#f87171" : "#991b1b", mb: "10px" }}>
               This removes the photo and its caption from this item. This can't be undone.
             </Typography>
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button size="small" onClick={() => setConfirmingDelete(false)} sx={{ fontSize: 13, color: "#64748b" }}>Cancel</Button>
+              <Button size="small" onClick={() => setConfirmingDelete(false)} sx={{ fontSize: 13, color: "var(--color-text-muted)" }}>Cancel</Button>
               <Button size="small" variant="contained" color="error" disableElevation
                 onClick={() => { onDelete(target); onClose() }} sx={{ fontSize: 13 }}>
                 Delete photo
@@ -173,7 +175,7 @@ export function PhotoDetailDialog({
               onClick={() => setConfirmingDelete(true)}
               disabled={confirmingDelete}
               startIcon={<DeleteOutlineIcon sx={{ fontSize: 18 }} />}
-              sx={{ fontSize: 13, color: "#dc2626" }}
+              sx={{ fontSize: 13, color: semanticToken("danger", mode).text }}
             >
               Delete
             </Button>

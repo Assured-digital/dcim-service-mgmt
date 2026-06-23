@@ -74,8 +74,8 @@ export function EvidenceThumbs({
               width: TILE,
               height: TILE,
               borderRadius: "6px",
-              border: "1px solid #e2e8f0",
-              bgcolor: "#f1f5f9", // loading placeholder — reserves space, no layout jump
+              border: "1px solid var(--color-border-primary)",
+              bgcolor: "var(--color-background-tertiary)", // loading placeholder — reserves space, no layout jump
               overflow: "hidden",
               flexShrink: 0,
             }}
@@ -97,9 +97,9 @@ export function EvidenceThumbs({
             width: TILE,
             height: TILE,
             borderRadius: "6px",
-            border: "1px solid #e2e8f0",
-            bgcolor: "#e2e8f0",
-            color: "#475569",
+            border: "1px solid var(--color-border-primary)",
+            bgcolor: "var(--color-border-primary)",
+            color: "var(--color-text-secondary)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
