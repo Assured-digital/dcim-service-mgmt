@@ -28,6 +28,7 @@ import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
 import { AD_STAFF_ROLES, CLIENT_OWN_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId } from "../lib/scope"
 import { createUser, updateUser, type UserRole, type UserView } from "../lib/users"
+import { useThemeMode } from "../lib/theme"
 
 type Client = { id: string; name: string }
 
@@ -118,11 +119,12 @@ function StatusSegmented({
   onChange: (active: boolean) => void
   disableInactive: boolean
 }) {
+  const { mode } = useThemeMode()
   const segment = (active: boolean) => {
     const selected = value === active
     const disabled = !active && disableInactive
     const selectedSx = active
-      ? { bgcolor: "#dcfce7", color: "#166534" }
+      ? (mode === "dark" ? { bgcolor: "#13351f", color: "#4ade80" } : { bgcolor: "#dcfce7", color: "#166534" })
       : { bgcolor: "var(--color-background-tertiary, #f1f5f9)", color: "var(--color-text-secondary, #475569)" }
     return (
       <Box
@@ -499,7 +501,7 @@ export default function UserFormDrawer({ open, mode, user, onClose, context }: P
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>
 
-        <Stack direction="row" spacing={1.2} sx={{ mt: 2, pt: 2, borderTop: "1px solid #e2e8f0" }}>
+        <Stack direction="row" spacing={1.2} sx={{ mt: 2, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Button variant="outlined" onClick={onClose} disabled={mutation.isPending} fullWidth>
             Cancel
           </Button>

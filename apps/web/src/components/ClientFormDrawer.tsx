@@ -93,7 +93,7 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>
 
-        <Stack direction="row" spacing={1.2} sx={{ mt: 2, pt: 2, borderTop: "1px solid #e2e8f0" }}>
+        <Stack direction="row" spacing={1.2} sx={{ mt: 2, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Button variant="outlined" onClick={onClose} disabled={mutation.isPending} fullWidth>
             Cancel
           </Button>

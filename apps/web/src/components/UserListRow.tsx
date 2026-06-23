@@ -4,6 +4,8 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import EditIcon from "@mui/icons-material/Edit"
 import { isOrgSuperRole } from "../lib/auth"
 import { type UserView } from "../lib/users"
+import { semanticToken } from "./shared/tokens/colors"
+import { useThemeMode } from "../lib/theme"
 
 // Derive 1–2 initials from an email local-part. Splits on "." (or "_"/"-") so
 // "jake.haldane@x.com" → "JH"; otherwise takes the first two characters.
@@ -48,6 +50,7 @@ type Props = {
 }
 
 export default function UserListRow({ user, clientNameById, onEdit }: Props) {
+  const { mode } = useThemeMode()
   const orgLevel = isOrgSuperRole(user.role)
   const clientLabels = clientLabelsFor(user, clientNameById)
   const roleLabel = user.role.replace(/_/g, " ").toLowerCase()
@@ -67,8 +70,8 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
         py: 1.5,
         transition: "border-color 120ms ease, box-shadow 120ms ease",
         "&:hover": {
-          borderColor: "#cbd5e1",
-          boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)"
+          borderColor: mode === "dark" ? "#475569" : "#cbd5e1",
+          boxShadow: mode === "dark" ? "0 1px 3px rgba(0, 0, 0, 0.4)" : "0 1px 3px rgba(15, 23, 42, 0.06)"
         }
       }}
     >
@@ -82,9 +85,11 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
           display: "grid",
           placeItems: "center",
           bgcolor: orgLevel
-            ? "var(--color-background-info, #eff6ff)"
+            ? (mode === "dark" ? "#16294a" : "#eff6ff")
             : "var(--color-background-secondary, #f8fafc)",
-          color: orgLevel ? "#1d4ed8" : "var(--color-text-secondary, #475569)",
+          color: orgLevel
+            ? (mode === "dark" ? "#60a5fa" : "#1d4ed8")
+            : "var(--color-text-secondary, #475569)",
           fontSize: 13,
           fontWeight: 700,
           letterSpacing: 0.3
@@ -110,8 +115,8 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
           </Typography>
           {user.isActive ? (
             <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.375, flexShrink: 0 }}>
-              <CheckCircleIcon sx={{ fontSize: 13, color: "#16a34a" }} />
-              <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#16a34a" }}>active</Typography>
+              <CheckCircleIcon sx={{ fontSize: 13, color: semanticToken("success", mode).text }} />
+              <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: semanticToken("success", mode).text }}>active</Typography>
             </Box>
           ) : (
             <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-text-muted, #64748b)", flexShrink: 0 }}>
@@ -141,8 +146,8 @@ export default function UserListRow({ user, clientNameById, onEdit }: Props) {
             label={roleLabel}
             sx={{
               height: 20,
-              bgcolor: "#eef2ff",
-              color: "#3730a3",
+              bgcolor: mode === "dark" ? "#1e1b3a" : "#eef2ff",
+              color: mode === "dark" ? "#a5b4fc" : "#3730a3",
               fontWeight: 600,
               fontSize: 11,
               textTransform: "capitalize",
