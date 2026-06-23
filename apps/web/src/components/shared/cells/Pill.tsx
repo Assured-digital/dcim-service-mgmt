@@ -3,7 +3,7 @@ import { Box } from "@mui/material"
 import {
   PILL_RADIUS,
   resolveIntent,
-  semanticTokens,
+  semanticToken,
   priorityToken,
   type SemanticIntent,
 } from "../tokens/colors"
@@ -82,7 +82,9 @@ export function StatusPill({
   size?: "sm" | "md"
   minWidth?: number
 }) {
-  const tok = semanticTokens[intent ?? resolveIntent(value ?? "")]
+  // Mode-aware: semanticToken() reads the active theme mode, so a status pill is
+  // the correct colour in both light and dark without each call site passing mode.
+  const tok = semanticToken(intent ?? resolveIntent(value ?? ""))
   return (
     <IntentPill bg={tok.bg} text={tok.text} label={label} trailing={trailing} size={size} minWidth={minWidth} />
   )

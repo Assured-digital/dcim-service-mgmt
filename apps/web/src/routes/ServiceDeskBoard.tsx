@@ -6,7 +6,17 @@ import LanguageIcon from "@mui/icons-material/Language"
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
 import { EmptyState } from "../components/PageState"
 import { TypeBadge, PriorityDot } from "../components/shared"
+import { ragToken, type ThemeMode } from "../components/shared/tokens/colors"
+import { useThemeMode } from "../lib/theme"
 import type { Ticket, ChipIntent } from "../lib/tickets"
+
+// Card shadow + hover-border — light branch = the prior literals exactly; dark
+// deepens the shadow (mirrors the MuiCard dark override) and lifts the hover border.
+function cardChrome(mode: ThemeMode) {
+  return mode === "dark"
+    ? { shadow: "0 2px 8px rgba(0,0,0,0.4)", shadowHover: "0 4px 12px rgba(0,0,0,0.5)", hoverBorder: "#475569" }
+    : { shadow: "0 2px 8px rgba(15,23,42,0.04)", shadowHover: "0 4px 12px rgba(15,23,42,0.08)", hoverBorder: "#cbd5e1" }
+}
 
 // Four columns mapped to chipIntent. "Overdue" is rendered as a red-accent card
 // inside whichever column the ticket already lives in.
@@ -36,29 +46,31 @@ function bucketTickets(tickets: Ticket[]): Record<ChipIntent, Ticket[]> {
 }
 
 function TicketCard({ t, onClick }: { t: Ticket; onClick: () => void }) {
-  const borderLeft = t.overdue ? "3px solid #ef4444" : "1px solid #e2e8f0"
+  const { mode } = useThemeMode()
+  const chrome = cardChrome(mode)
+  const borderLeft = t.overdue ? `3px solid ${ragToken("RED", mode).dot}` : "1px solid var(--color-border-primary)"
   return (
     <Box
       onClick={onClick}
       sx={{
         px: 1.25, py: 1.25, cursor: "pointer",
-        bgcolor: "#fff", borderRadius: 1,
-        border: "1px solid #e2e8f0",
+        bgcolor: "background.paper", borderRadius: 1,
+        border: "1px solid var(--color-border-primary)",
         borderLeft,
-        boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
+        boxShadow: chrome.shadow,
         transition: "box-shadow 150ms, border-color 150ms",
-        "&:hover": { boxShadow: "0 4px 12px rgba(15,23,42,0.08)", borderColor: "#cbd5e1" },
+        "&:hover": { boxShadow: chrome.shadowHover, borderColor: chrome.hoverBorder },
       }}
     >
       <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
         <PriorityDot priority={t.priority} />
         <TypeBadge kind={t.kind} />
-        <Typography sx={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "#475569" }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "text.secondary" }}>
           {t.reference}
         </Typography>
       </Stack>
       <Typography sx={{
-        fontSize: 12.5, fontWeight: 500, color: "#0f172a",
+        fontSize: 12.5, fontWeight: 500, color: "text.primary",
         lineHeight: 1.35, mb: 0.75,
         display: "-webkit-box",
         WebkitLineClamp: 2,
@@ -68,10 +80,10 @@ function TicketCard({ t, onClick }: { t: Ticket; onClick: () => void }) {
         {t.subject}
       </Typography>
       <Stack direction="row" alignItems="center" spacing={0.5}>
-        <Typography sx={{ fontSize: 11, color: "#64748b", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {t.assignee ? t.assignee.displayName : "Unassigned"}
         </Typography>
-        <LanguageIcon sx={{ fontSize: 13, color: "#94a3b8" }} />
+        <LanguageIcon sx={{ fontSize: 13, color: "text.tertiary" }} />
         {/* Channel icon placeholder — real channel data not yet surfaced by the API */}
       </Stack>
     </Box>
@@ -83,31 +95,31 @@ function BoardColumn({ col, items }: { col: Column; items: Ticket[] }) {
   return (
     <Box sx={{
       flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-      bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: 1.5,
+      bgcolor: "background.paper", border: "1px solid var(--color-border-primary)", borderRadius: 1.5,
       minHeight: 0, overflow: "hidden",
     }}>
-      <Box sx={{ px: 1.5, pt: 1, pb: 0.75, borderBottom: "1px solid #f1f5f9", flexShrink: 0 }}>
+      <Box sx={{ px: 1.5, pt: 1, pb: 0.75, borderBottom: "1px solid var(--color-border-tertiary)", flexShrink: 0 }}>
         <Stack direction="row" alignItems="center" spacing={0.75}>
-          <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+          <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "text.primary" }}>
             {col.title}
           </Typography>
           <Box sx={{
-            fontSize: 11, fontWeight: 700, color: "#64748b",
-            bgcolor: "#f1f5f9", borderRadius: 999, px: 0.875, py: 0.125,
+            fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)",
+            bgcolor: "var(--color-background-tertiary)", borderRadius: 999, px: 0.875, py: 0.125,
           }}>
             {items.length}
           </Box>
-          <Box sx={{ ml: "auto", color: "#94a3b8", display: "flex" }}>
+          <Box sx={{ ml: "auto", color: "text.tertiary", display: "flex" }}>
             <MoreHorizIcon sx={{ fontSize: 16 }} />
           </Box>
         </Stack>
-        <Typography sx={{ fontSize: 10.5, color: "#94a3b8", mt: 0.25, letterSpacing: "0.02em" }}>
+        <Typography sx={{ fontSize: 10.5, color: "text.tertiary", mt: 0.25, letterSpacing: "0.02em" }}>
           {col.sub}
         </Typography>
       </Box>
       <Box sx={{ flex: 1, overflowY: "auto", p: 1, display: "flex", flexDirection: "column", gap: 1 }}>
         {items.length === 0 ? (
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8", textAlign: "center", py: 2, fontStyle: "italic" }}>
+          <Typography sx={{ fontSize: 11.5, color: "text.tertiary", textAlign: "center", py: 2, fontStyle: "italic" }}>
             Nothing here
           </Typography>
         ) : (
@@ -134,7 +146,7 @@ export default function ServiceDeskBoard({ tickets }: { tickets: Ticket[] }) {
     <Box sx={{
       flex: 1, display: "flex", gap: 1.25, p: 1.5,
       overflowX: "auto", overflowY: "hidden",
-      bgcolor: "#f8fafc", minHeight: 0,
+      bgcolor: "var(--color-background-secondary)", minHeight: 0,
     }}>
       {COLUMNS.map(col => (
         <BoardColumn key={col.key} col={col} items={buckets[col.key]} />

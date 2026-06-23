@@ -35,6 +35,8 @@ import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { dataGridSx } from "../components/DataGridShell"
+import { semanticToken, ragToken, type ThemeMode } from "../components/shared/tokens/colors"
+import { useThemeMode } from "../lib/theme"
 import { getCurrentUser } from "../lib/auth"
 import { useTickets, isNewStatus, type Ticket, type TicketKind } from "../lib/tickets"
 import {
@@ -59,9 +61,14 @@ export function CreateServiceRequestModal({
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
   const [subject, setSubject] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [priority, setPriority] = React.useState("medium")
+  // Linked-entity info banner — light branch = the prior literals exactly.
+  const banner = mode === "dark"
+    ? { bg: "#0c2a3a", border: "#164e63", text: "#7dd3fc" }
+    : { bg: "#f0f9ff", border: "#bae6fd", text: "#0369a1" }
 
   async function handleSubmit() {
     if (!subject.trim() || description.trim().length < 5) return
@@ -90,8 +97,8 @@ export function CreateServiceRequestModal({
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           {linkedEntityLabel ? (
-            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#f0f9ff", border: "1px solid #bae6fd" }}>
-              <Typography variant="caption" color="#0369a1">Linked to: <strong>{linkedEntityLabel}</strong></Typography>
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: banner.bg, border: `1px solid ${banner.border}` }}>
+              <Typography variant="caption" color={banner.text}>Linked to: <strong>{linkedEntityLabel}</strong></Typography>
             </Box>
           ) : null}
           <TextField
@@ -239,7 +246,7 @@ function TruncatedSubject({ text }: { text: string }) {
       <Typography
         ref={ref}
         sx={{
-          fontSize: 13, fontWeight: 500, color: "#0f172a",
+          fontSize: 13, fontWeight: 500, color: "text.primary",
           display: "block", width: "100%",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
         }}
@@ -252,7 +259,8 @@ function TruncatedSubject({ text }: { text: string }) {
 
 // ── Unified queue: columns ────────────────────────────────────────────────
 
-function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
+function buildUnifiedColumns(assigneeOptions: string[], mode: ThemeMode): GridColDef<Ticket>[] {
+  const overdueColor = semanticToken("danger", mode).solid
   return [
     {
       field: "kind", headerName: "Type", width: 70,
@@ -261,7 +269,7 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
     {
       field: "reference", headerName: "Ref", width: 110,
       renderCell: (p) => (
-        <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#475569" }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "text.secondary" }}>
           {p.value as string}
         </Typography>
       ),
@@ -289,7 +297,7 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
       type: "singleSelect",
       valueOptions: assigneeOptions,
       valueGetter: (_v, row) => row.assignee?.displayName ?? "Unassigned",
-      renderCell: (p) => <AssigneeCell user={(p.row as Ticket).assignee} />,
+      renderCell: (p) => <AssigneeCell user={(p.row as Ticket).assignee} mode={mode} />,
     },
     {
       field: "updatedAt", headerName: "Updated", width: 110,
@@ -300,7 +308,7 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
         return (
           <Typography sx={{
             fontSize: 12,
-            color: t.overdue ? "#b91c1c" : "#94a3b8",
+            color: t.overdue ? overdueColor : "text.tertiary",
             fontWeight: t.overdue ? 600 : 400
           }}>
             {dateStr}
@@ -317,7 +325,7 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
         return (
           <Typography sx={{
             fontSize: 12,
-            color: t.overdue ? "#b91c1c" : "#475569",
+            color: t.overdue ? overdueColor : "text.secondary",
             fontWeight: t.overdue ? 600 : 400,
           }}>
             {dateStr}
@@ -332,6 +340,7 @@ function buildUnifiedColumns(assigneeOptions: string[]): GridColDef<Ticket>[] {
 
 function UnifiedServiceDeskView() {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
   const [searchParams, setSearchParams] = useSearchParams()
   const rawView = searchParams.get("view")
   const viewParam: QueueView = rawView === "board" ? "board" : "table"
@@ -382,7 +391,7 @@ function UnifiedServiceDeskView() {
     return hasUnassigned ? ["Unassigned", ...sorted] : sorted
   }, [tickets])
 
-  const unifiedColumns = React.useMemo(() => buildUnifiedColumns(assigneeOptions), [assigneeOptions])
+  const unifiedColumns = React.useMemo(() => buildUnifiedColumns(assigneeOptions, mode), [assigneeOptions, mode])
 
   // Filter via the shared selector (same logic the depth-1 rail uses). The
   // DataGrid still owns sorting via sortModel, so no sortTickets() here.
@@ -481,13 +490,13 @@ function UnifiedServiceDeskView() {
     <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
       {/* Drill-down (record/association) is owned by the DrillDownNavigator; this
           body is always the depth-0 queue, so the rail + chrome always show. */}
-      <ListNavRail title="Service Desk" sections={[ticketsSection, typeSection]} />
+      <ListNavRail title="Service Desk" sections={[ticketsSection, typeSection]} mode={mode} />
 
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "#f8fafc" }}>
+      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "var(--color-background-secondary)" }}>
         {/* Header — Search on the left, View + New ticket on the right. */}
         <Box sx={{
-          px: 2, py: 1.25, bgcolor: "#fff",
-          borderBottom: "1px solid #e2e8f0",
+          px: 2, py: 1.25, bgcolor: "background.paper",
+          borderBottom: "1px solid", borderColor: "divider",
           display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", flexShrink: 0
         }}>
             <TextField
@@ -497,8 +506,8 @@ function UnifiedServiceDeskView() {
               onChange={e => setSearchText(e.target.value)}
               sx={{ flex: 1, maxWidth: 420 }}
               InputProps={{
-                startAdornment: <SearchIcon sx={{ fontSize: 16, color: "#94a3b8", mr: 1 }} />,
-                sx: { fontSize: 12.5, bgcolor: "#f8fafc", height: 34 },
+                startAdornment: <SearchIcon sx={{ fontSize: 16, color: "text.tertiary", mr: 1 }} />,
+                sx: { fontSize: 12.5, bgcolor: "var(--color-background-secondary)", height: 34 },
               }}
             />
 
@@ -551,7 +560,7 @@ function UnifiedServiceDeskView() {
           ) : null}
 
           {!isLoading && !error && viewParam === "table" && filtered.length > 0 ? (
-            <Box sx={{ flex: 1, minHeight: 0, bgcolor: "#fff" }}>
+            <Box sx={{ flex: 1, minHeight: 0, bgcolor: "background.paper" }}>
               <DataGrid
                 apiRef={apiRef}
                 rows={filtered}
@@ -569,17 +578,17 @@ function UnifiedServiceDeskView() {
                 slots={{ toolbar: null, footer: UnifiedFooter }}
                 getRowClassName={params => (params.row as Ticket).overdue ? "overdue-row" : ""}
                 sx={{
-                  ...dataGridSx(true),
+                  ...dataGridSx(true, mode),
                   // Vertically centre cell contents — without this, Typography
                   // children sit at the top of the row by default in compact density.
                   "& .MuiDataGrid-cell": {
-                    borderColor: "#f1f5f9",
+                    borderColor: "var(--color-border-tertiary)",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
                   },
                   "& .overdue-row .MuiDataGrid-cell:first-of-type": {
-                    boxShadow: "inset 3px 0 0 #ef4444",
+                    boxShadow: `inset 3px 0 0 ${ragToken("RED", mode).dot}`,
                   },
                 }}
               />

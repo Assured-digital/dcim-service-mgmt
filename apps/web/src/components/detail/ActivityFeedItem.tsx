@@ -4,7 +4,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline"
 import PersonIcon from "@mui/icons-material/Person"
 import LinkIcon from "@mui/icons-material/Link"
-import { Avatar } from "../shared"
+import { Avatar, accentToken, type AccentKey, type ThemeMode } from "../shared"
 import { CommentBody } from "./CommentBody"
 import type { ResolvedMention } from "./CommentBody"
 import { SlimExpandCommentBox, type CommentDraft } from "./activityCommentBox"
@@ -64,15 +64,16 @@ export type FeedEvent = {
 
 interface FeedVisual {
   Icon: React.ComponentType<{ sx?: object }>
-  bg: string
-  fg: string
+  accent: AccentKey
 }
 
+// Icon + accent hue per event type; the actual fill/text resolve via accentToken()
+// at render so they follow the active theme mode (light values are unchanged).
 const FEED_VISUALS: Record<FeedEventType, FeedVisual> = {
-  status: { Icon: PlayArrowIcon, bg: "#e6f1fb", fg: "#185fa5" },
-  comment: { Icon: ChatBubbleOutlineIcon, bg: "#eaf3de", fg: "#3b6d11" },
-  assignment: { Icon: PersonIcon, bg: "#faeeda", fg: "#854f0b" },
-  link: { Icon: LinkIcon, bg: "#fbeaf0", fg: "#993556" },
+  status: { Icon: PlayArrowIcon, accent: "blue" },
+  comment: { Icon: ChatBubbleOutlineIcon, accent: "green" },
+  assignment: { Icon: PersonIcon, accent: "amber" },
+  link: { Icon: LinkIcon, accent: "pink" },
 }
 
 // Older replies beyond this count are collapsed behind a "show N earlier" toggle.
@@ -84,16 +85,21 @@ interface ActivityFeedItemProps {
   // Render as a nested reply: no timeline connector, no Reply affordance, no further
   // nesting (two-level only), lighter avatar, no "added a work note" lead-in line.
   asReply?: boolean
+  // Opt-in theme mode (default light = the prior literals). Detail pages in dark
+  // scope pass the live mode; unmigrated callers stay light.
+  mode?: ThemeMode
 }
 
 export const ActivityFeedItem = React.memo(function ActivityFeedItem({
   event,
   isLast,
   asReply = false,
+  mode = "light",
 }: ActivityFeedItemProps) {
   const isComment = event.type === "comment"
   const visual = FEED_VISUALS[event.type]
   const Icon = visual.Icon
+  const accent = accentToken(visual.accent, mode)
 
   const replyTo = useReplyToComment()
   const [savingReply, setSavingReply] = React.useState(false)
@@ -139,15 +145,15 @@ export const ActivityFeedItem = React.memo(function ActivityFeedItem({
         />
       ) : null}
       {isComment ? (
-        <Avatar name={event.actor} size={asReply ? "sm" : "md"} variant="neutral" />
+        <Avatar name={event.actor} size={asReply ? "sm" : "md"} variant="neutral" mode={mode} />
       ) : (
         <Box
           sx={{
             width: 24,
             height: 24,
             borderRadius: "50%",
-            bgcolor: visual.bg,
-            color: visual.fg,
+            bgcolor: accent.bg,
+            color: accent.text,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -177,8 +183,8 @@ export const ActivityFeedItem = React.memo(function ActivityFeedItem({
                 px: 0.75,
                 py: "1px",
                 borderRadius: 1,
-                bgcolor: "#e6f1fb",
-                color: "#185fa5",
+                bgcolor: accentToken("blue", mode).bg,
+                color: accentToken("blue", mode).text,
               }}
             >
               Customer update
@@ -247,6 +253,7 @@ export const ActivityFeedItem = React.memo(function ActivityFeedItem({
                   <ActivityFeedItem
                     key={r.id}
                     asReply
+                    mode={mode}
                     isLast={idx === visibleReplies.length - 1}
                     event={{
                       id: r.id,

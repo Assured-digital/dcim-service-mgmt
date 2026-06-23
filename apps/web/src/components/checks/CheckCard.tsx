@@ -7,11 +7,15 @@ import {
   AssigneeCell,
   IntentPill,
   StatusPill,
-  ragTokens,
+  ragToken,
   resolveIntent,
-  semanticTokens,
+  semanticToken,
+  slate,
+  uiSurface,
   type SemanticIntent,
+  type ThemeMode,
 } from "../shared"
+import { useThemeMode } from "../../lib/theme"
 import { formatRelativeTime } from "../../lib/notifications"
 import type { AttachmentSummary } from "../../lib/attachments"
 
@@ -139,11 +143,13 @@ export function dueUrgency(iso: string | null): { label: string; intent: Semanti
   return null
 }
 
-const ACCENT: Record<Exclude<CheckCardVariant, "history">, string> = {
-  review: semanticTokens.warning.text, // amber
-  progress: semanticTokens.active.text, // blue
-  upcoming: semanticTokens.neutral.text, // slate
-  draft: semanticTokens.neutral.text,
+// Per-variant accent intent (the coloured left rail). Resolved to a colour via
+// semanticToken(intent, mode) at render so the rail reads in both light and dark.
+const ACCENT_INTENT: Record<Exclude<CheckCardVariant, "history">, SemanticIntent> = {
+  review: "warning",   // amber
+  progress: "active",  // blue
+  upcoming: "neutral", // slate
+  draft: "neutral",
 }
 
 // Full status label set — every card shows a status pill (top-right), so every status that can
@@ -160,8 +166,8 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 // Pass-rate -> RAG band (matches the prior history table): >=80 green, >=60 amber, else red.
-function passRateRag(v: number) {
-  return v >= 80 ? ragTokens.GREEN : v >= 60 ? ragTokens.AMBER : ragTokens.RED
+function passRateRag(v: number, mode: ThemeMode) {
+  return v >= 80 ? ragToken("GREEN", mode) : v >= 60 ? ragToken("AMBER", mode) : ragToken("RED", mode)
 }
 
 // Uniform short date for the card's line-3 date slot (en-GB, day + short month + year).
@@ -189,7 +195,8 @@ function formatDuration(startIso: string | null, endIso: string | null): string 
 }
 
 function IntentChip({ intent, label }: { intent: SemanticIntent; label: string }) {
-  const tok = semanticTokens[intent]
+  const { mode } = useThemeMode()
+  const tok = semanticToken(intent, mode)
   return <IntentPill bg={tok.bg} text={tok.text} label={label} />
 }
 
@@ -219,12 +226,15 @@ export function CheckCard({
   // ⋮ actions menu (a deliberate two-step, never a hair-trigger). Sits bottom-right on every
   // variant for a consistent action slot; today it carries Open + (history) Download report.
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
+  const { mode } = useThemeMode()
 
   const isHistory = variant === "history"
   const isCancelled = check.status === "CANCELLED"
   // History colour-codes its accent by terminal status (green/slate/red); active queues keep
   // their per-variant accent. The coloured left-accent is preserved either way.
-  const accent = isHistory ? semanticTokens[resolveIntent(check.status)].text : ACCENT[variant]
+  const accent = isHistory
+    ? semanticToken(resolveIntent(check.status), mode).text
+    : semanticToken(ACCENT_INTENT[variant], mode).text
 
   // Line-3 derived data — the date (left, after the assignee) and the signal (right).
   const { answered, total } = progressFraction(check.items)
@@ -257,31 +267,31 @@ export function CheckCard({
     variant === "history" ? (
       <>
         {duration ? (
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>{duration}</Typography>
+          <Typography sx={{ fontSize: 11.5, color: "text.tertiary" }}>{duration}</Typography>
         ) : null}
         {passRate == null ? (
           // Cancelled / never-scored -> "—", never a misleading 0%.
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>—</Typography>
+          <Typography sx={{ fontSize: 11.5, color: "text.tertiary" }}>—</Typography>
         ) : (
-          <IntentPill {...passRateRag(passRate)} label={`Pass rate ${Math.round(passRate)}%`} size="sm" />
+          <IntentPill {...passRateRag(passRate, mode)} label={`Pass rate ${Math.round(passRate)}%`} size="sm" />
         )}
         {!isCancelled ? (
           <Typography
-            sx={{ fontSize: 11.5, fontWeight: fails > 0 ? 600 : 400, color: fails > 0 ? ragTokens.RED.text : "#94a3b8" }}
+            sx={{ fontSize: 11.5, fontWeight: fails > 0 ? 600 : 400, color: fails > 0 ? ragToken("RED", mode).text : "text.tertiary" }}
           >
             {fails} fail{fails === 1 ? "" : "s"}
           </Typography>
         ) : null}
         {/* Critical fails — distinct from total fails, danger colour, only when there are any. */}
         {criticalFails > 0 ? (
-          <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: ragTokens.RED.text }}>
+          <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: ragToken("RED", mode).text }}>
             {criticalFails} critical
           </Typography>
         ) : null}
       </>
     ) : variant === "progress" ? (
       <Stack direction="row" alignItems="center" spacing={0.75}>
-        <Box sx={{ width: 64, height: 6, bgcolor: "#f1f5f9", borderRadius: 999, overflow: "hidden", flexShrink: 0 }}>
+        <Box sx={{ width: 64, height: 6, bgcolor: "var(--color-background-tertiary)", borderRadius: 999, overflow: "hidden", flexShrink: 0 }}>
           <Box
             sx={{
               width: total > 0 ? `${(answered / total) * 100}%` : "0%",
@@ -291,7 +301,7 @@ export function CheckCard({
             }}
           />
         </Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#475569", flexShrink: 0 }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "text.secondary", flexShrink: 0 }}>
           {total > 0 ? `${answered}/${total}` : "No items"}
         </Typography>
       </Stack>
@@ -299,7 +309,7 @@ export function CheckCard({
       <>
         {fail ? <IntentChip intent={fail.intent} label={fail.label} /> : null}
         {submitted ? (
-          <Typography sx={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>{submitted}</Typography>
+          <Typography sx={{ fontSize: 11.5, color: "text.tertiary", fontWeight: 600 }}>{submitted}</Typography>
         ) : null}
       </>
     ) : variant === "upcoming" ? (
@@ -309,9 +319,9 @@ export function CheckCard({
   // ⋮ menu items — Open is the universal baseline (and the slot for future per-card actions);
   // history non-cancelled adds Download report. Built as data so the menu render stays flat.
   const menuItems: { label: string; icon: React.ReactNode; onClick: () => void }[] = [
-    { label: "Open check", icon: <OpenInNewIcon sx={{ fontSize: 16, color: "#64748b" }} />, onClick: () => onOpen(check.id) },
+    { label: "Open check", icon: <OpenInNewIcon sx={{ fontSize: 16, color: "var(--color-text-muted)" }} />, onClick: () => onOpen(check.id) },
     ...(isHistory && !isCancelled && onDownloadReport
-      ? [{ label: "Download report", icon: <DownloadIcon sx={{ fontSize: 16, color: "#64748b" }} />, onClick: () => onDownloadReport(check) }]
+      ? [{ label: "Download report", icon: <DownloadIcon sx={{ fontSize: 16, color: "var(--color-text-muted)" }} />, onClick: () => onDownloadReport(check) }]
       : []),
   ]
 
@@ -325,7 +335,7 @@ export function CheckCard({
             size="small"
             disabled={!!downloading}
             onClick={(e) => setMenuAnchor(e.currentTarget)}
-            sx={{ color: "#64748b", "&:hover": { color: "#1d4ed8", bgcolor: "#e8f1ff" } }}
+            sx={{ color: "var(--color-text-muted)", "&:hover": { color: "primary.main", bgcolor: mode === "dark" ? "rgba(59,130,246,0.18)" : uiSurface.accentSoft } }}
           >
             {downloading ? <CircularProgress size={16} /> : <MoreVertIcon sx={{ fontSize: 18 }} />}
           </IconButton>
@@ -356,10 +366,11 @@ export function CheckCard({
     <Box
       onClick={() => onOpen(check.id)}
       sx={{
-        border: "1px solid #e2e8f0",
+        border: "1px solid",
+        borderColor: "divider",
         borderLeft: `3px solid ${accent}`,
         borderRadius: "8px",
-        bgcolor: "#ffffff",
+        bgcolor: "background.paper",
         px: { xs: 1.5, sm: 2 },
         py: 1.25,
         // Uniform height so cards align in a clean list; grows only if line 3 wraps on a phone.
@@ -369,16 +380,16 @@ export function CheckCard({
         justifyContent: "center",
         cursor: "pointer",
         transition: "background-color 0.12s",
-        "&:hover": { bgcolor: "#f8fafc" },
+        "&:hover": { bgcolor: "var(--color-background-secondary)" },
       }}
     >
       <Stack spacing={0.5}>
         {/* Line 1 — ref + template (truncating meta), ⋮ actions menu top-right */}
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography
-            sx={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            sx={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "text.tertiary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           >
-            <Box component="span" sx={{ fontFamily: "monospace", fontWeight: 700, color: "#475569" }}>
+            <Box component="span" sx={{ fontFamily: "monospace", fontWeight: 700, color: "text.secondary" }}>
               {check.reference}
             </Box>
             {check.template?.name ? `  ·  ${check.template.name}` : ""}
@@ -388,7 +399,7 @@ export function CheckCard({
 
         {/* Line 2 — title */}
         <Typography
-          sx={{ fontSize: 13.5, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          sx={{ fontSize: 13.5, fontWeight: 600, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
           {check.title}
         </Typography>
@@ -401,9 +412,9 @@ export function CheckCard({
           sx={{ flexWrap: { xs: "wrap", sm: "nowrap" }, rowGap: 0.5 }}
         >
           <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flex: 1, minWidth: 0 }}>
-            <AssigneeCell user={check.assignee} />
-            <Typography sx={{ fontSize: 11.5, color: "#cbd5e1", flexShrink: 0 }}>·</Typography>
-            <Typography sx={{ fontSize: 11.5, color: "#94a3b8", flexShrink: 0 }}>{dateLabel}</Typography>
+            <AssigneeCell user={check.assignee} mode={mode} />
+            <Typography sx={{ fontSize: 11.5, color: mode === "dark" ? slate[600] : slate[300], flexShrink: 0 }}>·</Typography>
+            <Typography sx={{ fontSize: 11.5, color: "text.tertiary", flexShrink: 0 }}>{dateLabel}</Typography>
           </Stack>
 
           <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
@@ -429,20 +440,22 @@ export function QueueSection({
   icon: React.ReactNode
   children: React.ReactNode
 }) {
+  const { mode } = useThemeMode()
+  const countBadge = semanticToken("neutral", mode)
   if (count === 0) return null
   return (
     <Box>
       <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1 }}>
         {icon}
         <Typography
-          sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "#0f172a" }}
+          sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "text.primary" }}
         >
           {title}
         </Typography>
         <Box
           sx={{
-            bgcolor: "#e2e8f0",
-            color: "#475569",
+            bgcolor: countBadge.bg,
+            color: countBadge.text,
             borderRadius: 10,
             px: 0.85,
             py: 0.1,

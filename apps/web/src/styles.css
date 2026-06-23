@@ -13,6 +13,25 @@
   --color-border-tertiary: #f1f5f9;
 }
 
+/* Dark scope — the ThemeModeProvider sets data-theme="dark" on <html>. Mirrors the
+   :root vars above (higher specificity via :root[...] so it always wins). The dark
+   counterpart of the MUI palette in src/lib/theme.tsx. */
+:root[data-theme="dark"] {
+  --app-bg: linear-gradient(180deg, #0b1220 0%, #0d1526 100%);
+  --panel-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --color-text-primary: #e2e8f0;
+  /* secondary/tertiary lifted to mirror the MUI dark palette text steps (see lib/theme.tsx). */
+  --color-text-secondary: #b0bccd;
+  --color-text-muted: #94a3b8;
+  --color-text-tertiary: #7e8ca1;
+  --color-text-inverse: #0f172a;
+  --color-background-primary: #1e293b;
+  --color-background-secondary: #0f172a;
+  --color-background-tertiary: #172033;
+  --color-border-primary: #334155;
+  --color-border-tertiary: #1e293b;
+}
+
 * {
   box-sizing: border-box;
 }

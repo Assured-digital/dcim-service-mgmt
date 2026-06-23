@@ -6,7 +6,8 @@ import { api } from "../lib/api"
 import { setSelectedClientId } from "../lib/scope"
 import { Box, Chip, Stack, Typography } from "@mui/material"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { StatusPill } from "../components/shared"
+import { StatusPill, semanticToken, ragToken, slate } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { PersonalBriefing } from "../components/PersonalBriefing"
 import { useTickets } from "../lib/tickets"
@@ -99,8 +100,12 @@ function WorkItemCard({
   urgency: UrgencyGroup
   onClick: () => void
 }) {
+  const { mode } = useThemeMode()
   const isOverdue = urgency === "overdue"
   const isToday = urgency === "today"
+  const edge = mode === "dark" ? slate[600] : slate[300]
+  const overdueDot = ragToken("RED", mode).dot
+  const todayDot = ragToken("AMBER", mode).dot
 
   const reference = item.kind === "check" ? item.data.reference : item.data.reference
   const title = item.kind === "check" ? item.data.title : item.data.title
@@ -116,13 +121,13 @@ function WorkItemCard({
     <Box
       onClick={onClick}
       sx={{
-        bgcolor: "#ffffff",
-        border: "1px solid #e2e8f0",
+        bgcolor: "background.paper",
+        border: "1px solid", borderColor: "divider",
         borderLeft: isOverdue
-          ? "3px solid #ef4444"
+          ? `3px solid ${overdueDot}`
           : isToday
-          ? "3px solid #f59e0b"
-          : "1px solid #e2e8f0",
+          ? `3px solid ${todayDot}`
+          : "1px solid var(--color-border-primary)",
         borderRadius: "8px",
         px: "16px", py: "12px",
         mb: "6px",
@@ -130,7 +135,7 @@ function WorkItemCard({
         display: "flex", alignItems: "center", gap: "12px",
         transition: "all 0.1s",
         "&:hover": {
-          borderColor: isOverdue ? "#ef4444" : isToday ? "#f59e0b" : "#cbd5e1",
+          borderColor: isOverdue ? overdueDot : isToday ? todayDot : edge,
           boxShadow: "0 2px 8px rgba(15,23,42,0.06)"
         }
       }}
@@ -141,8 +146,8 @@ function WorkItemCard({
         size="small"
         sx={{
           fontSize: 10, fontWeight: 600, flexShrink: 0,
-          bgcolor: item.kind === "check" ? "#e8f1ff" : "#f1f5f9",
-          color: item.kind === "check" ? "#1d4ed8" : "#475569",
+          bgcolor: item.kind === "check" ? (mode === "dark" ? "rgba(59,130,246,0.15)" : "#e8f1ff") : "var(--color-background-tertiary)",
+          color: item.kind === "check" ? (mode === "dark" ? "#60a5fa" : "#1d4ed8") : "text.secondary",
           borderRadius: "4px", height: 20
         }}
       />
@@ -151,7 +156,7 @@ function WorkItemCard({
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" alignItems="center" gap="8px" sx={{ mb: "2px" }}>
           <Typography sx={{
-            fontSize: 13.5, fontWeight: 500, color: "#0f172a",
+            fontSize: 13.5, fontWeight: 500, color: "text.primary",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             flex: 1, minWidth: 0
           }}>
@@ -159,17 +164,17 @@ function WorkItemCard({
           </Typography>
         </Stack>
         <Stack direction="row" alignItems="center" gap="6px" flexWrap="wrap">
-          <Typography sx={{ fontSize: 11, fontFamily: "monospace", color: "#94a3b8" }}>
+          <Typography sx={{ fontSize: 11, fontFamily: "monospace", color: "text.tertiary" }}>
             {reference}
           </Typography>
           {clientName ? (
             <>
-              <Typography sx={{ fontSize: 11, color: "#cbd5e1" }}>·</Typography>
+              <Typography sx={{ fontSize: 11, color: edge }}>·</Typography>
               <Box sx={{
-                px: "6px", py: "1px", bgcolor: "#f1f5f9",
-                borderRadius: "4px", border: "1px solid #e2e8f0"
+                px: "6px", py: "1px", bgcolor: "var(--color-background-tertiary)",
+                borderRadius: "4px", border: "1px solid", borderColor: "divider"
               }}>
-                <Typography sx={{ fontSize: 11, fontWeight: 500, color: "#475569" }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 500, color: "text.secondary" }}>
                   {clientName}
                 </Typography>
               </Box>
@@ -177,16 +182,16 @@ function WorkItemCard({
           ) : null}
           {siteName ? (
             <>
-              <Typography sx={{ fontSize: 11, color: "#cbd5e1" }}>·</Typography>
-              <Typography sx={{ fontSize: 11, color: "#64748b" }}>{siteName}</Typography>
+              <Typography sx={{ fontSize: 11, color: edge }}>·</Typography>
+              <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>{siteName}</Typography>
             </>
           ) : null}
           {dueFormatted ? (
             <>
-              <Typography sx={{ fontSize: 11, color: "#cbd5e1" }}>·</Typography>
+              <Typography sx={{ fontSize: 11, color: edge }}>·</Typography>
               <Typography sx={{
                 fontSize: 11, fontWeight: isOverdue ? 600 : 400,
-                color: isOverdue ? "#b91c1c" : isToday ? "#b45309" : "#64748b"
+                color: isOverdue ? semanticToken("danger", mode).solid : isToday ? semanticToken("warning", mode).text : "var(--color-text-muted)"
               }}>
                 {dueFormatted}
               </Typography>
@@ -201,28 +206,29 @@ function WorkItemCard({
       </Box>
 
       {/* Chevron */}
-      <Typography sx={{ fontSize: 16, color: "#cbd5e1", flexShrink: 0, lineHeight: 1 }}>›</Typography>
+      <Typography sx={{ fontSize: 16, color: edge, flexShrink: 0, lineHeight: 1 }}>›</Typography>
     </Box>
   )
 }
 
 // ── Empty state ────────────────────────────────────────────────────────────
 function EmptyMyWork() {
+  const { mode } = useThemeMode()
   return (
     <Box sx={{
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       py: "64px", px: "24px", textAlign: "center"
     }}>
       <Box sx={{
-        width: 48, height: 48, borderRadius: "50%", bgcolor: "#f0fdf4",
+        width: 48, height: 48, borderRadius: "50%", bgcolor: mode === "dark" ? "rgba(34,197,94,0.12)" : "#f0fdf4",
         display: "flex", alignItems: "center", justifyContent: "center", mb: "16px"
       }}>
         <Typography sx={{ fontSize: 22 }}>✓</Typography>
       </Box>
-      <Typography sx={{ fontSize: 16, fontWeight: 500, color: "#0f172a", mb: "6px" }}>
+      <Typography sx={{ fontSize: 16, fontWeight: 500, color: "text.primary", mb: "6px" }}>
         All clear
       </Typography>
-      <Typography sx={{ fontSize: 13.5, color: "#64748b" }}>
+      <Typography sx={{ fontSize: 13.5, color: "var(--color-text-muted)" }}>
         No checks or tasks assigned to you right now.
       </Typography>
     </Box>

@@ -4,7 +4,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Box, Collapse, Drawer, IconButton, List, ListItemButton, ListItemIcon,
-  ListItemText, MenuItem, Select, Tooltip, Typography, useMediaQuery, useTheme
+  ListItemText, MenuItem, Select, Switch, Tooltip, Typography, useMediaQuery, useTheme
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
 import DashboardIcon from "@mui/icons-material/Dashboard"
@@ -24,6 +24,7 @@ import AutorenewIcon from "@mui/icons-material/Autorenew"
 import NotificationImportantIcon from "@mui/icons-material/NotificationImportant"
 import LogoutIcon from "@mui/icons-material/Logout"
 import SettingsIcon from "@mui/icons-material/Settings"
+import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline"
 import SupportAgentIcon from "@mui/icons-material/SupportAgent"
@@ -40,9 +41,11 @@ import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
 import NotificationBell from "../components/NotificationBell"
 import { LoadingState } from "../components/PageState"
+import { shellTokens } from "../components/shared"
 import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
+import { useThemeMode } from "../lib/theme"
 
 // ── Breadcrumb context ─────────────────────────────────────────────────────
 // Detail pages call setRecordLabel(record.reference) to populate the top bar
@@ -313,7 +316,7 @@ function SectionFlyout({ title, items, anchorEl, onClose, onNavigate, pathname }
       <Box onClick={onClose} sx={{ position: "fixed", inset: 0, zIndex: 1500 }} />
       <Box sx={{
         position: "fixed", top: rect.top, left: SIDEBAR_COLLAPSED + 4, zIndex: 1501,
-        bgcolor: "#0d1526", border: "1px solid rgba(255,255,255,0.1)",
+        bgcolor: shellTokens.bg, border: "1px solid rgba(255,255,255,0.1)",
         borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
         minWidth: 200, py: "6px"
       }}>
@@ -350,7 +353,7 @@ function ClientFlyout({ anchorEl, clients, selectedClientId, onSelect, onClose }
       <Box onClick={onClose} sx={{ position: "fixed", inset: 0, zIndex: 1500 }} />
       <Box sx={{
         position: "fixed", top: rect.top, left: SIDEBAR_COLLAPSED + 4, zIndex: 1501,
-        bgcolor: "#0d1526", border: "1px solid rgba(255,255,255,0.1)",
+        bgcolor: shellTokens.bg, border: "1px solid rgba(255,255,255,0.1)",
         borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
         minWidth: 200, py: "6px"
       }}>
@@ -512,6 +515,19 @@ function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
 }) {
   const [open, setOpen] = React.useState(false)
   const nav = useNavigate()
+  const { mode, toggleMode } = useThemeMode()
+  const isDark = mode === "dark"
+
+  // Popover surface is mode-aware so the menu hosting the toggle reads correctly in
+  // both modes (the chrome around it is navy in both).
+  const panelBg = isDark ? "#1e293b" : "#ffffff"
+  const panelBorder = isDark ? "#334155" : "#e2e8f0"
+  const headerBorder = isDark ? "#334155" : "#f1f5f9"
+  const itemColor = isDark ? "#94a3b8" : "#64748b"
+  const itemHoverBg = isDark ? "#172033" : "#f8fafc"
+  const itemHoverColor = isDark ? "#e2e8f0" : "#0f172a"
+  const primaryText = isDark ? "#e2e8f0" : "#0f172a"
+
   return (
     <>
       <Box onClick={() => setOpen(o => !o)} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "10px", py: "4px", borderRadius: "6px", cursor: "pointer", "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
@@ -521,16 +537,29 @@ function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
       </Box>
       {open ? (
         <>
-          <Box sx={{ position: "fixed", top: HEADER_HEIGHT + 4, right: 12, zIndex: 1400, bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px", boxShadow: "0 4px 16px rgba(15,23,42,0.10)", minWidth: 200, py: "4px" }}>
-            <Box sx={{ px: "12px", py: "8px", borderBottom: "1px solid #f1f5f9" }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 500, color: "#0f172a" }}>{email}</Typography>
+          <Box sx={{ position: "fixed", top: HEADER_HEIGHT + 4, right: 12, zIndex: 1400, bgcolor: panelBg, border: `1px solid ${panelBorder}`, borderRadius: "8px", boxShadow: isDark ? "0 4px 16px rgba(0,0,0,0.45)" : "0 4px 16px rgba(15,23,42,0.10)", minWidth: 200, py: "4px" }}>
+            <Box sx={{ px: "12px", py: "8px", borderBottom: `1px solid ${headerBorder}` }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 500, color: primaryText }}>{email}</Typography>
               <Typography sx={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize", mt: "2px" }}>{roleLabel}</Typography>
             </Box>
-            <Box onClick={() => { setOpen(false); nav("/settings") }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: "#64748b", "&:hover": { bgcolor: "#f8fafc", color: "#0f172a" } }}>
+            {/* Dark mode — same item pattern as Settings/Sign out; the row toggles, the
+                switch reflects current state. Does NOT close the menu, so the flip is visible. */}
+            <Box onClick={toggleMode} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: itemColor, "&:hover": { bgcolor: itemHoverBg, color: itemHoverColor } }}>
+              <DarkModeOutlinedIcon sx={{ fontSize: 14 }} />
+              <Typography sx={{ fontSize: 13, flex: 1 }}>Dark mode</Typography>
+              <Switch
+                size="small"
+                checked={isDark}
+                onClick={e => e.stopPropagation()}
+                onChange={toggleMode}
+                sx={{ m: 0 }}
+              />
+            </Box>
+            <Box onClick={() => { setOpen(false); nav("/settings") }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: itemColor, "&:hover": { bgcolor: itemHoverBg, color: itemHoverColor } }}>
               <SettingsIcon sx={{ fontSize: 14 }} />
               <Typography sx={{ fontSize: 13 }}>Settings</Typography>
             </Box>
-            <Box onClick={() => { setOpen(false); onLogout() }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: "#64748b", "&:hover": { bgcolor: "#f8fafc", color: "#0f172a" } }}>
+            <Box onClick={() => { setOpen(false); onLogout() }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: itemColor, "&:hover": { bgcolor: itemHoverBg, color: itemHoverColor } }}>
               <LogoutIcon sx={{ fontSize: 14 }} />
               <Typography sx={{ fontSize: 13 }}>{loggingOut ? "Signing out..." : "Sign out"}</Typography>
             </Box>
@@ -550,6 +579,9 @@ export default function Shell() {
   const loc = useLocation()
   const queryClient = useQueryClient()
   const currentUser = getCurrentUser()
+  const { mode } = useThemeMode()
+  // Content surface flips in dark mode; the navy chrome (sidebar/top bar) stays put.
+  const contentBg = mode === "dark" ? "#0b1220" : "#f8fafc"
 
   // Two-state client selector: every logged-in user gets the selector; only its
   // DATA SOURCE differs. Org-super sources from GET /clients (all org clients) and
@@ -751,7 +783,7 @@ export default function Shell() {
   // sidebarExpanded=false) from leaking into the mobile drawer.
   const navExpanded = isMobile || sidebarExpanded
   const sidebarNav = (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", bgcolor: "#0d1526" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", bgcolor: shellTokens.bg }}>
 
       {/* ── Sidebar header: hamburger left, logo centred ───────────────── */}
       <Box sx={{
@@ -959,10 +991,10 @@ export default function Shell() {
           <img src="/ad-logo-white-new.svg" alt="Assured Digital" style={{ height: 28, width: "auto", objectFit: "contain", maxWidth: 200 }} />
         </Box>
         <Drawer variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)}
-          sx={{ [`& .MuiDrawer-paper`]: { width: SIDEBAR_EXPANDED, background: "#0d1526", borderRight: "1px solid rgba(255,255,255,0.05)" } }}>
+          sx={{ [`& .MuiDrawer-paper`]: { width: SIDEBAR_EXPANDED, background: shellTokens.bg, borderRight: "1px solid rgba(255,255,255,0.05)" } }}>
           {sidebarNav}
         </Drawer>
-        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "#f8fafc", p: "12px" }}><Suspense fallback={<LoadingState />}><Outlet /></Suspense></Box>
+        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: contentBg, p: "12px" }}><Suspense fallback={<LoadingState />}><Outlet /></Suspense></Box>
       </Box>
     )
   }
@@ -974,7 +1006,7 @@ export default function Shell() {
       {/* Sidebar — full height, owns its own header row */}
       <Box sx={{
         width: sidebarWidth, flexShrink: 0,
-        bgcolor: "#0d1526",
+        bgcolor: shellTokens.bg,
         borderRight: "1px solid rgba(255,255,255,0.05)",
         overflow: "hidden",
         transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
@@ -1067,7 +1099,7 @@ export default function Shell() {
         <Box
           component="main"
           sx={{
-            flex: 1, bgcolor: "#f8fafc",
+            flex: 1, bgcolor: contentBg,
             overflow: pageFullBleed ? "hidden" : "auto",
             p: pageFullBleed ? 0 : PAGE_GUTTER,
             display: pageFullBleed ? "flex" : undefined,

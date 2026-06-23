@@ -5,7 +5,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import PersonIcon from "@mui/icons-material/Person"
 import { StatusPopover, type PopoverOption } from "./detail"
 import { useDrillNav } from "../lib/drillNav"
-import { statusColors, type LinkedTask } from "./shared"
+import { statusColors, accentToken, type ThemeMode, type LinkedTask } from "./shared"
 import { type AssignableUser } from "../lib/useAssignableUsers"
 
 // Shared Tasks panel — used by the work-item detail pages (Incident, Service
@@ -27,13 +27,17 @@ const TASK_STATUS_LABELS: Record<string, string> = {
   DONE: "Done",
 }
 
-const TASK_STATUS_OPTIONS: PopoverOption[] = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map((value) => ({
-  value,
-  label: TASK_STATUS_LABELS[value],
-  iconBg: statusColors(value).bg,
-  iconColor: statusColors(value).text,
-  icon: <AssignmentIcon sx={{ fontSize: 14 }} />,
-}))
+// Built per-render with the active mode (light values unchanged) so the popover
+// swatches follow the theme.
+function buildTaskStatusOptions(mode: ThemeMode): PopoverOption[] {
+  return ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map((value) => ({
+    value,
+    label: TASK_STATUS_LABELS[value],
+    iconBg: statusColors(value, mode).bg,
+    iconColor: statusColors(value, mode).text,
+    icon: <AssignmentIcon sx={{ fontSize: 14 }} />,
+  }))
+}
 
 function getInitials(label: string): string {
   const local = label.includes("@") ? label.split("@")[0] : label
@@ -47,13 +51,15 @@ function getInitials(label: string): string {
 interface TaskStatusBadgeProps {
   status: string
   onClick: (anchor: HTMLElement) => void
+  mode: ThemeMode
 }
 
 const TaskStatusBadge = React.memo(function TaskStatusBadge({
   status,
   onClick,
+  mode,
 }: TaskStatusBadgeProps) {
-  const colours = statusColors(status)
+  const colours = statusColors(status, mode)
   const label = TASK_STATUS_LABELS[status] ?? status
   const handleClick = React.useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
@@ -90,12 +96,15 @@ const TaskStatusBadge = React.memo(function TaskStatusBadge({
 interface AssigneeCellProps {
   assignee: { id: string; displayName: string } | null | undefined
   onClick: (anchor: HTMLElement) => void
+  mode: ThemeMode
 }
 
 const AssigneeCell = React.memo(function AssigneeCell({
   assignee,
   onClick,
+  mode,
 }: AssigneeCellProps) {
+  const accent = accentToken("green", mode)
   const handleClick = React.useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
       e.stopPropagation()
@@ -120,8 +129,8 @@ const AssigneeCell = React.memo(function AssigneeCell({
             width: 22,
             height: 22,
             borderRadius: "50%",
-            bgcolor: "#eaf3de",
-            color: "#3b6d11",
+            bgcolor: accent.bg,
+            color: accent.text,
             fontSize: 9,
             fontWeight: 600,
             display: "flex",
@@ -152,6 +161,9 @@ export interface TasksSectionContentProps {
   // Inline "Add task" button below the list. Shell pages hoist the add action to
   // the section header "+", so they pass false; non-shell consumers keep the default.
   showAddButton?: boolean
+  // Opt-in theme mode (default light = the prior literals). Shell detail pages in
+  // dark scope pass the live mode; unmigrated callers stay light.
+  mode?: ThemeMode
 }
 
 export const TasksSectionContent = React.memo(function TasksSectionContent({
@@ -163,6 +175,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
   onChangeTaskStatus,
   onChangeTaskAssignee,
   showAddButton = true,
+  mode = "light",
 }: TasksSectionContentProps) {
   const [activePopover, setActivePopover] = React.useState<{
     taskId: string
@@ -214,12 +227,16 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
     [drill, onSelectTask]
   )
 
+  const taskStatusOptions = React.useMemo(() => buildTaskStatusOptions(mode), [mode])
+
   const assigneeOptions = React.useMemo<PopoverOption[]>(() => {
+    const green = accentToken("green", mode)
+    const neutral = accentToken("neutral", mode)
     const list: PopoverOption[] = users.map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: green.bg,
+      iconColor: green.text,
       icon: (
         <Box component="span" sx={{ fontSize: 9, fontWeight: 600 }}>
           {getInitials(u.displayName)}
@@ -230,13 +247,13 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: neutral.bg,
+        iconColor: neutral.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [users])
+  }, [users, mode])
 
   return (
     <Box>
@@ -279,8 +296,9 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
             <AssigneeCell
               assignee={task.assignee ?? null}
               onClick={handleAssigneeClick(task.id)}
+              mode={mode}
             />
-            <TaskStatusBadge status={task.status} onClick={handleStatusClick(task.id)} />
+            <TaskStatusBadge status={task.status} onClick={handleStatusClick(task.id)} mode={mode} />
           </Paper>
         ))
       )}
@@ -300,7 +318,7 @@ export const TasksSectionContent = React.memo(function TasksSectionContent({
       <StatusPopover
         id="task-status-popover"
         header="Task status"
-        options={TASK_STATUS_OPTIONS}
+        options={taskStatusOptions}
         currentValue={
           activePopover?.type === "status"
             ? tasks.find((t) => t.id === activePopover.taskId)?.status ?? ""

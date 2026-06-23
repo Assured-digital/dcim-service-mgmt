@@ -2,6 +2,7 @@ import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { Box, Typography, useMediaQuery, useTheme } from "@mui/material"
 import { useBreadcrumb } from "../../../routes/Shell"
+import type { ThemeMode } from "../tokens/colors"
 
 // ── Drill-down navigator (shared layout primitive) ─────────────────────────
 //
@@ -40,6 +41,12 @@ export interface DrillDownNavigatorProps {
   panels: DrillDownPanel[]
   /** Rail width in px. Default 56 matches the collapsed app sidebar. */
   railWidth?: number
+  /**
+   * Opt-in theme mode for the compressed-rail chrome. Defaults to "light" → the
+   * exact prior literal values, so callers that don't pass it (e.g. Risks &
+   * Issues) are unchanged. Service Desk passes the live mode for dark support.
+   */
+  mode?: ThemeMode
 }
 
 // True for anything rendered inside the navigator. Lets a shared detail page
@@ -89,10 +96,16 @@ function PanelEnter({ slideFrom, children }: { slideFrom: number; children: Reac
   )
 }
 
-export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigatorProps) {
+export function DrillDownNavigator({ panels, railWidth = 56, mode = "light" }: DrillDownNavigatorProps) {
   const navigate = useNavigate()
   const theme = useTheme()
   const { setPageFullBleed, setNavCollapsed } = useBreadcrumb()
+  // Compressed-rail chrome palette — light branch = the prior literals exactly.
+  const dark = mode === "dark"
+  const railBg = dark ? "#1e293b" : "#fff"
+  const railBorder = dark ? "#334155" : "#e2e8f0"
+  const railHover = dark ? "#172033" : "#f1f5f9"
+  const railTitleColor = dark ? "#94a3b8" : "#475569"
   // Match Shell's `isMobile` breakpoint so the responsive renderer and the
   // shell's mobile layout flip at the same point (no flicker band).
   const isNarrow = useMediaQuery(theme.breakpoints.down("md"))
@@ -153,8 +166,8 @@ export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigato
             sx={{
               width: rail.railWidth ?? railWidth,
               flexShrink: 0,
-              borderRight: "1px solid #e2e8f0",
-              bgcolor: "#fff",
+              borderRight: `1px solid ${railBorder}`,
+              bgcolor: railBg,
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
@@ -179,13 +192,13 @@ export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigato
               width: rail.railWidth ?? railWidth,
               flexShrink: 0,
               cursor: "pointer",
-              borderRight: "1px solid #e2e8f0",
-              bgcolor: "#fff",
+              borderRight: `1px solid ${railBorder}`,
+              bgcolor: railBg,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               transition: "background-color 0.12s",
-              "&:hover": { bgcolor: "#f1f5f9" },
+              "&:hover": { bgcolor: railHover },
             }}
           >
             <Typography
@@ -194,7 +207,7 @@ export function DrillDownNavigator({ panels, railWidth = 56 }: DrillDownNavigato
                 transform: "rotate(180deg)",
                 fontSize: 12,
                 fontWeight: 600,
-                color: "#475569",
+                color: railTitleColor,
                 whiteSpace: "nowrap",
                 userSelect: "none",
               }}

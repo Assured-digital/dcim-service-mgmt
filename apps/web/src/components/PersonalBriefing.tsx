@@ -1,13 +1,14 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
 import {
-  Box, Button, Card, CardContent, Chip, Divider, Stack, Typography
+  Box, Button, Card, CardContent, Chip, Divider, Stack, Typography, useTheme
 } from "@mui/material"
 import { BarChart } from "@mui/x-charts/BarChart"
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh"
 import WbSunnyIcon from "@mui/icons-material/WbSunny"
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
-import { StatusPill, TypeBadge } from "./shared"
+import { StatusPill, TypeBadge, semanticToken, ragToken, slate } from "./shared"
+import { useThemeMode } from "../lib/theme"
 import { getCurrentUser, type CurrentUser } from "../lib/auth"
 import type { Ticket } from "../lib/tickets"
 
@@ -89,11 +90,13 @@ function MiniStat({ label, value, tone }: {
   value: React.ReactNode
   tone: "good" | "bad" | "warn" | "neutral"
 }) {
+  const { mode } = useThemeMode()
   const toneMap = {
-    good:    { bg: "#dcfce7", color: "#15803d" },
-    bad:     { bg: "#fee2e2", color: "#b91c1c" },
-    warn:    { bg: "#fef3c7", color: "#b45309" },
-    neutral: { bg: "#f1f5f9", color: "#334155" },
+    good:    { bg: semanticToken("success", mode).bg, color: semanticToken("success", mode).solid },
+    bad:     { bg: semanticToken("danger", mode).bg, color: semanticToken("danger", mode).solid },
+    warn:    { bg: semanticToken("warning", mode).bg, color: semanticToken("warning", mode).text },
+    // neutral (flagged F): bg = tertiary surface; text = slate-pair (light = slate-700).
+    neutral: { bg: "var(--color-background-tertiary)", color: mode === "dark" ? slate[300] : slate[700] },
   } as const
   const t = toneMap[tone]
   return (
@@ -119,6 +122,8 @@ function MiniStat({ label, value, tone }: {
  */
 export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
+  const theme = useTheme()
   const user = React.useMemo(() => getCurrentUser(), [])
 
   const myTickets = React.useMemo(
@@ -151,50 +156,50 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
       {/* Greeting */}
       <Box>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-          <WbSunnyIcon sx={{ fontSize: 20, color: "#b45309" }} />
+          <WbSunnyIcon sx={{ fontSize: 20, color: semanticToken("warning", mode).text }} />
           <Typography sx={{
             fontFamily: "Space Grotesk, Manrope", fontSize: 26, fontWeight: 700,
-            color: "#0f172a", letterSpacing: "-0.02em",
+            color: "text.primary", letterSpacing: "-0.02em",
           }}>
             {greetingByHour(now.getHours())}, {userFirstName(user)}
           </Typography>
         </Stack>
-        <Typography sx={{ fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
-          You have <strong style={{ color: "#0f172a" }}>{totalOpen} open ticket{totalOpen === 1 ? "" : "s"}</strong>
-          {resolvedToday > 0 ? <> · <strong style={{ color: "#15803d" }}>{resolvedToday} resolved today</strong></> : null}
-          {slaBreached > 0 ? <> · <strong style={{ color: "#b91c1c" }}>{slaBreached} crossed SLA</strong></> : null}.
+        <Typography sx={{ fontSize: 14, color: "text.secondary", lineHeight: 1.6 }}>
+          You have <strong style={{ color: theme.palette.text.primary }}>{totalOpen} open ticket{totalOpen === 1 ? "" : "s"}</strong>
+          {resolvedToday > 0 ? <> · <strong style={{ color: semanticToken("success", mode).solid }}>{resolvedToday} resolved today</strong></> : null}
+          {slaBreached > 0 ? <> · <strong style={{ color: semanticToken("danger", mode).solid }}>{slaBreached} crossed SLA</strong></> : null}.
         </Typography>
       </Box>
 
       {/* Needs your call */}
       {focus ? (
-        <Card sx={{ borderLeft: "3px solid #ef4444" }}>
+        <Card sx={{ borderLeft: `3px solid ${ragToken("RED", mode).dot}` }}>
           <CardContent sx={{ p: 2.25 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <PriorityHighIcon sx={{ fontSize: 18, color: "#b91c1c" }} />
-              <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+              <PriorityHighIcon sx={{ fontSize: 18, color: semanticToken("danger", mode).solid }} />
+              <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "text.primary" }}>
                 Needs your call
               </Typography>
               <Chip
                 size="small"
                 label={`P${focus.priority === "critical" ? 1 : focus.priority === "high" ? 2 : 3}`}
-                sx={{ fontSize: 11, fontWeight: 700, bgcolor: "#fee2e2", color: "#b91c1c" }}
+                sx={{ fontSize: 11, fontWeight: 700, bgcolor: semanticToken("danger", mode).bg, color: semanticToken("danger", mode).solid }}
               />
             </Stack>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <TypeBadge kind={focus.kind} />
-              <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#475569" }}>
+              <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "text.secondary" }}>
                 {focus.reference}
               </Typography>
               <StatusPill
                 value={focus.overdue ? "OVERDUE" : focus.status}
                 label={focus.overdue ? "overdue" : focus.status.toLowerCase().replaceAll("_", " ")}
               />
-              <Typography sx={{ fontSize: 11.5, color: "#64748b", ml: "auto" }}>
+              <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", ml: "auto" }}>
                 {hoursOld(focus.createdAt)}h since created
               </Typography>
             </Stack>
-            <Typography sx={{ fontSize: 14, color: "#0f172a", fontWeight: 500, mb: 1.5 }}>
+            <Typography sx={{ fontSize: 14, color: "text.primary", fontWeight: 500, mb: 1.5 }}>
               {focus.subject}
             </Typography>
             <Stack direction="row" spacing={1}>
@@ -205,14 +210,14 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
           </CardContent>
         </Card>
       ) : (
-        <Card sx={{ borderLeft: "3px solid #22c55e" }}>
+        <Card sx={{ borderLeft: `3px solid ${ragToken("GREEN", mode).dot}` }}>
           <CardContent sx={{ p: 2 }}>
             <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "#15803d" }}>
+              <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: semanticToken("success", mode).solid }}>
                 Nothing on your plate needs escalating right now.
               </Typography>
             </Stack>
-            <Typography sx={{ fontSize: 13, color: "#64748b", mt: 0.5 }}>
+            <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)", mt: 0.5 }}>
               No overdue or critical-priority tickets assigned to you.
             </Typography>
           </CardContent>
@@ -230,10 +235,10 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
       <Card>
         <CardContent sx={{ p: 2 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-            <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+            <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "text.primary" }}>
               Last 14 days
             </Typography>
-            <Typography sx={{ fontSize: 11, color: "#64748b", ml: "auto" }}>
+            <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", ml: "auto" }}>
               Created vs resolved
             </Typography>
           </Stack>
@@ -242,7 +247,7 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
               dataset={chart}
               xAxis={[{ dataKey: "label", scaleType: "band" }]}
               series={[
-                { dataKey: "created", label: "Created", color: "#1d4ed8" },
+                { dataKey: "created", label: "Created", color: mode === "dark" ? "#3b82f6" : "#1d4ed8" },
                 { dataKey: "resolved", label: "Resolved", color: "#93c5fd" },
               ]}
               height={140}
@@ -257,18 +262,18 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
       <Card>
         <CardContent sx={{ p: 2, pb: 1 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-            <HourglassEmptyIcon sx={{ fontSize: 16, color: "#b45309" }} />
-            <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+            <HourglassEmptyIcon sx={{ fontSize: 16, color: semanticToken("warning", mode).text }} />
+            <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "text.primary" }}>
               Waiting on client
             </Typography>
-            <Typography sx={{ fontSize: 11, fontWeight: 700, color: "#b45309", ml: "auto" }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 700, color: semanticToken("warning", mode).text, ml: "auto" }}>
               {waiting.length} item{waiting.length === 1 ? "" : "s"}
             </Typography>
           </Stack>
         </CardContent>
         <Divider />
         {waiting.length === 0 ? (
-          <Typography sx={{ p: 2, fontSize: 13, color: "#64748b", textAlign: "center" }}>
+          <Typography sx={{ p: 2, fontSize: 13, color: "var(--color-text-muted)", textAlign: "center" }}>
             No tickets of yours are waiting on a client response.
           </Typography>
         ) : (
@@ -278,22 +283,22 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
               onClick={() => navigate(t.detailPath)}
               sx={{
                 px: 2, py: 1.25, cursor: "pointer",
-                borderBottom: "1px solid #f1f5f9",
+                borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)",
                 "&:last-child": { borderBottom: "none" },
-                "&:hover": { bgcolor: "#f8fafc" },
+                "&:hover": { bgcolor: "var(--color-background-secondary)" },
               }}
             >
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.25 }}>
                 <TypeBadge kind={t.kind} />
-                <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "#475569" }}>
+                <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "text.secondary" }}>
                   {t.reference}
                 </Typography>
-                <Typography sx={{ ml: "auto", fontSize: 11, color: "#b45309", fontWeight: 600 }}>
+                <Typography sx={{ ml: "auto", fontSize: 11, color: semanticToken("warning", mode).text, fontWeight: 600 }}>
                   waiting {hoursOld(t.updatedAt)}h
                 </Typography>
               </Stack>
               <Typography sx={{
-                fontSize: 12.5, color: "#0f172a", fontWeight: 500,
+                fontSize: 12.5, color: "text.primary", fontWeight: 500,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
               }}>
                 {t.subject}

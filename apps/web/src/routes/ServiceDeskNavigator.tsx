@@ -15,6 +15,7 @@ import IssueDetailPage from "./IssueDetailPage"
 import { DrillNavContext, type DrillFn } from "../lib/drillNav"
 import { DetailNarrowProvider, DetailDrawerChromeProvider } from "../components/detail"
 import { routeForSegment, deleteRecordLink } from "../lib/linkedRecords"
+import { useThemeMode } from "../lib/theme"
 
 // ── Service Desk drill-down adopter ────────────────────────────────────────
 //
@@ -52,6 +53,7 @@ export default function ServiceDeskNavigator() {
   const params = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { mode } = useThemeMode()
   const [searchParams] = useSearchParams()
   const segments = (params["*"] ?? "").split("/").filter(Boolean)
   const [type, id, assocType, assocId] = segments
@@ -161,7 +163,7 @@ export default function ServiceDeskNavigator() {
   // hence the depth cap). "Open full" navigates to the record's own route.
   return (
     <>
-      <DrillDownNavigator panels={panels} />
+      <DrillDownNavigator panels={panels} mode={mode} />
       <Drawer
         anchor="right"
         open={depth === 2}
@@ -181,7 +183,7 @@ export default function ServiceDeskNavigator() {
                 alignItems: "center",
                 gap: 1,
                 p: 1,
-                borderBottom: "1px solid #e2e8f0",
+                borderBottom: "1px solid var(--color-border-primary)",
                 flexShrink: 0,
                 minHeight: 48,
               }}

@@ -25,9 +25,10 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import { statusColors, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
+import { statusColors, priorityToken, accentToken, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask, type ThemeMode } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
+import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -143,16 +144,20 @@ const SR_STATUS_ORDER = [
   "CANCELLED",
 ]
 
-const SR_STATUS_CONFIG: StatusConfig = {
-  options: SR_STATUS_ORDER.map<StatusOption>((value) => ({
-    value,
-    label: STATUS_LABELS[value],
-    badgeClass: `b-${value.toLowerCase()}`,
-    bg: statusColors(value).bg,
-    iconColor: statusColors(value).text,
-    icon: STATUS_ICONS[value],
-    buttonIcon: STATUS_ICONS[value],
-  })),
+// Built per-render with the active mode (statusColors light branch is unchanged),
+// so the status pill + popover swatches follow the theme.
+function buildSRStatusConfig(mode: ThemeMode): StatusConfig {
+  return {
+    options: SR_STATUS_ORDER.map<StatusOption>((value) => ({
+      value,
+      label: STATUS_LABELS[value],
+      badgeClass: `b-${value.toLowerCase()}`,
+      bg: statusColors(value, mode).bg,
+      iconColor: statusColors(value, mode).text,
+      icon: STATUS_ICONS[value],
+      buttonIcon: STATUS_ICONS[value],
+    })),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,42 +166,20 @@ const SR_STATUS_CONFIG: StatusConfig = {
 
 const PRIORITY_VALUES = ["low", "medium", "high", "critical"]
 
-const PRIORITY_COLOURS: Record<string, { bg: string; text: string }> = {
-  low: { bg: "#dcfce7", text: "#15803d" },
-  medium: { bg: "#fef3c7", text: "#b45309" },
-  high: { bg: "#ffedd5", text: "#c2410c" },
-  critical: { bg: "#fee2e2", text: "#b91c1c" },
+// priorityToken reproduces the prior PRIORITY_COLOURS values exactly in light, and
+// adds the dark ramp — so a priority swatch matches the PriorityPill everywhere.
+function buildPriorityOptions(mode: ThemeMode): PopoverOption[] {
+  return PRIORITY_VALUES.map((value) => {
+    const tok = priorityToken(value, mode)
+    return {
+      value,
+      label: value.charAt(0).toUpperCase() + value.slice(1),
+      iconBg: tok.bg,
+      iconColor: tok.text,
+      icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
+    }
+  })
 }
-
-const PRIORITY_OPTIONS: PopoverOption[] = PRIORITY_VALUES.map((value) => ({
-  value,
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-  iconBg: PRIORITY_COLOURS[value].bg,
-  iconColor: PRIORITY_COLOURS[value].text,
-  icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
-}))
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Type badge — spec section 3.3 (SR)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SR_TYPE_BADGE = (
-  <Box
-    component="span"
-    sx={{
-      fontSize: 10,
-      fontWeight: 500,
-      bgcolor: "#eaf3de",
-      color: "#3b6d11",
-      px: 1,
-      py: 0.25,
-      borderRadius: 1,
-      letterSpacing: "0.04em",
-    }}
-  >
-    SR
-  </Box>
-)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -248,6 +231,7 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const { mode } = useThemeMode()
   const [visibleCount, setVisibleCount] = React.useState(10)
 
   const handleFilterChange = React.useCallback(
@@ -286,7 +270,7 @@ const ActivityContent = React.memo(function ActivityContent({
         <AuditHistoryList events={auditEvents.slice(0, visibleCount)} recordNoun="service request" />
       ) : (
         visibleEvents.map((event, idx) => (
-          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} />
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} mode={mode} />
         ))
       )}
 
@@ -321,6 +305,9 @@ export default function ServiceRequestDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
+  const srStatusConfig = React.useMemo(() => buildSRStatusConfig(mode), [mode])
+  const priorityOptions = React.useMemo(() => buildPriorityOptions(mode), [mode])
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -657,24 +644,26 @@ export default function ServiceRequestDetailPage() {
   }, [allFeedEvents, activeFilter])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const green = accentToken("green", mode)
+    const neutral = accentToken("neutral", mode)
     const list: PopoverOption[] = assignableUsers.map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: green.bg,
+      iconColor: green.text,
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
     }))
     return [
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: neutral.bg,
+        iconColor: neutral.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [assignableUsers])
+  }, [assignableUsers, mode])
 
   // ── Title commit handlers ──────────────────────────────────────────────────
 
@@ -783,7 +772,7 @@ export default function ServiceRequestDetailPage() {
         label: "Priority",
         editable: true,
         currentValue: sr.priority,
-        popoverOptions: PRIORITY_OPTIONS,
+        popoverOptions: priorityOptions,
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
@@ -803,7 +792,7 @@ export default function ServiceRequestDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            <AssigneeCell user={sr.assignee} />
+            <AssigneeCell user={sr.assignee} mode={mode} />
           </Box>
         ),
       },
@@ -816,7 +805,7 @@ export default function ServiceRequestDetailPage() {
         editable: false,
         value: (
           <Box sx={valueWrapperSx}>
-            <Typography sx={{ fontSize: 12, color: "#3b6d11", whiteSpace: "pre-wrap" }}>
+            <Typography sx={{ fontSize: 12, color: accentToken("green", mode).text, whiteSpace: "pre-wrap" }}>
               {sr.closureSummary}
             </Typography>
           </Box>
@@ -825,7 +814,7 @@ export default function ServiceRequestDetailPage() {
     }
 
     return fields
-  }, [sr, usersOptions, handleSelectPriority, handleSelectAssignee])
+  }, [sr, usersOptions, priorityOptions, mode, handleSelectPriority, handleSelectAssignee])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -865,11 +854,11 @@ export default function ServiceRequestDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!sr) return undefined
     return {
-      submittedBy: <AssigneeCell user={sr.createdBy ?? null} emptyLabel="—" />,
+      submittedBy: <AssigneeCell user={sr.createdBy ?? null} emptyLabel="—" mode={mode} />,
       createdAt: sr.createdAt,
       updatedAt: sr.updatedAt,
     }
-  }, [sr])
+  }, [sr, mode])
 
   const rightSections = React.useMemo<RightSection[]>(() => {
     return [
@@ -884,6 +873,7 @@ export default function ServiceRequestDetailPage() {
             tasks={linkedTasks ?? []}
             users={assignableUsers}
             canManage={canManage}
+            mode={mode}
             onCreate={handleOpenCreateTask}
             onSelectTask={handleSelectTask}
             onChangeTaskStatus={updateLinkedTaskStatus}
@@ -956,9 +946,9 @@ export default function ServiceRequestDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={sr.reference}
-        typeBadge={SR_TYPE_BADGE}
+        typeBadge={null}
         currentStatus={sr.status}
-        statusConfig={SR_STATUS_CONFIG}
+        statusConfig={srStatusConfig}
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={

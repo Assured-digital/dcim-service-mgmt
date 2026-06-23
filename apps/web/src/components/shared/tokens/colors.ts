@@ -1,6 +1,21 @@
 export type SemanticIntent =
   | "success" | "active" | "warning" | "danger" | "neutral" | "info" | "muted"
 
+// ── Theme mode ──────────────────────────────────────────────────────────────
+// The colour helpers below resolve against the ACTIVE theme mode. The mode is
+// kept in sync by the ThemeModeProvider (src/lib/theme.tsx) calling
+// setActiveThemeMode() inside the toggle handler — i.e. BEFORE the resulting
+// re-render — so any component re-rendering on the theme swap reads the new mode.
+// It defaults to "light", so any call before the provider mounts, and every call
+// site not yet migrated to pass an explicit `mode`, behaves exactly as it always
+// has. Every helper also takes an optional explicit `mode` (defaulting to the
+// active mode) so later prompts can migrate call sites off the implicit default.
+export type ThemeMode = "light" | "dark"
+
+let activeThemeMode: ThemeMode = "light"
+export function setActiveThemeMode(mode: ThemeMode): void { activeThemeMode = mode }
+export function getActiveThemeMode(): ThemeMode { return activeThemeMode }
+
 export const uiText = {
   primary: "#0f172a",
   secondary: "#475569",
@@ -48,6 +63,25 @@ export const semanticTokens: Record<SemanticIntent, { bg: string; text: string; 
   muted:   { bg: "#f1f5f9", text: "#94a3b8", solid: "#94a3b8" },
 }
 
+// Dark counterpart of semanticTokens: same intent→hue mapping, re-scaled for a
+// dark surface — a deep, low-luminance tinted `bg` with a light same-hue `text`
+// (the inverse of the light pastel-fill / saturated-text pairing), and a brighter
+// `solid` glyph colour that still reads at ~8px on a dark rail.
+export const semanticTokensDark: Record<SemanticIntent, { bg: string; text: string; solid: string }> = {
+  success: { bg: "#13351f", text: "#4ade80", solid: "#22c55e" }, // green
+  active:  { bg: "#16294a", text: "#60a5fa", solid: "#3b82f6" }, // blue
+  warning: { bg: "#3a2c0f", text: "#fbbf24", solid: "#f59e0b" }, // amber
+  danger:  { bg: "#3a1a1a", text: "#f87171", solid: "#ef4444" }, // red
+  neutral: { bg: "#1e293b", text: "#94a3b8", solid: "#94a3b8" }, // slate
+  info:    { bg: "#16294a", text: "#60a5fa", solid: "#3b82f6" }, // blue — mirrors active
+  muted:   { bg: "#172033", text: "#64748b", solid: "#64748b" },
+}
+
+const semanticByMode: Record<ThemeMode, Record<SemanticIntent, { bg: string; text: string; solid: string }>> = {
+  light: semanticTokens,
+  dark: semanticTokensDark,
+}
+
 export type RAGLevel = "RED" | "AMBER" | "GREEN"
 
 export const ragTokens: Record<RAGLevel, { bg: string; text: string; dot: string }> = {
@@ -56,11 +90,34 @@ export const ragTokens: Record<RAGLevel, { bg: string; text: string; dot: string
   GREEN: { bg: "#dcfce7", text: "#15803d", dot: "#22c55e" },
 }
 
+export const ragTokensDark: Record<RAGLevel, { bg: string; text: string; dot: string }> = {
+  RED:   { bg: "#3a1a1a", text: "#f87171", dot: "#ef4444" },
+  AMBER: { bg: "#3a2c0f", text: "#fbbf24", dot: "#f59e0b" },
+  GREEN: { bg: "#13351f", text: "#4ade80", dot: "#22c55e" },
+}
+
+const ragByMode: Record<ThemeMode, Record<RAGLevel, { bg: string; text: string; dot: string }>> = {
+  light: ragTokens,
+  dark: ragTokensDark,
+}
+
 export const priorityDots: Record<string, string> = {
   low:      "#94a3b8",
   medium:   "#f59e0b",
   high:     "#ef4444",
   critical: "#7c3aed"
+}
+
+export const priorityDotsDark: Record<string, string> = {
+  low:      "#94a3b8",
+  medium:   "#fbbf24",
+  high:     "#f87171",
+  critical: "#a78bfa"
+}
+
+const priorityDotsByMode: Record<ThemeMode, Record<string, string>> = {
+  light: priorityDots,
+  dark: priorityDotsDark,
 }
 
 // Priority pastel ramp — a true 4-step low -> critical scale (green/amber/orange/
@@ -74,6 +131,19 @@ export const priorityTokens: Record<string, { bg: string; text: string }> = {
   medium:   { bg: "#fef3c7", text: "#b45309" }, // amber
   high:     { bg: "#ffedd5", text: "#c2410c" }, // orange
   critical: { bg: "#fee2e2", text: "#b91c1c" }, // red
+}
+
+// Dark counterpart of the 4-step priority ramp (low → critical).
+export const priorityTokensDark: Record<string, { bg: string; text: string }> = {
+  low:      { bg: "#13351f", text: "#4ade80" }, // green
+  medium:   { bg: "#3a2c0f", text: "#fbbf24" }, // amber
+  high:     { bg: "#3a240f", text: "#fb923c" }, // orange
+  critical: { bg: "#3a1a1a", text: "#f87171" }, // red
+}
+
+const priorityByMode: Record<ThemeMode, Record<string, { bg: string; text: string }>> = {
+  light: priorityTokens,
+  dark: priorityTokensDark,
 }
 
 // Semantic status -> intent. First match wins, so order matters:
@@ -179,36 +249,112 @@ export const typeBadgeTokens = {
   TASK: { bg: "#eeedfe", text: "#3c3489" },
 } as const
 
-export function chipSx(value: string) {
-  const { bg, text } = semanticTokens[resolveIntent(value)]
+// Dark counterpart of the type badges — same identity hue, dark-tinted fill.
+export const typeBadgeTokensDark = {
+  SR:   { bg: "#0c2a3a", text: "#7dd3fc" },
+  INC:  { bg: "#3a1a1a", text: "#f87171" },
+  CHG:  { bg: "#2a1a3a", text: "#d8b4fe" },
+  RSK:  { bg: "#3a2c0f", text: "#fbbf24" },
+  ISS:  { bg: "#3a1428", text: "#f9a8d4" },
+  TASK: { bg: "#1e1b3a", text: "#a5b4fc" },
+} as const
+
+export type TypeBadgeKey = keyof typeof typeBadgeTokens
+
+const typeBadgeByMode: Record<ThemeMode, Record<TypeBadgeKey, { bg: string; text: string }>> = {
+  light: typeBadgeTokens,
+  dark: typeBadgeTokensDark,
+}
+
+// Status fill + text for a resolved intent (mode-aware). Sibling of statusColors
+// that takes the intent directly, for callers that already have it (e.g. the
+// shared StatusPill, which accepts an explicit `intent` prop).
+export function semanticToken(intent: SemanticIntent, mode: ThemeMode = activeThemeMode): { bg: string; text: string; solid: string } {
+  return semanticByMode[mode][intent]
+}
+
+export function chipSx(value: string, mode: ThemeMode = activeThemeMode) {
+  const { bg, text } = semanticByMode[mode][resolveIntent(value)]
   return { bgcolor: bg, color: text, fontWeight: 700 }
 }
 
 // Status fill + text for non-chip status indicators (e.g. the detail status pill
 // and StatusPopover icon squares). Resolves to the same deepened tokens as chipSx,
 // so a given status is the same colour everywhere it appears.
-export function statusColors(value: string): { bg: string; text: string } {
-  return semanticTokens[resolveIntent(value)]
+export function statusColors(value: string, mode: ThemeMode = activeThemeMode): { bg: string; text: string } {
+  return semanticByMode[mode][resolveIntent(value)]
 }
 
 // Saturated status colour for tiny standalone glyphs (the queue-rail status dot),
 // where the pastel `bg` washes out at ~8px. Same intent mapping as statusColors —
 // only the scale differs (solid vs soft). Do NOT use for pills; they stay pastel.
-export function statusSolid(value: string): string {
-  return semanticTokens[resolveIntent(value)].solid
+export function statusSolid(value: string, mode: ThemeMode = activeThemeMode): string {
+  return semanticByMode[mode][resolveIntent(value)].solid
 }
 
-export function priorityDot(priority: string): string {
-  return priorityDots[priority.toLowerCase()] ?? "#94a3b8"
+// RAG fill + text + dot for a level (mode-aware). Unknown values are impossible
+// (RAGLevel is a closed union) so no fallback is needed.
+export function ragToken(level: RAGLevel, mode: ThemeMode = activeThemeMode): { bg: string; text: string; dot: string } {
+  return ragByMode[mode][level]
+}
+
+// Type-badge fill + text for SR/INC/CHG/RSK/ISS/TASK (mode-aware).
+export function typeBadge(key: TypeBadgeKey, mode: ThemeMode = activeThemeMode): { bg: string; text: string } {
+  return typeBadgeByMode[mode][key]
+}
+
+export function priorityDot(priority: string, mode: ThemeMode = activeThemeMode): string {
+  return priorityDotsByMode[mode][priority.toLowerCase()] ?? "#94a3b8"
 }
 
 // Priority pastel fill + text for the shared PriorityPill. Resolves to the 4-step
 // priorityTokens ramp; unknown values fall back to medium.
-export function priorityToken(priority: string): { bg: string; text: string } {
-  return priorityTokens[priority.toLowerCase()] ?? priorityTokens.medium
+export function priorityToken(priority: string, mode: ThemeMode = activeThemeMode): { bg: string; text: string } {
+  const map = priorityByMode[mode]
+  return map[priority.toLowerCase()] ?? map.medium
 }
 
-export function statusSelectSx(minWidth = 180) {
+// ── Detail-page accent palette ──────────────────────────────────────────────
+// A soft 6-hue accent set used by the work-item detail pages + the shared activity
+// feed: the assignee/person identity wash, the comment/status/assignment/link event
+// icons, change-approval decisions, and the closure summary. Distinct from
+// semanticTokens (status) — warmer/softer, hand-picked for these surfaces. This is
+// the single source of truth — read via accentToken(). The light values reproduce
+// the prior inline literals exactly; the dark counterparts re-scale to a deep,
+// low-luminance fill + light same-hue text, matching the other *Dark groups.
+export type AccentKey = "green" | "red" | "blue" | "amber" | "pink" | "neutral"
+
+export const accentTokens: Record<AccentKey, { bg: string; text: string }> = {
+  green:   { bg: "#eaf3de", text: "#3b6d11" }, // person/assigned · comment · APPROVED · closure
+  red:     { bg: "#fcebeb", text: "#a32d2d" }, // REJECTED
+  blue:    { bg: "#e6f1fb", text: "#185fa5" }, // status event · customer-update badge
+  amber:   { bg: "#faeeda", text: "#854f0b" }, // assignment event · DEFERRED
+  pink:    { bg: "#fbeaf0", text: "#993556" }, // link event
+  neutral: { bg: "#f1efe8", text: "#5f5e5a" }, // unassigned · approval default
+}
+
+export const accentTokensDark: Record<AccentKey, { bg: string; text: string }> = {
+  green:   { bg: "#20300f", text: "#a3c57a" },
+  red:     { bg: "#371b1b", text: "#e8918c" },
+  blue:    { bg: "#14283f", text: "#74a9e0" },
+  amber:   { bg: "#322611", text: "#d9a85e" },
+  pink:    { bg: "#311823", text: "#d98fae" },
+  neutral: { bg: "#26261f", text: "#a8a59c" },
+}
+
+const accentByMode: Record<ThemeMode, Record<AccentKey, { bg: string; text: string }>> = {
+  light: accentTokens,
+  dark: accentTokensDark,
+}
+
+// Soft accent fill + text for a hue (mode-aware). Single source for the detail-page
+// person/event/approval washes — read it instead of inlining the literals.
+export function accentToken(key: AccentKey, mode: ThemeMode = activeThemeMode): { bg: string; text: string } {
+  return accentByMode[mode][key]
+}
+
+export function statusSelectSx(minWidth = 180, mode: ThemeMode = activeThemeMode) {
+  const isDark = mode === "dark"
   return {
     minWidth,
     "& .MuiInputLabel-root": {
@@ -217,18 +363,18 @@ export function statusSelectSx(minWidth = 180) {
     "& .MuiOutlinedInput-root": {
       height: 32,
       borderRadius: 999,
-      bgcolor: "#ffffff",
+      bgcolor: isDark ? "#1e293b" : "#ffffff",
       fontSize: 12,
       fontWeight: 600,
-      color: "#334155",
+      color: isDark ? "#e2e8f0" : "#334155",
       "& fieldset": {
-        borderColor: "#cbd5e1",
+        borderColor: isDark ? "#334155" : "#cbd5e1",
       },
       "&:hover fieldset": {
-        borderColor: "#94a3b8",
+        borderColor: isDark ? "#475569" : "#94a3b8",
       },
       "&.Mui-focused fieldset": {
-        borderColor: "#64748b",
+        borderColor: isDark ? "#64748b" : "#64748b",
       },
     },
     "& .MuiSelect-select": {
@@ -239,7 +385,7 @@ export function statusSelectSx(minWidth = 180) {
       alignItems: "center",
     },
     "& .MuiSvgIcon-root": {
-      color: "#64748b",
+      color: isDark ? "#94a3b8" : "#64748b",
       fontSize: 18,
     },
   }

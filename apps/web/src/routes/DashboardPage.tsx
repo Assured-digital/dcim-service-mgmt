@@ -13,9 +13,25 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { StatusPill } from "../components/shared"
+import { StatusPill, semanticToken, ragToken, slate, type ThemeMode } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { Chip } from "@mui/material"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
+
+// ── Category / series tones ─────────────────────────────────────────────────
+// The brand category colours used by the trend series, KPI accent strips and dots.
+// Light branch = the exact prior hex (a documented exception, like the 2b washes);
+// dark holds the same EXCEPT teal, which is brightened so it reads on the dark ground.
+const CATEGORY_TONES = {
+  sr:      { light: "#2563eb", dark: "#2563eb" }, // blue — Service Requests
+  ri:      { light: "#f59e0b", dark: "#f59e0b" }, // amber — Risks & Issues
+  tasks:   { light: "#0f766e", dark: "#14b8a6" }, // teal — Tasks (brightened in dark)
+  issues:  { light: "#dc2626", dark: "#dc2626" }, // red — Issues
+  pending: { light: "#7c3aed", dark: "#7c3aed" }, // purple — Pending review
+} as const
+function categoryTone(key: keyof typeof CATEGORY_TONES, mode: ThemeMode): string {
+  return CATEGORY_TONES[key][mode]
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type SR = { id: string; status: string; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; displayName: string } | null }
@@ -112,14 +128,15 @@ function StatTile({ label, value, tone, description, onClick, urgent }: {
   label: string; value: number; tone: string; description: string
   onClick?: () => void; urgent?: boolean
 }) {
+  const { mode } = useThemeMode()
   return (
     <Box
       onClick={onClick}
       sx={{
         flex: 1, minWidth: 0,
-        bgcolor: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderLeft: `3px solid ${urgent && value > 0 ? "#ef4444" : tone}`,
+        bgcolor: "background.paper",
+        border: "1px solid", borderColor: "divider",
+        borderLeft: `3px solid ${urgent && value > 0 ? ragToken("RED", mode).dot : tone}`,
         borderRadius: "8px",
         px: "14px", py: "12px",
         cursor: onClick ? "pointer" : "default",
@@ -127,13 +144,13 @@ function StatTile({ label, value, tone, description, onClick, urgent }: {
         "&:hover": onClick ? { borderColor: tone, boxShadow: "0 2px 8px rgba(15,23,42,0.07)" } : {}
       }}
     >
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#64748b", mb: "5px" }}>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px" }}>
         {label}
       </Typography>
-      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: urgent && value > 0 ? "#b91c1c" : "#0f172a" }}>
+      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: urgent && value > 0 ? semanticToken("danger", mode).solid : "text.primary" }}>
         {value}
       </Typography>
-      <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: "3px" }}>
+      <Typography sx={{ fontSize: 11, color: "text.tertiary", mt: "3px" }}>
         {description}
       </Typography>
     </Box>
@@ -146,15 +163,17 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
   tone: string; chartData: { date: string; opened: number; closed: number }[]
   onExport?: () => void; exporting?: boolean
 }) {
+  const { mode } = useThemeMode()
   const total = opened + closed
   const pct = total > 0 ? Math.round((closed / total) * 100) : 0
+  const edge = mode === "dark" ? slate[600] : slate[300]
 
   return (
     <Box sx={{ flex: 1, minWidth: 0 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: "10px" }}>
         <Stack direction="row" alignItems="center" gap="6px">
           <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: tone, flexShrink: 0 }} />
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{label}</Typography>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary" }}>{label}</Typography>
         </Stack>
         {onExport ? (
           <Box
@@ -162,8 +181,8 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
             sx={{
               display: "flex", alignItems: "center", gap: "4px",
               px: "7px", py: "3px", borderRadius: "5px", cursor: "pointer",
-              border: "1px solid #e2e8f0", color: "#64748b",
-              "&:hover": { bgcolor: "#f8fafc", borderColor: "#cbd5e1" }
+              border: "1px solid", borderColor: "divider", color: "var(--color-text-muted)",
+              "&:hover": { bgcolor: "var(--color-background-secondary)", borderColor: edge }
             }}
           >
             <FileDownloadIcon sx={{ fontSize: 12 }} />
@@ -174,16 +193,16 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
 
       <Stack direction="row" gap="20px" sx={{ mb: "10px" }}>
         <Box>
-          <Typography sx={{ fontSize: 10, color: "#94a3b8", mb: "1px" }}>Opened</Typography>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, color: "#0f172a", lineHeight: 1 }}>{opened}</Typography>
+          <Typography sx={{ fontSize: 10, color: "text.tertiary", mb: "1px" }}>Opened</Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{opened}</Typography>
         </Box>
         <Box>
-          <Typography sx={{ fontSize: 10, color: "#94a3b8", mb: "1px" }}>{closedLabel}</Typography>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, color: "#0f172a", lineHeight: 1 }}>{closed}</Typography>
+          <Typography sx={{ fontSize: 10, color: "text.tertiary", mb: "1px" }}>{closedLabel}</Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{closed}</Typography>
         </Box>
         <Box sx={{ ml: "auto", textAlign: "right" }}>
-          <Typography sx={{ fontSize: 10, color: "#94a3b8", mb: "1px" }}>Rate</Typography>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, color: pct > 50 ? "#15803d" : "#0f172a", lineHeight: 1 }}>
+          <Typography sx={{ fontSize: 10, color: "text.tertiary", mb: "1px" }}>Rate</Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: pct > 50 ? semanticToken("success", mode).solid : "text.primary", lineHeight: 1 }}>
             {pct}%
           </Typography>
         </Box>
@@ -211,15 +230,15 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
           sx={{
             "& .MuiAreaElement-root": { fillOpacity: 0.12 },
             "& .MuiChartsAxis-root": { display: "none" },
-            "& .MuiChartsGrid-root": { "& line": { stroke: "#f1f5f9" } }
+            "& .MuiChartsGrid-root": { "& line": { stroke: "var(--color-background-tertiary)" } }
           }}
           hideLegend
         />
       </Box>
       {chartData.length > 1 ? (
         <Stack direction="row" justifyContent="space-between" sx={{ px: "4px", mt: "-4px" }}>
-          <Typography sx={{ fontSize: 9, color: "#cbd5e1" }}>{chartData[0]?.date}</Typography>
-          <Typography sx={{ fontSize: 9, color: "#cbd5e1" }}>{chartData[chartData.length - 1]?.date}</Typography>
+          <Typography sx={{ fontSize: 9, color: edge }}>{chartData[0]?.date}</Typography>
+          <Typography sx={{ fontSize: 9, color: edge }}>{chartData[chartData.length - 1]?.date}</Typography>
         </Stack>
       ) : null}
     </Box>
@@ -230,21 +249,22 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
 function AttentionRow({ dot, label, detail, onClick }: {
   dot: string; label: string; detail: string; onClick?: () => void
 }) {
+  const { mode } = useThemeMode()
   return (
     <Box onClick={onClick} sx={{
       display: "flex", alignItems: "flex-start", gap: "10px",
       py: "10px", cursor: onClick ? "pointer" : "default",
-      borderBottom: "1px solid #f1f5f9", "&:last-child": { borderBottom: "none" },
+      borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)", "&:last-child": { borderBottom: "none" },
       "&:hover .attn-label": onClick ? { color: "primary.main" } : {}
     }}>
       <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: dot, flexShrink: 0, mt: "4px" }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography className="attn-label" sx={{ fontSize: 13, fontWeight: 500, color: "#0f172a", transition: "color 0.1s" }}>
+        <Typography className="attn-label" sx={{ fontSize: 13, fontWeight: 500, color: "text.primary", transition: "color 0.1s" }}>
           {label}
         </Typography>
-        <Typography sx={{ fontSize: 11.5, color: "#64748b", mt: "1px" }}>{detail}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", mt: "1px" }}>{detail}</Typography>
       </Box>
-      {onClick ? <Typography sx={{ fontSize: 13, color: "#cbd5e1" }}>›</Typography> : null}
+      {onClick ? <Typography sx={{ fontSize: 13, color: mode === "dark" ? slate[600] : slate[300] }}>›</Typography> : null}
     </Box>
   )
 }
@@ -261,30 +281,37 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
     if (hrs < 24) return `${hrs}h ago`
     return `${Math.floor(diff / 86400000)}d ago`
   })()
+  const { mode } = useThemeMode()
+  // Type chips (flagged E): blue for SR/CHECK, neutral for TASK, warning for RISK.
+  // Light = exact prior hex; dark = a translucent blue so the chip doesn't glare.
+  const blueChip = mode === "dark"
+    ? { bg: "rgba(59,130,246,0.15)", color: "#60a5fa" }
+    : { bg: "#e8f1ff", color: "#1d4ed8" }
+  const neutralChip = { bg: "var(--color-background-tertiary)", color: "text.secondary" }
   const typeColour: Record<string, { bg: string; color: string }> = {
-    SR: { bg: "#e8f1ff", color: "#1d4ed8" },
-    TASK: { bg: "#f1f5f9", color: "#475569" },
-    CHECK: { bg: "#e8f1ff", color: "#1d4ed8" },
-    RISK: { bg: "#fef3c7", color: "#b45309" }
+    SR: blueChip,
+    TASK: neutralChip,
+    CHECK: blueChip,
+    RISK: { bg: semanticToken("warning", mode).bg, color: semanticToken("warning", mode).text }
   }
-  const tc = typeColour[type] ?? { bg: "#f1f5f9", color: "#475569" }
+  const tc = typeColour[type] ?? neutralChip
   return (
     <Box onClick={onClick} sx={{
       display: "flex", alignItems: "center", gap: "10px",
       py: "9px", cursor: "pointer",
-      borderBottom: "1px solid #f1f5f9", "&:last-child": { borderBottom: "none" },
+      borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)", "&:last-child": { borderBottom: "none" },
       "&:hover .recent-title": { color: "primary.main" }
     }}>
       <Chip label={type} size="small" sx={{ fontSize: 10, fontWeight: 600, flexShrink: 0, bgcolor: tc.bg, color: tc.color, borderRadius: "4px", height: 18 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography className="recent-title" sx={{ fontSize: 13, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.1s" }}>
+        <Typography className="recent-title" sx={{ fontSize: 13, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.1s" }}>
           {title}
         </Typography>
-        <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{reference}</Typography>
+        <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>{reference}</Typography>
       </Box>
       <Stack direction="row" alignItems="center" gap="8px" sx={{ flexShrink: 0 }}>
         <StatusPill value={status} label={status.toLowerCase().replace(/_/g, " ")} size="sm" />
-        <Typography sx={{ fontSize: 11, color: "#94a3b8", minWidth: 36, textAlign: "right" }}>{ago}</Typography>
+        <Typography sx={{ fontSize: 11, color: "text.tertiary", minWidth: 36, textAlign: "right" }}>{ago}</Typography>
       </Stack>
     </Box>
   )
@@ -293,6 +320,7 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
 
   const defaultRange = getDateRangeFromPreset("30d")
   const [dateFrom, setDateFrom] = React.useState(defaultRange.from)
@@ -425,7 +453,7 @@ export default function DashboardPage() {
                   </ButtonGroup>
                   <Button size="small" variant="text"
                     onClick={() => { applyPreset("30d"); setAssigneeId("") }}
-                    sx={{ fontSize: 11, color: "#64748b" }}>
+                    sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>
                     Reset
                   </Button>
                 </Stack>
@@ -434,20 +462,20 @@ export default function DashboardPage() {
               {/* Three trend cards with charts */}
               <Stack direction={{ xs: "column", md: "row" }} gap="24px" divider={<Divider orientation="vertical" flexItem />}>
                 <TrendCard
-                  label="Service Requests" tone="#2563eb"
+                  label="Service Requests" tone={categoryTone("sr", mode)}
                   opened={srInPeriod.length} closed={srClosedInPeriod.length}
                   closedLabel="Closed" chartData={srChart}
                   onExport={() => exportCsv("service-requests")}
                   exporting={isExporting === "service-requests"}
                 />
                 <TrendCard
-                  label="Risks & Issues" tone="#f59e0b"
+                  label="Risks & Issues" tone={categoryTone("ri", mode)}
                   opened={risksInPeriod.length + issuesInPeriod.length}
                   closed={risksClosed.length + issuesClosed.length}
                   closedLabel="Closed" chartData={riChart}
                 />
                 <TrendCard
-                  label="Tasks" tone="#0f766e"
+                  label="Tasks" tone={categoryTone("tasks", mode)}
                   opened={tasksInPeriod.length} closed={tasksDone.length}
                   closedLabel="Done" chartData={taskChart}
                   onExport={() => exportCsv("tasks")}
@@ -459,11 +487,11 @@ export default function DashboardPage() {
               <Divider sx={{ my: "20px" }} />
 
               <Box sx={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <StatTile label="Open SRs" value={openSRs} tone="#2563eb" description="Not yet closed" onClick={() => navigate("/service-desk")} />
-                <StatTile label="Open Risks" value={openRisks} tone="#f59e0b" description="Active risks" urgent onClick={() => navigate("/risks-issues/risks?view=all")} />
-                <StatTile label="Open Issues" value={openIssues} tone="#dc2626" description="Unresolved issues" urgent onClick={() => navigate("/risks-issues/issues?view=all")} />
-                <StatTile label="Open Tasks" value={openTasks} tone="#0f766e" description="Not yet done" onClick={() => navigate("/tasks")} />
-                <StatTile label="Pending Review" value={pendingReviewChecks} tone="#7c3aed" description="Checks awaiting review" urgent onClick={() => navigate("/checks")} />
+                <StatTile label="Open SRs" value={openSRs} tone={categoryTone("sr", mode)} description="Not yet closed" onClick={() => navigate("/service-desk")} />
+                <StatTile label="Open Risks" value={openRisks} tone={categoryTone("ri", mode)} description="Active risks" urgent onClick={() => navigate("/risks-issues/risks?view=all")} />
+                <StatTile label="Open Issues" value={openIssues} tone={categoryTone("issues", mode)} description="Unresolved issues" urgent onClick={() => navigate("/risks-issues/issues?view=all")} />
+                <StatTile label="Open Tasks" value={openTasks} tone={categoryTone("tasks", mode)} description="Not yet done" onClick={() => navigate("/tasks")} />
+                <StatTile label="Pending Review" value={pendingReviewChecks} tone={categoryTone("pending", mode)} description="Checks awaiting review" urgent onClick={() => navigate("/checks")} />
               </Box>
             </CardContent>
           </Card>
@@ -479,8 +507,8 @@ export default function DashboardPage() {
                       label="Needs Attention"
                       action={
                         overdueTasks.length === 0 && overdueChecks.length === 0 && pendingReviewChecks === 0
-                          ? <CheckCircleOutlineIcon sx={{ fontSize: 14, color: "#22c55e" }} />
-                          : <WarningAmberIcon sx={{ fontSize: 14, color: "#f59e0b" }} />
+                          ? <CheckCircleOutlineIcon sx={{ fontSize: 14, color: ragToken("GREEN", mode).dot }} />
+                          : <WarningAmberIcon sx={{ fontSize: 14, color: ragToken("AMBER", mode).dot }} />
                       }
                     />
                   </Box>
@@ -488,23 +516,23 @@ export default function DashboardPage() {
                     <Typography variant="body2" color="text.secondary">Nothing needs attention right now.</Typography>
                   ) : null}
                   {overdueTasks.slice(0, 3).map(t => (
-                    <AttentionRow key={t.id} dot="#ef4444" label={t.title}
+                    <AttentionRow key={t.id} dot={ragToken("RED", mode).dot} label={t.title}
                       detail={`Task overdue · due ${new Date(t.dueAt!).toLocaleDateString("en-GB")}`}
                       onClick={() => navigate(`/tasks/${t.id}`)} />
                   ))}
                   {overdueTasks.length > 3 ? (
-                    <Typography sx={{ fontSize: 12, color: "#2563eb", cursor: "pointer", mt: "6px" }} onClick={() => navigate("/tasks")}>
+                    <Typography sx={{ fontSize: 12, color: categoryTone("sr", mode), cursor: "pointer", mt: "6px" }} onClick={() => navigate("/tasks")}>
                       +{overdueTasks.length - 3} more overdue tasks →
                     </Typography>
                   ) : null}
                   {pendingReviewChecks > 0 ? (
-                    <AttentionRow dot="#f59e0b"
+                    <AttentionRow dot={ragToken("AMBER", mode).dot}
                       label={`${pendingReviewChecks} check${pendingReviewChecks > 1 ? "s" : ""} pending review`}
                       detail="Awaiting review approval"
                       onClick={() => navigate("/checks")} />
                   ) : null}
                   {overdueChecks.slice(0, 2).map(c => (
-                    <AttentionRow key={c.id} dot="#f59e0b" label={c.title}
+                    <AttentionRow key={c.id} dot={ragToken("AMBER", mode).dot} label={c.title}
                       detail={`Check overdue · ${c.site?.name ?? ""}`}
                       onClick={() => navigate(`/checks/${c.id}`)} />
                   ))}

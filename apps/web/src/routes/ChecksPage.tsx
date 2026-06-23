@@ -13,11 +13,12 @@ import EditNoteIcon from "@mui/icons-material/EditNote"
 import HistoryIcon from "@mui/icons-material/History"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
-import { semanticTokens } from "../components/shared"
+import { semanticToken } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { PAGE_GUTTER } from "../lib/layout"
+import { useThemeMode } from "../lib/theme"
 import { useBreadcrumb } from "./Shell"
 import {
   CheckCard,
@@ -35,6 +36,7 @@ export default function ChecksPage() {
   const qc = useQueryClient()
   const { notify } = useNotification()
   const { setPageFullBleed } = useBreadcrumb()
+  const { mode } = useThemeMode()
 
   // Schedule-check gate == manager-tier, matching the controller's create role set
   // (ORG_SUPER + SERVICE_MANAGER + SERVICE_DESK_ANALYST) so the UI never offers an
@@ -122,7 +124,7 @@ export default function ChecksPage() {
           spacing={1.5}
         >
           <Typography
-            sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 20, fontWeight: 700, color: "#0f172a", flex: 1 }}
+            sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 20, fontWeight: 700, color: "text.primary", flex: 1 }}
           >
             Engineering checks
           </Typography>
@@ -160,7 +162,7 @@ export default function ChecksPage() {
               <QueueSection
                 title="Awaiting your review"
                 count={queues.review.length}
-                icon={<FactCheckIcon sx={{ fontSize: 18, color: semanticTokens.warning.text }} />}
+                icon={<FactCheckIcon sx={{ fontSize: 18, color: semanticToken("warning", mode).text }} />}
               >
                 {queues.review.map((c) => (
                   <CheckCard key={c.id} check={c} variant="review" onOpen={openCheck} />
@@ -171,7 +173,7 @@ export default function ChecksPage() {
             <QueueSection
               title={view === "engineer" ? "Your active work" : "In progress"}
               count={queues.progress.length}
-              icon={<PlayCircleOutlineIcon sx={{ fontSize: 18, color: semanticTokens.active.text }} />}
+              icon={<PlayCircleOutlineIcon sx={{ fontSize: 18, color: semanticToken("active", mode).text }} />}
             >
               {queues.progress.map((c) => (
                 <CheckCard key={c.id} check={c} variant="progress" onOpen={openCheck} />
@@ -181,7 +183,7 @@ export default function ChecksPage() {
             <QueueSection
               title="Upcoming"
               count={queues.upcoming.length}
-              icon={<EventIcon sx={{ fontSize: 18, color: semanticTokens.neutral.text }} />}
+              icon={<EventIcon sx={{ fontSize: 18, color: semanticToken("neutral", mode).text }} />}
             >
               {queues.upcoming.map((c) => (
                 <CheckCard key={c.id} check={c} variant="upcoming" onOpen={openCheck} />
@@ -192,7 +194,7 @@ export default function ChecksPage() {
               <QueueSection
                 title="Drafts"
                 count={queues.drafts.length}
-                icon={<EditNoteIcon sx={{ fontSize: 18, color: semanticTokens.neutral.text }} />}
+                icon={<EditNoteIcon sx={{ fontSize: 18, color: semanticToken("neutral", mode).text }} />}
               >
                 {queues.drafts.map((c) => (
                   <CheckCard key={c.id} check={c} variant="draft" onOpen={openCheck} />

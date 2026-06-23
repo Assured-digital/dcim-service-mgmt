@@ -27,9 +27,10 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import { statusColors, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
+import { statusColors, priorityToken, accentToken, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask, type ThemeMode } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
+import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -130,75 +131,54 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   CLOSED: <LockIcon sx={{ fontSize: 14 }} />,
 }
 
-const INCIDENT_STATUS_CONFIG: StatusConfig = {
-  options: ["NEW", "INVESTIGATING", "MITIGATED", "RESOLVED", "CLOSED"].map<StatusOption>((value) => ({
-    value,
-    label: STATUS_LABELS[value],
-    badgeClass: `b-${value.toLowerCase()}`,
-    bg: statusColors(value).bg,
-    iconColor: statusColors(value).text,
-    icon: STATUS_ICONS[value],
-    buttonIcon: STATUS_ICONS[value],
-  })),
+// Built per-render with the active mode (statusColors light branch is unchanged).
+function buildIncidentStatusConfig(mode: ThemeMode): StatusConfig {
+  return {
+    options: ["NEW", "INVESTIGATING", "MITIGATED", "RESOLVED", "CLOSED"].map<StatusOption>((value) => ({
+      value,
+      label: STATUS_LABELS[value],
+      badgeClass: `b-${value.toLowerCase()}`,
+      bg: statusColors(value, mode).bg,
+      iconColor: statusColors(value, mode).text,
+      icon: STATUS_ICONS[value],
+      buttonIcon: STATUS_ICONS[value],
+    })),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Severity / Priority popover options
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SEVERITY_COLOURS: Record<string, { bg: string; text: string }> = {
-  LOW: { bg: "#dcfce7", text: "#15803d" },
-  MEDIUM: { bg: "#fef3c7", text: "#b45309" },
-  HIGH: { bg: "#ffedd5", text: "#c2410c" },
-  CRITICAL: { bg: "#fee2e2", text: "#b91c1c" },
+// Severity + priority share the 4-step priorityToken ramp; its light values equal
+// the prior SEVERITY_COLOURS / PRIORITY_COLOURS exactly, and it adds the dark ramp.
+function buildSeverityOptions(mode: ThemeMode): PopoverOption[] {
+  return ["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((value) => {
+    const tok = priorityToken(value, mode)
+    return {
+      value,
+      label: value.charAt(0) + value.slice(1).toLowerCase(),
+      iconBg: tok.bg,
+      iconColor: tok.text,
+      icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
+    }
+  })
 }
-
-const SEVERITY_OPTIONS: PopoverOption[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((value) => ({
-  value,
-  label: value.charAt(0) + value.slice(1).toLowerCase(),
-  iconBg: SEVERITY_COLOURS[value].bg,
-  iconColor: SEVERITY_COLOURS[value].text,
-  icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
-}))
 
 const PRIORITY_VALUES = ["low", "medium", "high", "critical"]
 
-const PRIORITY_COLOURS: Record<string, { bg: string; text: string }> = {
-  low: { bg: "#dcfce7", text: "#15803d" },
-  medium: { bg: "#fef3c7", text: "#b45309" },
-  high: { bg: "#ffedd5", text: "#c2410c" },
-  critical: { bg: "#fee2e2", text: "#b91c1c" },
+function buildPriorityOptions(mode: ThemeMode): PopoverOption[] {
+  return PRIORITY_VALUES.map((value) => {
+    const tok = priorityToken(value, mode)
+    return {
+      value,
+      label: value.charAt(0).toUpperCase() + value.slice(1),
+      iconBg: tok.bg,
+      iconColor: tok.text,
+      icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
+    }
+  })
 }
-
-const PRIORITY_OPTIONS: PopoverOption[] = PRIORITY_VALUES.map((value) => ({
-  value,
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-  iconBg: PRIORITY_COLOURS[value].bg,
-  iconColor: PRIORITY_COLOURS[value].text,
-  icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
-}))
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Type badge — spec section 3.3
-// ─────────────────────────────────────────────────────────────────────────────
-
-const INCIDENT_TYPE_BADGE = (
-  <Box
-    component="span"
-    sx={{
-      fontSize: 10,
-      fontWeight: 500,
-      bgcolor: "#fcebeb",
-      color: "#a32d2d",
-      px: 1,
-      py: 0.25,
-      borderRadius: 1,
-      letterSpacing: "0.04em",
-    }}
-  >
-    INC
-  </Box>
-)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -250,6 +230,7 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const { mode } = useThemeMode()
   const [visibleCount, setVisibleCount] = React.useState(10)
 
   const handleFilterChange = React.useCallback(
@@ -297,6 +278,7 @@ const ActivityContent = React.memo(function ActivityContent({
             key={event.id}
             event={event}
             isLast={idx === visibleEvents.length - 1}
+            mode={mode}
           />
         ))
       )}
@@ -332,6 +314,10 @@ export default function IncidentDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
+  const incidentStatusConfig = React.useMemo(() => buildIncidentStatusConfig(mode), [mode])
+  const severityOptions = React.useMemo(() => buildSeverityOptions(mode), [mode])
+  const priorityOptions = React.useMemo(() => buildPriorityOptions(mode), [mode])
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -600,24 +586,26 @@ export default function IncidentDetailPage() {
   }, [allFeedEvents, activeFilter])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const green = accentToken("green", mode)
+    const neutral = accentToken("neutral", mode)
     const list: PopoverOption[] = assignableUsers.map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: green.bg,
+      iconColor: green.text,
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
     }))
     return [
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: neutral.bg,
+        iconColor: neutral.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [assignableUsers])
+  }, [assignableUsers, mode])
 
   // ── Title commit handlers ──────────────────────────────────────────────────
 
@@ -694,7 +682,7 @@ export default function IncidentDetailPage() {
 
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!incident) return []
-    const severityColours = SEVERITY_COLOURS[incident.severity]
+    const severityColours = priorityToken(incident.severity, mode)
     const valueWrapperSx = {
       width: "100%",
       display: "flex",
@@ -719,7 +707,7 @@ export default function IncidentDetailPage() {
         label: "Severity",
         editable: true,
         currentValue: incident.severity,
-        popoverOptions: SEVERITY_OPTIONS,
+        popoverOptions: severityOptions,
         onSelect: handleSelectSeverity,
         value: (
           <Box sx={valueWrapperSx}>
@@ -742,7 +730,7 @@ export default function IncidentDetailPage() {
         label: "Priority",
         editable: true,
         currentValue: incident.priority,
-        popoverOptions: PRIORITY_OPTIONS,
+        popoverOptions: priorityOptions,
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
@@ -762,14 +750,17 @@ export default function IncidentDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            <AssigneeCell user={incident.assignee} />
+            <AssigneeCell user={incident.assignee} mode={mode} />
           </Box>
         ),
       },
     ]
   }, [
     incident,
+    mode,
     usersOptions,
+    severityOptions,
+    priorityOptions,
     handleSelectSeverity,
     handleSelectPriority,
     handleSelectAssignee,
@@ -813,11 +804,11 @@ export default function IncidentDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!incident) return undefined
     return {
-      submittedBy: <AssigneeCell user={incident.createdBy ?? null} emptyLabel="—" />,
+      submittedBy: <AssigneeCell user={incident.createdBy ?? null} emptyLabel="—" mode={mode} />,
       createdAt: incident.createdAt,
       updatedAt: incident.updatedAt,
     }
-  }, [incident])
+  }, [incident, mode])
 
   const rightSections = React.useMemo<RightSection[]>(() => {
     return [
@@ -832,6 +823,7 @@ export default function IncidentDetailPage() {
             tasks={linkedTasks ?? []}
             users={assignableUsers}
             canManage={canManage}
+            mode={mode}
             onCreate={handleOpenCreateTask}
             onSelectTask={handleSelectTask}
             onChangeTaskStatus={updateLinkedTaskStatus}
@@ -904,9 +896,9 @@ export default function IncidentDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={incident.reference}
-        typeBadge={INCIDENT_TYPE_BADGE}
+        typeBadge={null}
         currentStatus={incident.status}
-        statusConfig={INCIDENT_STATUS_CONFIG}
+        statusConfig={incidentStatusConfig}
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={

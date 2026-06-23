@@ -2,6 +2,7 @@ import * as React from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Box, Stack, Typography } from "@mui/material"
 import { statusSolid } from "../components/shared/tokens/colors"
+import { useThemeMode } from "../lib/theme"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { getCurrentUser } from "../lib/auth"
 import { useTickets, type Ticket, KIND_LABELS } from "../lib/tickets"
@@ -27,10 +28,13 @@ function formatCreated(iso: string): string {
 
 export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
   const [searchParams] = useSearchParams()
   const queueParams = React.useMemo(() => parseQueueParams(searchParams), [searchParams])
   const currentUser = React.useMemo(() => getCurrentUser(), [])
   const { data: tickets } = useTickets()
+  // Active-row wash — light branch = the prior literal exactly.
+  const activeRowBg = mode === "dark" ? "rgba(59,130,246,0.14)" : "#eff4ff"
 
   const items = React.useMemo(
     () => sortTickets(filterTickets(tickets, queueParams, currentUser), queueParams.sortModel),
@@ -57,16 +61,16 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
           px: 1.5, height: 44,   // match the detail header height so the separators align
           cursor: "pointer",
           borderBottom: 1, borderColor: "divider",
-          color: "#475569",
+          color: "text.secondary",
           transition: "background-color 0.12s",
-          "&:hover": { bgcolor: "#f1f5f9" },
+          "&:hover": { bgcolor: "var(--color-background-tertiary)" },
         }}
       >
         <ArrowBackIcon sx={{ fontSize: 16 }} />
         <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
           Queue
         </Typography>
-        <Typography sx={{ ml: "auto", fontSize: 11, color: "#94a3b8" }}>{items.length}</Typography>
+        <Typography sx={{ ml: "auto", fontSize: 11, color: "text.tertiary" }}>{items.length}</Typography>
       </Box>
 
       {/* Scrollable ticket list. */}
@@ -78,7 +82,7 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
           // pill colour is near-invisible between intents, so the rail's only
           // status signal uses statusSolid (resolveIntent → semanticTokens.solid).
           // NOT due-proximity.
-          const dotColor = statusSolid(t.status)
+          const dotColor = statusSolid(t.status, mode)
           return (
             <Box
               key={t.id}
@@ -91,11 +95,11 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                 display: "flex", alignItems: "flex-start", gap: 1,
                 px: 1.5, py: 1.5,
                 cursor: "pointer",
-                borderBottom: "1px solid #f1f5f9",
+                borderBottom: "1px solid var(--color-border-tertiary)",
                 borderLeft: "3px solid", borderLeftColor: active ? "primary.main" : "transparent",
-                bgcolor: active ? "#eff4ff" : "transparent",
+                bgcolor: active ? activeRowBg : "transparent",
                 transition: "background-color 0.12s",
-                "&:hover": { bgcolor: active ? "#eff4ff" : "#f8fafc" },
+                "&:hover": { bgcolor: active ? activeRowBg : "var(--color-background-secondary)" },
               }}
             >
               <Box
@@ -110,7 +114,7 @@ export function ServiceDeskQueueRail({ activeId }: { activeId?: string }) {
                   title={t.subject}
                   variant="body2"
                   sx={{
-                    color: active ? "primary.main" : "#0f172a",
+                    color: active ? "primary.main" : "text.primary",
                     fontWeight: active ? 600 : 500,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}

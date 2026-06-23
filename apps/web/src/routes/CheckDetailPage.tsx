@@ -5,7 +5,7 @@ import { api } from "../lib/api"
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, Divider, Drawer, IconButton, Menu, MenuItem, Stack,
-  Tab, Tabs, TextField, Tooltip, Typography
+  Tab, Tabs, TextField, Tooltip, Typography, useTheme
 } from "@mui/material"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import AddIcon from "@mui/icons-material/Add"
@@ -40,8 +40,10 @@ import { PhotoCaptureDialog } from "../components/checks/PhotoCaptureDialog"
 import { PhotoDetailDialog, type PhotoDetailTarget } from "../components/checks/PhotoDetailDialog"
 import { FlagNoteDialog } from "../components/checks/FlagNoteDialog"
 import {
-  Avatar, PropertiesPanel, StatusPill, ragTokens, radii, TAG_RADIUS, WorkflowStrip, type SemanticIntent
+  Avatar, PropertiesPanel, StatusPill, ragToken, semanticToken, slate, radii, TAG_RADIUS, WorkflowStrip,
+  type SemanticIntent, type ThemeMode
 } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { RightPanelSection, DetailNarrowProvider, DetailDrawerChromeProvider } from "../components/detail"
 import { DrillNavContext, type DrillFn } from "../lib/drillNav"
 import TaskDetailPage from "./TaskDetailPage"
@@ -223,15 +225,42 @@ function sectionIcon(name: string): SvgIconComponent {
   return RuleFolderIcon
 }
 
+// ── Mode-aware "wash" treatments (Path B) ────────────────────────────────────
+// These status WASHES have no entry in the token layer, so the light branch keeps
+// the EXACT existing hex — a deliberate, documented exception to the no-literals
+// rule, on a par with the dark-side rgba tints. The dark branch is a translucent
+// status tint that stays a clearly-readable "this passed / failed / needs attention"
+// wash on the dark surface. Centralised so each band resolves identically everywhere.
+function failWash(mode: ThemeMode) {
+  return mode === "dark"
+    ? { bg: "rgba(239,68,68,0.10)", border: "rgba(239,68,68,0.30)" }
+    : { bg: "#fff5f5", border: "#fecaca" }
+}
+function amberWash(mode: ThemeMode) {
+  return mode === "dark"
+    ? { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.30)", text: "#fbbf24", icon: "#fbbf24" }
+    : { bg: "#fffbeb", border: "#fde68a", text: "#92400e", icon: "#d97706" }
+}
+function successWash(mode: ThemeMode) {
+  return mode === "dark"
+    ? { bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.30)", text: "#4ade80" }
+    : { bg: "#f0fdf4", border: "#bbf7d0", text: "#15803d" }
+}
+// Flag/rework accent rail — amber. Brightened in dark (matching amberWash) so it
+// stays vivid on the dark surface rather than going muddy.
+function flagAccent(mode: ThemeMode): string {
+  return mode === "dark" ? "#fbbf24" : "#f59e0b"
+}
+
 // Shared stat tile — the single context-number unit across the journey (draft, self-review).
 // Secondary-bg surface, 0.5px border, radius-lg; 13px muted label over a 20px value. The
 // value may take a semantic accent colour (e.g. green Pass / red Fail) while the chrome stays
 // identical, so every tile reads as one design language.
 function StatTile({ label, value, accent }: { label: string; value: React.ReactNode; accent?: string }) {
   return (
-    <Box sx={{ bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", p: "12px 14px" }}>
-      <Typography sx={{ fontSize: 20, fontWeight: 700, color: accent ?? "#0f172a", lineHeight: 1.1 }}>{value}</Typography>
-      <Typography sx={{ fontSize: 13, color: "#64748b", mt: "4px", fontWeight: 500 }}>{label}</Typography>
+    <Box sx={{ bgcolor: "var(--color-background-secondary)", border: "1px solid", borderColor: "divider", borderRadius: "12px", p: "12px 14px" }}>
+      <Typography sx={{ fontSize: 20, fontWeight: 700, color: accent ?? "text.primary", lineHeight: 1.1 }}>{value}</Typography>
+      <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)", mt: "4px", fontWeight: 500 }}>{label}</Typography>
     </Box>
   )
 }
@@ -240,11 +269,14 @@ function StatTile({ label, value, accent }: { label: string; value: React.ReactN
 // Honest, minimal indicator: the engineer must trust that work captured offline is
 // saved on-device and will sync — the opposite of the old silent-loss trap.
 function SyncStatusPill({ status, pendingCount }: { status: CheckSyncStatus; pendingCount: number }) {
+  const { mode } = useThemeMode()
+  const savedColor = semanticToken("success", mode).solid
+  const warnColor = semanticToken("warning", mode).text
   if (status === "synced") {
     return (
       <Stack direction="row" alignItems="center" spacing={0.5}>
-        <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#15803d", boxShadow: "0 0 0 3px rgba(21,128,61,0.15)" }} />
-        <Typography sx={{ fontSize: 11.5, color: "#15803d" }}>All changes saved</Typography>
+        <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: savedColor, boxShadow: "0 0 0 3px rgba(21,128,61,0.15)" }} />
+        <Typography sx={{ fontSize: 11.5, color: savedColor }}>All changes saved</Typography>
       </Stack>
     )
   }
@@ -259,8 +291,8 @@ function SyncStatusPill({ status, pendingCount }: { status: CheckSyncStatus; pen
     return (
       <Tooltip title="Saved on this device — will sync automatically when you're back online">
         <Stack direction="row" alignItems="center" spacing={0.6}>
-          <CloudOffIcon sx={{ fontSize: 14, color: "#b45309" }} />
-          <Typography sx={{ fontSize: 11.5, color: "#b45309", fontWeight: 500 }}>
+          <CloudOffIcon sx={{ fontSize: 14, color: warnColor }} />
+          <Typography sx={{ fontSize: 11.5, color: warnColor, fontWeight: 500 }}>
             Offline — {pendingCount} saved on this device
           </Typography>
         </Stack>
@@ -270,8 +302,8 @@ function SyncStatusPill({ status, pendingCount }: { status: CheckSyncStatus; pen
   // pending: online but not yet confirmed (server error / mid-retry)
   return (
     <Stack direction="row" alignItems="center" spacing={0.6}>
-      <ScheduleIcon sx={{ fontSize: 13, color: "#b45309" }} />
-      <Typography sx={{ fontSize: 11.5, color: "#b45309" }}>{pendingCount} not yet synced…</Typography>
+      <ScheduleIcon sx={{ fontSize: 13, color: warnColor }} />
+      <Typography sx={{ fontSize: 11.5, color: warnColor }}>{pendingCount} not yet synced…</Typography>
     </Stack>
   )
 }
@@ -289,6 +321,7 @@ function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
   const [impact, setImpact] = React.useState("MEDIUM")
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState("")
+  const { mode } = useThemeMode()
 
   React.useEffect(() => {
     if (open) { setTitle(item.label); setDescription(""); setType("Task"); setError("") }
@@ -319,15 +352,15 @@ function FollowOnModal({ open, onClose, checkId, item, onSuccess }: {
           {/* Source-item banner — red "Failed: …" for the engineer's failed-item flow; neutral
               for any other response (a reviewer can raise a follow-on from a pass/N-A too). */}
           {item.response === "FAIL" ? (
-            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fff5f5", border: "1px solid #fecaca" }}>
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: failWash(mode).bg, border: "1px solid", borderColor: failWash(mode).border }}>
               <Stack direction="row" spacing={0.75} alignItems="center">
-                <WarningAmberIcon sx={{ fontSize: 14, color: "#b91c1c" }} />
-                <Typography variant="caption" color="#b91c1c" fontWeight={600}>Failed: {item.label}</Typography>
+                <WarningAmberIcon sx={{ fontSize: 14, color: semanticToken("danger", mode).solid }} />
+                <Typography variant="caption" color={semanticToken("danger", mode).solid} fontWeight={600}>Failed: {item.label}</Typography>
               </Stack>
             </Box>
           ) : (
-            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <Typography variant="caption" sx={{ color: "#475569", fontWeight: 600 }}>From: {item.label}</Typography>
+            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "var(--color-background-secondary)", border: "1px solid", borderColor: "divider" }}>
+              <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>From: {item.label}</Typography>
             </Box>
           )}
           <Stack direction="row" spacing={1}>
@@ -382,6 +415,8 @@ export default function CheckDetailPage() {
   const qc = useQueryClient()
   const { notify } = useNotification()
   const { setRecordLabel, setPageFullBleed } = useBreadcrumb()
+  const { mode } = useThemeMode()
+  const theme = useTheme()
 
   // Origin-aware back: a check opened from the history archive carries from:"history" in
   // router state, so Back returns to that archive view (navigate(-1) -> the history page at
@@ -1033,7 +1068,7 @@ export default function CheckDetailPage() {
   const historyButton = (
     <Tooltip title="History">
       <IconButton size="small" onClick={openHistory}
-        sx={{ color: "#64748b", flexShrink: 0, "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+        sx={{ color: "var(--color-text-muted)", flexShrink: 0, "&:hover": { color: "primary.main", bgcolor: "transparent" } }}>
         <HistoryIcon sx={{ fontSize: 20 }} />
       </IconButton>
     </Tooltip>
@@ -1063,7 +1098,7 @@ export default function CheckDetailPage() {
     >
       {drawerOpen && (
         <>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: "1px solid #e2e8f0", flexShrink: 0, minHeight: 48 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0, minHeight: 48 }}>
             <IconButton aria-label="Close" size="small" onClick={closeDrawer}>
               <CloseIcon fontSize="small" />
             </IconButton>
@@ -1094,8 +1129,8 @@ export default function CheckDetailPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             {reviewAction === "return" ? (
-              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fef3c7", border: "1px solid #fde68a" }}>
-                <Typography variant="caption" color="#92400e">
+              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: semanticToken("warning", mode).bg, border: "1px solid", borderColor: amberWash(mode).border }}>
+                <Typography variant="caption" color={amberWash(mode).text}>
                   The check will be returned to the engineer for corrections
                   {flaggedCount > 0 ? `, with ${flaggedCount} flagged item${flaggedCount === 1 ? "" : "s"} marked for rework` : ""}.
                 </Typography>
@@ -1104,8 +1139,8 @@ export default function CheckDetailPage() {
             {/* Approve-with-flags: warn (the flagged items won't be addressed) but don't block —
                 a reviewer may sign off with minor notes recorded for history. */}
             {reviewAction === "approve" && flaggedCount > 0 ? (
-              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fffbeb", border: "1px solid #fde68a" }}>
-                <Typography variant="caption" color="#92400e">
+              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: amberWash(mode).bg, border: "1px solid", borderColor: amberWash(mode).border }}>
+                <Typography variant="caption" color={amberWash(mode).text}>
                   {flaggedCount} item{flaggedCount === 1 ? " is" : "s are"} flagged for rework. Approving signs
                   off the check anyway — the flag{flaggedCount === 1 ? "" : "s"} stay on the record but won't be
                   sent back. Use Return for rework to send {flaggedCount === 1 ? "it" : "them"} to the engineer.
@@ -1232,9 +1267,11 @@ export default function CheckDetailPage() {
     const isPass = response === "PASS"
     const isNA = response === "NA"
     const isUnansweredRequired = item.isRequired && !response
-    const accent = item.reworkFlagged ? "#f59e0b"
-      : isUnansweredRequired ? "#f59e0b"
-      : isPass ? "#15803d" : isFail ? "#b91c1c" : isNA ? "#94a3b8" : "#e2e8f0"
+    const accent = item.reworkFlagged ? flagAccent(mode)
+      : isUnansweredRequired ? flagAccent(mode)
+      : isPass ? semanticToken("success", mode).solid
+        : isFail ? semanticToken("danger", mode).solid
+          : isNA ? theme.palette.text.tertiary : theme.palette.divider
     const composerOpen = openComposer === item.id
     const ev = evidenceDrafts[item.id]
     const stagedPhotos = ev?.photos ?? []
@@ -1253,9 +1290,9 @@ export default function CheckDetailPage() {
           flex: { xs: 1, md: "0 1 auto" }, minWidth: { xs: 0, md: 78 },
           fontSize: { xs: 14, md: 12 }, fontWeight: 600, borderRadius: "6px",
           border: "1.5px solid", py: { xs: "11px", md: "7px" },
-          borderColor: on ? onCol : "#e2e8f0", bgcolor: on ? onBg : "#ffffff", color: on ? onText : "#64748b",
-          "&.Mui-disabled": { color: on ? onText : "#cbd5e1", borderColor: on ? onCol : "#eef2f6" },
-          "&:hover": { bgcolor: on ? onBg : "#f8fafc", borderColor: onCol, color: onText },
+          borderColor: on ? onCol : "divider", bgcolor: on ? onBg : "background.paper", color: on ? onText : "var(--color-text-muted)",
+          "&.Mui-disabled": { color: on ? onText : (mode === "dark" ? slate[600] : slate[300]), borderColor: on ? onCol : "#eef2f6" },
+          "&:hover": { bgcolor: on ? onBg : "var(--color-background-secondary)", borderColor: onCol, color: onText },
         }}>
         {label}
       </Button>
@@ -1267,9 +1304,9 @@ export default function CheckDetailPage() {
       <Box key={opts.key} onClick={opts.onClick}
         sx={{
           position: "relative", width: 52, height: 52, borderRadius: `${radii.md}px`, overflow: "hidden",
-          border: opts.dashed ? "1px dashed #cbd5e1" : "1px solid #e2e8f0", bgcolor: "#f8fafc", flexShrink: 0,
+          border: opts.dashed ? `1px dashed ${mode === "dark" ? slate[600] : slate[300]}` : `1px solid ${theme.palette.divider}`, bgcolor: "var(--color-background-secondary)", flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-          transition: "border-color 0.1s", "&:hover": { borderColor: "#94a3b8" },
+          transition: "border-color 0.1s", "&:hover": { borderColor: "text.tertiary" },
         }}>
         {opts.img
           ? <img src={opts.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
@@ -1282,30 +1319,30 @@ export default function CheckDetailPage() {
       <Box key={item.id}
         ref={(el: HTMLDivElement | null) => { itemRefs.current[item.id] = el }}
         sx={{
-          bgcolor: "#ffffff", border: "1px solid #e2e8f0",
-          borderLeft: (response || isUnansweredRequired) ? `3px solid ${accent}` : "1px solid #e2e8f0",
+          bgcolor: "background.paper", border: `1px solid ${theme.palette.divider}`,
+          borderLeft: (response || isUnansweredRequired) ? `3px solid ${accent}` : `1px solid ${theme.palette.divider}`,
           borderRadius: "8px", p: "14px 16px", mb: "8px", transition: "border-color 0.15s",
         }}>
         <Stack direction="row" spacing={1.5} alignItems="flex-start">
-          <Typography sx={{ fontSize: 11, fontWeight: 500, color: "#94a3b8", mt: "3px", flexShrink: 0, minWidth: 22, fontFamily: "monospace" }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 500, color: "text.tertiary", mt: "3px", flexShrink: 0, minWidth: 22, fontFamily: "monospace" }}>
             {num}
           </Typography>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {/* Label + badges (squared-off TAG_RADIUS, not fully-rounded pills) */}
             <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ mb: "6px", flexWrap: "wrap" }}>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: "#0f172a", flex: 1, lineHeight: 1.4 }}>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: "text.primary", flex: 1, lineHeight: 1.4 }}>
                 {item.label}
               </Typography>
-              {item.isRequired ? <Chip size="small" label="Required" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: "#fef3c7", color: "#92400e" }} /> : null}
-              {item.isCritical ? <Chip size="small" label="Critical" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: "#fee2e2", color: "#b91c1c" }} /> : null}
+              {item.isRequired ? <Chip size="small" label="Required" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: semanticToken("warning", mode).bg, color: amberWash(mode).text }} /> : null}
+              {item.isCritical ? <Chip size="small" label="Critical" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: semanticToken("danger", mode).bg, color: semanticToken("danger", mode).solid }} /> : null}
               {item.isAdHoc ? <Chip size="small" label="Ad hoc" sx={{ height: 18, fontSize: 10, borderRadius: `${TAG_RADIUS}px`, bgcolor: "#f0f9ff", color: "#0369a1" }} /> : null}
             </Stack>
             {/* Reviewer flag-for-rework — surfaced to the engineer while they rework (the other
                 half of the flag flow). Amber, with the reviewer's note so they know exactly why. */}
             {item.reworkFlagged ? (
-              <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mb: "8px", px: "10px", py: "7px", bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "6px" }}>
-                <OutlinedFlagIcon sx={{ fontSize: 15, color: "#d97706", mt: "1px", flexShrink: 0 }} />
-                <Typography sx={{ fontSize: 12, color: "#92400e", lineHeight: 1.45 }}>
+              <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mb: "8px", px: "10px", py: "7px", bgcolor: amberWash(mode).bg, border: "1px solid", borderColor: amberWash(mode).border, borderRadius: "6px" }}>
+                <OutlinedFlagIcon sx={{ fontSize: 15, color: amberWash(mode).icon, mt: "1px", flexShrink: 0 }} />
+                <Typography sx={{ fontSize: 12, color: amberWash(mode).text, lineHeight: 1.45 }}>
                   <Box component="span" sx={{ fontWeight: 700 }}>Reviewer flagged</Box>
                   {item.reworkNote ? ` · ${item.reworkNote}` : ""}
                 </Typography>
@@ -1313,31 +1350,31 @@ export default function CheckDetailPage() {
             ) : null}
 
             {item.guidance ? (
-              <Typography sx={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, mb: "10px" }}>{item.guidance}</Typography>
+              <Typography sx={{ fontSize: 12, color: "var(--color-text-muted)", lineHeight: 1.5, mb: "10px" }}>{item.guidance}</Typography>
             ) : null}
 
             {/* Response — ALWAYS visible; the filled button is the answer state, so re-answering
                 is one tap and an answer never "vanishes" on selection */}
             <Stack direction="row" spacing={0.75}>
-              {respBtn("PASS", "✓ Pass", isPass, "#15803d", "#dcfce7", "#15803d")}
-              {respBtn("FAIL", "✕ Fail", isFail, "#b91c1c", "#fee2e2", "#b91c1c")}
-              {item.responseType !== "PASS_FAIL" ? respBtn("NA", "N/A", isNA, "#64748b", "#f1f5f9", "#475569") : null}
+              {respBtn("PASS", "✓ Pass", isPass, semanticToken("success", mode).solid, semanticToken("success", mode).bg, semanticToken("success", mode).solid)}
+              {respBtn("FAIL", "✕ Fail", isFail, semanticToken("danger", mode).solid, semanticToken("danger", mode).bg, semanticToken("danger", mode).solid)}
+              {item.responseType !== "PASS_FAIL" ? respBtn("NA", "N/A", isNA, "var(--color-text-muted)", "var(--color-background-tertiary)", "text.secondary") : null}
             </Stack>
 
             {/* Evidence composer (Save/Discard) when open; else the compact answered row. */}
             {composerOpen ? (
-              <Box sx={{ borderTop: "1px dashed #e2e8f0", pt: "12px", mt: "12px" }}>
+              <Box sx={{ borderTop: `1px dashed ${theme.palette.divider}`, pt: "12px", mt: "12px" }}>
                 {/* Fail framing — evidence is expected, not optional (a nudge, not a hard block) */}
                 {needsEvidence ? (
-                  <Box sx={{ mb: "10px", px: "10px", py: "7px", bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "6px" }}>
-                    <Typography sx={{ fontSize: 11.5, color: "#92400e" }}>A note and photo are expected for failed items.</Typography>
+                  <Box sx={{ mb: "10px", px: "10px", py: "7px", bgcolor: amberWash(mode).bg, border: "1px solid", borderColor: amberWash(mode).border, borderRadius: "6px" }}>
+                    <Typography sx={{ fontSize: 11.5, color: amberWash(mode).text }}>A note and photo are expected for failed items.</Typography>
                   </Box>
                 ) : null}
 
                 {/* Note draft (comment-box styling) — local until Save */}
                 <Box sx={{ mb: "10px" }}>
                   <Box sx={{
-                    borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "#fff",
+                    borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "background.paper",
                     px: 1.25, py: 0.5, transition: "border-color 120ms ease",
                     "&:focus-within": { borderColor: "primary.main" },
                   }}>
@@ -1366,9 +1403,9 @@ export default function CheckDetailPage() {
                     key: att.id,
                     onClick: () => setPhotoDetail({ source: "uploaded", attachment: att }),
                     icon: isImageType(att.contentType)
-                      ? <ImageIcon sx={{ fontSize: 22, color: "#64748b" }} />
-                      : <DescriptionIcon sx={{ fontSize: 22, color: "#64748b" }} />,
-                    badge: <CheckCircleIcon sx={{ position: "absolute", bottom: 1, right: 1, fontSize: 15, color: "#15803d", bgcolor: "#fff", borderRadius: "50%" }} />,
+                      ? <ImageIcon sx={{ fontSize: 22, color: "var(--color-text-muted)" }} />
+                      : <DescriptionIcon sx={{ fontSize: 22, color: "var(--color-text-muted)" }} />,
+                    badge: <CheckCircleIcon sx={{ position: "absolute", bottom: 1, right: 1, fontSize: 15, color: semanticToken("success", mode).solid, bgcolor: "background.paper", borderRadius: "50%" }} />,
                   }))}
 
                   {/* Queued (offline) captures — pending upload */}
@@ -1377,7 +1414,7 @@ export default function CheckDetailPage() {
                     onClick: () => setPhotoDetail({ source: "pending", seq: p.seq, url: p.url, filename: p.filename, caption: p.caption ?? "" }),
                     img: p.url, dashed: true,
                     badge: (
-                      <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "3px", py: "1px", display: "flex", alignItems: "center" }}>
+                      <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "common.white", px: "3px", py: "1px", display: "flex", alignItems: "center" }}>
                         <ScheduleIcon sx={{ fontSize: 11 }} />
                       </Box>
                     ),
@@ -1395,9 +1432,9 @@ export default function CheckDetailPage() {
                   {canExecute ? (
                     <Box onClick={() => photoInputRefs.current[item.id]?.click()} sx={{
                       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "2px",
-                      width: 52, height: 52, borderRadius: `${radii.md}px`, border: "1px dashed #cbd5e1", color: "#64748b",
+                      width: 52, height: 52, borderRadius: `${radii.md}px`, border: `1px dashed ${mode === "dark" ? slate[600] : slate[300]}`, color: "var(--color-text-muted)",
                       cursor: "pointer", flexShrink: 0, transition: "all 0.1s",
-                      "&:hover": { borderColor: "#94a3b8", color: "#0f172a", bgcolor: "#f8fafc" },
+                      "&:hover": { borderColor: "text.tertiary", color: "text.primary", bgcolor: "var(--color-background-secondary)" },
                     }}>
                       <CameraAltIcon sx={{ fontSize: 18 }} />
                       <Typography sx={{ fontSize: 9, fontWeight: 500, lineHeight: 1 }}>{photoCount > 0 ? "More" : "Add"}</Typography>
@@ -1409,7 +1446,7 @@ export default function CheckDetailPage() {
                     Discard backs out (and reverts); Save flushes note + staged photos through P4a. */}
                 {canExecute ? (
                   <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: "12px" }}>
-                    <Button size="small" onClick={() => discardDraft(item.id)} sx={{ fontSize: 12, color: "#64748b" }}>
+                    <Button size="small" onClick={() => discardDraft(item.id)} sx={{ fontSize: 12, color: "var(--color-text-muted)" }}>
                       Discard
                     </Button>
                     <Button size="small" variant="contained" disableElevation disabled={!dirty} onClick={() => void saveEvidence(item)}
@@ -1426,7 +1463,7 @@ export default function CheckDetailPage() {
                  ever renders BETWEEN two present fragments, so there is no orphan leading "·". */
               <Box sx={{ mt: "10px" }}>
                 {needsEvidence ? (
-                  <Typography sx={{ fontSize: 11.5, color: "#b45309", fontWeight: 500, mb: "8px" }}>Note &amp; photo expected</Typography>
+                  <Typography sx={{ fontSize: 11.5, color: semanticToken("warning", mode).text, fontWeight: 500, mb: "8px" }}>Note &amp; photo expected</Typography>
                 ) : null}
                 {uploaded.length > 0 || pending.length > 0 ? (
                   <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", mb: "8px" }}>
@@ -1434,16 +1471,16 @@ export default function CheckDetailPage() {
                       key: att.id,
                       onClick: () => openPhotoView({ source: "uploaded", attachment: att }),
                       icon: isImageType(att.contentType)
-                        ? <ImageIcon sx={{ fontSize: 22, color: "#64748b" }} />
-                        : <DescriptionIcon sx={{ fontSize: 22, color: "#64748b" }} />,
-                      badge: <CheckCircleIcon sx={{ position: "absolute", bottom: 1, right: 1, fontSize: 15, color: "#15803d", bgcolor: "#fff", borderRadius: "50%" }} />,
+                        ? <ImageIcon sx={{ fontSize: 22, color: "var(--color-text-muted)" }} />
+                        : <DescriptionIcon sx={{ fontSize: 22, color: "var(--color-text-muted)" }} />,
+                      badge: <CheckCircleIcon sx={{ position: "absolute", bottom: 1, right: 1, fontSize: 15, color: semanticToken("success", mode).solid, bgcolor: "background.paper", borderRadius: "50%" }} />,
                     }))}
                     {pending.map(p => photoThumb({
                       key: `p-${p.seq}`,
                       onClick: () => openPhotoView({ source: "pending", seq: p.seq, url: p.url, filename: p.filename, caption: p.caption ?? "" }),
                       img: p.url, dashed: true,
                       badge: (
-                        <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "#fff", px: "3px", py: "1px", display: "flex", alignItems: "center" }}>
+                        <Box sx={{ position: "absolute", bottom: 0, right: 0, bgcolor: "rgba(15,23,42,0.65)", color: "common.white", px: "3px", py: "1px", display: "flex", alignItems: "center" }}>
                           <ScheduleIcon sx={{ fontSize: 11 }} />
                         </Box>
                       ),
@@ -1455,8 +1492,8 @@ export default function CheckDetailPage() {
                   const frags: React.ReactNode[] = []
                   if (hasNote) frags.push(
                     <Stack key="note" direction="row" alignItems="center" spacing={0.4}>
-                      <NotesIcon sx={{ fontSize: 15, color: "#94a3b8" }} />
-                      <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>Note</Typography>
+                      <NotesIcon sx={{ fontSize: 15, color: "text.tertiary" }} />
+                      <Typography sx={{ fontSize: 11.5, color: "text.tertiary" }}>Note</Typography>
                     </Stack>
                   )
                   if (item.followOns.length > 0) frags.push(
@@ -1465,7 +1502,7 @@ export default function CheckDetailPage() {
                   )
                   if (canExecute) frags.push(
                     <Button key="edit" size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />} onClick={() => requestOpenComposer(item)}
-                      sx={{ fontSize: 11.5, color: needsEvidence ? "#b45309" : "#64748b", minWidth: 0 }}>
+                      sx={{ fontSize: 11.5, color: needsEvidence ? semanticToken("warning", mode).text : "var(--color-text-muted)", minWidth: 0 }}>
                       {hasNote || photoCount > 0 ? "Edit evidence" : "Add note or photo"}
                     </Button>
                   )
@@ -1474,7 +1511,7 @@ export default function CheckDetailPage() {
                     <Stack direction="row" alignItems="center" sx={{ flexWrap: "wrap", rowGap: "4px" }}>
                       {frags.map((node, i) => (
                         <React.Fragment key={i}>
-                          {i > 0 ? <Box component="span" sx={{ mx: "8px", color: "#cbd5e1", fontSize: 12 }}>·</Box> : null}
+                          {i > 0 ? <Box component="span" sx={{ mx: "8px", color: mode === "dark" ? slate[600] : slate[300], fontSize: 12 }}>·</Box> : null}
                           {node}
                         </React.Fragment>
                       ))}
@@ -1486,19 +1523,19 @@ export default function CheckDetailPage() {
 
             {/* Follow-on prompt for failed items */}
             {isFail && canExecute ? (
-              <Box sx={{ mt: "12px", p: "10px 12px", bgcolor: "#fef9e7", border: "1px solid #fcd34d", borderRadius: "6px" }}>
+              <Box sx={{ mt: "12px", p: "10px 12px", bgcolor: mode === "dark" ? amberWash(mode).bg : "#fef9e7", border: "1px solid", borderColor: mode === "dark" ? amberWash(mode).border : "#fcd34d", borderRadius: "6px" }}>
                 {item.followOns.length > 0 ? (
                   <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
                     {item.followOns.map(fo => (
                       <Chip key={fo.id} size="small" label={followOnLabel(fo)} sx={{ bgcolor: "#e0f2fe", color: "#0369a1", fontSize: 10, borderRadius: `${TAG_RADIUS}px`, maxWidth: "100%" }} />
                     ))}
-                    <Button size="small" onClick={() => setFollowOnItem(item)} sx={{ fontSize: 11, color: "#92400e", ml: "auto" }}>Add another</Button>
+                    <Button size="small" onClick={() => setFollowOnItem(item)} sx={{ fontSize: 11, color: amberWash(mode).text, ml: "auto" }}>Add another</Button>
                   </Stack>
                 ) : (
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography sx={{ fontSize: 12, color: "#92400e" }}>⚠ This item failed — create a follow-on action?</Typography>
+                    <Typography sx={{ fontSize: 12, color: amberWash(mode).text }}>⚠ This item failed — create a follow-on action?</Typography>
                     <Button size="small" onClick={() => setFollowOnItem(item)}
-                      sx={{ fontSize: 11, bgcolor: "#f59e0b", color: "#fff", px: "10px", py: "4px", borderRadius: "4px", "&:hover": { bgcolor: "#d97706" } }}>
+                      sx={{ fontSize: 11, bgcolor: flagAccent(mode), color: "common.white", px: "10px", py: "4px", borderRadius: "4px", "&:hover": { bgcolor: mode === "dark" ? "#f59e0b" : "#d97706" } }}>
                       Create
                     </Button>
                   </Stack>
@@ -1539,10 +1576,10 @@ export default function CheckDetailPage() {
       ? null
       : (passItems + failItems) === 0 ? 100 : Math.round((passItems / (passItems + failItems)) * 100)
     const statTiles: { label: string; value: React.ReactNode; accent?: string }[] = [
-      { label: "Pass", value: passItems, accent: "#15803d" },
-      { label: "Fail", value: failItems, accent: "#b91c1c" },
-      { label: "N/A", value: naItems, accent: "#475569" },
-      { label: "Pass rate", value: livePassRate === null ? "—" : `${livePassRate}%`, accent: livePassRate === null ? "#94a3b8" : "#1d4ed8" },
+      { label: "Pass", value: passItems, accent: semanticToken("success", mode).solid },
+      { label: "Fail", value: failItems, accent: semanticToken("danger", mode).solid },
+      { label: "N/A", value: naItems, accent: "text.secondary" },
+      { label: "Pass rate", value: livePassRate === null ? "—" : `${livePassRate}%`, accent: livePassRate === null ? "text.tertiary" : "primary.main" },
     ]
     // Self-review "Needs attention" set — the actionable items, fixed IN-PLACE on the review
     // screen (no jump-back). Reviewer-flagged-for-rework (the engineer must address what was
@@ -1580,14 +1617,14 @@ export default function CheckDetailPage() {
         <Box sx={{ bgcolor: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-primary)", px: { xs: "16px", md: "28px" }, pt: "14px", pb: "12px", flexShrink: 0 }}>
           <Stack direction="row" alignItems="flex-start" spacing={2}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ fontSize: { xs: 17, md: 20 }, fontWeight: 500, color: "#0f172a", lineHeight: 1.3 }}>
+              <Typography sx={{ fontSize: { xs: 17, md: 20 }, fontWeight: 500, color: "text.primary", lineHeight: 1.3 }}>
                 {check.title}
               </Typography>
-              <Typography sx={{ fontSize: 13, color: "#64748b", mt: "3px" }}>
+              <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)", mt: "3px" }}>
                 {check.site.name} · {userLabel(check.assignee)}
               </Typography>
               {check.scopeNotes ? (
-                <Typography sx={{ fontSize: 12.5, color: "#94a3b8", mt: "2px" }}>{check.scopeNotes}</Typography>
+                <Typography sx={{ fontSize: 12.5, color: "text.tertiary", mt: "2px" }}>{check.scopeNotes}</Typography>
               ) : null}
             </Box>
             {/* Status indicator cluster + primary action (md+) */}
@@ -1618,32 +1655,32 @@ export default function CheckDetailPage() {
           {/* Progress bar */}
           {totalItems > 0 ? (
             <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: "12px" }}>
-              <Box sx={{ flex: 1, height: 7, bgcolor: "#f1f5f9", borderRadius: "4px", overflow: "hidden", display: "flex" }}>
-                <Box sx={{ width: `${passPercent}%`, bgcolor: "#15803d", height: "100%", transition: "width 0.3s" }} />
-                <Box sx={{ width: `${failPercent}%`, bgcolor: "#b91c1c", height: "100%", transition: "width 0.3s" }} />
-                <Box sx={{ width: `${naPercent}%`, bgcolor: "#94a3b8", height: "100%", transition: "width 0.3s" }} />
+              <Box sx={{ flex: 1, height: 7, bgcolor: "var(--color-background-tertiary)", borderRadius: "4px", overflow: "hidden", display: "flex" }}>
+                <Box sx={{ width: `${passPercent}%`, bgcolor: semanticToken("success", mode).solid, height: "100%", transition: "width 0.3s" }} />
+                <Box sx={{ width: `${failPercent}%`, bgcolor: semanticToken("danger", mode).solid, height: "100%", transition: "width 0.3s" }} />
+                <Box sx={{ width: `${naPercent}%`, bgcolor: "text.tertiary", height: "100%", transition: "width 0.3s" }} />
               </Box>
               <Stack direction="row" spacing={2} sx={{ flexShrink: 0, display: { xs: "none", sm: "flex" } }}>
                 {[
-                  { dot: "#15803d", label: "Pass", value: passItems },
-                  { dot: "#b91c1c", label: "Fail", value: failItems },
-                  { dot: "#94a3b8", label: "N/A", value: naItems },
-                  { dot: "#cbd5e1", label: "Pending", value: pendingItems }
+                  { dot: semanticToken("success", mode).solid, label: "Pass", value: passItems },
+                  { dot: semanticToken("danger", mode).solid, label: "Fail", value: failItems },
+                  { dot: theme.palette.text.tertiary, label: "N/A", value: naItems },
+                  { dot: mode === "dark" ? slate[600] : slate[300], label: "Pending", value: pendingItems }
                 ].filter(r => r.value > 0 || r.label === "Pending").map(r => (
                   <Stack key={r.label} direction="row" alignItems="center" spacing={0.5}>
-                    <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: r.dot, border: r.label === "Pending" ? "1px solid #94a3b8" : undefined }} />
-                    <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>
-                      <strong style={{ color: "#0f172a" }}>{r.value}</strong> {r.label}
+                    <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: r.dot, border: r.label === "Pending" ? `1px solid ${theme.palette.text.tertiary}` : undefined }} />
+                    <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
+                      <strong style={{ color: theme.palette.text.primary }}>{r.value}</strong> {r.label}
                     </Typography>
                   </Stack>
                 ))}
-                <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>·</Typography>
-                <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>
-                  <strong style={{ color: "#0f172a" }}>{answeredItems}/{totalItems}</strong> answered
+                <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>·</Typography>
+                <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
+                  <strong style={{ color: theme.palette.text.primary }}>{answeredItems}/{totalItems}</strong> answered
                 </Typography>
               </Stack>
-              <Typography sx={{ fontSize: 11.5, color: "#64748b", flexShrink: 0, display: { xs: "block", sm: "none" } }}>
-                <strong style={{ color: "#0f172a" }}>{answeredItems}/{totalItems}</strong>
+              <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", flexShrink: 0, display: { xs: "block", sm: "none" } }}>
+                <strong style={{ color: theme.palette.text.primary }}>{answeredItems}/{totalItems}</strong>
               </Typography>
             </Stack>
           ) : null}
@@ -1656,43 +1693,43 @@ export default function CheckDetailPage() {
           <Box sx={{ flex: 1, overflowY: { xs: "visible", md: "auto" }, p: { xs: "16px 12px 24px", md: "24px 28px" }, minWidth: 0 }}>
             <Box sx={{ maxWidth: 760, mx: "auto" }}>
               <Button startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />} onClick={() => setReviewMode(false)}
-                sx={{ fontSize: 12.5, color: "#64748b", mb: "12px", px: "6px" }}>
+                sx={{ fontSize: 12.5, color: "var(--color-text-muted)", mb: "12px", px: "6px" }}>
                 Checklist
               </Button>
-              <Typography sx={{ fontSize: 18, fontWeight: 600, color: "#0f172a", mb: "16px" }}>Review &amp; submit</Typography>
+              <Typography sx={{ fontSize: 18, fontWeight: 600, color: "text.primary", mb: "16px" }}>Review &amp; submit</Typography>
 
               {/* ── Zone 1: Needs attention — fix it HERE (the editable execution card, not a
                   jump-back). Each item drops out the instant it's resolved. ─────────── */}
               {needsAttention.length > 0 ? (
                 <Box sx={{ mb: "24px" }}>
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "6px" }}>
-                    <WarningAmberIcon sx={{ fontSize: 16, color: "#b45309" }} />
-                    <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: "#0f172a" }}>
+                    <WarningAmberIcon sx={{ fontSize: 16, color: semanticToken("warning", mode).text }} />
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: "text.primary" }}>
                       Needs attention ({needsAttention.length})
                     </Typography>
                   </Stack>
-                  <Typography sx={{ fontSize: 12, color: "#64748b", mb: "12px" }}>
+                  <Typography sx={{ fontSize: 12, color: "var(--color-text-muted)", mb: "12px" }}>
                     Answer, add a note or photo, or change the response right here — items clear as you resolve them.
                   </Typography>
                   {needsAttention.map((item, idx) => renderItemCard(item, idx))}
                 </Box>
               ) : (
-                <Box sx={{ mb: "24px", display: "flex", alignItems: "center", gap: 1, bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", px: "14px", py: "12px" }}>
-                  <CheckCircleIcon sx={{ fontSize: 18, color: "#15803d" }} />
-                  <Typography sx={{ fontSize: 13, color: "#15803d", fontWeight: 500 }}>Nothing needs attention — every required item is answered and each failure has evidence.</Typography>
+                <Box sx={{ mb: "24px", display: "flex", alignItems: "center", gap: 1, bgcolor: successWash(mode).bg, border: "1px solid", borderColor: successWash(mode).border, borderRadius: "10px", px: "14px", py: "12px" }}>
+                  <CheckCircleIcon sx={{ fontSize: 18, color: semanticToken("success", mode).solid }} />
+                  <Typography sx={{ fontSize: 13, color: successWash(mode).text, fontWeight: 500 }}>Nothing needs attention — every required item is answered and each failure has evidence.</Typography>
                 </Box>
               )}
 
               {/* ── Zone 2: Full checklist review — read-only final scan of every item ── */}
-              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "8px" }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.tertiary", mb: "8px" }}>
                 Full checklist review
               </Typography>
               <Box sx={{ mb: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
                 {sectionNames.map(sectionName => (
-                  <Box key={sectionName} sx={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+                  <Box key={sectionName} sx={{ border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
                     {sectionNames.length > 1 ? (
-                      <Box sx={{ bgcolor: "#f8fafc", px: "12px", py: "8px", borderBottom: "1px solid #e2e8f0" }}>
-                        <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "#475569" }}>{sectionName}</Typography>
+                      <Box sx={{ bgcolor: "var(--color-background-secondary)", px: "12px", py: "8px", borderBottom: "1px solid", borderColor: "divider" }}>
+                        <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "text.secondary" }}>{sectionName}</Typography>
                       </Box>
                     ) : null}
                     <Stack divider={<Divider />}>
@@ -1701,15 +1738,15 @@ export default function CheckDetailPage() {
                         const note = (drafts[item.id]?.notes ?? item.notes ?? "").trim()
                         const photos = (item.attachments?.length ?? 0) + (sync.photosByItem[item.id]?.length ?? 0)
                         return (
-                          <Stack key={item.id} direction="row" alignItems="center" spacing={1} sx={{ px: "12px", py: "9px", bgcolor: "#fff" }}>
+                          <Stack key={item.id} direction="row" alignItems="center" spacing={1} sx={{ px: "12px", py: "9px", bgcolor: "background.paper" }}>
                             <StatusPill intent={resultIntent(r || null)}
                               label={r === "NA" ? "N/A" : r === "PASS" ? "Pass" : r === "FAIL" ? "Fail" : "—"} size="sm" />
-                            <Typography sx={{ fontSize: 12.5, color: "#0f172a", flex: 1, minWidth: 0, lineHeight: 1.4 }}>{item.label}</Typography>
-                            {note ? <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 14, color: "#94a3b8" }} /></Tooltip> : null}
+                            <Typography sx={{ fontSize: 12.5, color: "text.primary", flex: 1, minWidth: 0, lineHeight: 1.4 }}>{item.label}</Typography>
+                            {note ? <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 14, color: "text.tertiary" }} /></Tooltip> : null}
                             {photos > 0 ? (
                               <Stack direction="row" alignItems="center" spacing={0.3}>
-                                <CameraAltIcon sx={{ fontSize: 14, color: "#94a3b8" }} />
-                                <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{photos}</Typography>
+                                <CameraAltIcon sx={{ fontSize: 14, color: "text.tertiary" }} />
+                                <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>{photos}</Typography>
                               </Stack>
                             ) : null}
                           </Stack>
@@ -1730,31 +1767,31 @@ export default function CheckDetailPage() {
 
               {/* Readiness banner — gates submit on all required items answered */}
               {remainingRequired.length > 0 ? (
-                <Box sx={{ mb: "20px", display: "flex", alignItems: "center", gap: 1, bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", px: "14px", py: "12px" }}>
-                  <WarningAmberIcon sx={{ fontSize: 18, color: "#b45309" }} />
-                  <Typography sx={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                <Box sx={{ mb: "20px", display: "flex", alignItems: "center", gap: 1, bgcolor: amberWash(mode).bg, border: "1px solid", borderColor: amberWash(mode).border, borderRadius: "10px", px: "14px", py: "12px" }}>
+                  <WarningAmberIcon sx={{ fontSize: 18, color: semanticToken("warning", mode).text }} />
+                  <Typography sx={{ fontSize: 13, color: amberWash(mode).text, fontWeight: 500 }}>
                     {remainingRequired.length} required item{remainingRequired.length === 1 ? "" : "s"} still to answer before you can submit.
                   </Typography>
                 </Box>
               ) : (
-                <Box sx={{ mb: "20px", display: "flex", alignItems: "center", gap: 1, bgcolor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", px: "14px", py: "12px" }}>
-                  <CheckCircleIcon sx={{ fontSize: 18, color: "#15803d" }} />
-                  <Typography sx={{ fontSize: 13, color: "#15803d", fontWeight: 500 }}>All required items answered — ready to submit.</Typography>
+                <Box sx={{ mb: "20px", display: "flex", alignItems: "center", gap: 1, bgcolor: successWash(mode).bg, border: "1px solid", borderColor: successWash(mode).border, borderRadius: "10px", px: "14px", py: "12px" }}>
+                  <CheckCircleIcon sx={{ fontSize: 18, color: semanticToken("success", mode).solid }} />
+                  <Typography sx={{ fontSize: 13, color: successWash(mode).text, fontWeight: 500 }}>All required items answered — ready to submit.</Typography>
                 </Box>
               )}
 
               {/* Details */}
-              <Box sx={{ mb: "20px", border: "1px solid #e2e8f0", borderRadius: "10px", p: "12px 16px" }}>
+              <Box sx={{ mb: "20px", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "12px 16px" }}>
                 {detailRows.map((row, i) => (
-                  <Box key={row.label} sx={{ display: "flex", justifyContent: "space-between", py: "6px", fontSize: 12, borderBottom: i < detailRows.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                    <Typography sx={{ fontSize: 12, color: "#64748b" }}>{row.label}</Typography>
-                    <Typography sx={{ fontSize: 12, color: "#0f172a", textAlign: "right", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.value}</Typography>
+                  <Box key={row.label} sx={{ display: "flex", justifyContent: "space-between", py: "6px", fontSize: 12, borderBottom: i < detailRows.length - 1 ? "1px solid var(--color-background-tertiary)" : "none" }}>
+                    <Typography sx={{ fontSize: 12, color: "var(--color-text-muted)" }}>{row.label}</Typography>
+                    <Typography sx={{ fontSize: 12, color: "text.primary", textAlign: "right", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.value}</Typography>
                   </Box>
                 ))}
               </Box>
 
               {/* Engineer summary */}
-              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "8px" }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.tertiary", mb: "8px" }}>
                 Engineer summary (optional)
               </Typography>
               <TextField multiline minRows={3} fullWidth value={engineerSummary}
@@ -1765,11 +1802,11 @@ export default function CheckDetailPage() {
               {/* Submit (md+; xs uses the sticky bar below) */}
               <Box sx={{ display: { xs: "none", md: "block" } }}>
                 {!allRequiredAnswered ? (
-                  <Typography sx={{ fontSize: 12, color: "#92400e", mb: "8px" }}>
+                  <Typography sx={{ fontSize: 12, color: amberWash(mode).text, mb: "8px" }}>
                     Answer the remaining {remainingRequired.length} required item{remainingRequired.length === 1 ? "" : "s"} to submit.
                   </Typography>
                 ) : sync.pendingCount > 0 ? (
-                  <Typography sx={{ fontSize: 12, color: "#92400e", mb: "8px" }}>
+                  <Typography sx={{ fontSize: 12, color: amberWash(mode).text, mb: "8px" }}>
                     {sync.pendingCount} change(s) still syncing — submit once saved.
                   </Typography>
                 ) : null}
@@ -1779,7 +1816,7 @@ export default function CheckDetailPage() {
                     sx={{ fontSize: 13, py: "10px", px: "20px" }}>
                     {transitioning ? "Submitting…" : "Submit for review"}
                   </Button>
-                  <Typography sx={{ fontSize: 11.5, color: "#94a3b8", mt: "8px" }}>
+                  <Typography sx={{ fontSize: 11.5, color: "text.tertiary", mt: "8px" }}>
                     Sends for review and locks your answers.
                   </Typography>
                 </Box>
@@ -1793,22 +1830,22 @@ export default function CheckDetailPage() {
             {showSticky ? (
               <Box sx={{
                 position: { xs: "sticky", md: "static" }, top: 0, zIndex: 5, flexShrink: 0,
-                bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0",
+                bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider",
                 px: { xs: "16px", md: "28px" }, py: "9px",
                 display: "flex", alignItems: "center", gap: 1,
               }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {stickyName}
                   </Typography>
-                  <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>
                     {stickyStats.answered} of {stickyStats.total} answered
                     {stickyStats.failed > 0 ? ` · ${stickyStats.failed} fail` : ""}
                   </Typography>
                 </Box>
                 <Button size="small" endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 16 }} />}
                   onClick={e => setSectionMenuAnchor(e.currentTarget)}
-                  sx={{ fontSize: 11.5, color: "#64748b", flexShrink: 0 }}>
+                  sx={{ fontSize: 11.5, color: "var(--color-text-muted)", flexShrink: 0 }}>
                   Jump to section
                 </Button>
                 <Menu anchorEl={sectionMenuAnchor} open={!!sectionMenuAnchor} onClose={() => setSectionMenuAnchor(null)}>
@@ -1819,7 +1856,7 @@ export default function CheckDetailPage() {
                         onClick={() => { setSectionMenuAnchor(null); scrollToSection(name) }}
                         sx={{ fontSize: 13, gap: 2, justifyContent: "space-between" }}>
                         <span>{name}</span>
-                        <Typography component="span" sx={{ fontSize: 11, color: s.failed > 0 ? "#b91c1c" : "#94a3b8" }}>
+                        <Typography component="span" sx={{ fontSize: 11, color: s.failed > 0 ? semanticToken("danger", mode).solid : "text.tertiary" }}>
                           {s.answered}/{s.total}{s.failed > 0 ? ` · ${s.failed} fail` : ""}
                         </Typography>
                       </MenuItem>
@@ -1848,7 +1885,7 @@ export default function CheckDetailPage() {
                           wayfinding is the sticky header + jump-to-section menu (no auto-collapse). */}
                       {showSticky ? (
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ px: "4px", py: "6px", mb: "8px" }}>
-                          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#94a3b8", flex: 1 }}>
+                          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary", flex: 1 }}>
                             {sectionName} · {stats.answered}/{stats.total}{stats.failed > 0 ? ` · ${stats.failed} fail` : ""}
                           </Typography>
                         </Stack>
@@ -1862,8 +1899,8 @@ export default function CheckDetailPage() {
 
                 {/* Completion hint */}
                 {!allRequiredAnswered ? (
-                  <Box sx={{ p: "12px 14px", borderRadius: "8px", bgcolor: "#fffbeb", border: "1px solid #fde68a" }}>
-                    <Typography sx={{ fontSize: 12, color: "#92400e" }}>
+                  <Box sx={{ p: "12px 14px", borderRadius: "8px", bgcolor: amberWash(mode).bg, border: "1px solid", borderColor: amberWash(mode).border }}>
+                    <Typography sx={{ fontSize: 12, color: amberWash(mode).text }}>
                       {remainingRequired.length} required item(s) still need a response before this check can be submitted.
                     </Typography>
                   </Box>
@@ -1875,10 +1912,10 @@ export default function CheckDetailPage() {
                     mt: "8px", mb: { xs: "96px", md: "8px" },
                     display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                     p: "11px 16px", width: "100%",
-                    border: "1.5px dashed #cbd5e1", borderRadius: "8px",
-                    color: "#64748b", fontSize: 12.5, fontWeight: 500, cursor: "pointer",
+                    border: `1.5px dashed ${mode === "dark" ? slate[600] : slate[300]}`, borderRadius: "8px",
+                    color: "var(--color-text-muted)", fontSize: 12.5, fontWeight: 500, cursor: "pointer",
                     bgcolor: "transparent", transition: "all 0.1s",
-                    "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "#f8fafc" }
+                    "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "var(--color-background-secondary)" }
                   }}>
                     <AddIcon sx={{ fontSize: 15 }} />
                     Add ad-hoc item
@@ -1894,22 +1931,22 @@ export default function CheckDetailPage() {
           <Box sx={{
             display: { xs: "flex", md: "none" },
             position: "sticky", bottom: 0, zIndex: 6, flexShrink: 0,
-            bgcolor: "#ffffff", borderTop: "1px solid #e2e8f0",
+            bgcolor: "background.paper", borderTop: "1px solid", borderColor: "divider",
             p: "12px", gap: 1, alignItems: "center",
             boxShadow: "0 -2px 8px rgba(15,23,42,0.06)",
           }}>
             {reviewMode ? (
               <Stack spacing={0.5} sx={{ width: "100%" }}>
                 {!allRequiredAnswered ? (
-                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                  <Typography sx={{ fontSize: 11.5, color: amberWash(mode).text, textAlign: "center" }}>
                     Answer {remainingRequired.length} required item{remainingRequired.length === 1 ? "" : "s"} to submit
                   </Typography>
                 ) : sync.pendingCount > 0 ? (
-                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                  <Typography sx={{ fontSize: 11.5, color: amberWash(mode).text, textAlign: "center" }}>
                     {sync.pendingCount} change(s) still syncing…
                   </Typography>
                 ) : (
-                  <Typography sx={{ fontSize: 11, color: "#94a3b8", textAlign: "center" }}>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary", textAlign: "center" }}>
                     Sends for review and locks your answers.
                   </Typography>
                 )}
@@ -1925,11 +1962,11 @@ export default function CheckDetailPage() {
             ) : (
               <Stack spacing={0.5} sx={{ width: "100%" }}>
                 {!allRequiredAnswered ? (
-                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                  <Typography sx={{ fontSize: 11.5, color: amberWash(mode).text, textAlign: "center" }}>
                     {remainingRequired.length} required item(s) remaining
                   </Typography>
                 ) : sync.pendingCount > 0 ? (
-                  <Typography sx={{ fontSize: 11.5, color: "#92400e", textAlign: "center" }}>
+                  <Typography sx={{ fontSize: 11.5, color: amberWash(mode).text, textAlign: "center" }}>
                     {sync.pendingCount} change(s) still to sync…
                   </Typography>
                 ) : null}
@@ -1975,7 +2012,7 @@ export default function CheckDetailPage() {
   if (check.passRate !== null) {
     // Pass rate is a RAG metric, not a record status — keep it on the quiet RAG palette
     // so the deepened status colours stay the loud exception.
-    const passRag = check.passRate >= 80 ? ragTokens.GREEN : check.passRate >= 60 ? ragTokens.AMBER : ragTokens.RED
+    const passRag = check.passRate >= 80 ? ragToken("GREEN", mode) : check.passRate >= 60 ? ragToken("AMBER", mode) : ragToken("RED", mode)
     propertiesRows.push({
       label: "Pass rate",
       value: <Chip size="small" sx={{ bgcolor: passRag.bg, color: passRag.text, fontWeight: 700 }} label={`${check.passRate}%`} />
@@ -1984,7 +2021,7 @@ export default function CheckDetailPage() {
   if (failedItems.length > 0) {
     propertiesRows.push({
       label: "Failed items",
-      value: <Typography variant="caption" sx={{ color: "#b91c1c", fontWeight: 700 }}>{failedItems.length}</Typography>
+      value: <Typography variant="caption" sx={{ color: semanticToken("danger", mode).solid, fontWeight: 700 }}>{failedItems.length}</Typography>
     })
   }
   if (check.scheduledAt) {
@@ -2019,18 +2056,18 @@ export default function CheckDetailPage() {
         <Stack direction="row" alignItems="flex-start" spacing={1.5} sx={{ mb: "22px" }}>
           <Tooltip title={cameFromHistory ? "Back to history" : "Back to checks"}>
             <IconButton onClick={goBack} size="small"
-              sx={{ color: "#64748b", mt: "2px", flexShrink: 0, "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+              sx={{ color: "var(--color-text-muted)", mt: "2px", flexShrink: 0, "&:hover": { color: "primary.main", bgcolor: "transparent" } }}>
               <ArrowBackIcon sx={{ fontSize: 20 }} />
             </IconButton>
           </Tooltip>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, color: "#0f172a", lineHeight: 1.25 }}>
+            <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 700, color: "text.primary", lineHeight: 1.25 }}>
               {check.title}
             </Typography>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: "8px", flexWrap: "wrap", rowGap: "6px" }}>
               <StatusPill value={check.status} label={STATUS_LABELS[check.status] ?? check.status} size="sm" />
               {/* Managers edit the assignee below, so the subtitle drops it to avoid duplication. */}
-              <Typography sx={{ fontSize: 13.5, color: "#64748b" }}>
+              <Typography sx={{ fontSize: 13.5, color: "var(--color-text-muted)" }}>
                 {canManage ? check.site.name : `${check.site.name} · ${userLabel(check.assignee)}`}
               </Typography>
             </Stack>
@@ -2081,25 +2118,25 @@ export default function CheckDetailPage() {
             reviewer's per-item notes) are surfaced here, alongside any overall return note.
             Once the engineer starts, each flagged item is also marked in its execution card. */}
         {flaggedCount > 0 ? (
-          <Box sx={{ mb: "22px", p: "14px", bgcolor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "12px" }}>
+          <Box sx={{ mb: "22px", p: "14px", bgcolor: amberWash(mode).bg, border: "1px solid", borderColor: amberWash(mode).border, borderRadius: "12px" }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: "8px" }}>
-              <OutlinedFlagIcon sx={{ fontSize: 18, color: "#d97706" }} />
-              <Typography sx={{ fontSize: 14, fontWeight: 700, color: "#92400e" }}>
+              <OutlinedFlagIcon sx={{ fontSize: 18, color: amberWash(mode).icon }} />
+              <Typography sx={{ fontSize: 14, fontWeight: 700, color: amberWash(mode).text }}>
                 Returned for rework · {flaggedCount} item{flaggedCount === 1 ? "" : "s"} flagged
               </Typography>
             </Stack>
             {check.reviewerNotes ? (
-              <Typography sx={{ fontSize: 13, color: "#92400e", mb: "10px", lineHeight: 1.5 }}>
+              <Typography sx={{ fontSize: 13, color: amberWash(mode).text, mb: "10px", lineHeight: 1.5 }}>
                 {check.reviewerNotes}
               </Typography>
             ) : null}
             <Stack spacing={0.75}>
               {flaggedItems.map(fi => (
                 <Box key={fi.id} sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-                  <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#d97706", mt: "7px", flexShrink: 0 }} />
-                  <Typography sx={{ fontSize: 13, color: "#0f172a", lineHeight: 1.45 }}>
+                  <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: amberWash(mode).icon, mt: "7px", flexShrink: 0 }} />
+                  <Typography sx={{ fontSize: 13, color: "text.primary", lineHeight: 1.45 }}>
                     <Box component="span" sx={{ fontWeight: 600 }}>{fi.label}</Box>
-                    {fi.reworkNote ? <Box component="span" sx={{ color: "#92400e" }}>{` — ${fi.reworkNote}`}</Box> : null}
+                    {fi.reworkNote ? <Box component="span" sx={{ color: amberWash(mode).text }}>{` — ${fi.reworkNote}`}</Box> : null}
                   </Typography>
                 </Box>
               ))}
@@ -2113,7 +2150,7 @@ export default function CheckDetailPage() {
         </Box>
 
         {/* What this check covers — section summary (icons are a best-effort heuristic) */}
-        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>
+        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.tertiary", mb: "10px" }}>
           What this check covers
         </Typography>
         <Stack spacing={1} sx={{ mb: "24px" }}>
@@ -2121,21 +2158,21 @@ export default function CheckDetailPage() {
             const Icon = sectionIcon(name)
             const count = sections[name].length
             return (
-              <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", px: "14px", py: "12px" }}>
+              <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "12px", px: "14px", py: "12px" }}>
                 <Box sx={{ width: 34, height: 34, borderRadius: "8px", bgcolor: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Icon sx={{ fontSize: 18, color: "#1d4ed8" }} />
+                  <Icon sx={{ fontSize: 18, color: "primary.main" }} />
                 </Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "#0f172a", flex: 1, minWidth: 0 }}>{name}</Typography>
-                <Typography sx={{ fontSize: 13, color: "#64748b", flexShrink: 0 }}>{count} item{count === 1 ? "" : "s"}</Typography>
+                <Typography sx={{ fontSize: 14, fontWeight: 500, color: "text.primary", flex: 1, minWidth: 0 }}>{name}</Typography>
+                <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)", flexShrink: 0 }}>{count} item{count === 1 ? "" : "s"}</Typography>
               </Box>
             )
           })}
         </Stack>
 
         {/* Offline reassurance */}
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", px: "14px", py: "12px" }}>
-          <InfoOutlinedIcon sx={{ fontSize: 17, color: "#94a3b8", mt: "1px", flexShrink: 0 }} />
-          <Typography sx={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, bgcolor: "var(--color-background-secondary)", border: "1px solid", borderColor: "divider", borderRadius: "10px", px: "14px", py: "12px" }}>
+          <InfoOutlinedIcon sx={{ fontSize: 17, color: "text.tertiary", mt: "1px", flexShrink: 0 }} />
+          <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)", lineHeight: 1.5 }}>
             Your answers save automatically as you go. You can pause and resume any time — even offline.
           </Typography>
         </Box>
@@ -2172,28 +2209,28 @@ export default function CheckDetailPage() {
     if (!expanded) {
       // Compact pass / N/A row — glanceable, low weight.
       return (
-        <Box key={item.id} sx={{ px: "12px", py: "9px", bgcolor: "#fff", display: "flex", alignItems: "center", gap: 1 }}>
+        <Box key={item.id} sx={{ px: "12px", py: "9px", bgcolor: "background.paper", display: "flex", alignItems: "center", gap: 1 }}>
           <StatusPill intent={resultIntent(resp)} label={respLabel} size="sm" />
-          <Typography sx={{ fontSize: 12.5, color: "#0f172a", flex: 1, minWidth: 0, lineHeight: 1.4 }}>{item.label}</Typography>
-          {hasNote ? <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 14, color: "#94a3b8" }} /></Tooltip> : null}
+          <Typography sx={{ fontSize: 12.5, color: "text.primary", flex: 1, minWidth: 0, lineHeight: 1.4 }}>{item.label}</Typography>
+          {hasNote ? <Tooltip title="Has a note"><NotesIcon sx={{ fontSize: 14, color: "text.tertiary" }} /></Tooltip> : null}
           {photos.length > 0 ? (
             <Stack direction="row" alignItems="center" spacing={0.3}>
-              <CameraAltIcon sx={{ fontSize: 14, color: "#94a3b8" }} />
-              <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{photos.length}</Typography>
+              <CameraAltIcon sx={{ fontSize: 14, color: "text.tertiary" }} />
+              <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>{photos.length}</Typography>
             </Stack>
           ) : null}
           {item.followOns.length > 0 ? (
             <Tooltip title={`${item.followOns.length} follow-on${item.followOns.length === 1 ? "" : "s"}`}>
               <Stack direction="row" alignItems="center" spacing={0.3}>
-                <AddTaskIcon sx={{ fontSize: 14, color: "#94a3b8" }} />
-                <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{item.followOns.length}</Typography>
+                <AddTaskIcon sx={{ fontSize: 14, color: "text.tertiary" }} />
+                <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>{item.followOns.length}</Typography>
               </Stack>
             </Tooltip>
           ) : null}
           {reviewing ? (
             <Tooltip title="Item actions">
               <IconButton size="small" onClick={e => setRowMenu({ anchor: e.currentTarget, item })}
-                sx={{ ml: "2px", color: "#94a3b8", "&:hover": { color: "#475569" } }}>
+                sx={{ ml: "2px", color: "text.tertiary", "&:hover": { color: "text.secondary" } }}>
                 <MoreVertIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
@@ -2205,16 +2242,21 @@ export default function CheckDetailPage() {
     // Expanded item — evidence inline. Three visual tiers: flagged (amber) and fail (red) keep
     // their attention-grabbing treatment; a pass/NA revealed only because it carries content gets
     // a calm, neutral tier (white, thin slate rule) so a clean pass never reads as a problem.
-    const accent = flagged ? "#f59e0b" : isFail ? "#b91c1c" : "#e2e8f0"
-    const bg = flagged ? "#fffdf7" : isFail ? "#fffafa" : "#fff"
+    // Rail: amber when flagged, confident red on a fail, hairline divider otherwise.
+    const accent = flagged ? flagAccent(mode) : isFail ? semanticToken("danger", mode).solid : theme.palette.divider
+    // Row tint: a very light amber (flagged) / red (fail) wash in light; a readable
+    // translucent wash on the dark surface so "this failed/flagged" still carries.
+    const bg = flagged ? (mode === "dark" ? "rgba(245,158,11,0.08)" : "#fffdf7")
+      : isFail ? (mode === "dark" ? "rgba(239,68,68,0.10)" : "#fffafa")
+        : "background.paper"
     const showFooterActions = reviewing
     return (
       <Box key={item.id} sx={{ bgcolor: bg, borderLeft: `3px solid ${accent}` }}>
         {/* Flagged-for-rework strip — amber, above the question so it's unmissable (unchanged). */}
         {flagged ? (
-          <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ px: "14px", py: "8px", bgcolor: "#fffbeb", borderBottom: "1px solid #fde68a" }}>
-            <OutlinedFlagIcon sx={{ fontSize: 15, color: "#d97706", mt: "1px", flexShrink: 0 }} />
-            <Typography sx={{ fontSize: 12, color: "#92400e", lineHeight: 1.45 }}>
+          <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ px: "14px", py: "8px", bgcolor: amberWash(mode).bg, borderBottom: `1px solid ${amberWash(mode).border}` }}>
+            <OutlinedFlagIcon sx={{ fontSize: 15, color: amberWash(mode).icon, mt: "1px", flexShrink: 0 }} />
+            <Typography sx={{ fontSize: 12, color: amberWash(mode).text, lineHeight: 1.45 }}>
               <Box component="span" sx={{ fontWeight: 700 }}>Flagged for rework</Box>
               {item.reworkNote ? ` · ${item.reworkNote}` : ""}
             </Typography>
@@ -2224,7 +2266,7 @@ export default function CheckDetailPage() {
           {/* Header zone — result pill + question, top-aligned. */}
           <Stack direction="row" spacing={1} alignItems="flex-start">
             <StatusPill intent={resultIntent(resp)} label={respLabel} size="sm" />
-            <Typography variant="body2" fontWeight={600} sx={{ flex: 1, minWidth: 0, color: "#0f172a", lineHeight: 1.45 }}>
+            <Typography variant="body2" fontWeight={600} sx={{ flex: 1, minWidth: 0, color: "text.primary", lineHeight: 1.45 }}>
               {item.label}
             </Typography>
           </Stack>
@@ -2236,10 +2278,10 @@ export default function CheckDetailPage() {
               <Avatar name={noteAuthor} size="sm" variant="engineer" />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Stack direction="row" spacing={0.75} alignItems="baseline" flexWrap="wrap">
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "#0f172a", lineHeight: 1.4 }}>{noteAuthor}</Typography>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "text.primary", lineHeight: 1.4 }}>{noteAuthor}</Typography>
                   <Typography sx={{ fontSize: 11, color: "text.secondary" }}>{noteTime ? `noted · ${noteTime}` : "noted"}</Typography>
                 </Stack>
-                <Typography sx={{ mt: 0.25, fontSize: 12.5, color: "#334155", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{item.notes}</Typography>
+                <Typography sx={{ mt: 0.25, fontSize: 12.5, color: mode === "dark" ? slate[300] : slate[700], lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{item.notes}</Typography>
               </Box>
             </Box>
           ) : null}
@@ -2259,19 +2301,19 @@ export default function CheckDetailPage() {
                         <Box key={att.id} sx={{ display: "flex", flexDirection: "column", gap: "4px", width: 116 }}>
                           <Tooltip title={att.filename}>
                             <Box onClick={() => setPreviewAtt(att)} sx={{
-                              width: 48, height: 48, borderRadius: "4px", border: "1px solid #e2e8f0",
+                              width: 48, height: 48, borderRadius: "4px", border: "1px solid", borderColor: "divider",
                               display: "flex", alignItems: "center", justifyContent: "center",
-                              bgcolor: "#f8fafc", cursor: "pointer", "&:hover": { borderColor: "#cbd5e1" }
+                              bgcolor: "var(--color-background-secondary)", cursor: "pointer", "&:hover": { borderColor: mode === "dark" ? slate[600] : slate[300] }
                             }}>
                               {isImageType(att.contentType)
-                                ? <ImageIcon sx={{ fontSize: 20, color: "#64748b" }} />
-                                : <DescriptionIcon sx={{ fontSize: 20, color: "#64748b" }} />}
+                                ? <ImageIcon sx={{ fontSize: 20, color: "var(--color-text-muted)" }} />
+                                : <DescriptionIcon sx={{ fontSize: 20, color: "var(--color-text-muted)" }} />}
                             </Box>
                           </Tooltip>
                           {att.caption ? (
-                            <Typography sx={{ fontSize: 11, color: "#334155", lineHeight: 1.3, wordBreak: "break-word" }}>{att.caption}</Typography>
+                            <Typography sx={{ fontSize: 11, color: mode === "dark" ? slate[300] : slate[700], lineHeight: 1.3, wordBreak: "break-word" }}>{att.caption}</Typography>
                           ) : (
-                            <Typography sx={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.3, wordBreak: "break-word" }}>
+                            <Typography sx={{ fontSize: 10, color: "text.tertiary", lineHeight: 1.3, wordBreak: "break-word" }}>
                               {att.filename} · {new Date(att.uploadedAt).toLocaleDateString("en-GB")}
                             </Typography>
                           )}
@@ -2303,16 +2345,16 @@ export default function CheckDetailPage() {
           {showFooterActions ? (
             <Stack direction="row" spacing={1} justifyContent="flex-end"
               sx={{ mx: "-14px", mb: "-12px", mt: "12px", px: "14px", py: "8px",
-                    bgcolor: "rgba(15, 23, 42, 0.02)", borderTop: "1px solid", borderColor: "divider" }}>
+                    bgcolor: mode === "dark" ? "rgba(255,255,255,0.03)" : "rgba(15, 23, 42, 0.02)", borderTop: "1px solid", borderColor: "divider" }}>
               {flagged ? (
                 <Button size="small" startIcon={<OutlinedFlagIcon sx={{ fontSize: 16 }} />} onClick={() => unflagItemAction(item)}
-                  sx={{ fontSize: 11.5, color: "#92400e", textTransform: "none" }}>Unflag</Button>
+                  sx={{ fontSize: 11.5, color: amberWash(mode).text, textTransform: "none" }}>Unflag</Button>
               ) : (
                 <Button size="small" startIcon={<OutlinedFlagIcon sx={{ fontSize: 16 }} />} onClick={() => setFlagItem(item)}
-                  sx={{ fontSize: 11.5, color: "#b45309", textTransform: "none" }}>Flag for rework</Button>
+                  sx={{ fontSize: 11.5, color: semanticToken("warning", mode).text, textTransform: "none" }}>Flag for rework</Button>
               )}
               <Button size="small" startIcon={<AddTaskIcon sx={{ fontSize: 16 }} />} onClick={() => setFollowOnItem(item)}
-                sx={{ fontSize: 11.5, color: "#1d4ed8", textTransform: "none" }}>Task</Button>
+                sx={{ fontSize: 11.5, color: "primary.main", textTransform: "none" }}>Task</Button>
             </Stack>
           ) : null}
         </Box>
@@ -2336,19 +2378,19 @@ export default function CheckDetailPage() {
                  warning-coloured "Return for rework" in the side-card: keep the back arrow but
                  surface it as a labelled text control. */
               <Button onClick={goBack} size="small" startIcon={<ArrowBackIcon sx={{ fontSize: 18 }} />}
-                sx={{ color: "#64748b", textTransform: "none", fontSize: 13, fontWeight: 500, flexShrink: 0, mt: "-3px", px: "6px",
-                      "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+                sx={{ color: "var(--color-text-muted)", textTransform: "none", fontSize: 13, fontWeight: 500, flexShrink: 0, mt: "-3px", px: "6px",
+                      "&:hover": { color: "primary.main", bgcolor: "transparent" } }}>
                 {cameFromHistory ? "Back to history" : "Back to Field Work"}
               </Button>
             ) : (
               <Tooltip title={cameFromHistory ? "Back to history" : "Back to checks"}>
                 <IconButton onClick={goBack} size="small"
-                  sx={{ color: "#64748b", mt: "1px", flexShrink: 0, "&:hover": { color: "#1d4ed8", bgcolor: "transparent" } }}>
+                  sx={{ color: "var(--color-text-muted)", mt: "1px", flexShrink: 0, "&:hover": { color: "primary.main", bgcolor: "transparent" } }}>
                   <ArrowBackIcon sx={{ fontSize: 20 }} />
                 </IconButton>
               </Tooltip>
             )}
-            <Typography variant="h5" fontWeight={700} sx={{ color: "#0f172a", lineHeight: 1.25, minWidth: 0 }}>
+            <Typography variant="h5" fontWeight={700} sx={{ color: "text.primary", lineHeight: 1.25, minWidth: 0 }}>
               {check.title}
             </Typography>
           </Stack>
@@ -2388,7 +2430,7 @@ export default function CheckDetailPage() {
 
         {/* Left — read-only checklist */}
         <Card>
-          <Box sx={{ borderBottom: "1px solid #e2e8f0" }}>
+          <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }}>
             <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}
               sx={{ px: 2, minHeight: 44, "& .MuiTabs-indicator": { backgroundColor: "primary.main" } }} textColor="inherit">
               <Tab label={`Checklist (${totalItems})`} sx={{ fontSize: 13, minHeight: 44 }} />
@@ -2403,7 +2445,7 @@ export default function CheckDetailPage() {
           <CardContent>
             {activeTab === 0 ? (
               totalItems === 0 ? (
-                <Box sx={{ py: 3, textAlign: "center", border: "1px dashed #e2e8f0", borderRadius: 1.5 }}>
+                <Box sx={{ py: 3, textAlign: "center", border: `1px dashed ${theme.palette.divider}`, borderRadius: 1.5 }}>
                   <Typography variant="body2" color="text.secondary">No checklist items.</Typography>
                 </Box>
               ) : (
@@ -2416,13 +2458,13 @@ export default function CheckDetailPage() {
                     return (
                       // One bordered container per section; passes are a quiet divided list,
                       // fails/flagged break out as heavier accented rows within it.
-                      <Box key={sectionName} sx={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+                      <Box key={sectionName} sx={{ border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
                         {sectionNames.length > 1 ? (
-                          <Box sx={{ bgcolor: "#f8fafc", px: "12px", py: "8px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 1 }}>
-                            <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "#475569", flex: 1, minWidth: 0 }}>
+                          <Box sx={{ bgcolor: "var(--color-background-secondary)", px: "12px", py: "8px", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", gap: 1 }}>
+                            <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "text.secondary", flex: 1, minWidth: 0 }}>
                               {sectionName}
                             </Typography>
-                            <Typography sx={{ fontSize: 11, color: secFailed > 0 ? "#b91c1c" : "#94a3b8", flexShrink: 0 }}>
+                            <Typography sx={{ fontSize: 11, color: secFailed > 0 ? semanticToken("danger", mode).solid : "text.tertiary", flexShrink: 0 }}>
                               {secAnswered}/{items.length}{secFailed > 0 ? ` · ${secFailed} fail` : ""}
                             </Typography>
                           </Box>
@@ -2443,7 +2485,7 @@ export default function CheckDetailPage() {
                   Failed items from this check. Create follow-on actions for any requiring remediation.
                 </Typography>
                 {failedItems.map(item => (
-                  <Box key={item.id} sx={{ p: 1.5, borderRadius: 1.5, border: "1px solid #fecaca", bgcolor: "#fff5f5" }}>
+                  <Box key={item.id} sx={{ p: 1.5, borderRadius: 1.5, border: "1px solid", borderColor: failWash(mode).border, bgcolor: failWash(mode).bg }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                       <Box sx={{ flex: 1 }}>
                         <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.5 }}>
@@ -2474,16 +2516,16 @@ export default function CheckDetailPage() {
               <Stack spacing={2}>
                 {check.engineerSummary ? (
                   <Box>
-                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 0.75 }}>ENGINEER SUMMARY</Typography>
-                    <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "text.tertiary", mb: 0.75 }}>ENGINEER SUMMARY</Typography>
+                    <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: "var(--color-background-secondary)", border: "1px solid", borderColor: "divider" }}>
                       <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{check.engineerSummary}</Typography>
                     </Box>
                   </Box>
                 ) : null}
                 {check.reviewerNotes ? (
                   <Box>
-                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 0.75 }}>REVIEWER NOTES</Typography>
-                    <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: "#fffbeb", border: "1px solid #fde68a" }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "text.tertiary", mb: 0.75 }}>REVIEWER NOTES</Typography>
+                    <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: amberWash(mode).bg, border: "1px solid", borderColor: amberWash(mode).border }}>
                       <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{check.reviewerNotes}</Typography>
                     </Box>
                   </Box>
@@ -2502,7 +2544,7 @@ export default function CheckDetailPage() {
           {check.status === "PENDING_REVIEW" && canReview ? (
             <Card>
               <CardContent>
-                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 1.5 }}>REVIEW</Typography>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "text.tertiary", mb: 1.5 }}>REVIEW</Typography>
                 <Stack spacing={1}>
                   <Button fullWidth variant="contained" size="small"
                     onClick={() => { setReviewAction("approve"); setReviewOpen(true) }}
@@ -2520,15 +2562,15 @@ export default function CheckDetailPage() {
                     {flaggedCount > 0 ? `Return for rework · ${flaggedCount} flagged` : "Return for rework"}
                   </Button>
                   {flaggedCount === 0 ? (
-                    <Typography sx={{ fontSize: 11.5, color: "#94a3b8" }}>
+                    <Typography sx={{ fontSize: 11.5, color: "text.tertiary" }}>
                       Flag an item to return.
                     </Typography>
                   ) : null}
                 </Stack>
                 {check.engineerSummary ? (
                   <Box sx={{ mt: 2 }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 0.75 }}>ENGINEER SUMMARY</Typography>
-                    <Typography sx={{ fontSize: 12, color: "#334155", bgcolor: "#f8fafc", p: "10px", borderRadius: "6px", whiteSpace: "pre-wrap", lineHeight: 1.6, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "text.tertiary", mb: 0.75 }}>ENGINEER SUMMARY</Typography>
+                    <Typography sx={{ fontSize: 12, color: mode === "dark" ? slate[300] : slate[700], bgcolor: "var(--color-background-secondary)", p: "10px", borderRadius: "6px", whiteSpace: "pre-wrap", lineHeight: 1.6, border: "1px solid", borderColor: "divider" }}>
                       {check.engineerSummary}
                     </Typography>
                   </Box>
@@ -2544,18 +2586,18 @@ export default function CheckDetailPage() {
           {totalItems > 0 ? (
             <Card>
               <CardContent sx={{ pb: "12px !important" }}>
-                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "#94a3b8", mb: 1.5 }}>PROGRESS</Typography>
-                <Box sx={{ height: 6, borderRadius: 3, bgcolor: "#f1f5f9", overflow: "hidden", display: "flex", mb: 1 }}>
-                  <Box sx={{ width: `${(passItems / totalItems) * 100}%`, bgcolor: "#15803d", height: "100%", transition: "width 0.3s" }} />
-                  <Box sx={{ width: `${(failItems / totalItems) * 100}%`, bgcolor: "#b91c1c", height: "100%", transition: "width 0.3s" }} />
-                  <Box sx={{ width: `${(naItems / totalItems) * 100}%`, bgcolor: "#94a3b8", height: "100%", transition: "width 0.3s" }} />
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", color: "text.tertiary", mb: 1.5 }}>PROGRESS</Typography>
+                <Box sx={{ height: 6, borderRadius: 3, bgcolor: "var(--color-background-tertiary)", overflow: "hidden", display: "flex", mb: 1 }}>
+                  <Box sx={{ width: `${(passItems / totalItems) * 100}%`, bgcolor: semanticToken("success", mode).solid, height: "100%", transition: "width 0.3s" }} />
+                  <Box sx={{ width: `${(failItems / totalItems) * 100}%`, bgcolor: semanticToken("danger", mode).solid, height: "100%", transition: "width 0.3s" }} />
+                  <Box sx={{ width: `${(naItems / totalItems) * 100}%`, bgcolor: "text.tertiary", height: "100%", transition: "width 0.3s" }} />
                 </Box>
                 <Stack spacing={0.5}>
                   {[
-                    { label: "Pass", value: passItems, color: "#15803d" },
-                    { label: "Fail", value: failItems, color: "#b91c1c" },
-                    { label: "N/A", value: naItems, color: "#64748b" },
-                    { label: "Pending", value: pendingItems, color: "#94a3b8" }
+                    { label: "Pass", value: passItems, color: semanticToken("success", mode).solid },
+                    { label: "Fail", value: failItems, color: semanticToken("danger", mode).solid },
+                    { label: "N/A", value: naItems, color: "var(--color-text-muted)" },
+                    { label: "Pending", value: pendingItems, color: "text.tertiary" }
                   ].filter(r => r.value > 0).map(row => (
                     <Stack key={row.label} direction="row" justifyContent="space-between">
                       <Typography variant="caption" sx={{ color: row.color, fontWeight: 600 }}>{row.label}</Typography>
@@ -2591,12 +2633,12 @@ export default function CheckDetailPage() {
         <Box sx={{
           display: { xs: "block", md: "none" },
           position: "sticky", bottom: 0, zIndex: 2,
-          bgcolor: "#ffffff", borderTop: "1px solid #e2e8f0",
+          bgcolor: "background.paper", borderTop: "1px solid", borderColor: "divider",
           mx: "-12px", mt: 2, px: "12px", py: "12px",
           boxShadow: "0 -2px 8px rgba(15,23,42,0.06)",
         }}>
           {flaggedCount === 0 ? (
-            <Typography sx={{ fontSize: 11.5, color: "#94a3b8", textAlign: "center", mb: "8px" }}>
+            <Typography sx={{ fontSize: 11.5, color: "text.tertiary", textAlign: "center", mb: "8px" }}>
               Flag an item to return.
             </Typography>
           ) : null}
@@ -2620,15 +2662,15 @@ export default function CheckDetailPage() {
       <Menu anchorEl={rowMenu?.anchor ?? null} open={!!rowMenu} onClose={() => setRowMenu(null)}>
         {rowMenu?.item.reworkFlagged ? (
           <MenuItem onClick={() => { const it = rowMenu.item; setRowMenu(null); void unflagItemAction(it) }} sx={{ fontSize: 13 }}>
-            <OutlinedFlagIcon sx={{ fontSize: 16, mr: 1, color: "#92400e" }} /> Unflag
+            <OutlinedFlagIcon sx={{ fontSize: 16, mr: 1, color: amberWash(mode).text }} /> Unflag
           </MenuItem>
         ) : (
           <MenuItem onClick={() => { const it = rowMenu!.item; setRowMenu(null); setFlagItem(it) }} sx={{ fontSize: 13 }}>
-            <OutlinedFlagIcon sx={{ fontSize: 16, mr: 1, color: "#b45309" }} /> Flag for rework
+            <OutlinedFlagIcon sx={{ fontSize: 16, mr: 1, color: semanticToken("warning", mode).text }} /> Flag for rework
           </MenuItem>
         )}
         <MenuItem onClick={() => { const it = rowMenu!.item; setRowMenu(null); setFollowOnItem(it) }} sx={{ fontSize: 13 }}>
-          <AddTaskIcon sx={{ fontSize: 16, mr: 1, color: "#1d4ed8" }} /> Create task
+          <AddTaskIcon sx={{ fontSize: 16, mr: 1, color: "primary.main" }} /> Create task
         </MenuItem>
       </Menu>
 

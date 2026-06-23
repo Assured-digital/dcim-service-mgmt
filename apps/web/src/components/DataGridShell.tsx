@@ -5,6 +5,7 @@ import {
   GridToolbarExport,
   GridToolbarQuickFilter,
 } from "@mui/x-data-grid"
+import type { ThemeMode } from "./shared/tokens/colors"
 
 export function makeGridToolbar(fileName: string, { showSearch = true }: { showSearch?: boolean } = {}) {
   return function GridInnerToolbar() {
@@ -27,12 +28,18 @@ export function makeGridToolbar(fileName: string, { showSearch = true }: { showS
   }
 }
 
-export const dataGridSx = (clickable: boolean = true) => ({
-  border: "none",
-  height: "100%",
-  "& .MuiDataGrid-cell": { borderColor: "#f1f5f9", cursor: clickable ? "pointer" : "default" },
-  "& .MuiDataGrid-columnHeaders": { bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", fontSize: 12 },
-  "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 500 },
-  "& .MuiDataGrid-footerContainer": { borderTop: "1px solid #e2e8f0" },
-  "& .MuiDataGrid-row:hover": { bgcolor: "#f8fafc" },
-})
+// `mode` is OPT-IN and defaults to "light" → every existing caller renders the
+// exact prior light values unchanged. Only callers that pass mode (Service Desk)
+// get the dark branch, so other grids stay light until they migrate.
+export const dataGridSx = (clickable: boolean = true, mode: ThemeMode = "light") => {
+  const dark = mode === "dark"
+  return {
+    border: "none",
+    height: "100%",
+    "& .MuiDataGrid-cell": { borderColor: dark ? "#1e293b" : "#f1f5f9", cursor: clickable ? "pointer" : "default" },
+    "& .MuiDataGrid-columnHeaders": { bgcolor: dark ? "#172033" : "#ffffff", borderBottom: dark ? "1px solid #334155" : "1px solid #e2e8f0", fontSize: 12 },
+    "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 500 },
+    "& .MuiDataGrid-footerContainer": { borderTop: dark ? "1px solid #334155" : "1px solid #e2e8f0" },
+    "& .MuiDataGrid-row:hover": { bgcolor: dark ? "#172033" : "#f8fafc" },
+  }
+}

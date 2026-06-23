@@ -32,7 +32,8 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined"
 import BlockIcon from "@mui/icons-material/Block"
 import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined"
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined"
-import { statusColors, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
+import { statusColors, priorityToken, accentToken, PriorityPill, TypeBadge, AssigneeCell, type LinkedTask, type AccentKey, type ThemeMode } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -196,16 +197,19 @@ const CHANGE_STATUS_ORDER = [
   "CANCELLED",
 ]
 
-const CHANGE_STATUS_CONFIG: StatusConfig = {
-  options: CHANGE_STATUS_ORDER.map<StatusOption>((value) => ({
-    value,
-    label: STATUS_LABELS[value],
-    badgeClass: `b-${value.toLowerCase()}`,
-    bg: statusColors(value).bg,
-    iconColor: statusColors(value).text,
-    icon: STATUS_ICONS[value],
-    buttonIcon: STATUS_ICONS[value],
-  })),
+// Built per-render with the active mode (statusColors light branch is unchanged).
+function buildChangeStatusConfig(mode: ThemeMode): StatusConfig {
+  return {
+    options: CHANGE_STATUS_ORDER.map<StatusOption>((value) => ({
+      value,
+      label: STATUS_LABELS[value],
+      badgeClass: `b-${value.toLowerCase()}`,
+      bg: statusColors(value, mode).bg,
+      iconColor: statusColors(value, mode).text,
+      icon: STATUS_ICONS[value],
+      buttonIcon: STATUS_ICONS[value],
+    })),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -214,54 +218,34 @@ const CHANGE_STATUS_CONFIG: StatusConfig = {
 
 const PRIORITY_VALUES = ["low", "medium", "high", "critical"]
 
-const PRIORITY_COLOURS: Record<string, { bg: string; text: string }> = {
-  low: { bg: "#dcfce7", text: "#15803d" },
-  medium: { bg: "#fef3c7", text: "#b45309" },
-  high: { bg: "#ffedd5", text: "#c2410c" },
-  critical: { bg: "#fee2e2", text: "#b91c1c" },
+// priorityToken reproduces the prior PRIORITY_COLOURS values exactly in light + adds dark.
+function buildPriorityOptions(mode: ThemeMode): PopoverOption[] {
+  return PRIORITY_VALUES.map((value) => {
+    const tok = priorityToken(value, mode)
+    return {
+      value,
+      label: value.charAt(0).toUpperCase() + value.slice(1),
+      iconBg: tok.bg,
+      iconColor: tok.text,
+      icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
+    }
+  })
 }
 
-const PRIORITY_OPTIONS: PopoverOption[] = PRIORITY_VALUES.map((value) => ({
-  value,
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-  iconBg: PRIORITY_COLOURS[value].bg,
-  iconColor: PRIORITY_COLOURS[value].text,
-  icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
-}))
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Type badge — spec section 3.3 (CHG)
+// Approval colours — the soft accent palette (mode-aware); light values unchanged.
+// APPROVED→green, REJECTED→red, DEFERRED→amber, anything else→neutral (the prior default).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CHANGE_TYPE_BADGE = (
-  <Box
-    component="span"
-    sx={{
-      fontSize: 10,
-      fontWeight: 500,
-      bgcolor: "#e6f1fb",
-      color: "#185fa5",
-      px: 1,
-      py: 0.25,
-      borderRadius: 1,
-      letterSpacing: "0.04em",
-    }}
-  >
-    CHG
-  </Box>
-)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Approval colours
-// ─────────────────────────────────────────────────────────────────────────────
-
-const APPROVAL_COLOURS: Record<string, { bg: string; text: string }> = {
-  APPROVED: { bg: "#eaf3de", text: "#3b6d11" },
-  REJECTED: { bg: "#fcebeb", text: "#a32d2d" },
-  DEFERRED: { bg: "#faeeda", text: "#854f0b" },
+const APPROVAL_ACCENT: Record<string, AccentKey> = {
+  APPROVED: "green",
+  REJECTED: "red",
+  DEFERRED: "amber",
 }
 
-const APPROVAL_DEFAULT_COLOURS = { bg: "#f1efe8", text: "#5f5e5a" }
+function approvalColours(decision: string, mode: ThemeMode): { bg: string; text: string } {
+  return accentToken(APPROVAL_ACCENT[decision] ?? "neutral", mode)
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -502,6 +486,7 @@ interface ApprovalsSectionContentProps {
 const ApprovalsSectionContent = React.memo(function ApprovalsSectionContent({
   approvals,
 }: ApprovalsSectionContentProps) {
+  const { mode } = useThemeMode()
   if (approvals.length === 0) {
     return (
       <Typography variant="caption" sx={{ color: "text.tertiary" }}>
@@ -512,7 +497,7 @@ const ApprovalsSectionContent = React.memo(function ApprovalsSectionContent({
   return (
     <Box>
       {approvals.map((approval) => {
-        const colours = APPROVAL_COLOURS[approval.decision] ?? APPROVAL_DEFAULT_COLOURS
+        const colours = approvalColours(approval.decision, mode)
         const label =
           STATUS_LABELS[approval.decision] ??
           approval.decision.charAt(0) + approval.decision.slice(1).toLowerCase()
@@ -603,6 +588,7 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const { mode } = useThemeMode()
   const [visibleCount, setVisibleCount] = React.useState(10)
 
   const handleFilterChange = React.useCallback(
@@ -640,7 +626,7 @@ const ActivityContent = React.memo(function ActivityContent({
         <AuditHistoryList events={auditEvents.slice(0, visibleCount)} recordNoun="change" />
       ) : (
         visibleEvents.map((event, idx) => (
-          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} />
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} mode={mode} />
         ))
       )}
 
@@ -675,6 +661,9 @@ export default function ChangeDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
+  const changeStatusConfig = React.useMemo(() => buildChangeStatusConfig(mode), [mode])
+  const priorityOptions = React.useMemo(() => buildPriorityOptions(mode), [mode])
 
   const canManage = hasAnyRole([
     ...ORG_SUPER_ROLES,
@@ -952,24 +941,26 @@ export default function ChangeDetailPage() {
   }, [allFeedEvents, activeFilter])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const green = accentToken("green", mode)
+    const neutral = accentToken("neutral", mode)
     const list: PopoverOption[] = assignableUsers.map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: green.bg,
+      iconColor: green.text,
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
     }))
     return [
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: neutral.bg,
+        iconColor: neutral.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [assignableUsers])
+  }, [assignableUsers, mode])
 
   // ── Title commit handlers ──────────────────────────────────────────────────
 
@@ -1073,7 +1064,7 @@ export default function ChangeDetailPage() {
         label: "Priority",
         editable: true,
         currentValue: change.priority,
-        popoverOptions: PRIORITY_OPTIONS,
+        popoverOptions: priorityOptions,
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
@@ -1093,7 +1084,7 @@ export default function ChangeDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            <AssigneeCell user={change.assignee} />
+            <AssigneeCell user={change.assignee} mode={mode} />
           </Box>
         ),
       },
@@ -1124,7 +1115,7 @@ export default function ChangeDetailPage() {
         ),
       },
     ]
-  }, [change, usersOptions, handleSelectPriority, handleSelectAssignee])
+  }, [change, mode, usersOptions, priorityOptions, handleSelectPriority, handleSelectAssignee])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -1254,11 +1245,11 @@ export default function ChangeDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!change) return undefined
     return {
-      submittedBy: <AssigneeCell user={change.createdBy ?? null} emptyLabel="—" />,
+      submittedBy: <AssigneeCell user={change.createdBy ?? null} emptyLabel="—" mode={mode} />,
       createdAt: change.createdAt,
       updatedAt: change.updatedAt,
     }
-  }, [change])
+  }, [change, mode])
 
   const rightSections = React.useMemo<RightSection[]>(() => {
     return [
@@ -1272,6 +1263,7 @@ export default function ChangeDetailPage() {
           <TasksSectionContent
             tasks={linkedTasks ?? []}
             users={assignableUsers}
+            mode={mode}
             canManage={canManage}
             onCreate={handleOpenCreateTask}
             onSelectTask={handleSelectTask}
@@ -1345,9 +1337,9 @@ export default function ChangeDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={change.reference}
-        typeBadge={CHANGE_TYPE_BADGE}
+        typeBadge={null}
         currentStatus={change.status}
-        statusConfig={CHANGE_STATUS_CONFIG}
+        statusConfig={changeStatusConfig}
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={
