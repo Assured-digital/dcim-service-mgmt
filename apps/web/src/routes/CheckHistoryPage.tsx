@@ -104,8 +104,8 @@ function exportCsv(rows: Check[]) {
 
 const selectSx = {
   minWidth: 168,
-  "& .MuiOutlinedInput-root": { bgcolor: "#ffffff" },
-  "& .MuiSelect-select": { fontSize: 12, fontWeight: 500, color: "#475569", py: "8.5px" },
+  "& .MuiOutlinedInput-root": { bgcolor: "var(--color-background-primary)" },
+  "& .MuiSelect-select": { fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", py: "8.5px" },
 }
 
 export default function CheckHistoryPage() {
@@ -197,7 +197,7 @@ export default function CheckHistoryPage() {
       >
         <BackButton label="Active checks" onClick={() => navigate("/checks")} />
         <Typography
-          sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 20, fontWeight: 700, color: "#0f172a", flex: 1 }}
+          sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 20, fontWeight: 700, color: "text.primary", flex: 1 }}
         >
           Check history
         </Typography>
@@ -223,11 +223,11 @@ export default function CheckHistoryPage() {
           placeholder="Search ref, title or site"
           value={search}
           onChange={(e) => patchParams({ q: e.target.value, page: 1 })}
-          sx={{ flex: 1, "& .MuiOutlinedInput-root": { bgcolor: "#ffffff" }, "& .MuiInputBase-input": { fontSize: 12.5 } }}
+          sx={{ flex: 1, "& .MuiOutlinedInput-root": { bgcolor: "var(--color-background-primary)" }, "& .MuiInputBase-input": { fontSize: 12.5 } }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 18, color: "#94a3b8" }} />
+                <SearchIcon sx={{ fontSize: 18, color: "text.tertiary" }} />
               </InputAdornment>
             ),
           }}
@@ -272,7 +272,7 @@ export default function CheckHistoryPage() {
 
       {!isLoading && !error && filtered.length > 0 ? (
         <>
-          <Typography sx={{ fontSize: 12, color: "#64748b" }}>
+          <Typography sx={{ fontSize: 12, color: "var(--color-text-muted)" }}>
             {filtered.length} {filtered.length === 1 ? "check" : "checks"}
           </Typography>
           <Stack spacing={1}>

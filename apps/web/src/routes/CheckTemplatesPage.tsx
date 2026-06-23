@@ -9,6 +9,7 @@ import {
 } from "@mui/material"
 import { chipSx } from "../components/shared"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 type CheckTemplate = {
@@ -39,6 +40,7 @@ const CHECK_TYPES = [
 export default function CheckTemplatesPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { mode } = useThemeMode()
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
 
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -86,7 +88,7 @@ export default function CheckTemplatesPage() {
   return (
     <Box>
       <Card>
-        <Box sx={{ borderBottom: "1px solid #e2e8f0", px: 2, py: 1.25, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.25, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Typography color="text.secondary" variant="body2">
             Reusable checklists applied when scheduling engineering checks.
           </Typography>
@@ -125,7 +127,7 @@ export default function CheckTemplatesPage() {
                   <TableRow
                     key={t.id}
                     onClick={() => navigate(`/check-templates/${t.id}`)}
-                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "#f8fafc" } }}
+                    sx={{ cursor: "pointer", "&:hover": { bgcolor: "var(--color-background-secondary)" } }}
                   >
                     <TableCell sx={{ fontWeight: 700, fontFamily: "monospace", fontSize: 12 }}>
                       {t.reference}
@@ -141,7 +143,7 @@ export default function CheckTemplatesPage() {
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      <Chip size="small" sx={{ bgcolor: "#e8f1ff", color: "primary.main", fontWeight: 600 }} label={t.checkType} />
+                      <Chip size="small" sx={{ bgcolor: mode === "dark" ? "rgba(59,130,246,0.15)" : "#e8f1ff", color: mode === "dark" ? "#60a5fa" : "primary.main", fontWeight: 600 }} label={t.checkType} />
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2">{t.items.length} items</Typography>
@@ -154,7 +156,7 @@ export default function CheckTemplatesPage() {
                     <TableCell>
                       <Chip size="small"
                         label="Global"
-                        sx={{ bgcolor: "#f1f5f9", color: "#475569", fontSize: 11 }} />
+                        sx={{ bgcolor: "var(--color-background-tertiary)", color: "text.secondary", fontSize: 11 }} />
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption" color="text.secondary">
@@ -175,8 +177,8 @@ export default function CheckTemplatesPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {error ? (
-              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#fef2f2", border: "1px solid #fecaca" }}>
-                <Typography variant="caption" color="#b91c1c">{error}</Typography>
+              <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: mode === "dark" ? "#3a1a1a" : "#fef2f2", border: `1px solid ${mode === "dark" ? "#5b2626" : "#fecaca"}` }}>
+                <Typography variant="caption" color={mode === "dark" ? "#f87171" : "#b91c1c"}>{error}</Typography>
               </Box>
             ) : null}
             <TextField label="Template name" value={name}

@@ -13,8 +13,9 @@ import EditIcon from "@mui/icons-material/Edit"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
-import { InfoField, PanelCard, SectionHeader, chipSx } from "../components/shared"
+import { InfoField, PanelCard, SectionHeader, chipSx, semanticToken } from "../components/shared"
 import { ErrorState, LoadingState } from "../components/PageState"
+import { useThemeMode } from "../lib/theme"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
@@ -195,6 +196,7 @@ export default function CheckTemplateDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { setRecordLabel } = useBreadcrumb()
+  const { mode } = useThemeMode()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
 
@@ -308,7 +310,7 @@ export default function CheckTemplateDetailPage() {
             px: 1.5, py: 0.75, borderRadius: 2,
             bgcolor: "var(--color-background-primary)",
             border: "1px solid var(--color-border-secondary)",
-            boxShadow: "0 1px 3px rgba(15,23,42,0.06)"
+            boxShadow: mode === "dark" ? "0 1px 3px rgba(0,0,0,0.4)" : "0 1px 3px rgba(15,23,42,0.06)"
           }}>
             <Typography sx={{
               fontFamily: "monospace", fontSize: 12, fontWeight: 700,
@@ -317,10 +319,10 @@ export default function CheckTemplateDetailPage() {
               {template.reference}
             </Typography>
             <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
-            <Chip size="small" sx={{ bgcolor: "#e8f1ff", color: "primary.main", fontWeight: 600 }} label={template.checkType} />
+            <Chip size="small" sx={{ bgcolor: mode === "dark" ? "rgba(59,130,246,0.15)" : "#e8f1ff", color: mode === "dark" ? "#60a5fa" : "primary.main", fontWeight: 600 }} label={template.checkType} />
             <Chip size="small"
               label={`${template.items.length} items`}
-              sx={{ bgcolor: "#f1f5f9", color: "#475569" }} />
+              sx={{ bgcolor: "var(--color-background-tertiary)", color: "text.secondary" }} />
           </Box>
         </Stack>
         {canManage ? (
@@ -455,9 +457,9 @@ export default function CheckTemplateDetailPage() {
                         <TableBody>
                           {items.map((item) => (
                             <TableRow key={item.id}
-                              sx={{ "&:hover": { bgcolor: "#f8fafc" } }}>
+                              sx={{ "&:hover": { bgcolor: "var(--color-background-secondary)" } }}>
                               <TableCell>
-                                <DragIndicatorIcon sx={{ fontSize: 16, color: "#cbd5e1" }} />
+                                <DragIndicatorIcon sx={{ fontSize: 16, color: mode === "dark" ? "#475569" : "#cbd5e1" }} />
                               </TableCell>
                               <TableCell>
                                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -480,19 +482,19 @@ export default function CheckTemplateDetailPage() {
                               <TableCell>
                                 <Chip size="small"
                                   label={RESPONSE_TYPE_LABELS[item.responseType] ?? item.responseType}
-                                  sx={{ bgcolor: "#f1f5f9", color: "#475569", fontSize: 10 }} />
+                                  sx={{ bgcolor: "var(--color-background-tertiary)", color: "text.secondary", fontSize: 10 }} />
                               </TableCell>
                               <TableCell>
                                 <Chip size="small"
                                   label={item.isRequired ? "Yes" : "No"}
                                   sx={item.isRequired
-                                    ? { bgcolor: "#e8f1ff", color: "primary.main", fontSize: 10 }
-                                    : { bgcolor: "#f1f5f9", color: "#64748b", fontSize: 10 }} />
+                                    ? { bgcolor: mode === "dark" ? "rgba(59,130,246,0.15)" : "#e8f1ff", color: mode === "dark" ? "#60a5fa" : "primary.main", fontSize: 10 }
+                                    : { bgcolor: "var(--color-background-tertiary)", color: "var(--color-text-muted)", fontSize: 10 }} />
                               </TableCell>
                               <TableCell>
                                 {item.isCritical ? (
                                   <Chip size="small" label="Critical"
-                                    sx={{ bgcolor: "#fef2f2", color: "#b91c1c", fontSize: 10 }} />
+                                    sx={{ bgcolor: mode === "dark" ? "#3a1a1a" : "#fef2f2", color: mode === "dark" ? "#f87171" : "#b91c1c", fontSize: 10 }} />
                                 ) : (
                                   <Typography variant="caption" color="text.secondary">—</Typography>
                                 )}
@@ -556,7 +558,7 @@ export default function CheckTemplateDetailPage() {
                 {
                   label: "Critical items",
                   value: <Typography variant="caption" sx={{
-                    color: template.items.filter(i => i.isCritical).length > 0 ? "#b91c1c" : "inherit",
+                    color: template.items.filter(i => i.isCritical).length > 0 ? semanticToken("danger", mode).solid : "inherit",
                     fontWeight: template.items.filter(i => i.isCritical).length > 0 ? 700 : 400
                   }}>
                     {template.items.filter(i => i.isCritical).length}
