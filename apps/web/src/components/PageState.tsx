@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert, Box, CircularProgress, Typography } from "@mui/material";
+import { Alert, Box, CircularProgress, Typography, useTheme } from "@mui/material";
 
 export function LoadingState({ label = "Loading..." }: { label?: string }) {
   return (
@@ -31,14 +31,16 @@ export function EmptyState({
   title: string;
   detail: string;
 }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
   return (
     <Box
       sx={{
         py: 7,
         textAlign: "center",
-        border: "1px dashed #cbd5e1",
+        border: `1px dashed ${isDark ? "#334155" : "#cbd5e1"}`,
         borderRadius: 2,
-        bgcolor: "#f8fafc"
+        bgcolor: isDark ? "#172033" : "#f8fafc"
       }}
     >
       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>

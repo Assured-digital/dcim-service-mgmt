@@ -6,7 +6,8 @@ import {
   Button,
   Alert,
   InputAdornment,
-  IconButton
+  IconButton,
+  useTheme
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { api, type ApiError } from "../lib/api";
@@ -32,6 +33,8 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState(false);
 
   const newPasswordInvalid = newPassword.length > 0 && !isNewPasswordValid(newPassword);
+
+  const theme = useTheme();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,8 +90,8 @@ export default function SettingsPage() {
       <Box
         sx={{
           maxWidth: 440,
-          bgcolor: "#ffffff",
-          border: "1px solid #e2e8f0",
+          bgcolor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.divider}`,
           borderRadius: 2,
           p: 3
         }}

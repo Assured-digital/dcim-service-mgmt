@@ -1,5 +1,5 @@
 import React from "react"
-import { Box, Stack, Tooltip, Typography } from "@mui/material"
+import { Box, Stack, Tooltip, Typography, useTheme } from "@mui/material"
 import CheckIcon from "@mui/icons-material/Check"
 
 export interface WorkflowStage {
@@ -27,6 +27,8 @@ export function WorkflowStrip({
   specialStageColors = {}
 }: WorkflowStripProps) {
   const currentIndex = stages.findIndex(s => s.id === currentStage)
+  const theme = useTheme()
+  const isDark = theme.palette.mode === "dark"
 
   return (
     <Box sx={{
@@ -39,7 +41,7 @@ export function WorkflowStrip({
         {stages.map((stage, idx) => {
           const isCurrent = stage.id === currentStage
           const isPast = idx < currentIndex
-          const specialColor = isCurrent ? (specialStageColors[stage.id] ?? "#0f172a") : null
+          const specialColor = isCurrent ? (specialStageColors[stage.id] ?? (isDark ? "#475569" : "#0f172a")) : null
 
           return (
             <React.Fragment key={stage.id}>
@@ -60,13 +62,13 @@ export function WorkflowStrip({
                       <CheckIcon sx={{ fontSize: 9, color: "#fff" }} />
                     </Box>
                   ) : isPast ? (
-                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: "#cbd5e1", flexShrink: 0 }} />
+                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: isDark ? "#334155" : "#cbd5e1", flexShrink: 0 }} />
                   ) : (
-                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", border: "1.25px solid #e2e8f0", flexShrink: 0 }} />
+                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", border: `1.25px solid ${theme.palette.divider}`, flexShrink: 0 }} />
                   )}
                   <Typography sx={{
                     fontSize: 10.5, fontWeight: isCurrent ? 700 : 500,
-                    color: isCurrent ? "#0f172a" : isPast ? "#94a3b8" : "text.tertiary",
+                    color: isCurrent ? "text.primary" : "text.tertiary",
                     whiteSpace: "nowrap"
                   }}>
                     {stage.label}

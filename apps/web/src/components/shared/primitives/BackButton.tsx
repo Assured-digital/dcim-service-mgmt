@@ -19,10 +19,11 @@ export function BackButton({ label, onClick, sx }: BackButtonProps) {
       startIcon={<ArrowBackIcon sx={{ fontSize: 15 }} />}
       size="small"
       sx={[
-        {
-          color: "#64748b", fontSize: 12.5, textTransform: "none",
+        (theme) => ({
+          color: theme.palette.mode === "dark" ? "#94a3b8" : "#64748b",
+          fontSize: 12.5, textTransform: "none",
           "&:hover": { color: "#1d4ed8", bgcolor: "transparent" },
-        },
+        }),
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}
     >

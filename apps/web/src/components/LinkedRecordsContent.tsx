@@ -1,10 +1,11 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
-import { Box, Button, IconButton, Tooltip, Typography } from "@mui/material"
+import { Box, Button, IconButton, Tooltip, Typography, useTheme } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import LinkOffIcon from "@mui/icons-material/LinkOff"
 import { ResolvedLink, routeForLink, navSegmentForType, visualForType } from "../lib/linkedRecords"
 import { useDrillNav } from "../lib/drillNav"
+import { accentToken, type ThemeMode } from "./shared/tokens/colors"
 
 interface LinkedRecordsContentProps {
   links: ResolvedLink[]
@@ -20,10 +21,13 @@ interface LinkedRecordsContentProps {
 // giving the spec's coloured badge.
 const TERMINAL = /(closed|resolved|done|complete|completed|cancelled|canceled|rejected|retired|implemented)/i
 
-function statusTone(status: string): { bg: string; fg: string } {
-  return TERMINAL.test(status)
-    ? { bg: "#eef2f6", fg: "#475569" }
-    : { bg: "#e6f1fb", fg: "#185fa5" }
+function statusTone(status: string, mode: ThemeMode): { bg: string; fg: string } {
+  if (TERMINAL.test(status)) {
+    return mode === "dark" ? { bg: "#1e293b", fg: "#94a3b8" } : { bg: "#eef2f6", fg: "#475569" }
+  }
+  // active tone = the blue identity wash (light value is byte-identical to the prior #e6f1fb/#185fa5)
+  const blue = accentToken("blue", mode)
+  return { bg: blue.bg, fg: blue.text }
 }
 
 export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
@@ -33,6 +37,7 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   showAddButton = true,
 }: LinkedRecordsContentProps) {
   const navigate = useNavigate()
+  const theme = useTheme()
   // Inside the Service Desk navigator, a row drills to depth 2 (in place);
   // standalone (no provider) it navigates to the record's own detail route.
   const drill = useDrillNav()
@@ -47,7 +52,7 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
         links.map((link) => {
           const visual = visualForType(link.type)
           const Icon = visual.Icon
-          const tone = statusTone(link.status)
+          const tone = statusTone(link.status, theme.palette.mode)
           return (
             <Box
               key={link.linkId || `${link.type}:${link.id}`}

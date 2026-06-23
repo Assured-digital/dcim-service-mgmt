@@ -1,5 +1,5 @@
 import React from "react"
-import { Box, Dialog, DialogContent, DialogTitle, Stack, Typography } from "@mui/material"
+import { Box, Dialog, DialogContent, DialogTitle, Stack, Typography, useTheme } from "@mui/material"
 import { TypeBadge, type BadgeKind } from "../primitives/TypeBadge"
 
 // Generic "new record" type picker — a small dialog of clickable type cards
@@ -17,6 +17,8 @@ export function RecordTypePicker({
   title: string
   options: RecordTypeOption[]
 }) {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === "dark"
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>{title}</DialogTitle>
@@ -29,14 +31,17 @@ export function RecordTypePicker({
               sx={{
                 display: "flex", alignItems: "center", gap: 1.5,
                 p: 1.5, borderRadius: 1.5, cursor: "pointer",
-                border: "1px solid #e2e8f0",
-                "&:hover": { bgcolor: "#f8fafc", borderColor: "#cbd5e1" }
+                border: `1px solid ${theme.palette.divider}`,
+                "&:hover": {
+                  bgcolor: isDark ? "#172033" : "#f8fafc",
+                  borderColor: isDark ? "#475569" : "#cbd5e1",
+                }
               }}
             >
               <TypeBadge kind={o.kind} />
               <Box sx={{ flex: 1 }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{o.title}</Typography>
-                <Typography sx={{ fontSize: 12, color: "#64748b" }}>{o.subtitle}</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary" }}>{o.title}</Typography>
+                <Typography sx={{ fontSize: 12, color: isDark ? "#94a3b8" : "#64748b" }}>{o.subtitle}</Typography>
               </Box>
             </Box>
           ))}

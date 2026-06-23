@@ -17,12 +17,17 @@ const variantColours: Record<AvatarVariant, { bg: string; color: string }> = {
   neutral:  { bg: "#e8f1ff", color: "#1d4ed8" },
 }
 
-// Dark counterpart for the NEUTRAL variant — the one tone that read wrong on a dark
-// surface (the light #e8f1ff wash glares). A filled slate circle (slate-700 bg /
-// slate-300 initials) instead. Only neutral is mode-aware for now; the engineer/client
-// identity washes keep their tinted values in both modes (a later batch can dark-tune
-// those). Opt-in: callers that don't pass `mode` (default "light") are byte-identical.
-const neutralColoursDark = { bg: "#334155", color: "#cbd5e1" }
+// Dark counterparts for all three variants — a deep, low-luminance fill + bright,
+// same-hue initials, matching the app's other dark tint groups (semantic/priority/
+// accent *Dark) and legible at 20–24px. Neutral is a flat slate circle (done in
+// Batch C); engineer/client are the green/amber identity washes re-scaled for dark.
+// Opt-in: callers that don't pass `mode` (default "light") render the exact prior
+// light washes, byte-identical.
+const variantColoursDark: Record<AvatarVariant, { bg: string; color: string }> = {
+  engineer: { bg: "#13351f", color: "#4ade80" }, // green
+  client:   { bg: "#3a2c0f", color: "#fbbf24" }, // amber
+  neutral:  { bg: "#334155", color: "#cbd5e1" }, // slate
+}
 
 function initialsFrom(input: string): string {
   const cleaned = input.trim()
@@ -46,7 +51,7 @@ export function Avatar({
   mode?: ThemeMode
 }) {
   const { box, font } = sizeMap[size]
-  const palette = mode === "dark" && variant === "neutral" ? neutralColoursDark : variantColours[variant]
+  const palette = mode === "dark" ? variantColoursDark[variant] : variantColours[variant]
   return (
     <Box
       component="span"

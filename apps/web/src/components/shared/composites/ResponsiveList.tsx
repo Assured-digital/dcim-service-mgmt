@@ -40,6 +40,7 @@ export function ResponsiveList<T>({
   columns, rows, getRowKey, onRowClick,
 }: ResponsiveListProps<T>) {
   const theme = useTheme()
+  const isDark = theme.palette.mode === "dark"
   const isPhone = useMediaQuery(theme.breakpoints.down("md"))
 
   // ── Phone: stacked cards ─────────────────────────────────────────────────
@@ -57,14 +58,17 @@ export function ResponsiveList<T>({
             key={getRowKey(row)}
             onClick={() => onRowClick?.(row)}
             sx={{
-              bgcolor: "#ffffff",
-              border: "1px solid #e2e8f0",
+              bgcolor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.divider}`,
               borderRadius: "8px",
               px: "16px", py: "12px",
               cursor: onRowClick ? "pointer" : "default",
               transition: "all 0.1s",
               "&:hover": onRowClick
-                ? { borderColor: "#cbd5e1", boxShadow: "0 2px 8px rgba(15,23,42,0.06)" }
+                ? {
+                    borderColor: isDark ? "#475569" : "#cbd5e1",
+                    boxShadow: isDark ? "0 2px 8px rgba(0,0,0,0.4)" : "0 2px 8px rgba(15,23,42,0.06)",
+                  }
                 : undefined,
             }}
           >
@@ -84,9 +88,9 @@ export function ResponsiveList<T>({
                 {metaCols.map((col, i) => (
                   <React.Fragment key={col.id}>
                     {i > 0 ? (
-                      <Typography sx={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1 }}>·</Typography>
+                      <Typography sx={{ fontSize: 11, color: isDark ? "#475569" : "#cbd5e1", lineHeight: 1 }}>·</Typography>
                     ) : null}
-                    <Box sx={{ minWidth: 0, color: "#64748b", fontSize: 12, lineHeight: 1.3 }}>
+                    <Box sx={{ minWidth: 0, color: isDark ? "#94a3b8" : "#64748b", fontSize: 12, lineHeight: 1.3 }}>
                       {col.render(row)}
                     </Box>
                   </React.Fragment>
@@ -117,7 +121,7 @@ export function ResponsiveList<T>({
               onClick={() => onRowClick?.(row)}
               sx={{
                 cursor: onRowClick ? "pointer" : "default",
-                "&:hover": onRowClick ? { bgcolor: "#f8fafc" } : undefined,
+                "&:hover": onRowClick ? { bgcolor: isDark ? "#172033" : "#f8fafc" } : undefined,
               }}
             >
               {columns.map(col => (

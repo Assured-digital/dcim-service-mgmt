@@ -1,7 +1,8 @@
 import React from "react"
-import { Button, ButtonGroup, Divider, IconButton, Menu, MenuItem } from "@mui/material"
+import { Button, ButtonGroup, Divider, IconButton, Menu, MenuItem, useTheme } from "@mui/material"
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown"
+import { semanticToken } from "./shared/tokens/colors"
 
 export type EditAction =
   | { label: string; onClick: () => void; danger?: boolean; disabled?: boolean }
@@ -18,6 +19,7 @@ type Props = {
 export function EditActionsButton({ editLabel = "Edit", editIcon, onEdit, actions = [], disabled }: Props) {
   const [anchor, setAnchor] = React.useState<HTMLElement | null>(null)
   const hasActions = actions.length > 0
+  const theme = useTheme()
 
   return (
     <>
@@ -26,7 +28,7 @@ export function EditActionsButton({ editLabel = "Edit", editIcon, onEdit, action
           onClick={onEdit}
           disabled={disabled}
           startIcon={editIcon ?? <EditOutlinedIcon sx={{ fontSize: 13 }} />}
-          sx={{ textTransform: "none", fontSize: 12, borderColor: "#e2e8f0", color: "#475569" }}
+          sx={{ textTransform: "none", fontSize: 12, borderColor: theme.palette.divider, color: theme.palette.text.secondary }}
         >
           {editLabel}
         </Button>
@@ -35,7 +37,7 @@ export function EditActionsButton({ editLabel = "Edit", editIcon, onEdit, action
             size="small"
             disabled={disabled}
             onClick={e => setAnchor(e.currentTarget)}
-            sx={{ border: "1px solid #e2e8f0", borderLeft: "none", borderRadius: "0 4px 4px 0", px: "4px" }}
+            sx={{ border: `1px solid ${theme.palette.divider}`, borderLeft: "none", borderRadius: "0 4px 4px 0", px: "4px" }}
           >
             <ArrowDropDownIcon fontSize="small" />
           </IconButton>
@@ -52,7 +54,7 @@ export function EditActionsButton({ editLabel = "Edit", editIcon, onEdit, action
                 key={a.label}
                 disabled={a.disabled}
                 onClick={() => { setAnchor(null); a.onClick() }}
-                sx={{ fontSize: 13, ...(a.danger ? { color: "#dc2626" } : null) }}
+                sx={{ fontSize: 13, ...(a.danger ? { color: semanticToken("danger", theme.palette.mode).text } : null) }}
               >
                 {a.label}
               </MenuItem>
