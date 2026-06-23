@@ -986,7 +986,7 @@ export default function Shell() {
   if (isMobile) {
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-        <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: "#080f1e", display: "flex", alignItems: "center", px: 2, gap: 1 }}>
+        <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: shellTokens.top, display: "flex", alignItems: "center", px: 2, gap: 1 }}>
           <IconButton onClick={() => setMobileOpen(true)} sx={{ color: "#94a3b8" }}><MenuIcon /></IconButton>
           <img src="/ad-logo-white-new.svg" alt="Assured Digital" style={{ height: 28, width: "auto", objectFit: "contain", maxWidth: 200 }} />
         </Box>
@@ -1027,7 +1027,7 @@ export default function Shell() {
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Top bar */}
-        <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: "#080f1e", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", px: "16px", gap: "8px" }}>
+        <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: shellTokens.top, borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", px: "16px", gap: "8px" }}>
           <Box sx={{ flex: 1, display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
 
             {/* Client badge — "All clients" for org-super on scope-independent

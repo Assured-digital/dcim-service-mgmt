@@ -19,6 +19,7 @@ import {
 } from "@mui/icons-material";
 import { api, setAuthToken, type ApiError, type LoginResponse } from "../lib/api";
 import { setSession } from "../lib/auth";
+import { shellTokens } from "../components/shared";
 import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
@@ -78,7 +79,7 @@ export default function LoginPage() {
           display: { xs: "none", md: "flex" },
           alignItems: "center",
           justifyContent: "center",
-          bgcolor: "#0d1526",
+          bgcolor: shellTokens.bg,
           p: 4
         }}
       >
@@ -96,7 +97,7 @@ export default function LoginPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          bgcolor: "#ffffff",
+          bgcolor: "background.paper",
           p: { xs: 3, sm: 6 }
         }}
       >

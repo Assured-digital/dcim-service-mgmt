@@ -5,6 +5,7 @@ import { Badge, Box, CircularProgress, IconButton, Menu, Typography } from "@mui
 import NotificationsIcon from "@mui/icons-material/Notifications"
 import DoneAllIcon from "@mui/icons-material/DoneAll"
 import { Avatar } from "./shared"
+import { useThemeMode } from "../lib/theme"
 import {
   fetchNotifications,
   fetchUnreadCount,
@@ -27,6 +28,8 @@ const POLL_INTERVAL_MS = 25000
 export default function NotificationBell({ clientId }: { clientId: string }) {
   const nav = useNavigate()
   const qc = useQueryClient()
+  const { mode } = useThemeMode()
+  const isDark = mode === "dark"
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
   const open = Boolean(anchorEl)
 
@@ -99,16 +102,18 @@ export default function NotificationBell({ clientId }: { clientId: string }) {
           paper: {
             sx: {
               mt: 1, width: 380, maxWidth: "calc(100vw - 24px)",
-              borderRadius: "10px", border: "1px solid #e2e8f0",
-              boxShadow: "0 8px 24px rgba(15,23,42,0.16)", overflow: "hidden",
+              borderRadius: "10px",
+              border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
+              boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.45)" : "0 8px 24px rgba(15,23,42,0.16)",
+              overflow: "hidden",
             },
           },
         }}
         MenuListProps={{ sx: { p: 0 } }}
       >
         {/* Header — title + mark-all-read */}
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: "14px", py: "10px", borderBottom: "1px solid #f1f5f9" }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Notifications</Typography>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: "14px", py: "10px", borderBottom: "1px solid var(--color-border-tertiary)" }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary" }}>Notifications</Typography>
           {unreadCount > 0 ? (
             <Box
               component="button"
@@ -136,7 +141,7 @@ export default function NotificationBell({ clientId }: { clientId: string }) {
             </Box>
           ) : items.length === 0 ? (
             <Box sx={{ px: "16px", py: 5, textAlign: "center" }}>
-              <Typography sx={{ fontSize: 13, color: "#94a3b8" }}>No notifications</Typography>
+              <Typography sx={{ fontSize: 13, color: "text.tertiary" }}>No notifications</Typography>
             </Box>
           ) : (
             items.map((n) => {
@@ -148,20 +153,20 @@ export default function NotificationBell({ clientId }: { clientId: string }) {
                   onClick={() => handleItemClick(n)}
                   sx={{
                     display: "flex", gap: "10px", px: "14px", py: "10px", cursor: "pointer",
-                    borderBottom: "1px solid #f8fafc",
-                    bgcolor: unread ? "rgba(29,78,216,0.05)" : "transparent",
-                    "&:hover": { bgcolor: unread ? "rgba(29,78,216,0.09)" : "#f8fafc" },
+                    borderBottom: `1px solid ${isDark ? "#172033" : "#f8fafc"}`,
+                    bgcolor: unread ? (isDark ? "rgba(59,130,246,0.12)" : "rgba(29,78,216,0.05)") : "transparent",
+                    "&:hover": { bgcolor: unread ? (isDark ? "rgba(59,130,246,0.18)" : "rgba(29,78,216,0.09)") : "var(--color-background-secondary)" },
                   }}
                 >
-                  <Avatar name={actorName} size="md" variant="neutral" />
+                  <Avatar name={actorName} size="md" variant="neutral" mode={mode} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 13, color: "#0f172a", fontWeight: unread ? 600 : 400, lineHeight: 1.4 }}>
+                    <Typography sx={{ fontSize: 13, color: "text.primary", fontWeight: unread ? 600 : 400, lineHeight: 1.4 }}>
                       <Box component="span" sx={{ fontWeight: 600 }}>{actorName}</Box> mentioned you
                     </Typography>
-                    <Typography sx={{ fontSize: 12, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <Typography sx={{ fontSize: 12, color: isDark ? "#94a3b8" : "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       in {sourceTypeLabel(n.sourceType)}
                     </Typography>
-                    <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: "2px" }}>
+                    <Typography sx={{ fontSize: 11, color: "text.tertiary", mt: "2px" }}>
                       {formatRelativeTime(n.createdAt)}
                     </Typography>
                   </Box>
