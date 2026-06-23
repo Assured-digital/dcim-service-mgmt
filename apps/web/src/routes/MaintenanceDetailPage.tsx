@@ -54,7 +54,8 @@ import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { userLabel } from "../lib/userDisplay"
 import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
 import type { AttachmentSummary } from "../lib/attachments"
-import { statusColors } from "../components/shared"
+import { statusColors, accentToken, type ThemeMode } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { type AuditEvent } from "../lib/auditEvents"
 import { AuditHistoryList } from "../components/AuditHistoryList"
 
@@ -120,18 +121,21 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   CANCELLED: <CancelOutlinedIcon sx={{ fontSize: 14 }} />,
 }
 
-const MAINTENANCE_STATUS_CONFIG: StatusConfig = {
-  options: ["PLANNED", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "CLOSED"].map<StatusOption>(
-    (value) => ({
-      value,
-      label: STATUS_LABELS[value],
-      badgeClass: `b-${value.toLowerCase()}`,
-      bg: statusColors(value).bg,
-      iconColor: statusColors(value).text,
-      icon: STATUS_ICONS[value],
-      buttonIcon: STATUS_ICONS[value],
-    })
-  ),
+// Built per-render with the active mode (statusColors light branch is unchanged).
+function buildMaintenanceStatusConfig(mode: ThemeMode): StatusConfig {
+  return {
+    options: ["PLANNED", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "CLOSED"].map<StatusOption>(
+      (value) => ({
+        value,
+        label: STATUS_LABELS[value],
+        badgeClass: `b-${value.toLowerCase()}`,
+        bg: statusColors(value, mode).bg,
+        iconColor: statusColors(value, mode).text,
+        icon: STATUS_ICONS[value],
+        buttonIcon: STATUS_ICONS[value],
+      })
+    ),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,35 +166,42 @@ const WORK_TYPE_LABELS: Record<string, string> = {
   OTHER: "Other",
 }
 
-const WORK_TYPE_OPTIONS: PopoverOption[] = WORK_TYPES.map((value) => ({
-  value,
-  label: WORK_TYPE_LABELS[value],
-  iconBg: "#e6f1fb",
-  iconColor: "#185fa5",
-  icon: <BuildIcon sx={{ fontSize: 14 }} />,
-}))
+function buildWorkTypeOptions(mode: ThemeMode): PopoverOption[] {
+  const tone = accentToken("blue", mode)
+  return WORK_TYPES.map((value) => ({
+    value,
+    label: WORK_TYPE_LABELS[value],
+    iconBg: tone.bg,
+    iconColor: tone.text,
+    icon: <BuildIcon sx={{ fontSize: 14 }} />,
+  }))
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Type badge — spec section 3.3
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MAINTENANCE_TYPE_BADGE = (
-  <Box
-    component="span"
-    sx={{
-      fontSize: 10,
-      fontWeight: 500,
-      bgcolor: "#f1efe8",
-      color: "#5f5e5a",
-      px: 1,
-      py: 0.25,
-      borderRadius: 1,
-      letterSpacing: "0.04em",
-    }}
-  >
-    MNT
-  </Box>
-)
+// Maintenance identity badge — the neutral accent wash (light = the prior literals).
+function maintenanceTypeBadge(mode: ThemeMode) {
+  const a = accentToken("neutral", mode)
+  return (
+    <Box
+      component="span"
+      sx={{
+        fontSize: 10,
+        fontWeight: 500,
+        bgcolor: a.bg,
+        color: a.text,
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        letterSpacing: "0.04em",
+      }}
+    >
+      MNT
+    </Box>
+  )
+}
 
 // Linked record kind visuals (asset is the only linked entity for maintenance)
 type LinkedEntityKind = "asset" | "site" | "default"
@@ -202,10 +213,21 @@ interface LinkedEntityVisual {
   label: string
 }
 
-const LINKED_ENTITY_VISUALS: Record<LinkedEntityKind, LinkedEntityVisual> = {
-  asset: { Icon: StorageIcon, bg: "#e6f1fb", fg: "#185fa5", label: "ASSET" },
-  site: { Icon: LocationOnIcon, bg: "#eaf3de", fg: "#3b6d11", label: "SITE" },
-  default: { Icon: LinkIcon, bg: "#eef2f6", fg: "#475569", label: "REF" },
+// Icon + label are mode-invariant; the tinted bg/fg flip with mode (asset = blue,
+// site = green accent washes; default = the terminal slate). Light = the prior literals.
+const LINKED_ENTITY_META: Record<LinkedEntityKind, { Icon: LinkedEntityVisual["Icon"]; label: string }> = {
+  asset: { Icon: StorageIcon, label: "ASSET" },
+  site: { Icon: LocationOnIcon, label: "SITE" },
+  default: { Icon: LinkIcon, label: "REF" },
+}
+
+function linkedEntityVisual(kind: LinkedEntityKind, mode: ThemeMode): LinkedEntityVisual {
+  const tone =
+    kind === "asset" ? accentToken("blue", mode) :
+    kind === "site" ? accentToken("green", mode) :
+    (mode === "dark" ? { bg: "#1e293b", text: "#94a3b8" } : { bg: "#eef2f6", text: "#475569" })
+  const meta = LINKED_ENTITY_META[kind]
+  return { Icon: meta.Icon, bg: tone.bg, fg: tone.text, label: meta.label }
 }
 
 function entityKindFromType(value?: string | null): LinkedEntityKind {
@@ -432,6 +454,9 @@ const WorkDetailsContent = React.memo(function WorkDetailsContent({
   onCommitWorkTypeOther,
   onCommitNotes,
 }: WorkDetailsContentProps) {
+  const { mode } = useThemeMode()
+  const workTypeOptions = React.useMemo(() => buildWorkTypeOptions(mode), [mode])
+  const workTypeTone = accentToken("blue", mode)
   const anchorRef = React.useRef<HTMLButtonElement | null>(null)
   const [open, setOpen] = React.useState(false)
   const handleOpen = React.useCallback(() => setOpen(true), [])
@@ -464,8 +489,8 @@ const WorkDetailsContent = React.memo(function WorkDetailsContent({
             sx={{
               all: "unset",
               cursor: "pointer",
-              bgcolor: "#e6f1fb",
-              color: "#185fa5",
+              bgcolor: workTypeTone.bg,
+              color: workTypeTone.text,
               fontSize: 11,
               fontWeight: 500,
               px: 1,
@@ -479,7 +504,7 @@ const WorkDetailsContent = React.memo(function WorkDetailsContent({
         <StatusPopover
           id="maintenance-work-type"
           header="Work type"
-          options={WORK_TYPE_OPTIONS}
+          options={workTypeOptions}
           currentValue={workType}
           onSelect={handleSelect}
           anchorEl={anchorRef.current}
@@ -585,6 +610,7 @@ const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   onAddLink,
   showAddButton = true,
 }: LinkedRecordsContentProps) {
+  const { mode } = useThemeMode()
   return (
     <Box>
       {entities.length === 0 ? (
@@ -593,7 +619,7 @@ const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
         </Typography>
       ) : (
         entities.map((entity) => {
-          const visual = LINKED_ENTITY_VISUALS[entityKindFromType(entity.type)]
+          const visual = linkedEntityVisual(entityKindFromType(entity.type), mode)
           const Icon = visual.Icon
           return (
             <Box
@@ -693,6 +719,7 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const { mode } = useThemeMode()
   const [visibleCount, setVisibleCount] = React.useState(10)
 
   const handleFilterChange = React.useCallback(
@@ -728,7 +755,7 @@ const ActivityContent = React.memo(function ActivityContent({
         <AuditHistoryList events={auditEvents.slice(0, visibleCount)} recordNoun="maintenance record" />
       ) : (
         visibleEvents.map((event, idx) => (
-          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} />
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} mode={mode} />
         ))
       )}
 
@@ -756,6 +783,8 @@ export default function MaintenanceDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { mode } = useThemeMode()
+  const maintenanceStatusConfig = React.useMemo(() => buildMaintenanceStatusConfig(mode), [mode])
   const { setPageFullBleed } = useBreadcrumb()
 
   // Render flush in the Shell content area (no surrounding padding/frame), matching
@@ -924,24 +953,26 @@ export default function MaintenanceDetailPage() {
   }, [recordData, users.data])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const assigned = accentToken("green", mode)
+    const unassigned = accentToken("neutral", mode)
     const list: PopoverOption[] = (users.data ?? []).map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: assigned.bg,
+      iconColor: assigned.text,
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
     }))
     return [
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: unassigned.bg,
+        iconColor: unassigned.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [users.data])
+  }, [users.data, mode])
 
   const linkedEntities = React.useMemo<LinkedEntity[]>(() => {
     if (!recordData) return []
@@ -1023,8 +1054,8 @@ export default function MaintenanceDetailPage() {
               size="small"
               label={recordData.asset.assetTag}
               sx={{
-                bgcolor: "#e6f1fb",
-                color: "#185fa5",
+                bgcolor: accentToken("blue", mode).bg,
+                color: accentToken("blue", mode).text,
                 fontWeight: 600,
                 fontSize: 11,
                 height: 20,
@@ -1077,7 +1108,7 @@ export default function MaintenanceDetailPage() {
         ),
       },
     ]
-  }, [recordData, canManage, usersOptions, handleSelectPerformedBy])
+  }, [recordData, canManage, usersOptions, handleSelectPerformedBy, mode])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -1240,9 +1271,9 @@ export default function MaintenanceDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={record.data.asset.assetTag}
-        typeBadge={MAINTENANCE_TYPE_BADGE}
+        typeBadge={maintenanceTypeBadge(mode)}
         currentStatus={currentStatus}
-        statusConfig={MAINTENANCE_STATUS_CONFIG}
+        statusConfig={maintenanceStatusConfig}
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={

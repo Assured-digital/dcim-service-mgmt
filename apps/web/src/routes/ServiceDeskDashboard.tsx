@@ -8,6 +8,8 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward"
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh"
 import { TypeBadge, Avatar as TicketAvatar, PriorityDot } from "../components/shared"
+import { semanticToken, ragToken } from "../components/shared/tokens/colors"
+import { useThemeMode } from "../lib/theme"
 import { useTickets, type Ticket } from "../lib/tickets"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
@@ -73,13 +75,14 @@ function KPICard({
   delta?: Delta
   accent?: "danger" | "warning"
 }) {
-  const accentColor = accent === "danger" ? "#b91c1c" : accent === "warning" ? "#b45309" : undefined
+  const { mode } = useThemeMode()
+  const accentColor = accent === "danger" ? semanticToken("danger", mode).solid : accent === "warning" ? semanticToken("warning", mode).solid : undefined
   return (
     <Card sx={{ flex: 1, minWidth: 0 }}>
       <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
         <Typography sx={{
           fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
-          textTransform: "uppercase", color: "#64748b", mb: 0.75
+          textTransform: "uppercase", color: "var(--color-text-muted)", mb: 0.75
         }}>
           {label}
         </Typography>
@@ -87,7 +90,7 @@ function KPICard({
           <Typography sx={{
             fontFamily: "Space Grotesk, Manrope",
             fontSize: 28, fontWeight: 700,
-            color: accentColor ?? "#0f172a",
+            color: accentColor ?? "text.primary",
             letterSpacing: "-0.02em",
             lineHeight: 1.1,
           }}>
@@ -95,7 +98,7 @@ function KPICard({
           </Typography>
           {delta ? (
             <Stack direction="row" alignItems="center" spacing={0.25} sx={{
-              color: delta.tone === "good" ? "#15803d" : delta.tone === "bad" ? "#b91c1c" : "#64748b",
+              color: delta.tone === "good" ? semanticToken("success", mode).solid : delta.tone === "bad" ? semanticToken("danger", mode).solid : "var(--color-text-muted)",
               fontSize: 12, fontWeight: 600,
             }}>
               {delta.direction === "up" ? <ArrowUpwardIcon sx={{ fontSize: 13 }} /> :
@@ -105,7 +108,7 @@ function KPICard({
           ) : null}
         </Stack>
         {sub ? (
-          <Typography sx={{ fontSize: 12, color: "#64748b", mt: 0.5 }}>{sub}</Typography>
+          <Typography sx={{ fontSize: 12, color: "var(--color-text-muted)", mt: 0.5 }}>{sub}</Typography>
         ) : null}
       </CardContent>
     </Card>
@@ -115,6 +118,7 @@ function KPICard({
 // ── Overdue mini-table ────────────────────────────────────────────────────
 function OverdueTable({ tickets }: { tickets: Ticket[] }) {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
   const overdue = tickets
     .filter(t => t.overdue)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -124,11 +128,11 @@ function OverdueTable({ tickets }: { tickets: Ticket[] }) {
     <Card sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
       <CardContent sx={{ p: 2, pb: 1, flexShrink: 0 }}>
         <Stack direction="row" alignItems="center" spacing={0.75}>
-          <PriorityHighIcon sx={{ fontSize: 16, color: "#b91c1c" }} />
-          <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+          <PriorityHighIcon sx={{ fontSize: 16, color: semanticToken("danger", mode).solid }} />
+          <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "text.primary" }}>
             Overdue queue
           </Typography>
-          <Typography sx={{ fontSize: 11, fontWeight: 700, color: "#b91c1c", ml: "auto" }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 700, color: semanticToken("danger", mode).solid, ml: "auto" }}>
             {overdue.length} to action
           </Typography>
         </Stack>
@@ -136,7 +140,7 @@ function OverdueTable({ tickets }: { tickets: Ticket[] }) {
       <Divider />
       <Box sx={{ flex: 1, overflowY: "auto" }}>
         {overdue.length === 0 ? (
-          <Typography sx={{ p: 2, fontSize: 13, color: "#64748b", textAlign: "center" }}>
+          <Typography sx={{ p: 2, fontSize: 13, color: "var(--color-text-muted)", textAlign: "center" }}>
             Nothing overdue. ✨
           </Typography>
         ) : (
@@ -146,23 +150,23 @@ function OverdueTable({ tickets }: { tickets: Ticket[] }) {
               onClick={() => navigate(t.detailPath)}
               sx={{
                 px: 2, py: 1.25, cursor: "pointer",
-                borderBottom: "1px solid #f1f5f9",
-                borderLeft: "3px solid #ef4444",
-                "&:hover": { bgcolor: "#f8fafc" },
+                borderBottom: "1px solid var(--color-border-tertiary)",
+                borderLeft: `3px solid ${ragToken("RED", mode).dot}`,
+                "&:hover": { bgcolor: "var(--color-background-secondary)" },
                 "&:last-child": { borderBottom: "none" },
               }}
             >
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.25 }}>
                 <TypeBadge kind={t.kind} />
-                <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "#475569" }}>
+                <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "text.secondary" }}>
                   {t.reference}
                 </Typography>
-                <Typography sx={{ ml: "auto", fontSize: 11, color: "#b91c1c", fontWeight: 600 }}>
+                <Typography sx={{ ml: "auto", fontSize: 11, color: semanticToken("danger", mode).solid, fontWeight: 600 }}>
                   {Math.round((Date.now() - new Date(t.createdAt).getTime()) / 3600000)}h old
                 </Typography>
               </Stack>
               <Typography sx={{
-                fontSize: 12.5, color: "#0f172a", fontWeight: 500,
+                fontSize: 12.5, color: "text.primary", fontWeight: 500,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
               }}>
                 {t.subject}
@@ -189,24 +193,24 @@ function CategoryPanel({ tickets }: { tickets: Ticket[] }) {
   return (
     <Card sx={{ flex: 1, minWidth: 0 }}>
       <CardContent sx={{ p: 2 }}>
-        <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "#0f172a", mb: 1.5 }}>
+        <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "text.primary", mb: 1.5 }}>
           By category
         </Typography>
         {rows.length === 0 ? (
-          <Typography sx={{ fontSize: 13, color: "#64748b" }}>No open tickets.</Typography>
+          <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)" }}>No open tickets.</Typography>
         ) : (
           <Stack spacing={1.25}>
             {rows.map(([cat, n]) => (
               <Box key={cat}>
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 500, color: "#0f172a", flex: 1 }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 500, color: "text.primary", flex: 1 }}>
                     {cat}
                   </Typography>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: "#475569" }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: "text.secondary" }}>
                     {n}
                   </Typography>
                 </Stack>
-                <Box sx={{ height: 6, bgcolor: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
+                <Box sx={{ height: 6, bgcolor: "var(--color-background-tertiary)", borderRadius: 999, overflow: "hidden" }}>
                   <Box sx={{
                     width: `${(n / max) * 100}%`, height: "100%",
                     bgcolor: "primary.main", borderRadius: 999,
@@ -223,6 +227,7 @@ function CategoryPanel({ tickets }: { tickets: Ticket[] }) {
 
 // ── Team load ─────────────────────────────────────────────────────────────
 function TeamLoad({ tickets }: { tickets: Ticket[] }) {
+  const { mode } = useThemeMode()
   const agg = new Map<string, { open: number; late: number; id: string; displayName: string }>()
   for (const t of tickets) {
     if (!t.assignee || t.chipIntent === "done") continue
@@ -237,31 +242,31 @@ function TeamLoad({ tickets }: { tickets: Ticket[] }) {
   return (
     <Card sx={{ flex: 1, minWidth: 0 }}>
       <CardContent sx={{ p: 2 }}>
-        <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "#0f172a", mb: 1.5 }}>
+        <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "text.primary", mb: 1.5 }}>
           Team load
         </Typography>
         {rows.length === 0 ? (
-          <Typography sx={{ fontSize: 13, color: "#64748b" }}>No assigned tickets.</Typography>
+          <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)" }}>No assigned tickets.</Typography>
         ) : (
           <Stack spacing={1}>
             {rows.map(row => {
               const name = row.displayName
               return (
                 <Stack key={row.id} direction="row" alignItems="center" spacing={1.25}>
-                  <TicketAvatar name={row.displayName} size="md" variant="engineer" />
+                  <TicketAvatar name={row.displayName} size="md" variant="engineer" mode={mode} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{
-                      fontSize: 13, fontWeight: 600, color: "#0f172a",
+                      fontSize: 13, fontWeight: 600, color: "text.primary",
                       textTransform: "capitalize",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
                       {name}
                     </Typography>
-                    <Typography sx={{ fontSize: 11, color: "#64748b" }}>Analyst</Typography>
+                    <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>Analyst</Typography>
                   </Box>
-                  <Chip size="small" label={`${row.open} open`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: "#e8f1ff", color: "primary.main" }} />
+                  <Chip size="small" label={`${row.open} open`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: mode === "dark" ? "rgba(59,130,246,0.15)" : "#e8f1ff", color: mode === "dark" ? "#60a5fa" : "primary.main" }} />
                   {row.late > 0 ? (
-                    <Chip size="small" label={`${row.late} late`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: "#fee2e2", color: "#b91c1c" }} />
+                    <Chip size="small" label={`${row.late} late`} sx={{ fontSize: 11, fontWeight: 700, bgcolor: semanticToken("danger", mode).bg, color: semanticToken("danger", mode).solid }} />
                   ) : null}
                 </Stack>
               )
@@ -287,6 +292,7 @@ export default function ServiceDeskDashboard() {
 }
 
 export function ServiceDeskDashboardContent() {
+  const { mode } = useThemeMode()
   const { data: tickets, isLoading, error } = useTickets()
 
   const { open, overdue, avgResolveMs } = React.useMemo(() => {
@@ -332,7 +338,7 @@ export function ServiceDeskDashboardContent() {
         />
         <KPICard
           label="Client satisfaction"
-          value={<>4.6 <span style={{ fontSize: 16, color: "#64748b", fontWeight: 500 }}>/ 5.0</span></>}
+          value={<>4.6 <span style={{ fontSize: 16, color: "var(--color-text-muted)", fontWeight: 500 }}>/ 5.0</span></>}
           sub="CSAT placeholder — no data yet"
         />
       </Box>
@@ -342,17 +348,17 @@ export function ServiceDeskDashboardContent() {
         <Card>
           <CardContent sx={{ p: 2 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+              <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 15, fontWeight: 700, color: "text.primary" }}>
                 Tickets created vs resolved
               </Typography>
               <Stack direction="row" alignItems="center" spacing={1.5} sx={{ ml: "auto" }}>
                 <Stack direction="row" alignItems="center" spacing={0.5}>
                   <Box sx={{ width: 10, height: 10, bgcolor: "#1d4ed8", borderRadius: 0.25 }} />
-                  <Typography sx={{ fontSize: 11, color: "#64748b" }}>Created</Typography>
+                  <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>Created</Typography>
                 </Stack>
                 <Stack direction="row" alignItems="center" spacing={0.5}>
                   <Box sx={{ width: 10, height: 10, bgcolor: "#93c5fd", borderRadius: 0.25 }} />
-                  <Typography sx={{ fontSize: 11, color: "#64748b" }}>Resolved</Typography>
+                  <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>Resolved</Typography>
                 </Stack>
               </Stack>
             </Stack>
@@ -367,6 +373,13 @@ export function ServiceDeskDashboardContent() {
                 height={220}
                 margin={{ left: 36, right: 12, top: 8, bottom: 36 }}
                 hideLegend
+                // Dark-only: force axis ticks/labels to read on the dark card. Light gets
+                // no override (undefined) so the chart stays pixel-identical to before.
+                sx={mode === "dark" ? {
+                  "& .MuiChartsAxis-tickLabel": { fill: "#94a3b8" },
+                  "& .MuiChartsAxis-line": { stroke: "#334155" },
+                  "& .MuiChartsAxis-tick": { stroke: "#334155" },
+                } : undefined}
               />
             </Box>
           </CardContent>
