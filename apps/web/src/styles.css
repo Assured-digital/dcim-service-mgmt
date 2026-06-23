@@ -10,6 +10,7 @@
   --color-background-secondary: #f8fafc;
   --color-background-tertiary: #f1f5f9;
   --color-border-primary: #e2e8f0;
+  --color-border-secondary: #cbd5e1;
   --color-border-tertiary: #f1f5f9;
 }
 
@@ -29,6 +30,7 @@
   --color-background-secondary: #0f172a;
   --color-background-tertiary: #172033;
   --color-border-primary: #334155;
+  --color-border-secondary: #475569;
   --color-border-tertiary: #1e293b;
 }
 
