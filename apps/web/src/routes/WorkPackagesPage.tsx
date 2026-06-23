@@ -58,7 +58,7 @@ export default function WorkPackagesPage() {
   return (
     <Box>
       <Card>
-        <Box sx={{ borderBottom: "1px solid #e2e8f0", px: 2, py: 1.25, display: "flex", justifyContent: "flex-end" }}>
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.25, display: "flex", justifyContent: "flex-end" }}>
           <Button size="small" variant="contained" onClick={() => setOpen(true)}>New service scope</Button>
         </Box>
         <CardContent>

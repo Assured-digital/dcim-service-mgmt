@@ -8,6 +8,7 @@ import { StatusPill, entityStatusIntent } from "../components/shared"
 import { listClients, type ClientView } from "../lib/clients"
 import { EmptyState, ErrorState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { useThemeMode } from "../lib/theme"
 import ClientFormDrawer, { type ClientFormMode } from "../components/ClientFormDrawer"
 
 const ClientsToolbar = makeGridToolbar("clients")
@@ -27,6 +28,8 @@ export default function ClientsPage() {
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [mode, setMode] = React.useState<ClientFormMode>("create")
   const [selected, setSelected] = React.useState<ClientView | null>(null)
+  // Aliased — `mode` above is the form's create/edit mode, distinct from the theme mode.
+  const { mode: themeMode } = useThemeMode()
 
   const clients = useQuery({ queryKey: ["clients-admin"], queryFn: listClients })
 
@@ -71,7 +74,7 @@ export default function ClientsPage() {
         width: 130,
         valueGetter: (v) => (v ? new Date(v as string) : null),
         renderCell: (p) => (
-          <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>
+          <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>
             {p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}
           </Typography>
         )
@@ -103,7 +106,8 @@ export default function ClientsPage() {
       <Card>
         <Box
           sx={{
-            borderBottom: "1px solid #e2e8f0",
+            borderBottom: "1px solid",
+            borderColor: "divider",
             px: 2,
             py: 1.25,
             display: "flex",
@@ -112,7 +116,7 @@ export default function ClientsPage() {
             gap: 1.5
           }}
         >
-          <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#334155" }}>Client management</Typography>
+          <Typography sx={{ fontSize: 14, fontWeight: 600, color: themeMode === "dark" ? "#e2e8f0" : "#334155" }}>Client management</Typography>
           <Button
             size="small"
             variant="contained"
@@ -142,7 +146,7 @@ export default function ClientsPage() {
             pageSizeOptions={[25, 50, 100]}
             disableRowSelectionOnClick
             slots={{ toolbar: ClientsToolbar, noRowsOverlay: ClientsNoRowsOverlay }}
-            sx={dataGridSx(false)}
+            sx={dataGridSx(false, themeMode)}
           />
         </Box>
       </Card>
