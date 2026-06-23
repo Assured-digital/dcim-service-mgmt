@@ -26,7 +26,8 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import PersonIcon from "@mui/icons-material/Person"
-import { statusColors, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
+import { statusColors, accentToken, ragToken, TypeBadge, AssigneeCell, type LinkedTask, type ThemeMode } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -137,69 +138,91 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   CLOSED: <LockIcon sx={{ fontSize: 14 }} />,
 }
 
-const RISK_STATUS_CONFIG: StatusConfig = {
-  options: ["IDENTIFIED", "ASSESSED", "MITIGATING", "ACCEPTED", "CLOSED"].map<StatusOption>(
-    (value) => ({
-      value,
-      label: STATUS_LABELS[value],
-      badgeClass: `b-${value.toLowerCase()}`,
-      bg: statusColors(value).bg,
-      iconColor: statusColors(value).text,
-      icon: STATUS_ICONS[value],
-      buttonIcon: STATUS_ICONS[value],
-    })
-  ),
+// Built per-render with the active mode (statusColors light branch is unchanged).
+function buildRiskStatusConfig(mode: ThemeMode): StatusConfig {
+  return {
+    options: ["IDENTIFIED", "ASSESSED", "MITIGATING", "ACCEPTED", "CLOSED"].map<StatusOption>(
+      (value) => ({
+        value,
+        label: STATUS_LABELS[value],
+        badgeClass: `b-${value.toLowerCase()}`,
+        bg: statusColors(value, mode).bg,
+        iconColor: statusColors(value, mode).text,
+        icon: STATUS_ICONS[value],
+        buttonIcon: STATUS_ICONS[value],
+      })
+    ),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Likelihood / Impact popover options
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LEVEL_COLOURS: Record<string, { bg: string; text: string }> = {
-  LOW: { bg: "#dcfce7", text: "#15803d" },
-  MEDIUM: { bg: "#fef3c7", text: "#b45309" },
-  HIGH: { bg: "#fee2e2", text: "#b91c1c" },
+// Likelihood/Impact's LOW/MEDIUM/HIGH map onto the GREEN/AMBER/RED RAG tokens —
+// the light values equal the prior LEVEL_COLOURS exactly, and it adds the dark ramp.
+const LEVEL_TO_RAG: Record<string, "GREEN" | "AMBER" | "RED"> = {
+  LOW: "GREEN", MEDIUM: "AMBER", HIGH: "RED",
+}
+
+function levelColour(level: string, mode: ThemeMode): { bg: string; text: string } {
+  const t = ragToken(LEVEL_TO_RAG[level] ?? "AMBER", mode)
+  return { bg: t.bg, text: t.text }
 }
 
 const LEVEL_VALUES = ["LOW", "MEDIUM", "HIGH"] as const
 
-const LIKELIHOOD_OPTIONS: PopoverOption[] = LEVEL_VALUES.map((value) => ({
-  value,
-  label: value.charAt(0) + value.slice(1).toLowerCase(),
-  iconBg: LEVEL_COLOURS[value].bg,
-  iconColor: LEVEL_COLOURS[value].text,
-  icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
-}))
+function buildLikelihoodOptions(mode: ThemeMode): PopoverOption[] {
+  return LEVEL_VALUES.map((value) => {
+    const c = levelColour(value, mode)
+    return {
+      value,
+      label: value.charAt(0) + value.slice(1).toLowerCase(),
+      iconBg: c.bg,
+      iconColor: c.text,
+      icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
+    }
+  })
+}
 
-const IMPACT_OPTIONS: PopoverOption[] = LEVEL_VALUES.map((value) => ({
-  value,
-  label: value.charAt(0) + value.slice(1).toLowerCase(),
-  iconBg: LEVEL_COLOURS[value].bg,
-  iconColor: LEVEL_COLOURS[value].text,
-  icon: <ErrorOutlineIcon sx={{ fontSize: 14 }} />,
-}))
+function buildImpactOptions(mode: ThemeMode): PopoverOption[] {
+  return LEVEL_VALUES.map((value) => {
+    const c = levelColour(value, mode)
+    return {
+      value,
+      label: value.charAt(0) + value.slice(1).toLowerCase(),
+      iconBg: c.bg,
+      iconColor: c.text,
+      icon: <ErrorOutlineIcon sx={{ fontSize: 14 }} />,
+    }
+  })
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Type badge — spec section 3.3
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RISK_TYPE_BADGE = (
-  <Box
-    component="span"
-    sx={{
-      fontSize: 10,
-      fontWeight: 500,
-      bgcolor: "#faeeda",
-      color: "#854f0b",
-      px: 1,
-      py: 0.25,
-      borderRadius: 1,
-      letterSpacing: "0.04em",
-    }}
-  >
-    RSK
-  </Box>
-)
+// Risk identity badge — the amber accent wash (light values = the prior literals).
+function riskTypeBadge(mode: ThemeMode) {
+  const a = accentToken("amber", mode)
+  return (
+    <Box
+      component="span"
+      sx={{
+        fontSize: 10,
+        fontWeight: 500,
+        bgcolor: a.bg,
+        color: a.text,
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        letterSpacing: "0.04em",
+      }}
+    >
+      RSK
+    </Box>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -422,6 +445,7 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const { mode } = useThemeMode()
   const [visibleCount, setVisibleCount] = React.useState(10)
 
   const handleFilterChange = React.useCallback(
@@ -455,7 +479,7 @@ const ActivityContent = React.memo(function ActivityContent({
         <AuditHistoryList events={auditEvents.slice(0, visibleCount)} recordNoun="risk" />
       ) : (
         visibleEvents.map((event, idx) => (
-          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} />
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} mode={mode} />
         ))
       )}
 
@@ -490,6 +514,10 @@ export default function RiskDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
+  const riskStatusConfig = React.useMemo(() => buildRiskStatusConfig(mode), [mode])
+  const likelihoodOptions = React.useMemo(() => buildLikelihoodOptions(mode), [mode])
+  const impactOptions = React.useMemo(() => buildImpactOptions(mode), [mode])
 
   // Full-bleed is owned by RisksIssuesNavigator (the shared DrillDownNavigator
   // asserts it for the whole /risks-issues/* subtree and clears it on unmount).
@@ -826,24 +854,26 @@ export default function RiskDetailPage() {
 
   // Assignee-picker options — Unassigned sentinel ("") + the client-scoped assignable users.
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const assigned = accentToken("green", mode)
+    const unassigned = accentToken("neutral", mode)
     const list: PopoverOption[] = users.map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: assigned.bg,
+      iconColor: assigned.text,
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
     }))
     return [
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: unassigned.bg,
+        iconColor: unassigned.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [users])
+  }, [users, mode])
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -883,8 +913,8 @@ export default function RiskDetailPage() {
 
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!risk) return []
-    const likelihoodColours = LEVEL_COLOURS[risk.likelihood] ?? LEVEL_COLOURS.MEDIUM
-    const impactColours = LEVEL_COLOURS[risk.impact] ?? LEVEL_COLOURS.MEDIUM
+    const likelihoodColours = levelColour(risk.likelihood, mode)
+    const impactColours = levelColour(risk.impact, mode)
     const valueWrapperSx = {
       width: "100%",
       display: "flex",
@@ -909,7 +939,7 @@ export default function RiskDetailPage() {
         label: "Likelihood",
         editable: true,
         currentValue: risk.likelihood,
-        popoverOptions: LIKELIHOOD_OPTIONS,
+        popoverOptions: likelihoodOptions,
         onSelect: handleSelectLikelihood,
         value: (
           <Box sx={valueWrapperSx}>
@@ -932,7 +962,7 @@ export default function RiskDetailPage() {
         label: "Impact",
         editable: true,
         currentValue: risk.impact,
-        popoverOptions: IMPACT_OPTIONS,
+        popoverOptions: impactOptions,
         onSelect: handleSelectImpact,
         value: (
           <Box sx={valueWrapperSx}>
@@ -959,12 +989,12 @@ export default function RiskDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            <AssigneeCell user={risk.assignee} />
+            <AssigneeCell user={risk.assignee} mode={mode} />
           </Box>
         ),
       },
     ]
-  }, [risk, handleSelectLikelihood, handleSelectImpact, handleSelectAssignee, usersOptions])
+  }, [risk, mode, likelihoodOptions, impactOptions, handleSelectLikelihood, handleSelectImpact, handleSelectAssignee, usersOptions])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -1047,11 +1077,11 @@ export default function RiskDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!risk) return undefined
     return {
-      submittedBy: <AssigneeCell user={risk.createdBy ?? null} emptyLabel="—" />,
+      submittedBy: <AssigneeCell user={risk.createdBy ?? null} emptyLabel="—" mode={mode} />,
       createdAt: risk.createdAt,
       updatedAt: risk.updatedAt,
     }
-  }, [risk])
+  }, [risk, mode])
 
   const rightSections = React.useMemo<RightSection[]>(() => {
     return [
@@ -1138,9 +1168,9 @@ export default function RiskDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={risk.reference}
-        typeBadge={RISK_TYPE_BADGE}
+        typeBadge={riskTypeBadge(mode)}
         currentStatus={risk.status}
-        statusConfig={RISK_STATUS_CONFIG}
+        statusConfig={riskStatusConfig}
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={

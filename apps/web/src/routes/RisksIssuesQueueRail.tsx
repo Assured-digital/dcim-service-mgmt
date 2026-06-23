@@ -5,6 +5,7 @@ import { Box, Stack, Typography } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { api } from "../lib/api"
 import { statusSolid } from "../components/shared/tokens/colors"
+import { useThemeMode } from "../lib/theme"
 import { getCurrentUser } from "../lib/auth"
 import {
   parseRIParams, buildUnifiedRows, type Risk, type Issue, type UnifiedRow,
@@ -34,9 +35,12 @@ function formatCreated(iso: string): string {
 
 export function RisksIssuesQueueRail({ activeId }: { activeId?: string }) {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
   const [searchParams] = useSearchParams()
   const params = React.useMemo(() => parseRIParams(searchParams), [searchParams])
   const myId = React.useMemo(() => getCurrentUser(), [])?.userId
+  // Active-row wash — light branch = the prior literal exactly.
+  const activeRowBg = mode === "dark" ? "rgba(59,130,246,0.14)" : "#eff4ff"
 
   const { data: risks = [] } = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<Risk[]>("/risks")).data, staleTime: STALE_TIME })
   const { data: issues = [] } = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<Issue[]>("/issues")).data, staleTime: STALE_TIME })
@@ -65,16 +69,16 @@ export function RisksIssuesQueueRail({ activeId }: { activeId?: string }) {
           px: 1.5, height: 44,   // match the detail header height so the separators align
           cursor: "pointer",
           borderBottom: 1, borderColor: "divider",
-          color: "#475569",
+          color: "text.secondary",
           transition: "background-color 0.12s",
-          "&:hover": { bgcolor: "#f1f5f9" },
+          "&:hover": { bgcolor: "var(--color-background-tertiary)" },
         }}
       >
         <ArrowBackIcon sx={{ fontSize: 16 }} />
         <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
           List
         </Typography>
-        <Typography sx={{ ml: "auto", fontSize: 11, color: "#94a3b8" }}>{items.length}</Typography>
+        <Typography sx={{ ml: "auto", fontSize: 11, color: "text.tertiary" }}>{items.length}</Typography>
       </Box>
 
       {/* Scrollable record list. */}
@@ -84,7 +88,7 @@ export function RisksIssuesQueueRail({ activeId }: { activeId?: string }) {
           // Dot reads the SAME intent mapping the detail/grid pills use, but the
           // SOLID (saturated) scale rather than the pastel fill — at 8px the soft
           // pill colour is near-invisible between intents (see ServiceDeskQueueRail).
-          const dotColor = statusSolid(r.status)
+          const dotColor = statusSolid(r.status, mode)
           return (
             <Box
               key={r.id}
@@ -97,11 +101,11 @@ export function RisksIssuesQueueRail({ activeId }: { activeId?: string }) {
                 display: "flex", alignItems: "flex-start", gap: 1,
                 px: 1.5, py: 1.5,
                 cursor: "pointer",
-                borderBottom: "1px solid #f1f5f9",
+                borderBottom: "1px solid var(--color-border-tertiary)",
                 borderLeft: "3px solid", borderLeftColor: active ? "primary.main" : "transparent",
-                bgcolor: active ? "#eff4ff" : "transparent",
+                bgcolor: active ? activeRowBg : "transparent",
                 transition: "background-color 0.12s",
-                "&:hover": { bgcolor: active ? "#eff4ff" : "#f8fafc" },
+                "&:hover": { bgcolor: active ? activeRowBg : "var(--color-background-secondary)" },
               }}
             >
               <Box
@@ -116,7 +120,7 @@ export function RisksIssuesQueueRail({ activeId }: { activeId?: string }) {
                   title={r.title}
                   variant="body2"
                   sx={{
-                    color: active ? "primary.main" : "#0f172a",
+                    color: active ? "primary.main" : "text.primary",
                     fontWeight: active ? 600 : 500,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}

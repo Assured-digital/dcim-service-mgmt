@@ -22,6 +22,9 @@ import FilterListIcon from "@mui/icons-material/FilterList"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import { StatusPill, AssigneeCell, TypeBadge, ListNavRail, RecordTypePicker, type RailSection } from "../components/shared"
+import { ragToken, type ThemeMode } from "../components/shared/tokens/colors"
+import { dataGridSx } from "../components/DataGridShell"
+import { useThemeMode } from "../lib/theme"
 import { formatDate } from "../lib/format"
 import { LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -37,10 +40,10 @@ const STALE_TIME = 60_000
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function ragChipSx(rag: string) {
-  if (rag === "RED") return { bgcolor: "#fee2e2", color: "#b91c1c", fontWeight: 600, fontSize: 11 }
-  if (rag === "AMBER") return { bgcolor: "#fef3c7", color: "#b45309", fontWeight: 600, fontSize: 11 }
-  return { bgcolor: "#dcfce7", color: "#15803d", fontWeight: 600, fontSize: 11 }
+function ragChipSx(rag: string, mode: ThemeMode) {
+  const level = rag === "RED" ? "RED" : rag === "AMBER" ? "AMBER" : "GREEN"
+  const t = ragToken(level, mode)
+  return { bgcolor: t.bg, color: t.text, fontWeight: 600, fontSize: 11 }
 }
 
 // ─── Shared sub-components ──────────────────────────────────────────────────
@@ -63,6 +66,7 @@ function RIFooter() {
 
 function RisksIssuesQueueView() {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
   const currentUser = React.useMemo(() => getCurrentUser(), [])
   const myId = currentUser?.userId
   const apiRef = useGridApiRef()
@@ -157,13 +161,13 @@ function RisksIssuesQueueView() {
     {
       field: "reference", headerName: "Ref", width: 110,
       renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
-        <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "#475569", fontWeight: 700 }}>{p.value as string}</Typography>
+        <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "text.secondary", fontWeight: 700 }}>{p.value as string}</Typography>
       ),
     },
     {
       field: "title", headerName: "Title", flex: 1, minWidth: 240,
       renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
-        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>{p.value as string}</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "text.primary", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>{p.value as string}</Typography>
       ),
     },
     {
@@ -181,40 +185,26 @@ function RisksIssuesQueueView() {
     {
       field: "severityKey", headerName: "Severity / Impact", width: 150, sortable: false,
       renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
-        <Chip size="small" sx={ragChipSx(p.value as string)} label={(p.row as UnifiedRow).severityLabel} />
+        <Chip size="small" sx={ragChipSx(p.value as string, mode)} label={(p.row as UnifiedRow).severityLabel} />
       ),
     },
     {
       field: "assignee", headerName: "Assignee", width: 160,
       valueGetter: (_v, row) => row.assignee?.displayName ?? "Unassigned",
-      renderCell: (p: GridRenderCellParams<UnifiedRow>) => <AssigneeCell user={(p.row as UnifiedRow).assignee} />,
+      renderCell: (p: GridRenderCellParams<UnifiedRow>) => <AssigneeCell user={(p.row as UnifiedRow).assignee} mode={mode} />,
     },
     {
       field: "updatedAt", headerName: "Updated", width: 110,
       valueGetter: v => v ? new Date(v as string) : null,
       renderCell: (p: GridRenderCellParams<UnifiedRow>) => (
-        <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>
+        <Typography sx={{ fontSize: 12, color: "text.tertiary" }}>
           {formatDate((p.row as UnifiedRow).updatedAt) || "—"}
         </Typography>
       ),
     },
-  ], [])
+  ], [mode])
 
   const isLoading = risksLoading || issuesLoading
-
-  const gridSx = React.useMemo(() => ({
-    border: "none", height: "100%",
-    "& .MuiDataGrid-cell": {
-      borderColor: "#f1f5f9",
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-    },
-    "& .MuiDataGrid-columnHeaders": { bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", fontSize: 12 },
-    "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 500 },
-    "& .MuiDataGrid-footerContainer": { borderTop: "1px solid #e2e8f0" },
-    "& .MuiDataGrid-row:hover": { bgcolor: "#f8fafc" },
-  }), [])
 
   // Rail sections — Views (saved filters) and Type, each independently selected
   // (mirrors the Service Desk rail's Tickets + Type sections).
@@ -244,11 +234,11 @@ function RisksIssuesQueueView() {
     <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
       {/* Drill-down (record/association) is owned by the DrillDownNavigator; this
           body is always the depth-0 list, so the rail + chrome always show. */}
-      <ListNavRail title="Risks & Issues" sections={[viewsSection, typeSection]} />
+      <ListNavRail title="Risks & Issues" sections={[viewsSection, typeSection]} mode={mode} />
 
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, bgcolor: "#f8fafc" }}>
+      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, bgcolor: "var(--color-background-secondary)" }}>
         {/* Header — Search on the left, Columns + New record on the right. */}
-        <Box sx={{ px: 2, py: 1.25, bgcolor: "#fff", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", flexShrink: 0 }}>
+        <Box sx={{ px: 2, py: 1.25, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", flexShrink: 0 }}>
           <TextField
             size="small"
             placeholder="Search risks & issues…"
@@ -256,8 +246,8 @@ function RisksIssuesQueueView() {
             onChange={e => setSearchText(e.target.value)}
             sx={{ flex: 1, maxWidth: 420 }}
             InputProps={{
-              startAdornment: <SearchIcon sx={{ fontSize: 16, color: "#94a3b8", mr: 1 }} />,
-              sx: { fontSize: 12.5, bgcolor: "#f8fafc", height: 34 },
+              startAdornment: <SearchIcon sx={{ fontSize: 16, color: "text.tertiary", mr: 1 }} />,
+              sx: { fontSize: 12.5, bgcolor: "var(--color-background-secondary)", height: 34 },
             }}
           />
           <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: "auto" }}>
@@ -289,7 +279,7 @@ function RisksIssuesQueueView() {
           {isLoading ? (
             <Box sx={{ p: 3 }}><LoadingState /></Box>
           ) : (
-            <Box sx={{ flex: 1, minHeight: 0, bgcolor: "#fff" }}>
+            <Box sx={{ flex: 1, minHeight: 0, bgcolor: "background.paper" }}>
               <DataGrid
                 apiRef={apiRef}
                 rows={visibleRows}
@@ -304,7 +294,16 @@ function RisksIssuesQueueView() {
                 disableRowSelectionOnClick
                 onRowClick={p => handleRowClick(p.row as UnifiedRow)}
                 slots={{ footer: RIFooter }}
-                sx={gridSx}
+                sx={{
+                  ...dataGridSx(true, mode),
+                  // Vertically centre cell contents (compact density tops them by default).
+                  "& .MuiDataGrid-cell": {
+                    borderColor: "var(--color-border-tertiary)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                  },
+                }}
               />
             </Box>
           )}
@@ -348,11 +347,15 @@ type CreateRecordModalProps = {
   onSuccess?: () => Promise<void> | void
 }
 
-function LinkedBanner({ label }: { label?: string }) {
+function LinkedBanner({ label, mode }: { label?: string; mode: ThemeMode }) {
   if (!label) return null
+  // Light branch = the prior literals exactly; dark mirrors the Service Desk banner.
+  const banner = mode === "dark"
+    ? { bg: "#0c2a3a", border: "#164e63", text: "#7dd3fc" }
+    : { bg: "#f0f9ff", border: "#bae6fd", text: "#0369a1" }
   return (
-    <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#f0f9ff", border: "1px solid #bae6fd" }}>
-      <Typography variant="caption" color="#0369a1">Linked to: <strong>{label}</strong></Typography>
+    <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: banner.bg, border: `1px solid ${banner.border}` }}>
+      <Typography variant="caption" color={banner.text}>Linked to: <strong>{label}</strong></Typography>
     </Box>
   )
 }
@@ -360,6 +363,7 @@ function LinkedBanner({ label }: { label?: string }) {
 export function CreateRiskModal({ open, onClose, linkedEntityType, linkedEntityId, linkedEntityLabel, onSuccess }: CreateRecordModalProps) {
   const qc = useQueryClient()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [likelihood, setLikelihood] = React.useState("MEDIUM")
@@ -391,7 +395,7 @@ export function CreateRiskModal({ open, onClose, linkedEntityType, linkedEntityI
       <DialogTitle>Log risk</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <LinkedBanner label={linkedEntityLabel} />
+          <LinkedBanner label={linkedEntityLabel} mode={mode} />
           <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} required fullWidth autoFocus />
           <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} required fullWidth multiline rows={3} />
           <Stack direction="row" spacing={2}>
@@ -411,6 +415,7 @@ export function CreateRiskModal({ open, onClose, linkedEntityType, linkedEntityI
 export function CreateIssueModal({ open, onClose, linkedEntityType, linkedEntityId, linkedEntityLabel, onSuccess }: CreateRecordModalProps) {
   const qc = useQueryClient()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [severity, setSeverity] = React.useState("AMBER")
@@ -443,7 +448,7 @@ export function CreateIssueModal({ open, onClose, linkedEntityType, linkedEntity
       <DialogTitle>Log issue</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <LinkedBanner label={linkedEntityLabel} />
+          <LinkedBanner label={linkedEntityLabel} mode={mode} />
           <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} required fullWidth autoFocus />
           <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} required fullWidth multiline rows={3} />
           <Stack direction="row" spacing={2}>

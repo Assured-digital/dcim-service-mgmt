@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Drawer, Box, IconButton } from "@mui/material"
 import CloseIcon from "@mui/icons-material/Close"
 import { DrillDownNavigator, type DrillDownPanel } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { RisksIssuesQueueBody } from "./RisksIssuesPage"
 import { RisksIssuesQueueRail } from "./RisksIssuesQueueRail"
 import RiskDetailPage from "./RiskDetailPage"
@@ -47,6 +48,7 @@ export default function RisksIssuesNavigator() {
   const params = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { mode } = useThemeMode()
   const [searchParams] = useSearchParams()
   const segments = (params["*"] ?? "").split("/").filter(Boolean)
   const [type, id, assocType, assocId] = segments
@@ -155,7 +157,7 @@ export default function RisksIssuesNavigator() {
   // "Open full" navigates to the record's own route.
   return (
     <>
-      <DrillDownNavigator panels={panels} />
+      <DrillDownNavigator panels={panels} mode={mode} />
       <Drawer
         anchor="right"
         open={depth === 2}
@@ -175,7 +177,8 @@ export default function RisksIssuesNavigator() {
                 alignItems: "center",
                 gap: 1,
                 p: 1,
-                borderBottom: "1px solid #e2e8f0",
+                borderBottom: "1px solid",
+                borderColor: "divider",
                 flexShrink: 0,
                 minHeight: 48,
               }}

@@ -22,7 +22,8 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import BuildIcon from "@mui/icons-material/Build"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import PersonIcon from "@mui/icons-material/Person"
-import { statusColors, TypeBadge, AssigneeCell, type LinkedTask } from "../components/shared"
+import { statusColors, accentToken, ragToken, TypeBadge, AssigneeCell, type LinkedTask, type ThemeMode } from "../components/shared"
+import { useThemeMode } from "../lib/theme"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -126,16 +127,19 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   CLOSED: <LockIcon sx={{ fontSize: 14 }} />,
 }
 
-const ISSUE_STATUS_CONFIG: StatusConfig = {
-  options: ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"].map<StatusOption>((value) => ({
-    value,
-    label: STATUS_LABELS[value],
-    badgeClass: `b-${value.toLowerCase()}`,
-    bg: statusColors(value).bg,
-    iconColor: statusColors(value).text,
-    icon: STATUS_ICONS[value],
-    buttonIcon: STATUS_ICONS[value],
-  })),
+// Built per-render with the active mode (statusColors light branch is unchanged).
+function buildIssueStatusConfig(mode: ThemeMode): StatusConfig {
+  return {
+    options: ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"].map<StatusOption>((value) => ({
+      value,
+      label: STATUS_LABELS[value],
+      badgeClass: `b-${value.toLowerCase()}`,
+      bg: statusColors(value, mode).bg,
+      iconColor: statusColors(value, mode).text,
+      icon: STATUS_ICONS[value],
+      buttonIcon: STATUS_ICONS[value],
+    })),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,41 +152,52 @@ const SEVERITY_LABELS: Record<string, string> = {
   RED: "Red",
 }
 
-const SEVERITY_COLOURS: Record<string, { bg: string; text: string }> = {
-  GREEN: { bg: "#dcfce7", text: "#15803d" },
-  AMBER: { bg: "#fef3c7", text: "#b45309" },
-  RED: { bg: "#fee2e2", text: "#b91c1c" },
+// Severity GREEN/AMBER/RED map directly onto the RAG tokens — light values equal
+// the prior SEVERITY_COLOURS exactly, and it adds the dark ramp.
+function severityColour(severity: string, mode: ThemeMode): { bg: string; text: string } {
+  const level = (["GREEN", "AMBER", "RED"].includes(severity) ? severity : "AMBER") as "GREEN" | "AMBER" | "RED"
+  const t = ragToken(level, mode)
+  return { bg: t.bg, text: t.text }
 }
 
-const SEVERITY_OPTIONS: PopoverOption[] = ["AMBER", "RED"].map((value) => ({
-  value,
-  label: SEVERITY_LABELS[value],
-  iconBg: SEVERITY_COLOURS[value].bg,
-  iconColor: SEVERITY_COLOURS[value].text,
-  icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
-}))
+function buildSeverityOptions(mode: ThemeMode): PopoverOption[] {
+  return ["AMBER", "RED"].map((value) => {
+    const c = severityColour(value, mode)
+    return {
+      value,
+      label: SEVERITY_LABELS[value],
+      iconBg: c.bg,
+      iconColor: c.text,
+      icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
+    }
+  })
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Type badge — spec section 3.3
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ISSUE_TYPE_BADGE = (
-  <Box
-    component="span"
-    sx={{
-      fontSize: 10,
-      fontWeight: 500,
-      bgcolor: "#fbeaf0",
-      color: "#993556",
-      px: 1,
-      py: 0.25,
-      borderRadius: 1,
-      letterSpacing: "0.04em",
-    }}
-  >
-    ISS
-  </Box>
-)
+// Issue identity badge — the pink accent wash (light values = the prior literals).
+function issueTypeBadge(mode: ThemeMode) {
+  const a = accentToken("pink", mode)
+  return (
+    <Box
+      component="span"
+      sx={{
+        fontSize: 10,
+        fontWeight: 500,
+        bgcolor: a.bg,
+        color: a.text,
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        letterSpacing: "0.04em",
+      }}
+    >
+      ISS
+    </Box>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -234,6 +249,7 @@ const ActivityContent = React.memo(function ActivityContent({
   savingNote,
   onPostNote,
 }: ActivityContentProps) {
+  const { mode } = useThemeMode()
   const [visibleCount, setVisibleCount] = React.useState(10)
 
   const handleFilterChange = React.useCallback(
@@ -267,7 +283,7 @@ const ActivityContent = React.memo(function ActivityContent({
         <AuditHistoryList events={auditEvents.slice(0, visibleCount)} recordNoun="issue" />
       ) : (
         visibleEvents.map((event, idx) => (
-          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} />
+          <ActivityFeedItem key={event.id} event={event} isLast={idx === visibleEvents.length - 1} mode={mode} />
         ))
       )}
 
@@ -302,6 +318,9 @@ export default function IssueDetailPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { notify } = useNotification()
+  const { mode } = useThemeMode()
+  const issueStatusConfig = React.useMemo(() => buildIssueStatusConfig(mode), [mode])
+  const severityOptions = React.useMemo(() => buildSeverityOptions(mode), [mode])
 
   // Full-bleed is owned by RisksIssuesNavigator (the shared DrillDownNavigator
   // asserts it for the whole /risks-issues/* subtree and clears it on unmount).
@@ -597,24 +616,26 @@ export default function IssueDetailPage() {
 
   // Assignee-picker options — Unassigned sentinel ("") + the client-scoped assignable users.
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const assigned = accentToken("green", mode)
+    const unassigned = accentToken("neutral", mode)
     const list: PopoverOption[] = users.map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: assigned.bg,
+      iconColor: assigned.text,
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
     }))
     return [
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: unassigned.bg,
+        iconColor: unassigned.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [users])
+  }, [users, mode])
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -654,7 +675,7 @@ export default function IssueDetailPage() {
 
   const detailFields = React.useMemo<DetailField[]>(() => {
     if (!issue) return []
-    const severityColours = SEVERITY_COLOURS[issue.severity] ?? SEVERITY_COLOURS.AMBER
+    const severityColours = severityColour(issue.severity, mode)
     const severityLabel = SEVERITY_LABELS[issue.severity] ?? issue.severity
     const valueWrapperSx = {
       width: "100%",
@@ -680,7 +701,7 @@ export default function IssueDetailPage() {
         label: "Severity",
         editable: true,
         currentValue: issue.severity,
-        popoverOptions: SEVERITY_OPTIONS,
+        popoverOptions: severityOptions,
         onSelect: handleSelectSeverity,
         value: (
           <Box sx={valueWrapperSx}>
@@ -707,12 +728,12 @@ export default function IssueDetailPage() {
         onSelect: handleSelectAssignee,
         value: (
           <Box sx={valueWrapperSx}>
-            <AssigneeCell user={issue.assignee} />
+            <AssigneeCell user={issue.assignee} mode={mode} />
           </Box>
         ),
       },
     ]
-  }, [issue, handleSelectSeverity, handleSelectAssignee, usersOptions])
+  }, [issue, mode, severityOptions, handleSelectSeverity, handleSelectAssignee, usersOptions])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -752,11 +773,11 @@ export default function IssueDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!issue) return undefined
     return {
-      submittedBy: <AssigneeCell user={issue.createdBy ?? null} emptyLabel="—" />,
+      submittedBy: <AssigneeCell user={issue.createdBy ?? null} emptyLabel="—" mode={mode} />,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
     }
-  }, [issue])
+  }, [issue, mode])
 
   const rightSections = React.useMemo<RightSection[]>(() => {
     return [
@@ -843,9 +864,9 @@ export default function IssueDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={issue.reference}
-        typeBadge={ISSUE_TYPE_BADGE}
+        typeBadge={issueTypeBadge(mode)}
         currentStatus={issue.status}
-        statusConfig={ISSUE_STATUS_CONFIG}
+        statusConfig={issueStatusConfig}
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={
