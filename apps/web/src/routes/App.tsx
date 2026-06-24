@@ -11,8 +11,6 @@ const LoginPage                = React.lazy(() => import("./LoginPage"))
 const DashboardPage            = React.lazy(() => import("./DashboardPage"))
 const ServiceDeskNavigator     = React.lazy(() => import("./ServiceDeskNavigator"))
 const ServiceDeskDashboard     = React.lazy(() => import("./ServiceDeskDashboard"))
-const TasksPage                = React.lazy(() => import("./TasksPage"))
-const TaskDetailPage           = React.lazy(() => import("./TaskDetailPage"))
 const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
 const AssetRegisterPage        = React.lazy(() => import("./AssetRegisterPage"))
 const ChecksPage               = React.lazy(() => import("./ChecksPage"))
@@ -69,6 +67,11 @@ function LegacyIncidentDetailRedirect() {
 function LegacyChangeDetailRedirect() {
   const { id } = useParams()
   return <Navigate to={id ? `/service-desk/chg/${id}` : "/service-desk"} replace />
+}
+
+function LegacyTaskDetailRedirect() {
+  const { id } = useParams()
+  return <Navigate to={id ? `/service-desk/task/${id}` : "/service-desk"} replace />
 }
 
 
@@ -152,9 +155,9 @@ export default function App() {
           <Route path="service-desk/:id" element={<LegacyServiceRequestDetailRedirect />} />
           <Route path="service-requests/:id" element={<LegacyServiceRequestDetailRedirect />} />
 
-          {/* Tasks */}
-          <Route path="tasks" element={<TasksPage />} />
-          <Route path="tasks/:id" element={<TaskDetailPage />} />
+          {/* Tasks — now unified under Service Desk (Task is a first-class ticket type) */}
+          <Route path="tasks" element={<Navigate to="/service-desk?type=task" replace />} />
+          <Route path="tasks/:id" element={<LegacyTaskDetailRedirect />} />
 
           {/* Risks & Issues — the drill-down navigator owns the whole
               /risks-issues/* subtree (list → record → association), driven entirely

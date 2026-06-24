@@ -47,6 +47,7 @@ const DETAIL_QUERY_KEY: Record<string, string> = {
   sr: "sr-detail",
   inc: "incident-detail",
   chg: "change-detail",
+  task: "task-detail",
 }
 
 export default function ServiceDeskNavigator() {
@@ -148,6 +149,7 @@ export default function ServiceDeskNavigator() {
             <Route path="sr/:id/*" element={<ServiceRequestDetailPage />} />
             <Route path="inc/:id/*" element={<IncidentDetailPage />} />
             <Route path="chg/:id/*" element={<ChangeDetailPage />} />
+            <Route path="task/:id/*" element={<TaskDetailPage />} />
           </Routes>
         </DrillNavContext.Provider>
       ),

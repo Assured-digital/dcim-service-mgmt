@@ -26,6 +26,7 @@ import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { useThemeMode } from "../lib/theme"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { type AuditEvent } from "../lib/auditEvents"
 import { AuditHistoryList } from "../components/AuditHistoryList"
@@ -61,7 +62,7 @@ import { AttachmentsContent, type AttachmentsHandle } from "../components/Attach
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
-import { statusColors, PriorityPill, TypeBadge, AssigneeCell } from "../components/shared"
+import { statusColors, priorityToken, accentToken, semanticToken, PriorityPill, TypeBadge, AssigneeCell, type ThemeMode } from "../components/shared"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — preserve existing API shape
@@ -121,16 +122,19 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   DONE: <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />,
 }
 
-const TASK_STATUS_CONFIG: StatusConfig = {
-  options: ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map<StatusOption>((value) => ({
-    value,
-    label: STATUS_LABELS[value],
-    badgeClass: `b-${value.toLowerCase()}`,
-    bg: statusColors(value).bg,
-    iconColor: statusColors(value).text,
-    icon: STATUS_ICONS[value],
-    buttonIcon: STATUS_ICONS[value],
-  })),
+// Built per-render with the active mode (statusColors light branch is unchanged).
+function buildTaskStatusConfig(mode: ThemeMode): StatusConfig {
+  return {
+    options: ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE"].map<StatusOption>((value) => ({
+      value,
+      label: STATUS_LABELS[value],
+      badgeClass: `b-${value.toLowerCase()}`,
+      bg: statusColors(value, mode).bg,
+      iconColor: statusColors(value, mode).text,
+      icon: STATUS_ICONS[value],
+      buttonIcon: STATUS_ICONS[value],
+    })),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,42 +143,20 @@ const TASK_STATUS_CONFIG: StatusConfig = {
 
 const PRIORITY_VALUES = ["low", "medium", "high", "critical"]
 
-const PRIORITY_COLOURS: Record<string, { bg: string; text: string }> = {
-  low: { bg: "#dcfce7", text: "#15803d" },
-  medium: { bg: "#fef3c7", text: "#b45309" },
-  high: { bg: "#ffedd5", text: "#c2410c" },
-  critical: { bg: "#fee2e2", text: "#b91c1c" },
+// Priority shares the 4-step priorityToken ramp; its light values equal the prior
+// local PRIORITY_COLOURS exactly, and it adds the dark ramp (mirrors IncidentDetailPage).
+function buildPriorityOptions(mode: ThemeMode): PopoverOption[] {
+  return PRIORITY_VALUES.map((value) => {
+    const tok = priorityToken(value, mode)
+    return {
+      value,
+      label: value.charAt(0).toUpperCase() + value.slice(1),
+      iconBg: tok.bg,
+      iconColor: tok.text,
+      icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
+    }
+  })
 }
-
-const PRIORITY_OPTIONS: PopoverOption[] = PRIORITY_VALUES.map((value) => ({
-  value,
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-  iconBg: PRIORITY_COLOURS[value].bg,
-  iconColor: PRIORITY_COLOURS[value].text,
-  icon: <FlagOutlinedIcon sx={{ fontSize: 14 }} />,
-}))
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Type badge — spec section 3.3 (Task = TSK)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const TASK_TYPE_BADGE = (
-  <Box
-    component="span"
-    sx={{
-      fontSize: 10,
-      fontWeight: 500,
-      bgcolor: "#eeedfe",
-      color: "#3c3489",
-      px: 1,
-      py: 0.25,
-      borderRadius: 1,
-      letterSpacing: "0.04em",
-    }}
-  >
-    TSK
-  </Box>
-)
 
 function entityPath(type: string | null, id: string | null): string | null {
   if (!type || !id) return null
@@ -318,6 +300,10 @@ export default function TaskDetailPage() {
   const { notify } = useNotification()
   const { setPageFullBleed } = useBreadcrumb()
   const narrow = useDetailNarrow()
+  const { mode } = useThemeMode()
+  const statusConfig = React.useMemo(() => buildTaskStatusConfig(mode), [mode])
+  const priorityOptions = React.useMemo(() => buildPriorityOptions(mode), [mode])
+  const overdueColor = semanticToken("danger", mode).solid
 
   // Render flush in the Shell content area (no surrounding padding/frame), matching
   // the Service Request detail page, whose ServiceDeskPage wrapper sets this.
@@ -551,24 +537,26 @@ export default function TaskDetailPage() {
   }, [allFeedEvents, activeFilter])
 
   const usersOptions = React.useMemo<PopoverOption[]>(() => {
+    const green = accentToken("green", mode)
+    const neutral = accentToken("neutral", mode)
     const list: PopoverOption[] = users.map((u) => ({
       value: u.id,
       label: u.displayName,
-      iconBg: "#eaf3de",
-      iconColor: "#3b6d11",
+      iconBg: green.bg,
+      iconColor: green.text,
       icon: <PersonIcon sx={{ fontSize: 14 }} />,
     }))
     return [
       {
         value: "",
         label: "Unassigned",
-        iconBg: "#f1efe8",
-        iconColor: "#5f5e5a",
+        iconBg: neutral.bg,
+        iconColor: neutral.text,
         icon: <PersonIcon sx={{ fontSize: 14 }} />,
       },
       ...list,
     ]
-  }, [users])
+  }, [users, mode])
 
   const isOverdue = React.useMemo(() => {
     if (!task?.dueAt) return false
@@ -670,7 +658,7 @@ export default function TaskDetailPage() {
         label: "Priority",
         editable: true,
         currentValue: task.priority,
-        popoverOptions: PRIORITY_OPTIONS,
+        popoverOptions: priorityOptions,
         onSelect: handleSelectPriority,
         value: (
           <Box sx={valueWrapperSx}>
@@ -703,7 +691,7 @@ export default function TaskDetailPage() {
             <Typography
               sx={{
                 fontSize: 12,
-                color: isOverdue ? "#b91c1c" : "text.secondary",
+                color: isOverdue ? overdueColor : "text.secondary",
                 fontWeight: isOverdue ? 600 : 400,
               }}
             >
@@ -713,7 +701,7 @@ export default function TaskDetailPage() {
         ),
       },
     ]
-  }, [task, usersOptions, handleSelectPriority, handleSelectAssignee, isOverdue])
+  }, [task, usersOptions, priorityOptions, overdueColor, handleSelectPriority, handleSelectAssignee, isOverdue])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -824,9 +812,9 @@ export default function TaskDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={task.reference}
-        typeBadge={TASK_TYPE_BADGE}
+        typeBadge={null}
         currentStatus={task.status}
-        statusConfig={TASK_STATUS_CONFIG}
+        statusConfig={statusConfig}
         onStatusChange={handleStatusChange}
         moreMenuItems={moreMenuItems}
         titleCard={

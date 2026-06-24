@@ -9,7 +9,6 @@ import {
 import MenuIcon from "@mui/icons-material/Menu"
 import DashboardIcon from "@mui/icons-material/Dashboard"
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber"
-import TaskAltIcon from "@mui/icons-material/TaskAlt"
 import FactCheckIcon from "@mui/icons-material/FactCheck"
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts"
 import ApartmentIcon from "@mui/icons-material/Apartment"
@@ -275,7 +274,6 @@ const clientSections: NavSection[] = [
     title: "Operations", icon: <EngineeringIcon sx={{ fontSize: ICON_SIZE }} />, items: [
       { label: "Field Work", path: "/checks", icon: <FactCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Templates", path: "/check-templates", icon: <PlaylistAddCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
-      { label: "Tasks", path: "/tasks", icon: <TaskAltIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
     ]
   },
   {

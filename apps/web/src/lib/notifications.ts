@@ -55,7 +55,7 @@ const SOURCE_ROUTES: Record<string, (id: string) => string> = {
   Incident: (id) => `/service-desk/inc/${id}`,
   ServiceRequest: (id) => `/service-desk/sr/${id}`,
   ChangeRequest: (id) => `/service-desk/chg/${id}`,
-  Task: (id) => `/tasks/${id}`,
+  Task: (id) => `/service-desk/task/${id}`,
   Risk: (id) => `/risks-issues/risks/${id}`,
   Issue: (id) => `/risks-issues/issues/${id}`,
   Asset: (id) => `/asset-register/assets/${id}`,

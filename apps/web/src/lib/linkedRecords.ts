@@ -79,7 +79,7 @@ export function routeForLink(link: { type: string; id: string }): string {
     case "change":
       return `/service-desk/chg/${link.id}`
     case "task":
-      return `/tasks/${link.id}`
+      return `/service-desk/task/${link.id}`
     case "risk":
       return `/risks-issues/risks/${link.id}`
     case "issue":
@@ -101,7 +101,7 @@ export function routeForSegment(seg: string, id: string): string {
     case "chg":
       return `/service-desk/chg/${id}`
     case "task":
-      return `/tasks/${id}`
+      return `/service-desk/task/${id}`
     case "risk":
       return `/risks-issues/risks/${id}`
     case "issue":
