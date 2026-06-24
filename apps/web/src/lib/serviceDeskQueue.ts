@@ -11,8 +11,8 @@ import { isNewStatus, type Ticket, type TicketKind } from "./tickets"
 
 export const DEFAULT_SORT: GridSortModel = [{ field: "updatedAt", sort: "desc" }]
 
-export const TYPE_PARAM_TO_KIND: Record<string, TicketKind> = { sr: "SR", inc: "INC", chg: "CHG" }
-export const KIND_TO_TYPE_PARAM: Record<TicketKind, string> = { SR: "sr", INC: "inc", CHG: "chg" }
+export const TYPE_PARAM_TO_KIND: Record<string, TicketKind> = { sr: "SR", inc: "INC", chg: "CHG", task: "TASK" }
+export const KIND_TO_TYPE_PARAM: Record<TicketKind, string> = { SR: "sr", INC: "inc", CHG: "chg", TASK: "task" }
 
 export function parseSortParam(raw: string | null): GridSortModel {
   if (raw === "none") return []                       // explicit unsorted (MUI asc→desc→none)

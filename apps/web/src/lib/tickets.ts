@@ -3,7 +3,7 @@ import { api } from "./api"
 import { getSelectedClientId } from "./scope"
 
 // ── Kind + unified ticket shape ────────────────────────────────────────────
-export type TicketKind = "SR" | "INC" | "CHG"
+export type TicketKind = "SR" | "INC" | "CHG" | "TASK"
 export type ChipIntent = "new" | "open" | "wait" | "done" | "overdue"
 
 export interface Ticket {
@@ -71,6 +71,18 @@ interface RawChange {
   assignee: { id: string; displayName: string } | null
 }
 
+interface RawTask {
+  id: string
+  reference: string
+  title: string
+  status: string
+  priority: string
+  dueAt: string | null
+  createdAt: string
+  updatedAt: string
+  assignee: { id: string; displayName: string } | null
+}
+
 // ── Status → chipIntent mappers ────────────────────────────────────────────
 const SR_INTENT: Record<string, ChipIntent> = {
   NEW: "new",
@@ -99,9 +111,23 @@ const CHG_INTENT: Record<string, ChipIntent> = {
   REJECTED: "done",
   CANCELLED: "done",
 }
+// Task keeps its own status model (Open/In Progress/Blocked/Done). Locked
+// mapping onto the queue's saved views: OPEN/IN_PROGRESS → open, BLOCKED →
+// wait (shows under "Awaiting"), DONE → done (Closed). Tasks never bucket as
+// "new" (see isNewStatus); overdue is computed from the real dueAt below.
+const TASK_INTENT: Record<string, ChipIntent> = {
+  OPEN: "open",
+  IN_PROGRESS: "open",
+  BLOCKED: "wait",
+  DONE: "done",
+}
 
 function intentFor(kind: TicketKind, status: string): ChipIntent {
-  const map = kind === "SR" ? SR_INTENT : kind === "INC" ? INC_INTENT : CHG_INTENT
+  const map =
+    kind === "SR" ? SR_INTENT
+    : kind === "INC" ? INC_INTENT
+    : kind === "CHG" ? CHG_INTENT
+    : TASK_INTENT
   return map[status] ?? "new"
 }
 
@@ -197,11 +223,34 @@ function normaliseChange(r: RawChange, now: number): Ticket {
   }
 }
 
+function normaliseTask(r: RawTask, now: number): Ticket {
+  // Unlike SR/INC (heuristic SLA) and CHG (scheduledEnd), a Task carries a real
+  // dueAt. Overdue = a due date in the past while the task is not yet DONE.
+  const due = r.dueAt ? new Date(r.dueAt) : null
+  const overdue = due !== null && r.status !== "DONE" && due.getTime() < now
+  return {
+    id: r.id,
+    kind: "TASK",
+    reference: r.reference,
+    subject: r.title,
+    status: r.status,
+    chipIntent: overdue ? "overdue" : intentFor("TASK", r.status),
+    priority: r.priority,
+    assignee: r.assignee,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    overdue,
+    dueAt: due ? due.toISOString() : null,
+    detailPath: `/service-desk/task/${r.id}`,
+  }
+}
+
 // ── Helpers exposed for callers ───────────────────────────────────────────
 /** True when a ticket sits in its initial "newly raised" status. */
 export function isNewStatus(t: Ticket): boolean {
   if (t.kind === "SR") return t.status === "NEW"
   if (t.kind === "INC") return t.status === "NEW"
+  if (t.kind === "TASK") return false   // Task has no "new" state; OPEN is its initial active status.
   return t.status === "DRAFT" || t.status === "SUBMITTED"
 }
 
@@ -237,10 +286,14 @@ export function useTickets(): UseTicketsResult {
         queryKey: ["tickets", clientId, "chg"],
         queryFn: async () => (await api.get<RawChange[]>("/changes")).data,
       },
+      {
+        queryKey: ["tickets", clientId, "task"],
+        queryFn: async () => (await api.get<RawTask[]>("/tasks")).data,
+      },
     ],
   })
 
-  const [srQ, incQ, chgQ] = results
+  const [srQ, incQ, chgQ, taskQ] = results
   const isLoading = results.some(r => r.isLoading)
   const error = results.find(r => r.error)?.error ?? null
 
@@ -248,6 +301,7 @@ export function useTickets(): UseTicketsResult {
     ...((srQ.data ?? []).map(r => normaliseSR(r, now))),
     ...((incQ.data ?? []).map(r => normaliseIncident(r, now))),
     ...((chgQ.data ?? []).map(r => normaliseChange(r, now))),
+    ...((taskQ.data ?? []).map(r => normaliseTask(r, now))),
   ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
   return { data, isLoading, error }
@@ -258,6 +312,7 @@ export const KIND_DETAIL_FIELDS: Record<TicketKind, string[]> = {
   SR:  ["requester", "channel", "category", "sla", "opened", "updated"],
   INC: ["severity", "firstResponse", "sla", "opened", "updated"],
   CHG: ["changeType", "scheduledStart", "scheduledEnd", "approvals", "implementationNotes", "postImplReview", "opened", "updated"],
+  TASK: ["priority", "assignee", "dueAt", "opened", "updated"],
 }
 
 // ── Status-flow specs per kind (lifted from the three detail pages) ────────
@@ -289,6 +344,13 @@ export const STATUS_FLOW: Record<TicketKind, Record<string, string[]>> = {
     CLOSED: [],
     CANCELLED: [],
   },
+  // Mirrors config/transitions/taskTransitions.ts (OPEN ↔ IN_PROGRESS ↔ BLOCKED → DONE → reopen).
+  TASK: {
+    OPEN: ["IN_PROGRESS", "BLOCKED", "DONE"],
+    IN_PROGRESS: ["OPEN", "BLOCKED", "DONE"],
+    BLOCKED: ["OPEN", "IN_PROGRESS", "DONE"],
+    DONE: ["OPEN"],
+  },
 }
 
 // Full human-readable type label per kind (e.g. the working-queue rail row).
@@ -297,6 +359,7 @@ export const KIND_LABELS: Record<TicketKind, string> = {
   SR:  "Service Request",
   INC: "Incident",
   CHG: "Change Request",
+  TASK: "Task",
 }
 
 export const STATUS_LABELS: Record<TicketKind, Record<string, string>> = {
@@ -327,6 +390,12 @@ export const STATUS_LABELS: Record<TicketKind, Record<string, string>> = {
     CLOSED: "Closed",
     CANCELLED: "Cancelled",
   },
+  TASK: {
+    OPEN: "Open",
+    IN_PROGRESS: "In progress",
+    BLOCKED: "Blocked",
+    DONE: "Done",
+  },
 }
 
 // Kind-specific detail endpoint (used to build legacy redirects).
@@ -335,5 +404,6 @@ export function detailPathFor(kind: TicketKind, id: string): string {
     case "SR":  return `/service-desk/sr/${id}`
     case "INC": return `/service-desk/inc/${id}`
     case "CHG": return `/service-desk/chg/${id}`
+    case "TASK": return `/service-desk/task/${id}`
   }
 }

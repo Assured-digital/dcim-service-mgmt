@@ -28,6 +28,7 @@ import FilterListIcon from "@mui/icons-material/FilterList"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
+import TaskAltIcon from "@mui/icons-material/TaskAlt"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
 import { TypeBadge, PriorityPill, StatusPill, AssigneeCell, ListNavRail, RecordTypePicker, type RailSection, type BadgeKind } from "../components/shared"
 import { formatDate } from "../lib/format"
@@ -44,6 +45,7 @@ import {
 } from "../lib/serviceDeskQueue"
 import { CreateIncidentModal } from "./modals/CreateIncidentModal"
 import { CreateChangeModal } from "./modals/CreateChangeModal"
+import { CreateTaskModal } from "./modals/CreateTaskModal"
 import ServiceDeskBoard from "./ServiceDeskBoard"
 
 // ── Create Service Request Modal (exported) ───────────────────────────────
@@ -358,6 +360,7 @@ function UnifiedServiceDeskView() {
   const [srOpen, setSrOpen] = React.useState(false)
   const [incOpen, setIncOpen] = React.useState(false)
   const [chgOpen, setChgOpen] = React.useState(false)
+  const [taskOpen, setTaskOpen] = React.useState(false)
   const canRaise = hasAnyRole([
     ...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST,
     ROLES.ENGINEER, ROLES.CLIENT_VIEWER
@@ -445,6 +448,7 @@ function UnifiedServiceDeskView() {
     if (kind === "SR")  setSrOpen(true)
     if (kind === "INC") setIncOpen(true)
     if (kind === "CHG") setChgOpen(true)
+    if (kind === "TASK") setTaskOpen(true)
   }
 
   function handleRowClick(t: Ticket) {
@@ -483,6 +487,7 @@ function UnifiedServiceDeskView() {
       { id: "SR", label: "Service requests", icon: <AssignmentIcon sx={{ fontSize: 18 }} /> },
       { id: "INC", label: "Incidents", icon: <ReportProblemIcon sx={{ fontSize: 18 }} /> },
       { id: "CHG", label: "Change", icon: <BuildIcon sx={{ fontSize: 18 }} /> },
+      { id: "TASK", label: "Tasks", icon: <TaskAltIcon sx={{ fontSize: 18 }} /> },
     ],
   }
 
@@ -607,11 +612,13 @@ function UnifiedServiceDeskView() {
           { kind: "SR",  title: "Service request", subtitle: "Standard work, access, shipments, reports" },
           { kind: "INC", title: "Incident",        subtitle: "Unplanned outage or service degradation" },
           { kind: "CHG", title: "Change",          subtitle: "Planned change with scheduled window" },
+          { kind: "TASK", title: "Task",           subtitle: "Standalone action — no parent required" },
         ]}
       />
       <CreateServiceRequestModal open={srOpen} onClose={() => setSrOpen(false)} />
       <CreateIncidentModal open={incOpen} onClose={() => setIncOpen(false)} />
       <CreateChangeModal open={chgOpen} onClose={() => setChgOpen(false)} />
+      <CreateTaskModal open={taskOpen} onClose={() => setTaskOpen(false)} />
     </Box>
   )
 }
