@@ -7,6 +7,7 @@ import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
+import { resolveSlaHours, computeDueAt } from "../sla/sla";
 
 type ListFilters = {
   dateFrom?: string;
@@ -95,14 +96,28 @@ export class ServiceRequestsService {
 
   async createForClient(clientId: string, createdById: string | null, dto: any) {
     this.assertClientScope(clientId);
+    const priority = dto.priority ?? "medium";
+
+    // SLA: a user-supplied dueAt pins (dueAtManual: true); otherwise derive it from
+    // the per-client SLA policy (createdAt + resolutionHours), unpinned.
+    let slaData: { dueAt?: Date | null; dueAtManual?: boolean } = {};
+    if (dto.dueAt !== undefined) {
+      slaData = { dueAt: dto.dueAt ? new Date(dto.dueAt) : null, dueAtManual: true };
+    } else {
+      const hours = await resolveSlaHours(this.prisma, clientId, priority);
+      if (hours !== null) {
+        slaData = { dueAt: computeDueAt(new Date(), hours), dueAtManual: false };
+      }
+    }
+
     const sr = await this.prisma.serviceRequest.create({
       data: {
         reference: makeRef(),
         clientId,
         subject: dto.subject,
         description: dto.description,
-        priority: dto.priority ?? "medium",
-        ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
+        priority,
+        ...slaData,
         linkedEntityType: dto.linkedEntityType,
         linkedEntityId: dto.linkedEntityId,
         createdById
@@ -197,6 +212,22 @@ async updateForClient(
   this.assertClientScope(clientId);
   const sr = await this.getForClient(clientId, id);
 
+  // SLA: a hand-set/cleared dueAt pins (dueAtManual: true). Otherwise, on a real
+  // priority change of an unpinned record, recompute dueAt from createdAt + policy.
+  let slaData: { dueAt?: Date | null; dueAtManual?: boolean } = {};
+  if (dto.dueAt !== undefined) {
+    slaData = { dueAt: dto.dueAt ? new Date(dto.dueAt) : null, dueAtManual: true };
+  } else if (
+    dto.priority !== undefined &&
+    dto.priority !== sr.priority &&
+    !sr.dueAtManual
+  ) {
+    const hours = await resolveSlaHours(this.prisma, clientId, dto.priority);
+    if (hours !== null) {
+      slaData = { dueAt: computeDueAt(sr.createdAt, hours), dueAtManual: false };
+    }
+  }
+
   const updated = await this.prisma.serviceRequest.update({
     where: { id: sr.id },
     data: {
@@ -204,7 +235,7 @@ async updateForClient(
       description: dto.description,
       assigneeId: dto.assigneeId,
       priority: dto.priority,
-      ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
+      ...slaData,
       linkedEntityType: dto.linkedEntityType,
       linkedEntityId: dto.linkedEntityId
     },

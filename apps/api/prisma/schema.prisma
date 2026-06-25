@@ -140,6 +140,20 @@ model Client {
   userAssignments   UserClientAssignment[]
   recordLinks       RecordLink[]
   attachments       Attachment[]
+  slaPolicies       SlaPolicy[]
+}
+
+model SlaPolicy {
+  id              String   @id @default(uuid())
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  priority        String
+  resolutionHours Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([clientId, priority])
+  @@index([clientId])
 }
 
 model Site {
@@ -375,6 +389,7 @@ model ServiceRequest {
   status           ServiceRequestStatus @default(NEW)
   priority         String               @default("medium")
   dueAt            DateTime?
+  dueAtManual      Boolean              @default(false)
   closureSummary   String?
   assigneeId       String?
   assignee         User?                @relation("AssignedSR", fields: [assigneeId], references: [id])
@@ -475,6 +490,7 @@ model Incident {
   severity         IncidentSeverity @default(MEDIUM)
   priority         String           @default("medium")
   dueAt            DateTime?
+  dueAtManual      Boolean          @default(false)
   linkedEntityType String?
   linkedEntityId   String?
   assigneeId       String?

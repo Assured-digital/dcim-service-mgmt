@@ -7,6 +7,7 @@ import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
+import { resolveSlaHours, computeDueAt } from "../sla/sla";
 
 type ListFilters = {
   dateFrom?: string;
@@ -117,6 +118,19 @@ export class IncidentsService {
   ) {
     this.assertClientScope(clientId);
     const reference = await this.generateUniqueReference();
+    const priority = dto.priority ?? "medium";
+
+    // SLA: a user-supplied dueAt pins (dueAtManual: true); otherwise derive it from
+    // the per-client SLA policy (createdAt + resolutionHours), unpinned.
+    let slaData: { dueAt?: Date | null; dueAtManual?: boolean } = {};
+    if (dto.dueAt !== undefined) {
+      slaData = { dueAt: dto.dueAt ? new Date(dto.dueAt) : null, dueAtManual: true };
+    } else {
+      const hours = await resolveSlaHours(this.prisma, clientId, priority);
+      if (hours !== null) {
+        slaData = { dueAt: computeDueAt(new Date(), hours), dueAtManual: false };
+      }
+    }
 
     const created = await this.prisma.incident.create({
       data: {
@@ -125,8 +139,8 @@ export class IncidentsService {
         title: dto.title,
         description: dto.description,
         severity: dto.severity ?? IncidentSeverity.MEDIUM,
-        priority: dto.priority ?? "medium",
-        ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
+        priority,
+        ...slaData,
         createdById: actorUserId
       },
       include: {
@@ -163,6 +177,23 @@ export class IncidentsService {
     }
   ) {
     const incident = await this.getForClient(clientId, id);
+
+    // SLA: a hand-set/cleared dueAt pins (dueAtManual: true). Otherwise, on a real
+    // priority change of an unpinned record, recompute dueAt from createdAt + policy.
+    let slaData: { dueAt?: Date | null; dueAtManual?: boolean } = {};
+    if (dto.dueAt !== undefined) {
+      slaData = { dueAt: dto.dueAt ? new Date(dto.dueAt) : null, dueAtManual: true };
+    } else if (
+      dto.priority !== undefined &&
+      dto.priority !== incident.priority &&
+      !incident.dueAtManual
+    ) {
+      const hours = await resolveSlaHours(this.prisma, clientId, dto.priority);
+      if (hours !== null) {
+        slaData = { dueAt: computeDueAt(incident.createdAt, hours), dueAtManual: false };
+      }
+    }
+
     const updated = await this.prisma.incident.update({
       where: { id: incident.id },
       data: {
@@ -170,7 +201,7 @@ export class IncidentsService {
         description: dto.description,
         severity: dto.severity,
         priority: dto.priority,
-        ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
+        ...slaData,
         assigneeId: dto.assigneeId === "" ? null : dto.assigneeId ?? undefined
       },
       include: {
