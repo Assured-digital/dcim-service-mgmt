@@ -5,40 +5,36 @@ import { api } from "../lib/api"
 import {
   Box, Button, ButtonGroup, Card, CardContent,
   Divider, Grid, MenuItem, Stack, TextField,
-  Typography
+  Typography, Chip
 } from "@mui/material"
 import { LineChart } from "@mui/x-charts/LineChart"
 import FileDownloadIcon from "@mui/icons-material/FileDownload"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
-import WarningAmberIcon from "@mui/icons-material/WarningAmber"
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { StatusPill, semanticToken, ragToken, slate, type ThemeMode } from "../components/shared"
+import { StatusPill, semanticToken, slate } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
-import { Chip } from "@mui/material"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { useTickets } from "../lib/tickets"
 import { computeSlaStatus, type SlaFilter } from "../lib/serviceDeskQueue"
 
-// ── Category / series tones ─────────────────────────────────────────────────
-// The brand category colours used by the trend series, KPI accent strips and dots.
-// Light branch = the exact prior hex (a documented exception, like the 2b washes);
-// dark holds the same EXCEPT teal, which is brightened so it reads on the dark ground.
-const CATEGORY_TONES = {
-  sr:      { light: "#2563eb", dark: "#2563eb" }, // blue — Service Requests
-  ri:      { light: "#f59e0b", dark: "#f59e0b" }, // amber — Risks & Issues
-  tasks:   { light: "#0f766e", dark: "#14b8a6" }, // teal — Tasks (brightened in dark)
-  issues:  { light: "#dc2626", dark: "#dc2626" }, // red — Issues
-  pending: { light: "#7c3aed", dark: "#7c3aed" }, // purple — Pending review
+// ── One card system ─────────────────────────────────────────────────────────
+// Every dashboard card shares ONE surface: paper ground, a single hairline border,
+// one radius, flat (the theme's heavy MuiCard shadow is overridden locally — the
+// theme itself is left untouched for other pages). Inner content padding is uniform.
+const DASH_CARD_SX = {
+  bgcolor: "background.paper",
+  border: "0.5px solid",
+  borderColor: "divider",
+  borderRadius: "10px",
+  boxShadow: "none",
+  height: "100%",
 } as const
-function categoryTone(key: keyof typeof CATEGORY_TONES, mode: ThemeMode): string {
-  return CATEGORY_TONES[key][mode]
-}
+const CARD_CONTENT_SX = { p: "18px", "&:last-child": { pb: "18px" } } as const
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type SR = { id: string; status: string; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; displayName: string } | null }
 type Task = { id: string; reference: string; title: string; status: string; priority: string; dueAt: string | null; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; displayName: string } | null }
-type Risk = { id: string; status: string; createdAt: string; updatedAt: string }
+type Risk = { id: string; status: string; reviewDate?: string | null; createdAt: string; updatedAt: string }
 type Issue = { id: string; status: string; createdAt: string; updatedAt: string }
 type Check = { id: string; reference: string; title: string; status: string; scheduledAt: string | null; createdAt: string; updatedAt: string; site?: { name: string } | null }
 
@@ -125,75 +121,66 @@ function buildChartData(
   return Array.from(buckets.entries()).map(([date, v]) => ({ date, ...v }))
 }
 
-// ── KPI stat tile ──────────────────────────────────────────────────────────
-function StatTile({ label, value, tone, description, onClick, urgent }: {
-  label: string; value: number; tone: string; description: string
-  onClick?: () => void; urgent?: boolean
-}) {
+// ── Zone heading ────────────────────────────────────────────────────────────
+// A subtle uppercase label introducing each zone (not a page title — the app's
+// convention is no page titles; the breadcrumb identifies the page).
+function ZoneHeading({ label }: { label: string }) {
+  return (
+    <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
+      {label}
+    </Typography>
+  )
+}
+
+// ── Metric cell ───────────────────────────────────────────────────────────
+// The single compact metric primitive: a muted uppercase label + a big value.
+// Colour discipline — the value carries STATUS colour only (danger/warning/success
+// when present); neutral metrics and zero values stay text.primary. No decorative
+// borders or category hues. Clickable cells highlight their label on hover.
+type MetricIntent = "danger" | "warning" | "success" | "neutral"
+interface MetricCellProps { label: string; value: number; intent?: MetricIntent; onClick?: () => void }
+
+function MetricCell({ label, value, intent = "neutral", onClick }: MetricCellProps) {
   const { mode } = useThemeMode()
+  const active = value > 0
+  const valueColor = intent === "neutral" || !active ? "text.primary" : semanticToken(intent, mode).solid
   return (
     <Box
       onClick={onClick}
       sx={{
         flex: 1, minWidth: 0,
-        bgcolor: "background.paper",
-        border: "1px solid", borderColor: "divider",
-        borderLeft: `3px solid ${urgent && value > 0 ? ragToken("RED", mode).dot : tone}`,
-        borderRadius: "8px",
-        px: "14px", py: "12px",
         cursor: onClick ? "pointer" : "default",
-        transition: "all 0.12s",
-        "&:hover": onClick ? { borderColor: tone, boxShadow: "0 2px 8px rgba(15,23,42,0.07)" } : {}
+        "&:hover .metric-label": onClick ? { color: "primary.main" } : {}
       }}
     >
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px" }}>
+      <Typography className="metric-label" sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px", transition: "color 0.1s" }}>
         {label}
       </Typography>
-      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: urgent && value > 0 ? semanticToken("danger", mode).solid : "text.primary" }}>
+      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: valueColor }}>
         {value}
-      </Typography>
-      <Typography sx={{ fontSize: 11, color: "text.tertiary", mt: "3px" }}>
-        {description}
       </Typography>
     </Box>
   )
 }
 
-// ── SLA compliance widget ──────────────────────────────────────────────────
+// ── Summary card (titled card of 1–2 metric cells) ──────────────────────────
+function MetricCard({ title, cells }: { title: string; cells: MetricCellProps[] }) {
+  return (
+    <Card variant="outlined" sx={DASH_CARD_SX}>
+      <CardContent sx={CARD_CONTENT_SX}>
+        <SectionHeader label={title} />
+        <Box sx={{ display: "flex", gap: "16px", mt: "14px" }}>
+          {cells.map((c, i) => <MetricCell key={i} {...c} />)}
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── SLA compliance widget (HERO) ───────────────────────────────────────────
 // Per selected client: SLA health of OPEN Service Requests + Incidents only.
 // Buckets (and the click-through queue filter) share computeSlaStatus — single
 // source of truth for the thresholds. Click a tile → the queue, pre-filtered.
-
-function SlaTile({ label, value, intent, onClick }: {
-  label: string; value: number; intent: "danger" | "warning" | "success"; onClick: () => void
-}) {
-  const { mode } = useThemeMode()
-  const tok = semanticToken(intent, mode)
-  return (
-    <Box
-      onClick={onClick}
-      sx={{
-        flex: 1, minWidth: 0,
-        bgcolor: "background.paper",
-        border: "1px solid", borderColor: "divider",
-        borderLeft: `3px solid ${tok.solid}`,
-        borderRadius: "8px",
-        px: "14px", py: "12px",
-        cursor: "pointer",
-        transition: "all 0.12s",
-        "&:hover": { borderColor: tok.solid, boxShadow: "0 2px 8px rgba(15,23,42,0.07)" }
-      }}
-    >
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px" }}>
-        {label}
-      </Typography>
-      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: value > 0 ? tok.solid : "text.primary" }}>
-        {value}
-      </Typography>
-    </Box>
-  )
-}
-
 function SlaComplianceCard() {
   const { mode } = useThemeMode()
   const navigate = useNavigate()
@@ -226,8 +213,8 @@ function SlaComplianceCard() {
   const go = (sla: SlaFilter) => navigate(`/service-desk?sla=${sla}`)
 
   return (
-    <Card variant="outlined">
-      <CardContent>
+    <Card variant="outlined" sx={DASH_CARD_SX}>
+      <CardContent sx={CARD_CONTENT_SX}>
         <SectionHeader
           label="SLA compliance"
           tooltip="Open service requests & incidents, by SLA due date for the selected client."
@@ -260,11 +247,11 @@ function SlaComplianceCard() {
               {breached > 0 ? <Box sx={{ flexGrow: breached, bgcolor: danger }} /> : null}
             </Box>
 
-            {/* Clickable tiles → pre-filtered Service Desk queue */}
-            <Box sx={{ display: "flex", gap: "10px", mt: "14px" }}>
-              <SlaTile label="Breached" value={breached} intent="danger" onClick={() => go("breached")} />
-              <SlaTile label="Due soon" value={dueSoon} intent="warning" onClick={() => go("due-soon")} />
-              <SlaTile label="On track" value={onTrack} intent="success" onClick={() => go("on-track")} />
+            {/* Clickable cells → pre-filtered Service Desk queue */}
+            <Box sx={{ display: "flex", gap: "16px", mt: "16px" }}>
+              <MetricCell label="Breached" value={breached} intent="danger" onClick={() => go("breached")} />
+              <MetricCell label="Due soon" value={dueSoon} intent="warning" onClick={() => go("due-soon")} />
+              <MetricCell label="On track" value={onTrack} intent="success" onClick={() => go("on-track")} />
             </Box>
           </>
         )}
@@ -273,24 +260,67 @@ function SlaComplianceCard() {
   )
 }
 
-// ── Trend card with area chart ─────────────────────────────────────────────
-function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExport, exporting }: {
+// ── Open tickets card ───────────────────────────────────────────────────────
+// Open SR / INC / CHG counts for the selected client, from the same unified
+// ticket feed the SLA widget uses (react-query dedupes — no extra fetch). Each
+// count clicks through to the queue pre-filtered by type. Neutral colour: these
+// are workload counts, not a status to flag.
+function OpenTicketsCard() {
+  const navigate = useNavigate()
+  const { data: tickets, isLoading, error } = useTickets()
+
+  const counts = React.useMemo(() => {
+    let sr = 0, inc = 0, chg = 0
+    for (const t of tickets) {
+      if (t.chipIntent === "done") continue
+      if (t.kind === "SR") sr++
+      else if (t.kind === "INC") inc++
+      else if (t.kind === "CHG") chg++
+    }
+    return { sr, inc, chg }
+  }, [tickets])
+
+  return (
+    <Card variant="outlined" sx={DASH_CARD_SX}>
+      <CardContent sx={CARD_CONTENT_SX}>
+        <SectionHeader
+          label="Open tickets"
+          tooltip="Open service requests, incidents and changes for the selected client."
+        />
+        {isLoading ? (
+          <Box sx={{ mt: "12px" }}><LoadingState /></Box>
+        ) : error ? (
+          <Box sx={{ mt: "12px" }}><ErrorState title="Failed to load tickets" /></Box>
+        ) : (
+          <Box sx={{ display: "flex", gap: "16px", mt: "14px" }}>
+            <MetricCell label="Requests" value={counts.sr} onClick={() => navigate("/service-desk?type=sr")} />
+            <MetricCell label="Incidents" value={counts.inc} onClick={() => navigate("/service-desk?type=inc")} />
+            <MetricCell label="Changes" value={counts.chg} onClick={() => navigate("/service-desk?type=chg")} />
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Trend card with area chart (de-emphasised, supporting) ─────────────────
+// Smaller figures + a single neutral line (the per-category hue was decorative).
+// Charts/controls/export stay fully functional — this is supporting context.
+function TrendCard({ label, opened, closed, closedLabel, chartData, onExport, exporting }: {
   label: string; opened: number; closed: number; closedLabel: string
-  tone: string; chartData: { date: string; opened: number; closed: number }[]
+  chartData: { date: string; opened: number; closed: number }[]
   onExport?: () => void; exporting?: boolean
 }) {
   const { mode } = useThemeMode()
   const total = opened + closed
   const pct = total > 0 ? Math.round((closed / total) * 100) : 0
   const edge = mode === "dark" ? slate[600] : slate[300]
+  const line = mode === "dark" ? slate[400] : slate[500]   // neutral, de-emphasised
 
   return (
     <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: "10px" }}>
-        <Stack direction="row" alignItems="center" gap="6px">
-          <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: tone, flexShrink: 0 }} />
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary" }}>{label}</Typography>
-        </Stack>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: "8px" }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>{label}</Typography>
         {onExport ? (
           <Box
             onClick={onExport}
@@ -307,24 +337,22 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
         ) : null}
       </Stack>
 
-      <Stack direction="row" gap="20px" sx={{ mb: "10px" }}>
+      <Stack direction="row" gap="16px" sx={{ mb: "8px" }}>
         <Box>
-          <Typography sx={{ fontSize: 10, color: "text.tertiary", mb: "1px" }}>Opened</Typography>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{opened}</Typography>
+          <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>Opened</Typography>
+          <Typography sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{opened}</Typography>
         </Box>
         <Box>
-          <Typography sx={{ fontSize: 10, color: "text.tertiary", mb: "1px" }}>{closedLabel}</Typography>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{closed}</Typography>
+          <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>{closedLabel}</Typography>
+          <Typography sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{closed}</Typography>
         </Box>
         <Box sx={{ ml: "auto", textAlign: "right" }}>
-          <Typography sx={{ fontSize: 10, color: "text.tertiary", mb: "1px" }}>Rate</Typography>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, color: pct > 50 ? semanticToken("success", mode).solid : "text.primary", lineHeight: 1 }}>
-            {pct}%
-          </Typography>
+          <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>Rate</Typography>
+          <Typography sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{pct}%</Typography>
         </Box>
       </Stack>
 
-      <Box sx={{ height: 80, mx: "-8px" }}>
+      <Box sx={{ height: 60, mx: "-8px" }}>
         <LineChart
           xAxis={[{
             data: chartData.map((_, i) => i),
@@ -336,15 +364,15 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
             {
               data: chartData.map(d => d.opened),
               label: "Opened",
-              color: tone,
+              color: line,
               showMark: false,
               area: true
             }
           ]}
-          height={80}
+          height={60}
           margin={{ top: 8, right: 8, left: -40, bottom: 8 }}
           sx={{
-            "& .MuiAreaElement-root": { fillOpacity: 0.12 },
+            "& .MuiAreaElement-root": { fillOpacity: 0.1 },
             "& .MuiChartsAxis-root": { display: "none" },
             "& .MuiChartsGrid-root": { "& line": { stroke: "var(--color-background-tertiary)" } }
           }}
@@ -357,30 +385,6 @@ function TrendCard({ label, opened, closed, closedLabel, tone, chartData, onExpo
           <Typography sx={{ fontSize: 9, color: edge }}>{chartData[chartData.length - 1]?.date}</Typography>
         </Stack>
       ) : null}
-    </Box>
-  )
-}
-
-// ── Attention row ──────────────────────────────────────────────────────────
-function AttentionRow({ dot, label, detail, onClick }: {
-  dot: string; label: string; detail: string; onClick?: () => void
-}) {
-  const { mode } = useThemeMode()
-  return (
-    <Box onClick={onClick} sx={{
-      display: "flex", alignItems: "flex-start", gap: "10px",
-      py: "10px", cursor: onClick ? "pointer" : "default",
-      borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)", "&:last-child": { borderBottom: "none" },
-      "&:hover .attn-label": onClick ? { color: "primary.main" } : {}
-    }}>
-      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: dot, flexShrink: 0, mt: "4px" }} />
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography className="attn-label" sx={{ fontSize: 13, fontWeight: 500, color: "text.primary", transition: "color 0.1s" }}>
-          {label}
-        </Typography>
-        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", mt: "1px" }}>{detail}</Typography>
-      </Box>
-      {onClick ? <Typography sx={{ fontSize: 13, color: mode === "dark" ? slate[600] : slate[300] }}>›</Typography> : null}
     </Box>
   )
 }
@@ -398,19 +402,9 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
     return `${Math.floor(diff / 86400000)}d ago`
   })()
   const { mode } = useThemeMode()
-  // Type chips (flagged E): blue for SR/CHECK, neutral for TASK, warning for RISK.
-  // Light = exact prior hex; dark = a translucent blue so the chip doesn't glare.
-  const blueChip = mode === "dark"
-    ? { bg: "rgba(59,130,246,0.15)", color: "#60a5fa" }
-    : { bg: "#e8f1ff", color: "#1d4ed8" }
-  const neutralChip = { bg: "var(--color-background-tertiary)", color: "text.secondary" }
-  const typeColour: Record<string, { bg: string; color: string }> = {
-    SR: blueChip,
-    TASK: neutralChip,
-    CHECK: blueChip,
-    RISK: { bg: semanticToken("warning", mode).bg, color: semanticToken("warning", mode).text }
-  }
-  const tc = typeColour[type] ?? neutralChip
+  // Type chips: a neutral tag per kind — the chip identifies the record type, it is
+  // not a status, so it stays neutral (status colour lives on the StatusPill).
+  const neutralChip = { bg: "var(--color-background-tertiary)", color: mode === "dark" ? slate[300] : slate[600] }
   return (
     <Box onClick={onClick} sx={{
       display: "flex", alignItems: "center", gap: "10px",
@@ -418,7 +412,7 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
       borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)", "&:last-child": { borderBottom: "none" },
       "&:hover .recent-title": { color: "primary.main" }
     }}>
-      <Chip label={type} size="small" sx={{ fontSize: 10, fontWeight: 600, flexShrink: 0, bgcolor: tc.bg, color: tc.color, borderRadius: "4px", height: 18 }} />
+      <Chip label={type} size="small" sx={{ fontSize: 10, fontWeight: 600, flexShrink: 0, bgcolor: neutralChip.bg, color: neutralChip.color, borderRadius: "4px", height: 18 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography className="recent-title" sx={{ fontSize: 13, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.1s" }}>
           {title}
@@ -436,7 +430,6 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { mode } = useThemeMode()
 
   const defaultRange = getDateRangeFromPreset("30d")
   const [dateFrom, setDateFrom] = React.useState(defaultRange.from)
@@ -454,7 +447,7 @@ export default function DashboardPage() {
   const isLoading = srs.isLoading || tasks.isLoading || risks.isLoading || issues.isLoading || checks.isLoading
   const hasError = !!(srs.error || tasks.error || risks.error || issues.error || checks.error)
 
-  // ── Assignees ──────────────────────────────────────────────────────────
+  // ── Assignees (Trend filter) ─────────────────────────────────────────────
   const assignees = React.useMemo(() => {
     const byId = new Map<string, { id: string; displayName: string }>()
     ;[...(srs.data ?? []), ...(tasks.data ?? [])].forEach(item => {
@@ -467,14 +460,20 @@ export default function DashboardPage() {
     return assigneeId ? items.filter(x => x.assigneeId === assigneeId) : items
   }
 
+  // Trend is assignee-scoped (the filter lives with it, in Zone 2).
   const filteredSrs = applyAssignee(srs.data ?? [])
   const filteredTasks = applyAssignee(tasks.data ?? [])
 
-  // ── KPI metrics ────────────────────────────────────────────────────────
-  const openSRs = filteredSrs.filter(x => !["CLOSED", "COMPLETED"].includes(x.status)).length
+  // ── Zone-1 operational counts (NOT assignee-filtered — a Zone-2 control must
+  //    not silently move a Zone-1 glance number) ─────────────────────────────
   const openRisks = (risks.data ?? []).filter(x => !["ACCEPTED", "CLOSED"].includes(x.status)).length
+  const reviewSoonCutoff = Date.now() + 7 * 24 * 60 * 60 * 1000
+  const risksReviewDue = (risks.data ?? []).filter(
+    x => !["ACCEPTED", "CLOSED"].includes(x.status) && x.reviewDate && new Date(x.reviewDate).getTime() <= reviewSoonCutoff
+  ).length
   const openIssues = (issues.data ?? []).filter(x => !["RESOLVED", "CLOSED"].includes(x.status)).length
-  const openTasks = filteredTasks.filter(x => x.status !== "DONE").length
+  const openTasks = (tasks.data ?? []).filter(x => x.status !== "DONE").length
+  const overdueChecks = (checks.data ?? []).filter(c => !["COMPLETED", "CLOSED", "CANCELLED"].includes(c.status) && isOverdue(c.scheduledAt))
   const pendingReviewChecks = (checks.data ?? []).filter(x => x.status === "PENDING_REVIEW").length
 
   // ── Trend data (period-filtered) ───────────────────────────────────────
@@ -491,10 +490,6 @@ export default function DashboardPage() {
   const srChart = buildChartData(filteredSrs, dateFrom, dateTo, ["COMPLETED", "CLOSED"])
   const riChart = buildChartData([...(risks.data ?? []), ...(issues.data ?? [])], dateFrom, dateTo, ["ACCEPTED", "CLOSED", "RESOLVED"])
   const taskChart = buildChartData(filteredTasks, dateFrom, dateTo, ["DONE"])
-
-  // ── Attention items ────────────────────────────────────────────────────
-  const overdueTasks = filteredTasks.filter(t => t.status !== "DONE" && isOverdue(t.dueAt))
-  const overdueChecks = (checks.data ?? []).filter(c => !["COMPLETED", "CLOSED", "CANCELLED"].includes(c.status) && isOverdue(c.scheduledAt))
 
   // ── Recent activity ────────────────────────────────────────────────────
   const recentItems = [
@@ -536,132 +531,127 @@ export default function DashboardPage() {
       {!isLoading && !hasError ? (
         <Stack spacing="20px">
 
-          {/* ── Unified Trend + KPI card ─────────────────────────────── */}
-          <Card variant="outlined">
-            <CardContent>
+          {/* ══ ZONE 1 · OPERATIONAL ═══════════════════════════════════════ */}
+          <ZoneHeading label="Operational" />
 
-              {/* Filter bar */}
-              <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} gap="12px" sx={{ mb: "20px" }}>
-                <SectionHeader
-                  label="Trend Snapshot"
-                  action={<TrendingUpIcon sx={{ fontSize: 15, color: "var(--color-text-secondary)" }} />}
-                />
-                <Stack direction="row" alignItems="center" gap="8px" flexWrap="wrap">
-                  <TextField
-                    select size="small" label="Assignee" value={assigneeId}
-                    onChange={e => setAssigneeId(e.target.value)}
-                    sx={{ minWidth: 150, "& .MuiInputBase-root": { fontSize: 12 } }}
-                  >
-                    <MenuItem value="" sx={{ fontSize: 12 }}>All assignees</MenuItem>
-                    {assignees.map(a => (
-                      <MenuItem key={a.id} value={a.id} sx={{ fontSize: 12 }}>{a.displayName}</MenuItem>
-                    ))}
-                  </TextField>
-                  <ButtonGroup size="small" variant="outlined">
-                    {(["7d", "30d", "90d", "ytd"] as const).map(p => (
-                      <Button key={p}
-                        variant={activePreset === p ? "contained" : "outlined"}
-                        onClick={() => applyPreset(p)}
-                        sx={{ fontSize: 11, fontWeight: 500, px: "10px", minWidth: 0 }}>
-                        {p.toUpperCase()}
-                      </Button>
-                    ))}
-                  </ButtonGroup>
-                  <Button size="small" variant="text"
-                    onClick={() => { applyPreset("30d"); setAssigneeId("") }}
-                    sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-                    Reset
-                  </Button>
-                </Stack>
-              </Stack>
-
-              {/* Three trend cards with charts */}
-              <Stack direction={{ xs: "column", md: "row" }} gap="24px" divider={<Divider orientation="vertical" flexItem />}>
-                <TrendCard
-                  label="Service Requests" tone={categoryTone("sr", mode)}
-                  opened={srInPeriod.length} closed={srClosedInPeriod.length}
-                  closedLabel="Closed" chartData={srChart}
-                  onExport={() => exportCsv("service-requests")}
-                  exporting={isExporting === "service-requests"}
-                />
-                <TrendCard
-                  label="Risks & Issues" tone={categoryTone("ri", mode)}
-                  opened={risksInPeriod.length + issuesInPeriod.length}
-                  closed={risksClosed.length + issuesClosed.length}
-                  closedLabel="Closed" chartData={riChart}
-                />
-                <TrendCard
-                  label="Tasks" tone={categoryTone("tasks", mode)}
-                  opened={tasksInPeriod.length} closed={tasksDone.length}
-                  closedLabel="Done" chartData={taskChart}
-                  onExport={() => exportCsv("tasks")}
-                  exporting={isExporting === "tasks"}
-                />
-              </Stack>
-
-              {/* Divider + KPI tiles */}
-              <Divider sx={{ my: "20px" }} />
-
-              <Box sx={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <StatTile label="Open SRs" value={openSRs} tone={categoryTone("sr", mode)} description="Not yet closed" onClick={() => navigate("/service-desk")} />
-                <StatTile label="Open Risks" value={openRisks} tone={categoryTone("ri", mode)} description="Active risks" urgent onClick={() => navigate("/risks-issues/risks?view=all")} />
-                <StatTile label="Open Issues" value={openIssues} tone={categoryTone("issues", mode)} description="Unresolved issues" urgent onClick={() => navigate("/risks-issues/issues?view=all")} />
-                <StatTile label="Open Tasks" value={openTasks} tone={categoryTone("tasks", mode)} description="Not yet done" onClick={() => navigate("/tasks")} />
-                <StatTile label="Pending Review" value={pendingReviewChecks} tone={categoryTone("pending", mode)} description="Checks awaiting review" urgent onClick={() => navigate("/checks")} />
-              </Box>
-            </CardContent>
-          </Card>
-
-          {/* ── SLA compliance (open SR + Incident) ──────────────────── */}
-          <SlaComplianceCard />
-
-          {/* ── Attention + Recent ───────────────────────────────────── */}
+          {/* Row A — SLA compliance (hero) + Open tickets */}
           <Grid container spacing="16px">
+            <Grid item xs={12} md={7}><SlaComplianceCard /></Grid>
+            <Grid item xs={12} md={5}><OpenTicketsCard /></Grid>
+          </Grid>
 
-            <Grid item xs={12} md={5}>
-              <Card variant="outlined" sx={{ height: "100%" }}>
-                <CardContent>
-                  <Box sx={{ mb: "12px" }}>
+          {/* Row B — Needs-attention summary cards */}
+          <Grid container spacing="16px">
+            <Grid item xs={12} sm={4}>
+              <MetricCard
+                title="Checks"
+                cells={[
+                  { label: "Overdue", value: overdueChecks.length, intent: "danger", onClick: () => navigate("/checks") },
+                  { label: "Pending review", value: pendingReviewChecks, intent: "warning", onClick: () => navigate("/checks") }
+                ]}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <MetricCard
+                title="Risks"
+                cells={[
+                  { label: "Active", value: openRisks, intent: "danger", onClick: () => navigate("/risks-issues/risks?view=all") },
+                  { label: "Review due", value: risksReviewDue, intent: "warning", onClick: () => navigate("/risks-issues/risks?view=all") }
+                ]}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <MetricCard
+                title="Issues & tasks"
+                cells={[
+                  { label: "Open issues", value: openIssues, intent: "danger", onClick: () => navigate("/risks-issues/issues?view=all") },
+                  { label: "Open tasks", value: openTasks, intent: "neutral", onClick: () => navigate("/tasks") }
+                ]}
+              />
+            </Grid>
+          </Grid>
+
+          {/* Light section divider between zones */}
+          <Divider />
+
+          {/* ══ ZONE 2 · CLIENT ════════════════════════════════════════════ */}
+          <ZoneHeading label="Client" />
+
+          {/* RESERVED — Part B (Infrastructure) + Part C (Contacts) cards slot here:
+              a <Grid container spacing="16px"> of two <Grid item xs={12} md={6}> cards,
+              above the trend & activity row. Left as a comment until those parts land. */}
+
+          {/* Row C — de-emphasised Trend Snapshot + Recent Activity */}
+          <Grid container spacing="16px">
+            <Grid item xs={12} md={7}>
+              <Card variant="outlined" sx={DASH_CARD_SX}>
+                <CardContent sx={CARD_CONTENT_SX}>
+
+                  {/* Filter bar */}
+                  <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} gap="12px" sx={{ mb: "18px" }}>
                     <SectionHeader
-                      label="Needs Attention"
-                      action={
-                        overdueTasks.length === 0 && overdueChecks.length === 0 && pendingReviewChecks === 0
-                          ? <CheckCircleOutlineIcon sx={{ fontSize: 14, color: ragToken("GREEN", mode).dot }} />
-                          : <WarningAmberIcon sx={{ fontSize: 14, color: ragToken("AMBER", mode).dot }} />
-                      }
+                      label="Trend Snapshot"
+                      action={<TrendingUpIcon sx={{ fontSize: 15, color: "var(--color-text-secondary)" }} />}
                     />
-                  </Box>
-                  {overdueTasks.length === 0 && overdueChecks.length === 0 && pendingReviewChecks === 0 ? (
-                    <Typography variant="body2" color="text.secondary">Nothing needs attention right now.</Typography>
-                  ) : null}
-                  {overdueTasks.slice(0, 3).map(t => (
-                    <AttentionRow key={t.id} dot={ragToken("RED", mode).dot} label={t.title}
-                      detail={`Task overdue · due ${new Date(t.dueAt!).toLocaleDateString("en-GB")}`}
-                      onClick={() => navigate(`/service-desk/task/${t.id}`)} />
-                  ))}
-                  {overdueTasks.length > 3 ? (
-                    <Typography sx={{ fontSize: 12, color: categoryTone("sr", mode), cursor: "pointer", mt: "6px" }} onClick={() => navigate("/tasks")}>
-                      +{overdueTasks.length - 3} more overdue tasks →
-                    </Typography>
-                  ) : null}
-                  {pendingReviewChecks > 0 ? (
-                    <AttentionRow dot={ragToken("AMBER", mode).dot}
-                      label={`${pendingReviewChecks} check${pendingReviewChecks > 1 ? "s" : ""} pending review`}
-                      detail="Awaiting review approval"
-                      onClick={() => navigate("/checks")} />
-                  ) : null}
-                  {overdueChecks.slice(0, 2).map(c => (
-                    <AttentionRow key={c.id} dot={ragToken("AMBER", mode).dot} label={c.title}
-                      detail={`Check overdue · ${c.site?.name ?? ""}`}
-                      onClick={() => navigate(`/checks/${c.id}`)} />
-                  ))}
+                    <Stack direction="row" alignItems="center" gap="8px" flexWrap="wrap">
+                      <TextField
+                        select size="small" label="Assignee" value={assigneeId}
+                        onChange={e => setAssigneeId(e.target.value)}
+                        sx={{ minWidth: 150, "& .MuiInputBase-root": { fontSize: 12 } }}
+                      >
+                        <MenuItem value="" sx={{ fontSize: 12 }}>All assignees</MenuItem>
+                        {assignees.map(a => (
+                          <MenuItem key={a.id} value={a.id} sx={{ fontSize: 12 }}>{a.displayName}</MenuItem>
+                        ))}
+                      </TextField>
+                      <ButtonGroup size="small" variant="outlined">
+                        {(["7d", "30d", "90d", "ytd"] as const).map(p => (
+                          <Button key={p}
+                            variant={activePreset === p ? "contained" : "outlined"}
+                            onClick={() => applyPreset(p)}
+                            sx={{ fontSize: 11, fontWeight: 500, px: "10px", minWidth: 0 }}>
+                            {p.toUpperCase()}
+                          </Button>
+                        ))}
+                      </ButtonGroup>
+                      <Button size="small" variant="text"
+                        onClick={() => { applyPreset("30d"); setAssigneeId("") }}
+                        sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+                        Reset
+                      </Button>
+                    </Stack>
+                  </Stack>
+
+                  {/* Three trend cards with charts */}
+                  <Stack direction={{ xs: "column", md: "row" }} gap="20px" divider={<Divider orientation="vertical" flexItem />}>
+                    <TrendCard
+                      label="Service Requests"
+                      opened={srInPeriod.length} closed={srClosedInPeriod.length}
+                      closedLabel="Closed" chartData={srChart}
+                      onExport={() => exportCsv("service-requests")}
+                      exporting={isExporting === "service-requests"}
+                    />
+                    <TrendCard
+                      label="Risks & Issues"
+                      opened={risksInPeriod.length + issuesInPeriod.length}
+                      closed={risksClosed.length + issuesClosed.length}
+                      closedLabel="Closed" chartData={riChart}
+                    />
+                    <TrendCard
+                      label="Tasks"
+                      opened={tasksInPeriod.length} closed={tasksDone.length}
+                      closedLabel="Done" chartData={taskChart}
+                      onExport={() => exportCsv("tasks")}
+                      exporting={isExporting === "tasks"}
+                    />
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
 
-            <Grid item xs={12} md={7}>
-              <Card variant="outlined" sx={{ height: "100%" }}>
-                <CardContent>
+            <Grid item xs={12} md={5}>
+              <Card variant="outlined" sx={DASH_CARD_SX}>
+                <CardContent sx={CARD_CONTENT_SX}>
                   <Box sx={{ mb: "12px" }}>
                     <SectionHeader
                       label="Recent Activity"
