@@ -18,9 +18,9 @@ function capitalise(value: string) {
 
 // Standalone task-create modal — the canonical home for the Task create form
 // (sibling to CreateIncidentModal / CreateChangeModal). Used by the Service Desk
-// queue's "New ticket → Task" flow (no parent → standalone queue task) and, once
-// Prompt B retires TasksPage, by the per-record detail pages (passing
-// linkedEntityType/linkedEntityId + navigateAfterCreate={false} to stay on the record).
+// queue's "New ticket → Task" flow (no parent → standalone queue task) and by the
+// per-record detail pages (passing linkedEntityType/linkedEntityId +
+// navigateAfterCreate={false} to stay on the record).
 export function CreateTaskModal({
   open, onClose, linkedEntityType, linkedEntityId, linkedEntityLabel,
   onSuccess, navigateAfterCreate = true,
