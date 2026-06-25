@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Dialog, DialogActions,
+  Box, Button, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, ListItemIcon, Menu, MenuItem, Stack,
   TextField, Tooltip, Typography
 } from "@mui/material"
@@ -42,7 +42,14 @@ import { getCurrentUser } from "../lib/auth"
 import { useTickets, isNewStatus, type Ticket, type TicketKind } from "../lib/tickets"
 import {
   KIND_TO_TYPE_PARAM, encodeSortParam, parseQueueParams, filterTickets,
+  type SlaFilter,
 } from "../lib/serviceDeskQueue"
+
+const SLA_FILTER_LABELS: Record<SlaFilter, string> = {
+  breached: "Breached",
+  "due-soon": "Due soon",
+  "on-track": "On track",
+}
 import { CreateIncidentModal } from "./modals/CreateIncidentModal"
 import { CreateChangeModal } from "./modals/CreateChangeModal"
 import { CreateTaskModal } from "./modals/CreateTaskModal"
@@ -350,7 +357,7 @@ function UnifiedServiceDeskView() {
   // Filter/type/search/sort all derive from the URL (single source of truth) —
   // shared with the depth-1 working-queue rail via lib/serviceDeskQueue.
   const queueParams = React.useMemo(() => parseQueueParams(searchParams), [searchParams])
-  const { savedView, typeFilter, qParam, sortModel } = queueParams
+  const { savedView, typeFilter, qParam, sortModel, slaFilter } = queueParams
 
   // Snappy controlled-input mirror of ?q= — the URL is written debounced below.
   const [searchText, setSearchText] = React.useState(qParam)
@@ -436,6 +443,12 @@ function UnifiedServiceDeskView() {
     setSearchParams(params)   // push
   }
 
+  function handleClearSla() {
+    const params = new URLSearchParams(searchParams)
+    params.delete("sla")
+    setSearchParams(params)   // push
+  }
+
   function handleSortChange(model: GridSortModel) {
     const encoded = encodeSortParam(model)
     const params = new URLSearchParams(searchParams)
@@ -515,6 +528,15 @@ function UnifiedServiceDeskView() {
                 sx: { fontSize: 12.5, bgcolor: "var(--color-background-secondary)", height: 34 },
               }}
             />
+
+            {slaFilter ? (
+              <Chip
+                size="small"
+                label={`SLA: ${SLA_FILTER_LABELS[slaFilter]}`}
+                onDelete={handleClearSla}
+                sx={{ fontSize: 12, fontWeight: 500 }}
+              />
+            ) : null}
 
             <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: "auto" }}>
               <Button

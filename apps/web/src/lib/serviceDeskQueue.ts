@@ -14,6 +14,25 @@ export const DEFAULT_SORT: GridSortModel = [{ field: "updatedAt", sort: "desc" }
 export const TYPE_PARAM_TO_KIND: Record<string, TicketKind> = { sr: "SR", inc: "INC", chg: "CHG", task: "TASK" }
 export const KIND_TO_TYPE_PARAM: Record<TicketKind, string> = { SR: "sr", INC: "inc", CHG: "chg", TASK: "task" }
 
+// ── SLA status (single source of truth — shared with the Dashboard widget) ──
+// breached = past due; due-soon = due within the next 24h; on-track = due later.
+// "none" = no due date or already done. SLA only applies to SR + Incident.
+export const SLA_DUE_SOON_MS = 24 * 60 * 60 * 1000
+
+export type SlaStatus = "breached" | "due-soon" | "on-track" | "none"
+export type SlaFilter = Exclude<SlaStatus, "none">
+
+export function computeSlaStatus(dueAt: string | null, isDone: boolean, now = Date.now()): SlaStatus {
+  if (isDone || !dueAt) return "none"
+  const due = new Date(dueAt).getTime()
+  if (Number.isNaN(due)) return "none"
+  if (due < now) return "breached"
+  if (due <= now + SLA_DUE_SOON_MS) return "due-soon"
+  return "on-track"
+}
+
+const SLA_FILTERS: readonly SlaFilter[] = ["breached", "due-soon", "on-track"]
+
 export function parseSortParam(raw: string | null): GridSortModel {
   if (raw === "none") return []                       // explicit unsorted (MUI asc→desc→none)
   if (!raw) return DEFAULT_SORT
@@ -34,16 +53,20 @@ export interface QueueParams {
   typeFilter: TicketKind | "all"
   qParam: string
   sortModel: GridSortModel
+  /** SLA dimension (?sla=). Own filter — ANDs with the others, SR + INC only. */
+  slaFilter?: SlaFilter
 }
 
 /** Decode the queue state from the URL. Mirrors ServiceDeskPage's depth-0 read. */
 export function parseQueueParams(sp: URLSearchParams): QueueParams {
   const rawType = sp.get("type")
+  const rawSla = sp.get("sla")
   return {
     savedView: sp.get("status") ?? "open",
     typeFilter: rawType ? (TYPE_PARAM_TO_KIND[rawType] ?? "all") : "all",
     qParam: sp.get("q") ?? "",
     sortModel: parseSortParam(sp.get("sort")),
+    slaFilter: rawSla && (SLA_FILTERS as readonly string[]).includes(rawSla) ? (rawSla as SlaFilter) : undefined,
   }
 }
 
@@ -65,6 +88,12 @@ export function filterTickets(
     if (p.savedView === "unassigned" && (t.assignee || done)) return false
     if (p.savedView === "awaiting" && (t.chipIntent !== "wait" || done)) return false
     if (p.savedView === "closed" && !done) return false
+
+    // SLA filter is its own dimension: SR + INC only, matching the URL's sla status.
+    if (p.slaFilter) {
+      if (t.kind !== "SR" && t.kind !== "INC") return false
+      if (computeSlaStatus(t.dueAt, done) !== p.slaFilter) return false
+    }
 
     if (q) {
       const haystack = `${t.subject} ${t.reference} ${t.assignee?.displayName ?? ""}`.toLowerCase()

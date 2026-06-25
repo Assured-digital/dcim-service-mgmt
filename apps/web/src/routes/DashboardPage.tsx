@@ -17,6 +17,8 @@ import { StatusPill, semanticToken, ragToken, slate, type ThemeMode } from "../c
 import { useThemeMode } from "../lib/theme"
 import { Chip } from "@mui/material"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
+import { useTickets } from "../lib/tickets"
+import { computeSlaStatus, type SlaFilter } from "../lib/serviceDeskQueue"
 
 // ── Category / series tones ─────────────────────────────────────────────────
 // The brand category colours used by the trend series, KPI accent strips and dots.
@@ -154,6 +156,120 @@ function StatTile({ label, value, tone, description, onClick, urgent }: {
         {description}
       </Typography>
     </Box>
+  )
+}
+
+// ── SLA compliance widget ──────────────────────────────────────────────────
+// Per selected client: SLA health of OPEN Service Requests + Incidents only.
+// Buckets (and the click-through queue filter) share computeSlaStatus — single
+// source of truth for the thresholds. Click a tile → the queue, pre-filtered.
+
+function SlaTile({ label, value, intent, onClick }: {
+  label: string; value: number; intent: "danger" | "warning" | "success"; onClick: () => void
+}) {
+  const { mode } = useThemeMode()
+  const tok = semanticToken(intent, mode)
+  return (
+    <Box
+      onClick={onClick}
+      sx={{
+        flex: 1, minWidth: 0,
+        bgcolor: "background.paper",
+        border: "1px solid", borderColor: "divider",
+        borderLeft: `3px solid ${tok.solid}`,
+        borderRadius: "8px",
+        px: "14px", py: "12px",
+        cursor: "pointer",
+        transition: "all 0.12s",
+        "&:hover": { borderColor: tok.solid, boxShadow: "0 2px 8px rgba(15,23,42,0.07)" }
+      }}
+    >
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px" }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: value > 0 ? tok.solid : "text.primary" }}>
+        {value}
+      </Typography>
+    </Box>
+  )
+}
+
+function SlaComplianceCard() {
+  const { mode } = useThemeMode()
+  const navigate = useNavigate()
+  const { data: tickets, isLoading, error } = useTickets()
+
+  const buckets = React.useMemo(() => {
+    let breached = 0, dueSoon = 0, onTrack = 0, none = 0
+    for (const t of tickets) {
+      if (t.kind !== "SR" && t.kind !== "INC") continue
+      if (t.chipIntent === "done") continue                 // open SR + INC only
+      switch (computeSlaStatus(t.dueAt, false)) {
+        case "breached":  breached++; break
+        case "due-soon":  dueSoon++;  break
+        case "on-track":  onTrack++;  break
+        default:          none++;     break                 // no due date
+      }
+    }
+    return { breached, dueSoon, onTrack, none }
+  }, [tickets])
+
+  const { breached, dueSoon, onTrack, none } = buckets
+  const withDue = breached + dueSoon + onTrack
+  const pctOnTrack = withDue > 0 ? Math.round((onTrack / withDue) * 100) : 0
+
+  const danger = semanticToken("danger", mode).solid
+  const warning = semanticToken("warning", mode).solid
+  const success = semanticToken("success", mode).solid
+  const track = mode === "dark" ? slate[700] : slate[200]
+
+  const go = (sla: SlaFilter) => navigate(`/service-desk?sla=${sla}`)
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <SectionHeader
+          label="SLA compliance"
+          tooltip="Open service requests & incidents, by SLA due date for the selected client."
+        />
+
+        {isLoading ? (
+          <Box sx={{ mt: "12px" }}><LoadingState /></Box>
+        ) : error ? (
+          <Box sx={{ mt: "12px" }}><ErrorState title="Failed to load SLA data" /></Box>
+        ) : (
+          <>
+            {/* Compliance headline + segmented bar (no legend strip — tiles carry counts) */}
+            <Stack direction="row" alignItems="baseline" gap="8px" sx={{ mt: "14px", mb: "8px" }}>
+              <Typography sx={{ fontSize: 30, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>
+                {pctOnTrack}%
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>
+                on track
+              </Typography>
+              {none > 0 ? (
+                <Typography sx={{ ml: "auto", fontSize: 11.5, color: "text.tertiary" }}>
+                  No due date: {none}
+                </Typography>
+              ) : null}
+            </Stack>
+
+            <Box sx={{ display: "flex", height: 10, borderRadius: "5px", overflow: "hidden", bgcolor: track }}>
+              {onTrack > 0 ? <Box sx={{ flexGrow: onTrack, bgcolor: success }} /> : null}
+              {dueSoon > 0 ? <Box sx={{ flexGrow: dueSoon, bgcolor: warning }} /> : null}
+              {breached > 0 ? <Box sx={{ flexGrow: breached, bgcolor: danger }} /> : null}
+            </Box>
+
+            {/* Clickable tiles → pre-filtered Service Desk queue */}
+            <Box sx={{ display: "flex", gap: "10px", mt: "14px" }}>
+              <SlaTile label="Breached" value={breached} intent="danger" onClick={() => go("breached")} />
+              <SlaTile label="Due soon" value={dueSoon} intent="warning" onClick={() => go("due-soon")} />
+              <SlaTile label="On track" value={onTrack} intent="success" onClick={() => go("on-track")} />
+            </Box>
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -495,6 +611,9 @@ export default function DashboardPage() {
               </Box>
             </CardContent>
           </Card>
+
+          {/* ── SLA compliance (open SR + Incident) ──────────────────── */}
+          <SlaComplianceCard />
 
           {/* ── Attention + Recent ───────────────────────────────────── */}
           <Grid container spacing="16px">
