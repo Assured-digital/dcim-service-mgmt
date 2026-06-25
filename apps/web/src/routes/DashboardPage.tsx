@@ -11,7 +11,7 @@ import { LineChart } from "@mui/x-charts/LineChart"
 import FileDownloadIcon from "@mui/icons-material/FileDownload"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { StatusPill, semanticToken, slate, shadows, type ThemeMode } from "../components/shared"
+import { StatusPill, semanticToken, slate, type ThemeMode } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { useTickets } from "../lib/tickets"
@@ -132,11 +132,13 @@ function ZoneHeading({ label }: { label: string }) {
   )
 }
 
-// ── Metric cell ───────────────────────────────────────────────────────────
-// The single compact metric primitive: a muted uppercase label + a big value.
-// Colour discipline — the value carries STATUS colour only (danger/warning/success
-// when present); neutral metrics and zero values stay text.primary. No decorative
-// borders or category hues. Clickable cells highlight their label on hover.
+// ── Metric cell (navigable sub-tile) ────────────────────────────────────────
+// Each counter is its own distinct, clickable unit: at rest it sits on a faint
+// filled ground (--color-background-secondary), rounded + padded, so it reads as
+// a tile even before hover; hover deepens the fill (--color-background-tertiary,
+// the app's standard interactive fill). Colour discipline — the VALUE carries
+// status colour only (danger/warning/success when present); neutral metrics and
+// zero values stay text.primary. The tile ground is always neutral.
 type MetricIntent = "danger" | "warning" | "success" | "neutral"
 interface MetricCellProps { label: string; value: number; intent?: MetricIntent; onClick?: () => void }
 
@@ -149,11 +151,15 @@ function MetricCell({ label, value, intent = "neutral", onClick }: MetricCellPro
       onClick={onClick}
       sx={{
         flex: 1, minWidth: 0,
+        bgcolor: "var(--color-background-secondary)",
+        borderRadius: "8px",
+        px: "11px", py: "10px",
         cursor: onClick ? "pointer" : "default",
-        "&:hover .metric-label": onClick ? { color: "primary.main" } : {}
+        transition: "background-color 0.12s",
+        "&:hover": onClick ? { bgcolor: "var(--color-background-tertiary)" } : {}
       }}
     >
-      <Typography className="metric-label" sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px", transition: "color 0.1s" }}>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px" }}>
         {label}
       </Typography>
       <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: valueColor }}>
@@ -163,33 +169,24 @@ function MetricCell({ label, value, intent = "neutral", onClick }: MetricCellPro
   )
 }
 
-// ── Count-card chrome: status accent stripe + standard hover ────────────────
+// ── Count-card chrome: status accent stripe, content-sized ──────────────────
 // Stripe colour means STATUS: red when an attention metric is present (a danger
-// cell with value > 0), amber for a warning metric, else a faint neutral
-// (--color-border-secondary) — colour is never decorative. The hover reuses the
-// app's standard bordered-card lift (the shared ResponsiveList / UserListRow
-// pattern: border-colour + box-shadow, "all 0.1s") and re-asserts the stripe so
-// it survives the hover. Applied ONLY to interactive cards.
+// cell with value > 0), else a faint neutral (--color-border-secondary) — colour
+// is never decorative. Cards size to their content (height auto, overriding the
+// shared height:100%) so short cards don't pool dead space at the top. Hover lives
+// on the counter sub-tiles, not the card.
 function stripeColorFor(cells: MetricCellProps[], mode: ThemeMode): string {
   if (cells.some(c => c.intent === "danger" && c.value > 0)) return semanticToken("danger", mode).solid
-  if (cells.some(c => c.intent === "warning" && c.value > 0)) return semanticToken("warning", mode).solid
   return "var(--color-border-secondary)"
 }
 
-function countCardSx(stripe: string, interactive: boolean, mode: ThemeMode) {
+function countCardSx(stripe: string) {
   return {
     ...DASH_CARD_SX,
+    height: "auto",
     borderTopWidth: "2px",
     borderTopStyle: "solid",
     borderTopColor: stripe,
-    transition: "all 0.1s",
-    ...(interactive ? {
-      "&:hover": {
-        borderColor: "var(--color-border-secondary)",
-        borderTopColor: stripe,
-        boxShadow: mode === "dark" ? "0 2px 8px rgba(0,0,0,0.4)" : shadows.hover,
-      }
-    } : {})
   } as const
 }
 
@@ -197,12 +194,11 @@ function countCardSx(stripe: string, interactive: boolean, mode: ThemeMode) {
 function MetricCard({ title, cells }: { title: string; cells: MetricCellProps[] }) {
   const { mode } = useThemeMode()
   const stripe = stripeColorFor(cells, mode)
-  const interactive = cells.some(c => c.onClick)
   return (
-    <Card variant="outlined" sx={countCardSx(stripe, interactive, mode)}>
+    <Card variant="outlined" sx={countCardSx(stripe)}>
       <CardContent sx={CARD_CONTENT_SX}>
         <SectionHeader label={title} />
-        <Box sx={{ display: "flex", gap: "16px", mt: "14px" }}>
+        <Box sx={{ display: "flex", gap: "10px", mt: "12px" }}>
           {cells.map((c, i) => <MetricCell key={i} {...c} />)}
         </Box>
       </CardContent>
@@ -242,16 +238,21 @@ function SlaComplianceCard() {
   const warning = semanticToken("warning", mode).solid
   const success = semanticToken("success", mode).solid
   const track = mode === "dark" ? slate[700] : slate[200]
+  // Stripe is status-driven: green when nothing is breached, red on any breach.
+  const slaStripe = breached > 0 ? danger : success
 
   const go = (sla: SlaFilter) => navigate(`/service-desk?sla=${sla}`)
 
   return (
-    <Card variant="outlined" sx={DASH_CARD_SX}>
+    <Card variant="outlined" sx={countCardSx(slaStripe)}>
       <CardContent sx={CARD_CONTENT_SX}>
         <SectionHeader
           label="SLA compliance"
           tooltip="Open service requests & incidents, by SLA due date for the selected client."
         />
+        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", mt: "3px" }}>
+          Service Requests &amp; Incidents · resolution
+        </Typography>
 
         {isLoading ? (
           <Box sx={{ mt: "12px" }}><LoadingState /></Box>
@@ -267,11 +268,6 @@ function SlaComplianceCard() {
               <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>
                 on track
               </Typography>
-              {none > 0 ? (
-                <Typography sx={{ ml: "auto", fontSize: 11.5, color: "text.tertiary" }}>
-                  No due date: {none}
-                </Typography>
-              ) : null}
             </Stack>
 
             <Box sx={{ display: "flex", height: 10, borderRadius: "5px", overflow: "hidden", bgcolor: track }}>
@@ -280,12 +276,23 @@ function SlaComplianceCard() {
               {breached > 0 ? <Box sx={{ flexGrow: breached, bgcolor: danger }} /> : null}
             </Box>
 
-            {/* Clickable cells → pre-filtered Service Desk queue */}
-            <Box sx={{ display: "flex", gap: "16px", mt: "16px" }}>
+            {/* Clickable sub-tiles → pre-filtered Service Desk queue */}
+            <Box sx={{ display: "flex", gap: "10px", mt: "16px" }}>
               <MetricCell label="Breached" value={breached} intent="danger" onClick={() => go("breached")} />
               <MetricCell label="Due soon" value={dueSoon} intent="warning" onClick={() => go("due-soon")} />
               <MetricCell label="On track" value={onTrack} intent="success" onClick={() => go("on-track")} />
             </Box>
+
+            {/* Honest caveat: tickets with no due date sit outside the %. Kept
+                visible but de-emphasised, below a hairline. */}
+            {none > 0 ? (
+              <>
+                <Divider sx={{ mt: "14px", mb: "10px" }} />
+                <Typography sx={{ fontSize: 11.5, color: "text.tertiary" }}>
+                  {none === 1 ? "1 ticket has" : `${none} tickets have`} no due date set
+                </Typography>
+              </>
+            ) : null}
           </>
         )}
       </CardContent>
@@ -318,7 +325,7 @@ function OpenTicketsCard() {
   const stripe = stripeColorFor([], mode)
 
   return (
-    <Card variant="outlined" sx={countCardSx(stripe, true, mode)}>
+    <Card variant="outlined" sx={countCardSx(stripe)}>
       <CardContent sx={CARD_CONTENT_SX}>
         <SectionHeader
           label="Open tickets"
@@ -329,7 +336,7 @@ function OpenTicketsCard() {
         ) : error ? (
           <Box sx={{ mt: "12px" }}><ErrorState title="Failed to load tickets" /></Box>
         ) : (
-          <Box sx={{ display: "flex", gap: "16px", mt: "14px" }}>
+          <Box sx={{ display: "flex", gap: "10px", mt: "14px" }}>
             <MetricCell label="Requests" value={counts.sr} onClick={() => navigate("/service-desk?type=sr")} />
             <MetricCell label="Incidents" value={counts.inc} onClick={() => navigate("/service-desk?type=inc")} />
             <MetricCell label="Changes" value={counts.chg} onClick={() => navigate("/service-desk?type=chg")} />
@@ -580,6 +587,9 @@ export default function DashboardPage() {
           {/* Row B — Needs-attention summary cards */}
           <Grid container spacing="16px">
             <Grid item xs={12} sm={4}>
+              {/* FLAG: /checks has no per-status URL filter today — both counters land
+                  on the unfiltered list. Wire to ?status=overdue / ?status=pending-review
+                  if/when ChecksPage gains query-param filtering. */}
               <MetricCard
                 title="Checks"
                 cells={[
@@ -593,7 +603,7 @@ export default function DashboardPage() {
                 title="Risks"
                 cells={[
                   { label: "Active", value: openRisks, intent: "danger", onClick: () => navigate("/risks-issues/risks?view=all") },
-                  { label: "Review due", value: risksReviewDue, intent: "warning", onClick: () => navigate("/risks-issues/risks?view=all") }
+                  { label: "Review due", value: risksReviewDue, intent: "warning", onClick: () => navigate("/risks-issues/risks?view=review_due") }
                 ]}
               />
             </Grid>
@@ -602,7 +612,7 @@ export default function DashboardPage() {
                 title="Issues & tasks"
                 cells={[
                   { label: "Open issues", value: openIssues, intent: "danger", onClick: () => navigate("/risks-issues/issues?view=all") },
-                  { label: "Open tasks", value: openTasks, intent: "neutral", onClick: () => navigate("/tasks") }
+                  { label: "Open tasks", value: openTasks, intent: "neutral", onClick: () => navigate("/service-desk?type=task") }
                 ]}
               />
             </Grid>
