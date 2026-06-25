@@ -113,7 +113,7 @@ export class IncidentsService {
   async createForClient(
     clientId: string,
     actorUserId: string,
-    dto: { title: string; description: string; severity?: IncidentSeverity; priority?: string }
+    dto: { title: string; description: string; severity?: IncidentSeverity; priority?: string; dueAt?: string | null }
   ) {
     this.assertClientScope(clientId);
     const reference = await this.generateUniqueReference();
@@ -126,6 +126,7 @@ export class IncidentsService {
         description: dto.description,
         severity: dto.severity ?? IncidentSeverity.MEDIUM,
         priority: dto.priority ?? "medium",
+        ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
         createdById: actorUserId
       },
       include: {
@@ -157,6 +158,7 @@ export class IncidentsService {
       description?: string;
       severity?: IncidentSeverity;
       priority?: string;
+      dueAt?: string | null;
       assigneeId?: string;
     }
   ) {
@@ -168,6 +170,7 @@ export class IncidentsService {
         description: dto.description,
         severity: dto.severity,
         priority: dto.priority,
+        ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
         assigneeId: dto.assigneeId === "" ? null : dto.assigneeId ?? undefined
       },
       include: {

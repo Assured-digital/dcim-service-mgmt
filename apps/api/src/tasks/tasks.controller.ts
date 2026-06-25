@@ -94,7 +94,7 @@ export class TasksController {
   @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
   async create(
     @Req() req: any,
-    @Body() dto: { title: string; description?: string; priority?: string; dueAt?: string; assigneeId?: string },
+    @Body() dto: { title: string; description?: string; priority?: string; dueAt?: string | null; assigneeId?: string },
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req);
@@ -107,7 +107,7 @@ export class TasksController {
   async update(
     @Req() req: any,
     @Param("id") id: string,
-    @Body() dto: { title?: string; description?: string; priority?: string; dueAt?: string; assigneeId?: string },
+    @Body() dto: { title?: string; description?: string; priority?: string; dueAt?: string | null; assigneeId?: string },
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req)

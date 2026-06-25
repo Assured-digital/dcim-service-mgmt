@@ -374,6 +374,7 @@ model ServiceRequest {
   description      String
   status           ServiceRequestStatus @default(NEW)
   priority         String               @default("medium")
+  dueAt            DateTime?
   closureSummary   String?
   assigneeId       String?
   assignee         User?                @relation("AssignedSR", fields: [assigneeId], references: [id])
@@ -473,6 +474,7 @@ model Incident {
   status           IncidentStatus   @default(NEW)
   severity         IncidentSeverity @default(MEDIUM)
   priority         String           @default("medium")
+  dueAt            DateTime?
   linkedEntityType String?
   linkedEntityId   String?
   assigneeId       String?

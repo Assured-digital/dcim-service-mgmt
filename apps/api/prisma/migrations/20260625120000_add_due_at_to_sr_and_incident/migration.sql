@@ -1,0 +1,2 @@
+ALTER TABLE "ServiceRequest" ADD COLUMN "dueAt" TIMESTAMP(3);
+ALTER TABLE "Incident" ADD COLUMN "dueAt" TIMESTAMP(3);
