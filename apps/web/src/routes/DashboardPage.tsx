@@ -11,7 +11,7 @@ import { LineChart } from "@mui/x-charts/LineChart"
 import FileDownloadIcon from "@mui/icons-material/FileDownload"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { StatusPill, semanticToken, slate } from "../components/shared"
+import { StatusPill, semanticToken, slate, shadows, type ThemeMode } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { useTickets } from "../lib/tickets"
@@ -163,10 +163,43 @@ function MetricCell({ label, value, intent = "neutral", onClick }: MetricCellPro
   )
 }
 
+// ── Count-card chrome: status accent stripe + standard hover ────────────────
+// Stripe colour means STATUS: red when an attention metric is present (a danger
+// cell with value > 0), amber for a warning metric, else a faint neutral
+// (--color-border-secondary) — colour is never decorative. The hover reuses the
+// app's standard bordered-card lift (the shared ResponsiveList / UserListRow
+// pattern: border-colour + box-shadow, "all 0.1s") and re-asserts the stripe so
+// it survives the hover. Applied ONLY to interactive cards.
+function stripeColorFor(cells: MetricCellProps[], mode: ThemeMode): string {
+  if (cells.some(c => c.intent === "danger" && c.value > 0)) return semanticToken("danger", mode).solid
+  if (cells.some(c => c.intent === "warning" && c.value > 0)) return semanticToken("warning", mode).solid
+  return "var(--color-border-secondary)"
+}
+
+function countCardSx(stripe: string, interactive: boolean, mode: ThemeMode) {
+  return {
+    ...DASH_CARD_SX,
+    borderTopWidth: "2px",
+    borderTopStyle: "solid",
+    borderTopColor: stripe,
+    transition: "all 0.1s",
+    ...(interactive ? {
+      "&:hover": {
+        borderColor: "var(--color-border-secondary)",
+        borderTopColor: stripe,
+        boxShadow: mode === "dark" ? "0 2px 8px rgba(0,0,0,0.4)" : shadows.hover,
+      }
+    } : {})
+  } as const
+}
+
 // ── Summary card (titled card of 1–2 metric cells) ──────────────────────────
 function MetricCard({ title, cells }: { title: string; cells: MetricCellProps[] }) {
+  const { mode } = useThemeMode()
+  const stripe = stripeColorFor(cells, mode)
+  const interactive = cells.some(c => c.onClick)
   return (
-    <Card variant="outlined" sx={DASH_CARD_SX}>
+    <Card variant="outlined" sx={countCardSx(stripe, interactive, mode)}>
       <CardContent sx={CARD_CONTENT_SX}>
         <SectionHeader label={title} />
         <Box sx={{ display: "flex", gap: "16px", mt: "14px" }}>
@@ -267,6 +300,7 @@ function SlaComplianceCard() {
 // are workload counts, not a status to flag.
 function OpenTicketsCard() {
   const navigate = useNavigate()
+  const { mode } = useThemeMode()
   const { data: tickets, isLoading, error } = useTickets()
 
   const counts = React.useMemo(() => {
@@ -280,8 +314,11 @@ function OpenTicketsCard() {
     return { sr, inc, chg }
   }, [tickets])
 
+  // Open-ticket counts are workload, not a status — always a faint neutral stripe.
+  const stripe = stripeColorFor([], mode)
+
   return (
-    <Card variant="outlined" sx={DASH_CARD_SX}>
+    <Card variant="outlined" sx={countCardSx(stripe, true, mode)}>
       <CardContent sx={CARD_CONTENT_SX}>
         <SectionHeader
           label="Open tickets"
