@@ -392,7 +392,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
       ) : null}
 
       <TaskQuickDetailModal open={Boolean(quickTaskId)} taskId={quickTaskId} users={users} canManage={canManage}
-        onClose={() => setQuickTaskId(null)} onOpenFull={(taskId) => navigate(`/tasks/${taskId}`)}
+        onClose={() => setQuickTaskId(null)} onOpenFull={(taskId) => navigate(`/service-desk/task/${taskId}`)}
         onPatchTask={patchLinkedTask} onUpdateStatus={updateLinkedTaskStatus}
       />
     </Box>

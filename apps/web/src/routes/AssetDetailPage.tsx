@@ -584,7 +584,7 @@ export default function AssetDetailPage({
       <TaskQuickDetailModal
         open={Boolean(quickTaskId)} taskId={quickTaskId} users={users} canManage={canManage}
         onClose={() => setQuickTaskId(null)}
-        onOpenFull={(taskId) => navigate(`/tasks/${taskId}`)}
+        onOpenFull={(taskId) => navigate(`/service-desk/task/${taskId}`)}
         onPatchTask={patchLinkedTask}
         onUpdateStatus={updateLinkedTaskStatus}
       />

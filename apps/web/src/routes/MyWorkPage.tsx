@@ -273,7 +273,7 @@ export default function MyWorkPage() {
     if (item.kind === "check") {
       navigate(`/checks/${item.data.id}`)
     } else {
-      navigate(`/tasks/${item.data.id}`)
+      navigate(`/service-desk/task/${item.data.id}`)
     }
   }
 

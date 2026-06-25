@@ -536,7 +536,7 @@ export default function IssueDetailPage() {
   const handleOpenFullTask = React.useCallback(
     (taskId: string) => {
       if (!issue) return
-      navigate(`/tasks/${taskId}`, {
+      navigate(`/service-desk/task/${taskId}`, {
         state: { fromIssue: issue.id, fromIssueRef: issue.reference },
       })
     },

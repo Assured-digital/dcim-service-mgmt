@@ -759,7 +759,7 @@ export default function RiskDetailPage() {
   const handleOpenFullTask = React.useCallback(
     (taskId: string) => {
       if (!risk) return
-      navigate(`/tasks/${taskId}`, {
+      navigate(`/service-desk/task/${taskId}`, {
         state: { fromRisk: risk.id, fromRiskRef: risk.reference },
       })
     },

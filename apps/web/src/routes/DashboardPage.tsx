@@ -518,7 +518,7 @@ export default function DashboardPage() {
                   {overdueTasks.slice(0, 3).map(t => (
                     <AttentionRow key={t.id} dot={ragToken("RED", mode).dot} label={t.title}
                       detail={`Task overdue · due ${new Date(t.dueAt!).toLocaleDateString("en-GB")}`}
-                      onClick={() => navigate(`/tasks/${t.id}`)} />
+                      onClick={() => navigate(`/service-desk/task/${t.id}`)} />
                   ))}
                   {overdueTasks.length > 3 ? (
                     <Typography sx={{ fontSize: 12, color: categoryTone("sr", mode), cursor: "pointer", mt: "6px" }} onClick={() => navigate("/tasks")}>
@@ -559,7 +559,7 @@ export default function DashboardPage() {
                       status={item.status} updatedAt={item.updatedAt}
                       onClick={() => {
                         if (item.kind === "SR") navigate("/service-desk")
-                        else if (item.kind === "TASK") navigate(`/tasks/${item.id}`)
+                        else if (item.kind === "TASK") navigate(`/service-desk/task/${item.id}`)
                         else if (item.kind === "CHECK") navigate(`/checks/${item.id}`)
                         else if (item.kind === "RISK") navigate("/risks-issues/risks?view=all")
                         else if (item.kind === "ISSUE") navigate("/risks-issues/issues?view=all")

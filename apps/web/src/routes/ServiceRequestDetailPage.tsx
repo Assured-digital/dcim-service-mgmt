@@ -565,7 +565,7 @@ export default function ServiceRequestDetailPage() {
   const handleOpenFullTask = React.useCallback(
     (taskId: string) => {
       if (!sr) return
-      navigate(`/tasks/${taskId}`, {
+      navigate(`/service-desk/task/${taskId}`, {
         state: { fromSR: sr.id, fromSRRef: sr.reference },
       })
     },

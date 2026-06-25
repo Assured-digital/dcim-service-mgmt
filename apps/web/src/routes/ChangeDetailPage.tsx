@@ -883,7 +883,7 @@ export default function ChangeDetailPage() {
   const handleOpenFullTask = React.useCallback(
     (taskId: string) => {
       if (!change) return
-      navigate(`/tasks/${taskId}`, {
+      navigate(`/service-desk/task/${taskId}`, {
         state: { fromChange: change.id, fromChangeRef: change.reference },
       })
     },
