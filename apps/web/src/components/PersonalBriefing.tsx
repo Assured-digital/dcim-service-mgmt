@@ -7,6 +7,7 @@ import { BarChart } from "@mui/x-charts/BarChart"
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh"
 import WbSunnyIcon from "@mui/icons-material/WbSunny"
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
+import EventIcon from "@mui/icons-material/Event"
 import { StatusPill, TypeBadge, semanticToken, ragToken, slate } from "./shared"
 import { useThemeMode } from "../lib/theme"
 import { getCurrentUser, type CurrentUser } from "../lib/auth"
@@ -51,6 +52,32 @@ function pickWaiting(tickets: Ticket[], limit = 5): Ticket[] {
     .filter(t => t.chipIntent === "wait")
     .sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
     .slice(0, limit)
+}
+
+// Forward-looking: tickets with a real dueAt landing in the next `days` window
+// (today inclusive), not yet done. Excludes already-overdue items — those are
+// surfaced separately by the focus card / "New overdue" KPI.
+function pickDueSoon(tickets: Ticket[], days = 7, limit = 6): Ticket[] {
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
+  const windowEnd = startOfToday.getTime() + days * 86_400_000
+  return tickets
+    .filter(t => {
+      if (t.chipIntent === "done" || !t.dueAt) return false
+      const due = new Date(t.dueAt).getTime()
+      return due >= startOfToday.getTime() && due < windowEnd
+    })
+    .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())
+    .slice(0, limit)
+}
+
+// Short, honest due label for the next-7-days window. dueAt is date-granular,
+// so show "Today" / weekday+date rather than an arbitrary midnight time.
+function dueLabel(iso: string): { text: string; today: boolean } {
+  const due = new Date(iso)
+  const startOfTomorrow = new Date(); startOfTomorrow.setHours(0, 0, 0, 0)
+  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1)
+  if (due.getTime() < startOfTomorrow.getTime()) return { text: "Today", today: true }
+  return { text: due.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }), today: false }
 }
 
 function dayBuckets(tickets: Ticket[], days = 14): { label: string; created: number; resolved: number }[] {
@@ -145,10 +172,11 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
   const openP1P2 = myTickets.filter(
     t => t.chipIntent !== "done" && (t.priority === "critical" || t.priority === "high")
   ).length
-  const slaBreached = myTickets.filter(t => t.overdue).length
+  const overdueCount = myTickets.filter(t => t.overdue).length
 
   const focus = pickFocus(myTickets)
   const waiting = pickWaiting(myTickets)
+  const dueSoon = pickDueSoon(myTickets)
   const chart = React.useMemo(() => dayBuckets(myTickets, 14), [myTickets])
 
   return (
@@ -167,7 +195,7 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
         <Typography sx={{ fontSize: 14, color: "text.secondary", lineHeight: 1.6 }}>
           You have <strong style={{ color: theme.palette.text.primary }}>{totalOpen} open ticket{totalOpen === 1 ? "" : "s"}</strong>
           {resolvedToday > 0 ? <> · <strong style={{ color: semanticToken("success", mode).solid }}>{resolvedToday} resolved today</strong></> : null}
-          {slaBreached > 0 ? <> · <strong style={{ color: semanticToken("danger", mode).solid }}>{slaBreached} crossed SLA</strong></> : null}.
+          {overdueCount > 0 ? <> · <strong style={{ color: semanticToken("danger", mode).solid }}>{overdueCount} overdue</strong></> : null}.
         </Typography>
       </Box>
 
@@ -256,6 +284,62 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
             />
           </Box>
         </CardContent>
+      </Card>
+
+      {/* Due this week — real dueAt, scoped to the selected client + assigned to me */}
+      <Card>
+        <CardContent sx={{ p: 2, pb: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+            <EventIcon sx={{ fontSize: 16, color: mode === "dark" ? "#60a5fa" : "#1d4ed8" }} />
+            <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 14, fontWeight: 700, color: "text.primary" }}>
+              Due this week
+            </Typography>
+            <Typography sx={{ fontSize: 11, fontWeight: 700, color: mode === "dark" ? "#60a5fa" : "#1d4ed8", ml: "auto" }}>
+              {dueSoon.length} item{dueSoon.length === 1 ? "" : "s"}
+            </Typography>
+          </Stack>
+        </CardContent>
+        <Divider />
+        {dueSoon.length === 0 ? (
+          <Typography sx={{ p: 2, fontSize: 13, color: "var(--color-text-muted)", textAlign: "center" }}>
+            Nothing of yours is due in the next 7 days.
+          </Typography>
+        ) : (
+          dueSoon.map(t => {
+            const dl = dueLabel(t.dueAt!)
+            return (
+              <Box
+                key={`${t.kind}-${t.id}`}
+                onClick={() => navigate(t.detailPath)}
+                sx={{
+                  px: 2, py: 1.25, cursor: "pointer",
+                  borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)",
+                  "&:last-child": { borderBottom: "none" },
+                  "&:hover": { bgcolor: "var(--color-background-secondary)" },
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.25 }}>
+                  <TypeBadge kind={t.kind} />
+                  <Typography sx={{ fontFamily: "monospace", fontSize: 11.5, fontWeight: 700, color: "text.secondary" }}>
+                    {t.reference}
+                  </Typography>
+                  <Typography sx={{
+                    ml: "auto", fontSize: 11, fontWeight: 600,
+                    color: dl.today ? semanticToken("warning", mode).text : "var(--color-text-muted)"
+                  }}>
+                    {dl.text}
+                  </Typography>
+                </Stack>
+                <Typography sx={{
+                  fontSize: 12.5, color: "text.primary", fontWeight: 500,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                }}>
+                  {t.subject}
+                </Typography>
+              </Box>
+            )
+          })
+        )}
       </Card>
 
       {/* Waiting on client */}
