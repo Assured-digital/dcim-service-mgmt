@@ -34,7 +34,8 @@ import { useThemeMode } from "../lib/theme"
 import { formatDate } from "../lib/format"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
-import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
+import { CreateTaskModal } from "./modals/CreateTaskModal"
+import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import {
   SlimExpandCommentBox,
   ActivityFeedItem,
@@ -999,6 +1000,7 @@ export default function ServiceRequestDetailPage() {
       />
 
       <CreateTaskModal
+        navigateAfterCreate={false}
         open={taskOpen}
         onClose={handleCloseCreateTask}
         linkedEntityType="ServiceRequest"

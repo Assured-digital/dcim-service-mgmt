@@ -8,7 +8,7 @@ import {
 } from "@mui/material"
 import StorageIcon from "@mui/icons-material/Storage"
 import { StatusPill, entityStatusIntent } from "../components/shared"
-import { TaskQuickDetailModal } from "./TasksPage"
+import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import {
   Asset, Cabinet, Room, RackTab, ElevationSide,
   AuditEvent, LinkedTask, LinkedServiceRequest, LinkedRisk, LinkedIssue,

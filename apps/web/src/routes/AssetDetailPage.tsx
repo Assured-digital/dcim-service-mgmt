@@ -21,7 +21,8 @@ import { useAssignableUsers } from "../lib/useAssignableUsers"
 import {
   ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog
 } from "./InfraDialogs"
-import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
+import { CreateTaskModal } from "./modals/CreateTaskModal"
+import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import { CreateRiskModal, CreateIssueModal } from "./RisksIssuesPage"
 import { CreateServiceRequestModal } from "./ServiceDeskPage"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -558,6 +559,7 @@ export default function AssetDetailPage({
 
       {/* Create-record modals */}
       <CreateTaskModal
+        navigateAfterCreate={false}
         open={createModal === "task"} onClose={() => setCreateModal(null)}
         linkedEntityType="Asset" linkedEntityId={asset.id} linkedEntityLabel={asset.name}
         onSuccess={async () => { qc.invalidateQueries({ queryKey: ["linked-tasks-asset", asset.id] }) }}

@@ -30,7 +30,8 @@ import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
-import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
+import { CreateTaskModal } from "./modals/CreateTaskModal"
+import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import {
   EditableTitleCard,
   ActivityTabs,
@@ -896,6 +897,7 @@ export default function IssueDetailPage() {
       />
 
       <CreateTaskModal
+        navigateAfterCreate={false}
         open={taskOpen}
         onClose={handleCloseCreateTask}
         linkedEntityType="Issue"
