@@ -29,6 +29,7 @@ import { ConnectionsModule } from "./connections/connections.module"
 import { RecordLinksModule } from "./record-links/record-links.module"
 import { AttachmentsModule } from "./attachments/attachments.module"
 import { NotificationsModule } from "./notifications/notifications.module"
+import { RecordReportModule } from "./records-report/record-report.module"
 
 @Module({
   imports: [
@@ -60,7 +61,8 @@ import { NotificationsModule } from "./notifications/notifications.module"
     ConnectionsModule,
     RecordLinksModule,
     AttachmentsModule,
-    NotificationsModule
+    NotificationsModule,
+    RecordReportModule
   ],
   controllers: [HealthController]
 })

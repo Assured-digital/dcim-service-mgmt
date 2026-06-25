@@ -4,6 +4,7 @@ import { ServiceRequestsService } from "./service-requests.service";
 
 @Module({
   controllers: [ServiceRequestsController],
-  providers: [ServiceRequestsService]
+  providers: [ServiceRequestsService],
+  exports: [ServiceRequestsService]
 })
 export class ServiceRequestsModule {}

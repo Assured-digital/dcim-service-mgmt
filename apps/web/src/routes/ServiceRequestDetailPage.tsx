@@ -17,6 +17,8 @@ import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import LockIcon from "@mui/icons-material/Lock"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
+import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined"
+import { downloadRecordReport } from "../lib/recordReport"
 import CloseIcon from "@mui/icons-material/Close"
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined"
 import StorageIcon from "@mui/icons-material/Storage"
@@ -711,6 +713,16 @@ export default function ServiceRequestDetailPage() {
   const moreMenuItems = React.useMemo<MoreMenuItem[]>(
     () => [
       {
+        label: "Export as PDF",
+        icon: <PictureAsPdfOutlinedIcon sx={{ fontSize: 14 }} />,
+        onClick: () => {
+          if (!sr) return
+          void downloadRecordReport("service_request", sr.id, sr.reference).catch(() =>
+            notify.error("Couldn't generate the PDF — please try again")
+          )
+        },
+      },
+      {
         label: "Copy link",
         icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
         onClick: handleCopyLink,
@@ -727,7 +739,7 @@ export default function ServiceRequestDetailPage() {
         danger: true,
       },
     ],
-    [handleCopyLink, handleCloseRequest, handleCancelRequest]
+    [sr, notify, handleCopyLink, handleCloseRequest, handleCancelRequest]
   )
 
   const handleLinkSnackbarClose = React.useCallback(() => setLinkCopied(false), [])

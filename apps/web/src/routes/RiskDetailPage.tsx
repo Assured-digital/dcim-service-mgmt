@@ -19,6 +19,8 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
 import LockIcon from "@mui/icons-material/Lock"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
+import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined"
+import { downloadRecordReport } from "../lib/recordReport"
 import CloseIcon from "@mui/icons-material/Close"
 import StorageIcon from "@mui/icons-material/Storage"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
@@ -894,6 +896,16 @@ export default function RiskDetailPage() {
   const moreMenuItems = React.useMemo<MoreMenuItem[]>(
     () => [
       {
+        label: "Export as PDF",
+        icon: <PictureAsPdfOutlinedIcon sx={{ fontSize: 14 }} />,
+        onClick: () => {
+          if (!risk) return
+          void downloadRecordReport("risk", risk.id, risk.reference).catch(() =>
+            notify.error("Couldn't generate the PDF — please try again")
+          )
+        },
+      },
+      {
         label: "Copy link",
         icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
         onClick: handleCopyLink,
@@ -904,7 +916,7 @@ export default function RiskDetailPage() {
         onClick: handleCloseRisk,
       },
     ],
-    [handleCopyLink, handleCloseRisk]
+    [risk, notify, handleCopyLink, handleCloseRisk]
   )
 
   const handleLinkSnackbarClose = React.useCallback(() => setLinkCopied(false), [])

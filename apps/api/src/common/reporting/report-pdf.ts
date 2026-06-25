@@ -4,22 +4,32 @@
 // returns the PDFKit doc WITHOUT calling end() — the caller attaches a sink (buffer or
 // response) and ends it (so chunks are never dropped to an un-consumed Readable).
 //
+// The generic document chrome (palette, page-break/hairline primitives, narrative + photo
+// blocks, the branded header + metadata grid, the page-number footer pass) lives in
+// report-kit.ts and is shared with the per-record export builder. THIS file holds only the
+// Check-specific layout: the pass-rate summary band and the PASS/FAIL/NA checklist items.
+//
 // pdfkit is pure-JS (no native modules) and bundles its standard Helvetica fonts, so the
 // Dockerfile is unchanged. It can embed PNG/JPEG natively ONLY — GIF/WebP/PDF evidence
 // (also on the attachment allow-list) is rendered as a text reference, not an image.
 import PDFDocument = require("pdfkit");
+import {
+  COLORS,
+  MARGIN,
+  ReportPhoto,
+  drawDocHeader,
+  drawFooters,
+  drawNarrative,
+  drawPhoto,
+  ensureSpace,
+  fmtDate,
+  hairline
+} from "./report-kit";
+
+// Re-export the shared photo type so existing importers (checks-report.service) are unaffected.
+export type { ReportPhoto };
 
 // ── Model (assembled by checks-report.service from the clientId-scoped check) ──────────
-
-export type ReportPhoto = {
-  caption: string | null;
-  filename: string;
-  uploadedAt: string; // ISO
-  contentType: string;
-  // Decoded bytes for an embeddable image (png/jpeg). null when not embeddable or the
-  // tenant-scoped fetch failed — rendered as a text reference instead of an image.
-  bytes: Buffer | null;
-};
 
 export type ReportItem = {
   index: number; // 1-based display position within the whole check
@@ -67,19 +77,7 @@ export type CheckReportModel = {
   generatedAt: string; // ISO
 };
 
-// ── Palette (aligned with the app's design tokens) ────────────────────────────────────
-const COLORS = {
-  ink: "#0f172a",
-  body: "#334155",
-  muted: "#64748b",
-  faint: "#94a3b8",
-  hair: "#e2e8f0",
-  primary: "#1d4ed8",
-  pass: "#15803d",
-  fail: "#b91c1c",
-  na: "#475569"
-};
-
+// ── Check-specific response vocabulary ────────────────────────────────────────────────
 const RESPONSE_META: Record<string, { label: string; color: string }> = {
   PASS: { label: "PASS", color: COLORS.pass },
   FAIL: { label: "FAIL", color: COLORS.fail },
@@ -89,89 +87,32 @@ function responseMeta(r: string | null): { label: string; color: string } {
   return (r && RESPONSE_META[r]) || { label: "Not answered", color: COLORS.faint };
 }
 
-// ── Date helpers (en-GB; node:20 ships full ICU) ──────────────────────────────────────
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", {
-    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-  });
-}
-
-// ── Layout primitives ─────────────────────────────────────────────────────────────────
-const MARGIN = 50;
-const PHOTO_BOX_W = 200;
-const PHOTO_BOX_H = 150;
-
-// Add a page if `needed` points of vertical space don't remain before the bottom margin.
-// Used to keep an item header / image with what follows it instead of orphaning across a
-// page break (pdfkit auto-breaks flowing text, but image placement is manual).
-function ensureSpace(doc: PDFKit.PDFDocument, needed: number): void {
-  const bottom = doc.page.height - doc.page.margins.bottom;
-  if (doc.y + needed > bottom) doc.addPage();
-}
-
-function hairline(doc: PDFKit.PDFDocument, contentWidth: number): void {
-  doc
-    .moveTo(MARGIN, doc.y)
-    .lineTo(MARGIN + contentWidth, doc.y)
-    .lineWidth(0.5)
-    .strokeColor(COLORS.hair)
-    .stroke();
-}
-
 // ── Sections of the document ──────────────────────────────────────────────────────────
 
+// Thin wrapper over the shared branded header: supplies the Check brand/subtitle and the
+// Check metadata pairs. The exact spacing/fonts live in drawDocHeader (report-kit).
 function drawHeader(doc: PDFKit.PDFDocument, m: CheckReportModel, contentWidth: number): void {
-  doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.primary)
-    .text("ASSURED DIGITAL · CHECK REPORT", MARGIN, MARGIN, { characterSpacing: 0.5 });
-  doc.moveDown(0.4);
-  doc.font("Helvetica-Bold").fontSize(19).fillColor(COLORS.ink).text(m.title, { width: contentWidth });
-  doc.moveDown(0.25);
-  doc.font("Courier").fontSize(10).fillColor(COLORS.muted)
-    .text(`${m.reference}   ·   ${m.statusLabel}   ·   ${m.checkType}`, { width: contentWidth });
-  doc.moveDown(0.6);
-  hairline(doc, contentWidth);
-  doc.moveDown(0.7);
-
-  // Two-column metadata grid: label (faint) above value (ink) per cell.
-  const pairs: Array<[string, string]> = [
-    ["Site", m.siteName],
-    ["Template", m.templateName],
-    ["Engineer", m.assigneeName ?? "Unassigned"],
-    ["Reviewer", m.reviewerName ?? "—"],
-    ["Priority", m.priority],
-    ["Pass rate", m.passRate == null ? "—" : `${Math.round(m.passRate)}%`],
-    ["Scheduled", fmtDate(m.scheduledAt)],
-    ["Started", fmtDate(m.startedAt)],
-    ["Submitted", fmtDate(m.submittedAt)],
-    [m.closedAt ? "Closed" : "Completed", fmtDate(m.closedAt ?? m.completedAt)]
-  ];
-  const colGap = 26;
-  const colW = (contentWidth - colGap) / 2;
-  const cellH = 30;
-  const startY = doc.y;
-  const rows = Math.ceil(pairs.length / 2);
-  pairs.forEach((pair, idx) => {
-    const col = idx % 2;
-    const row = Math.floor(idx / 2);
-    const cx = MARGIN + col * (colW + colGap);
-    const cy = startY + row * cellH;
-    doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.faint)
-      .text(pair[0].toUpperCase(), cx, cy, { width: colW, characterSpacing: 0.4 });
-    doc.font("Helvetica").fontSize(11).fillColor(COLORS.ink)
-      .text(pair[1], cx, cy + 10.5, { width: colW, ellipsis: true, lineBreak: false });
-  });
-  doc.y = startY + rows * cellH;
-  doc.x = MARGIN;
-  doc.moveDown(0.4);
+  drawDocHeader(
+    doc,
+    {
+      brand: "ASSURED DIGITAL · CHECK REPORT",
+      title: m.title,
+      subtitle: `${m.reference}   ·   ${m.statusLabel}   ·   ${m.checkType}`,
+      pairs: [
+        ["Site", m.siteName],
+        ["Template", m.templateName],
+        ["Engineer", m.assigneeName ?? "Unassigned"],
+        ["Reviewer", m.reviewerName ?? "—"],
+        ["Priority", m.priority],
+        ["Pass rate", m.passRate == null ? "—" : `${Math.round(m.passRate)}%`],
+        ["Scheduled", fmtDate(m.scheduledAt)],
+        ["Started", fmtDate(m.startedAt)],
+        ["Submitted", fmtDate(m.submittedAt)],
+        [m.closedAt ? "Closed" : "Completed", fmtDate(m.closedAt ?? m.completedAt)]
+      ]
+    },
+    contentWidth
+  );
 }
 
 function drawSummary(doc: PDFKit.PDFDocument, m: CheckReportModel, contentWidth: number): void {
@@ -215,42 +156,6 @@ function drawSummary(doc: PDFKit.PDFDocument, m: CheckReportModel, contentWidth:
 
   doc.x = MARGIN;
   doc.y = boxY + boxH + 14;
-}
-
-function drawPhoto(doc: PDFKit.PDFDocument, photo: ReportPhoto, contentWidth: number): void {
-  const indent = MARGIN + 18;
-  const captionW = contentWidth - 18;
-  // Caption falls back to filename + capture date — consistent with the on-screen
-  // evidence cards (caption when set, else "<filename> · <date>").
-  const captionText = photo.caption?.trim()
-    ? photo.caption.trim()
-    : `${photo.filename} · ${fmtDate(photo.uploadedAt)}`;
-
-  if (photo.bytes) {
-    ensureSpace(doc, PHOTO_BOX_H + 26);
-    const top = doc.y;
-    try {
-      // fit scales within the box preserving aspect ratio; we advance y by the fixed box
-      // height so layout/page-breaks stay deterministic without decoding image dimensions.
-      doc.image(photo.bytes, indent, top, { fit: [PHOTO_BOX_W, PHOTO_BOX_H] });
-    } catch {
-      // A corrupt/undecodable image must never break the whole report — fall back to text.
-      doc.font("Helvetica-Oblique").fontSize(9).fillColor(COLORS.muted)
-        .text(`[image could not be rendered] ${captionText}`, indent, top, { width: captionW });
-      doc.moveDown(0.5);
-      return;
-    }
-    doc.y = top + PHOTO_BOX_H + 4;
-    doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.body)
-      .text(captionText, indent, doc.y, { width: PHOTO_BOX_W });
-    doc.moveDown(0.6);
-  } else {
-    // Non-embeddable evidence (GIF/WebP/PDF): reference it without an image.
-    ensureSpace(doc, 26);
-    doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.muted)
-      .text(`▢ ${captionText}  (${photo.contentType} — view in app)`, indent, doc.y, { width: captionW });
-    doc.moveDown(0.4);
-  }
 }
 
 function drawItem(doc: PDFKit.PDFDocument, item: ReportItem, contentWidth: number): void {
@@ -309,44 +214,6 @@ function drawSection(doc: PDFKit.PDFDocument, section: ReportSection, contentWid
   for (const item of section.items) drawItem(doc, item, contentWidth);
 }
 
-function drawNarrative(doc: PDFKit.PDFDocument, title: string, body: string, contentWidth: number): void {
-  ensureSpace(doc, 60);
-  doc.moveDown(0.4);
-  doc.font("Helvetica-Bold").fontSize(9).fillColor(COLORS.primary)
-    .text(title.toUpperCase(), MARGIN, doc.y, { characterSpacing: 0.6 });
-  doc.moveDown(0.25);
-  hairline(doc, contentWidth);
-  doc.moveDown(0.5);
-  doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.body).text(body.trim(), MARGIN, doc.y, { width: contentWidth });
-  doc.moveDown(0.4);
-}
-
-function drawFooters(doc: PDFKit.PDFDocument, m: CheckReportModel): void {
-  // bufferPages mode (set in options) lets us stamp "Page X of Y" once the total is known.
-  // bufferedPageRange() isn't in @types/pdfkit but is a stable pdfkit runtime API.
-  const range = (doc as unknown as {
-    bufferedPageRange(): { start: number; count: number };
-  }).bufferedPageRange();
-  const generated = `Generated ${fmtDateTime(m.generatedAt)}`;
-  for (let i = 0; i < range.count; i++) {
-    doc.switchToPage(range.start + i);
-    const bottomMargin = doc.page.margins.bottom;
-    const y = doc.page.height - bottomMargin + 18;
-    const w = doc.page.width - MARGIN * 2;
-    // The footer sits 18pt INTO the bottom margin. Writing text below the content area
-    // makes pdfkit's line-wrapper auto-paginate (continueOnNewPage), appending a blank
-    // page per footer line. Temporarily zero the bottom margin so the whole page is
-    // writable and the stamp never triggers a page break; restore it afterwards.
-    doc.page.margins.bottom = 0;
-    doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.faint);
-    doc.text(generated, MARGIN, y, { width: w / 2, lineBreak: false });
-    doc.text(`${m.reference}   ·   Page ${i + 1} of ${range.count}`, MARGIN + w / 2, y, {
-      width: w / 2, align: "right", lineBreak: false
-    });
-    doc.page.margins.bottom = bottomMargin;
-  }
-}
-
 // Build the report. Returns the doc with all content written but NOT ended — the caller
 // attaches a sink and calls doc.end(). bufferPages keeps every page addressable for the
 // page-number footer pass.
@@ -367,6 +234,6 @@ export function buildCheckReportPdf(model: CheckReportModel): PDFKit.PDFDocument
   if (model.engineerSummary?.trim()) drawNarrative(doc, "Engineer summary", model.engineerSummary, contentWidth);
   if (model.reviewerNotes?.trim()) drawNarrative(doc, "Reviewer notes", model.reviewerNotes, contentWidth);
 
-  drawFooters(doc, model);
+  drawFooters(doc, { reference: model.reference, generatedAt: model.generatedAt });
   return doc;
 }

@@ -16,6 +16,8 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked"
 import BlockIcon from "@mui/icons-material/Block"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
+import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined"
+import { downloadRecordReport } from "../lib/recordReport"
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined"
 import StorageIcon from "@mui/icons-material/Storage"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
@@ -609,6 +611,16 @@ export default function TaskDetailPage() {
   const moreMenuItems = React.useMemo<MoreMenuItem[]>(
     () => [
       {
+        label: "Export as PDF",
+        icon: <PictureAsPdfOutlinedIcon sx={{ fontSize: 14 }} />,
+        onClick: () => {
+          if (!task) return
+          void downloadRecordReport("task", task.id, task.reference).catch(() =>
+            notify.error("Couldn't generate the PDF — please try again")
+          )
+        },
+      },
+      {
         label: "Copy link",
         icon: <ContentCopyIcon sx={{ fontSize: 14 }} />,
         onClick: handleCopyLink,
@@ -625,7 +637,7 @@ export default function TaskDetailPage() {
         danger: true,
       },
     ],
-    [handleCopyLink, handleMarkDone, handleCancelTask]
+    [task, notify, handleCopyLink, handleMarkDone, handleCancelTask]
   )
 
   const handleLinkSnackbarClose = React.useCallback(() => setLinkCopied(false), [])
