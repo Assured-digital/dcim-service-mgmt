@@ -10,7 +10,6 @@ import Shell from "./Shell"
 const LoginPage                = React.lazy(() => import("./LoginPage"))
 const DashboardPage            = React.lazy(() => import("./DashboardPage"))
 const ServiceDeskNavigator     = React.lazy(() => import("./ServiceDeskNavigator"))
-const ServiceDeskDashboard     = React.lazy(() => import("./ServiceDeskDashboard"))
 const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
 const AssetRegisterPage        = React.lazy(() => import("./AssetRegisterPage"))
 const ChecksPage               = React.lazy(() => import("./ChecksPage"))
@@ -146,11 +145,10 @@ export default function App() {
               entirely by the URL. More-specific siblings below still win by RR v6
               route ranking (static/dynamic outrank the splat). */}
           <Route path="service-desk/*" element={<ServiceDeskNavigator />} />
-          {/* Dashboard is its own Service Management nav item — kept off /service-desk
-              so the Service Desk nav doesn't also highlight when the Dashboard is open. */}
-          <Route path="service-management/dashboard" element={<ServiceDeskDashboard />} />
-          {/* Legacy redirect for any deep links that still use the old path. */}
-          <Route path="service-desk/dashboard" element={<Navigate to="/service-management/dashboard" replace />} />
+          {/* Service Management dashboard removed (#160) — it overlapped the main
+              Dashboard. Old deep links fall back to the Service Desk queue. */}
+          <Route path="service-management/dashboard" element={<Navigate to="/service-desk" replace />} />
+          <Route path="service-desk/dashboard" element={<Navigate to="/service-desk" replace />} />
           {/* Legacy redirects */}
           <Route path="service-desk/:id" element={<LegacyServiceRequestDetailRedirect />} />
           <Route path="service-requests/:id" element={<LegacyServiceRequestDetailRedirect />} />

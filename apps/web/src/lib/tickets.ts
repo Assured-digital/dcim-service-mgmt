@@ -20,8 +20,8 @@ export interface Ticket {
   createdAt: string
   updatedAt: string
   overdue: boolean
-  /** Implied SLA / scheduled deadline. ISO string. Derived from priority/severity
-   *  thresholds for SR / INC, real `scheduledEnd` for CHG. */
+  /** Due date. ISO string. Real persisted `dueAt` for SR / INC / TASK; derived
+   *  from `scheduledEnd` for CHG. Null when no due date is set. */
   dueAt: string | null
   /** Canonical detail route for this kind. */
   detailPath: string
@@ -133,10 +133,11 @@ function intentFor(kind: TicketKind, status: string): ChipIntent {
   return map[status] ?? "new"
 }
 
-// ── Due / overdue heuristics ──────────────────────────────────────────────
+// ── Due / overdue rules ────────────────────────────────────────────────────
 // SR/INC/Task carry a real persisted dueAt; CHG derives its due-by from
 // `scheduledEnd`. `overdue` is `dueAt < now` for non-terminal statuses
-// (status-gated per type below).
+// (status-gated per type below). No SLA-policy layer — a ticket with no dueAt
+// is never overdue.
 const ACTIVE_SR = new Set(["NEW", "ASSIGNED", "IN_PROGRESS"])
 const ACTIVE_INC = new Set(["NEW", "INVESTIGATING"])
 const TERMINAL_CHG = new Set(["COMPLETED", "CLOSED", "CANCELLED", "REJECTED"])
@@ -211,8 +212,8 @@ function normaliseChange(r: RawChange, now: number): Ticket {
 }
 
 function normaliseTask(r: RawTask, now: number): Ticket {
-  // Unlike SR/INC (heuristic SLA) and CHG (scheduledEnd), a Task carries a real
-  // dueAt. Overdue = a due date in the past while the task is not yet DONE.
+  // Like SR/INC, a Task carries a real persisted dueAt (CHG instead derives its
+  // due-by from scheduledEnd). Overdue = a due date in the past while not yet DONE.
   const due = r.dueAt ? new Date(r.dueAt) : null
   const overdue = due !== null && r.status !== "DONE" && due.getTime() < now
   return {

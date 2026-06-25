@@ -10,7 +10,6 @@ const TITLE_MAP: { prefix: string; title: string }[] = [
   { prefix: "/dashboard", title: "Dashboard" },
   { prefix: "/overview", title: "Overview" },
   { prefix: "/dcim/overview", title: "DCIM Overview" },
-  { prefix: "/service-management/dashboard", title: "Service Desk Dashboard" },
   { prefix: "/service-desk", title: "Service Desk" },
   { prefix: "/risks-issues", title: "Risks & Issues" },
   { prefix: "/incidents", title: "Incidents" },
@@ -27,7 +26,7 @@ const TITLE_MAP: { prefix: string; title: string }[] = [
   { prefix: "/clients", title: "Clients" },
   { prefix: "/users", title: "Users" },
   { prefix: "/settings", title: "Settings" },
-  // Longest prefix wins so e.g. /service-management/dashboard beats /service-desk.
+  // Longest prefix wins so e.g. /check-templates beats /checks.
 ].sort((a, b) => b.prefix.length - a.prefix.length)
 
 function titleForPath(pathname: string): string | undefined {

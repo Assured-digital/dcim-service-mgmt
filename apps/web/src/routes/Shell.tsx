@@ -35,7 +35,6 @@ import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturi
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
 import ViewListIcon from "@mui/icons-material/ViewList"
-import InsightsIcon from "@mui/icons-material/Insights"
 import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
 import NotificationBell from "../components/NotificationBell"
@@ -253,7 +252,6 @@ const clientSections: NavSection[] = [
   { title: "", items: [{ label: "Dashboard", path: "/dashboard", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) }] },
   {
     title: "Service Management", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Dashboard", path: "/service-management/dashboard", icon: <InsightsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
       { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
       { label: "Risks & Issues", path: "/risks-issues", icon: <ReportProblemIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
       // Changes + Incidents are unified into Service Desk — they no longer have their own nav entries.
