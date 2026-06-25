@@ -1,5 +1,5 @@
 import { IncidentSeverity, IncidentStatus } from "@prisma/client";
-import { IsEnum, IsOptional, IsString, MinLength } from "class-validator";
+import { IsDateString, IsEnum, IsOptional, IsString, MinLength, ValidateIf } from "class-validator";
 
 export class CreateIncidentDto {
   @IsString()
@@ -17,6 +17,10 @@ export class CreateIncidentDto {
   @IsOptional()
   @IsString()
   priority?: string;
+
+  @ValidateIf((o) => o.dueAt !== undefined && o.dueAt !== null && o.dueAt !== "")
+  @IsDateString()
+  dueAt?: string | null;
 }
 
 export class UpdateIncidentStatusDto {
@@ -47,6 +51,10 @@ export class UpdateIncidentDto {
   @IsOptional()
   @IsString()
   priority?: string;
+
+  @ValidateIf((o) => o.dueAt !== undefined && o.dueAt !== null && o.dueAt !== "")
+  @IsDateString()
+  dueAt?: string | null;
 
   @IsOptional()
   @IsString()

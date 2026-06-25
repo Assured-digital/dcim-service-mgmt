@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TaskStatus } from "@prisma/client";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
+import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
@@ -100,9 +101,10 @@ export class TasksService {
       }
     });
     if (!task) throw new NotFoundException("Task not found");
+    const createdBy = await resolveCreator(this.prisma, task.createdById);
     const links = await resolveLinkedRecords(this.prisma, clientId, "task", task.id);
     const attachments = await resolveAttachments(this.prisma, clientId, "task", task.id);
-    return { ...task, assignee: toUserDisplay(task.assignee), links, attachments };
+    return { ...task, assignee: toUserDisplay(task.assignee), createdBy, links, attachments };
   }
 
   async createForClient(
@@ -112,7 +114,7 @@ export class TasksService {
       title: string
       description?: string
       priority?: string
-      dueAt?: string
+      dueAt?: string | null
       incidentId?: string
       assigneeId?: string
       linkedEntityType?: string
@@ -139,7 +141,7 @@ export class TasksService {
             title: dto.title,
             description: dto.description,
             priority: dto.priority ?? "medium",
-            dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
+            ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
             incidentId: dto.incidentId,
             assigneeId: dto.assigneeId,
             linkedEntityType: dto.linkedEntityType,
@@ -229,7 +231,7 @@ export class TasksService {
     title?: string
     description?: string
     priority?: string
-    dueAt?: string
+    dueAt?: string | null
     assigneeId?: string
   }) {
     const task = await this.getForClient(clientId, id)
@@ -239,7 +241,7 @@ export class TasksService {
         title: dto.title,
         description: dto.description,
         priority: dto.priority,
-        dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
+        ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
         assigneeId: dto.assigneeId ?? null
       },
       include: {

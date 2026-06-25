@@ -22,7 +22,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { priorityDot, StatusPill, PriorityPill, AssigneeCell } from "../components/shared"
-import { ActivityFeedItem, type FeedEvent, type ResolvedMention } from "../components/detail"
+import { ActivityFeedItem, DueDatePopover, type FeedEvent, type ResolvedMention } from "../components/detail"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
 import { formatDate, formatDateTime } from "../lib/format"
@@ -208,45 +208,6 @@ function AssigneePopover({ anchorEl, onClose, users, currentId, onSelect, header
           </Box>
         ))}
       </Box>
-    </Popover>
-  )
-}
-
-// Due date popover
-function DueDatePopover({ anchorEl, onClose, current, onSelect, headerLabel }: {
-  anchorEl: HTMLElement | null; onClose: () => void
-  // eslint-disable-next-line no-unused-vars
-  current: string | null; onSelect: (dueDate: string | null) => void
-  headerLabel?: string
-}) {
-  const [val, setVal] = React.useState(current ? current.slice(0, 10) : "")
-  return (
-    <Popover
-      open={Boolean(anchorEl)} anchorEl={anchorEl} onClose={onClose}
-      anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-      transformOrigin={{ vertical: "top", horizontal: "left" }}
-      PaperProps={{ sx: { boxShadow: "0 4px 16px rgba(15,23,42,0.12)", borderRadius: "8px", border: "1px solid #e2e8f0", p: "12px", minWidth: 200 } }}
-    >
-      <Typography sx={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", mb: "8px" }}>
-        {headerLabel ?? "Due date"}
-      </Typography>
-      <TextField
-        type="date" size="small" fullWidth
-        value={val}
-        InputLabelProps={{ shrink: true }}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") { onSelect(val || null); onClose() } }}
-      />
-      <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: "10px" }}>
-        <Button size="small" variant="text" sx={{ fontSize: 12, color: "#64748b" }}
-          onClick={() => { onSelect(null); onClose() }}>
-          Clear
-        </Button>
-        <Button size="small" variant="contained" sx={{ fontSize: 12 }}
-          onClick={() => { onSelect(val || null); onClose() }}>
-          Set
-        </Button>
-      </Stack>
     </Popover>
   )
 }

@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from "class-validator";
+import { IsDateString, IsOptional, IsString, ValidateIf } from "class-validator";
 
 export class CreateServiceRequestDto {
   @IsString()
@@ -10,6 +10,10 @@ export class CreateServiceRequestDto {
   @IsOptional()
   @IsString()
   priority?: string;
+
+  @ValidateIf((o) => o.dueAt !== undefined && o.dueAt !== null && o.dueAt !== "")
+  @IsDateString()
+  dueAt?: string | null;
 
   @IsOptional()
   @IsString()

@@ -102,6 +102,7 @@ export class ServiceRequestsService {
         subject: dto.subject,
         description: dto.description,
         priority: dto.priority ?? "medium",
+        ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
         linkedEntityType: dto.linkedEntityType,
         linkedEntityId: dto.linkedEntityId,
         createdById
@@ -191,7 +192,7 @@ async updateForClient(
   clientId: string,
   id: string,
   actorUserId: string,
-  dto: { subject?: string; description?: string; assigneeId?: string; priority?: string; linkedEntityType?: string; linkedEntityId?: string }
+  dto: { subject?: string; description?: string; assigneeId?: string; priority?: string; dueAt?: string | null; linkedEntityType?: string; linkedEntityId?: string }
 ) {
   this.assertClientScope(clientId);
   const sr = await this.getForClient(clientId, id);
@@ -203,6 +204,7 @@ async updateForClient(
       description: dto.description,
       assigneeId: dto.assigneeId,
       priority: dto.priority,
+      ...(dto.dueAt !== undefined && { dueAt: dto.dueAt ? new Date(dto.dueAt) : null }),
       linkedEntityType: dto.linkedEntityType,
       linkedEntityId: dto.linkedEntityId
     },
