@@ -83,6 +83,7 @@ type Task = {
   linkedEntityType: string | null
   linkedEntityId: string | null
   incident: { id: string; reference: string; title: string } | null
+  createdBy?: { id: string; displayName: string } | null
   links?: ResolvedLink[]
   attachments?: AttachmentSummary[]
   createdAt: string
@@ -104,7 +105,7 @@ type TaskComment = {
 }
 
 
-type EditableField = "priority" | "assigneeId" | "title" | "description"
+type EditableField = "priority" | "assigneeId" | "dueAt" | "title" | "description"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status config — spec sections 8 + 9.4 + 10
@@ -586,6 +587,10 @@ export default function TaskDetailPage() {
     (v: string) => commitDetailField("assigneeId", v),
     [commitDetailField]
   )
+  const handleSelectDueDate = React.useCallback(
+    (v: string) => commitDetailField("dueAt", v),
+    [commitDetailField]
+  )
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -697,7 +702,10 @@ export default function TaskDetailPage() {
       {
         key: "dueAt",
         label: "Due date",
-        editable: false,
+        editable: true,
+        editorKind: "date",
+        currentValue: task.dueAt ? task.dueAt.slice(0, 10) : "",
+        onSelect: handleSelectDueDate,
         value: (
           <Box sx={valueWrapperSx}>
             <Typography
@@ -713,7 +721,7 @@ export default function TaskDetailPage() {
         ),
       },
     ]
-  }, [task, usersOptions, priorityOptions, overdueColor, handleSelectPriority, handleSelectAssignee, isOverdue])
+  }, [task, usersOptions, priorityOptions, overdueColor, handleSelectPriority, handleSelectAssignee, handleSelectDueDate, isOverdue])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 
@@ -753,11 +761,11 @@ export default function TaskDetailPage() {
   const metadata = React.useMemo<RecordMetadata | undefined>(() => {
     if (!task) return undefined
     return {
-      submittedBy: null,
+      submittedBy: <AssigneeCell user={task.createdBy ?? null} emptyLabel="—" mode={mode} />,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     }
-  }, [task])
+  }, [task, mode])
 
   const rightSections = React.useMemo<RightSection[]>(() => {
     return [

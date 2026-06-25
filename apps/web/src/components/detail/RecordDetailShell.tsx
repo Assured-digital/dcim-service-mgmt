@@ -22,6 +22,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull"
 import LinkOffIcon from "@mui/icons-material/LinkOff"
 import { useNavigate } from "react-router-dom"
 import { StatusPopover, type PopoverOption } from "./StatusPopover"
+import { DueDatePopover } from "./DueDatePopover"
 import { useNotification } from "../NotificationProvider"
 import { useBreadcrumb } from "../../routes/Shell"
 import { useInDrillDownNavigator } from "../shared/layout/DrillDownNavigator"
@@ -54,11 +55,16 @@ export interface DetailField {
   label: string
   value: React.ReactNode
   editable: boolean
+  // Which editor opens on click. "options" (default) → the StatusPopover option list
+  // (needs popoverOptions); "date" → the shared DueDatePopover (no popoverOptions).
+  // Both stage into the same batch-confirm model.
+  editorKind?: "options" | "date"
   popoverOptions?: PopoverOption[]
   currentValue?: string
   // Commits the chosen value. Returning a promise lets the shell await the commit
   // (pending-confirm): a resolve shows a success toast and clears the pending state;
   // a reject shows an error toast and keeps the value pending so the user can retry.
+  // For a date field the value is a YYYY-MM-DD string, or "" to clear the date.
   onSelect?: (value: string) => void | Promise<void>
 }
 
@@ -273,7 +279,10 @@ const DetailFieldRow = React.memo(function DetailFieldRow({
 }: DetailFieldRowProps) {
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const popoverId = `${DETAIL_FIELD_PREFIX}${field.key}`
-  const interactive = field.editable && !!field.popoverOptions && !!field.onSelect
+  const isDate = field.editorKind === "date"
+  // A date field is interactive via onSelect + the DueDatePopover (no popoverOptions);
+  // an option field needs popoverOptions. Both still require editable + onSelect.
+  const interactive = field.editable && !!field.onSelect && (isDate || !!field.popoverOptions)
   const isPending = pendingValue !== null
 
   const handleClick = React.useCallback(() => {
@@ -291,9 +300,22 @@ const DetailFieldRow = React.memo(function DetailFieldRow({
     [onStage, field.key]
   )
 
+  // The date popover yields string | null (null = clear). The batch model is string-
+  // keyed, so a cleared date stages as "" — matching an empty currentValue, so the
+  // dirty-check treats clearing an already-empty date as a no-op.
+  const handleSelectDate = React.useCallback(
+    (value: string | null) => onStage(field.key, value ?? ""),
+    [onStage, field.key]
+  )
+
   const pendingOption = isPending
     ? field.popoverOptions?.find((o) => o.value === pendingValue)
     : undefined
+
+  // Date fields have no option chip; show the staged date (or "Cleared" when emptied).
+  const pendingDisplay = isDate
+    ? pendingValue || "Cleared"
+    : pendingOption?.label ?? pendingValue
 
   return (
     <>
@@ -348,7 +370,7 @@ const DetailFieldRow = React.memo(function DetailFieldRow({
                   color: pendingOption?.iconColor ?? "text.secondary",
                 }}
               >
-                {pendingOption?.label ?? pendingValue}
+                {pendingDisplay}
               </Typography>
             </Box>
           </Box>
@@ -356,7 +378,16 @@ const DetailFieldRow = React.memo(function DetailFieldRow({
           <Box sx={{ flex: 1, minWidth: 0, fontSize: 12 }}>{field.value}</Box>
         )}
       </Box>
-      {field.popoverOptions && field.onSelect ? (
+      {isDate && field.onSelect ? (
+        <DueDatePopover
+          anchorEl={anchorRef.current}
+          open={popoverOpen}
+          onClose={onClosePopover}
+          current={pendingValue ?? field.currentValue ?? null}
+          onSelect={handleSelectDate}
+          headerLabel={field.label}
+        />
+      ) : field.popoverOptions && field.onSelect ? (
         <StatusPopover
           id={popoverId}
           header={field.label}

@@ -40,6 +40,7 @@ interface RawSR {
   subject: string
   status: string
   priority: string
+  dueAt: string | null
   updatedAt: string
   createdAt: string
   assignee: { id: string; displayName: string } | null
@@ -52,6 +53,7 @@ interface RawIncident {
   status: string
   severity: string
   priority: string
+  dueAt: string | null
   createdAt: string
   updatedAt: string
   assignee: { id: string; displayName: string } | null
@@ -132,27 +134,12 @@ function intentFor(kind: TicketKind, status: string): ChipIntent {
 }
 
 // ── Due / overdue heuristics ──────────────────────────────────────────────
-// No real SLA data in the current API. The implied due-by is derived from
-// priority/severity thresholds for SR and INC, and from `scheduledEnd` for
-// CHG. `overdue` is just `dueAt < now` for non-terminal statuses.
-const HOUR = 1000 * 60 * 60
+// SR/INC/Task carry a real persisted dueAt; CHG derives its due-by from
+// `scheduledEnd`. `overdue` is `dueAt < now` for non-terminal statuses
+// (status-gated per type below).
 const ACTIVE_SR = new Set(["NEW", "ASSIGNED", "IN_PROGRESS"])
 const ACTIVE_INC = new Set(["NEW", "INVESTIGATING"])
 const TERMINAL_CHG = new Set(["COMPLETED", "CLOSED", "CANCELLED", "REJECTED"])
-
-function dueAtSR(r: RawSR): Date {
-  const t = r.priority === "critical" ? 4 * HOUR
-          : r.priority === "high" ? 12 * HOUR
-          : 48 * HOUR
-  return new Date(new Date(r.createdAt).getTime() + t)
-}
-
-function dueAtIncident(r: RawIncident): Date {
-  const t = r.severity === "CRITICAL" ? 1 * HOUR
-          : r.severity === "HIGH" ? 4 * HOUR
-          : 24 * HOUR
-  return new Date(new Date(r.createdAt).getTime() + t)
-}
 
 function dueAtChange(r: RawChange): Date | null {
   return r.scheduledEnd ? new Date(r.scheduledEnd) : null
@@ -160,8 +147,8 @@ function dueAtChange(r: RawChange): Date | null {
 
 // ── Normalisers ────────────────────────────────────────────────────────────
 function normaliseSR(r: RawSR, now: number): Ticket {
-  const due = dueAtSR(r)
-  const overdue = ACTIVE_SR.has(r.status) && due.getTime() < now
+  const due = r.dueAt ? new Date(r.dueAt) : null
+  const overdue = due !== null && ACTIVE_SR.has(r.status) && due.getTime() < now
   return {
     id: r.id,
     kind: "SR",
@@ -174,14 +161,14 @@ function normaliseSR(r: RawSR, now: number): Ticket {
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     overdue,
-    dueAt: due.toISOString(),
+    dueAt: due ? due.toISOString() : null,
     detailPath: `/service-desk/sr/${r.id}`,
   }
 }
 
 function normaliseIncident(r: RawIncident, now: number): Ticket {
-  const due = dueAtIncident(r)
-  const overdue = ACTIVE_INC.has(r.status) && due.getTime() < now
+  const due = r.dueAt ? new Date(r.dueAt) : null
+  const overdue = due !== null && ACTIVE_INC.has(r.status) && due.getTime() < now
   return {
     id: r.id,
     kind: "INC",
@@ -194,7 +181,7 @@ function normaliseIncident(r: RawIncident, now: number): Ticket {
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     overdue,
-    dueAt: due.toISOString(),
+    dueAt: due ? due.toISOString() : null,
     severity: r.severity,
     detailPath: `/service-desk/inc/${r.id}`,
   }

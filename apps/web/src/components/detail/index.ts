@@ -18,6 +18,8 @@ export {
 export type { DetailDrawerChrome } from "./detailLayoutContext"
 export { StatusPopover } from "./StatusPopover"
 export type { PopoverOption, StatusPopoverProps } from "./StatusPopover"
+export { DueDatePopover } from "./DueDatePopover"
+export type { DueDatePopoverProps } from "./DueDatePopover"
 export { EditableTitleCard, EditableField } from "./EditableTitleCard"
 export { WorkflowStrip } from "./WorkflowStrip"
 export { TransitionDialog } from "./TransitionDialog"

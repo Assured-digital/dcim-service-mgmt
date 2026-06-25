@@ -31,6 +31,7 @@ import { statusColors, priorityToken, accentToken, PriorityPill, TypeBadge, Assi
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { useThemeMode } from "../lib/theme"
+import { formatDate } from "../lib/format"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -79,6 +80,7 @@ type SR = {
   description: string
   status: string
   priority: string
+  dueAt: string | null
   closureSummary: string | null
   createdById?: string | null
   createdBy?: { id: string; displayName: string } | null
@@ -110,7 +112,7 @@ type LinkedTaskWithAssignee = LinkedTask & {
   assignee?: { id: string; displayName: string } | null
 }
 
-type EditableField = "subject" | "description" | "priority" | "assigneeId"
+type EditableField = "subject" | "description" | "priority" | "assigneeId" | "dueAt"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status config — spec sections 8 + 9.3
@@ -688,6 +690,10 @@ export default function ServiceRequestDetailPage() {
     (v: string) => commitDetailField("assigneeId", v),
     [commitDetailField]
   )
+  const handleSelectDueDate = React.useCallback(
+    (v: string) => commitDetailField("dueAt", v),
+    [commitDetailField]
+  )
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -808,6 +814,21 @@ export default function ServiceRequestDetailPage() {
           </Box>
         ),
       },
+      {
+        key: "dueAt",
+        label: "Due date",
+        editable: true,
+        editorKind: "date",
+        currentValue: sr.dueAt ? sr.dueAt.slice(0, 10) : "",
+        onSelect: handleSelectDueDate,
+        value: (
+          <Box sx={valueWrapperSx}>
+            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+              {sr.dueAt ? formatDate(sr.dueAt) : "N/A"}
+            </Typography>
+          </Box>
+        ),
+      },
     ]
 
     if (sr.closureSummary) {
@@ -826,7 +847,7 @@ export default function ServiceRequestDetailPage() {
     }
 
     return fields
-  }, [sr, usersOptions, priorityOptions, mode, handleSelectPriority, handleSelectAssignee])
+  }, [sr, usersOptions, priorityOptions, mode, handleSelectPriority, handleSelectAssignee, handleSelectDueDate])
 
   // ── Centre sections ────────────────────────────────────────────────────────
 

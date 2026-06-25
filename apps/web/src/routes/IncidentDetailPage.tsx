@@ -33,6 +33,7 @@ import { statusColors, priorityToken, accentToken, PriorityPill, TypeBadge, Assi
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { useThemeMode } from "../lib/theme"
+import { formatDate } from "../lib/format"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useActivityFilter } from "../lib/useActivityFilter"
 import { CreateTaskModal, TaskQuickDetailModal } from "./TasksPage"
@@ -82,6 +83,7 @@ type Incident = {
   status: string
   severity: string
   priority: string
+  dueAt: string | null
   assigneeId: string | null
   assignee: { id: string; displayName: string } | null
   createdById?: string | null
@@ -111,7 +113,7 @@ type LinkedTaskWithAssignee = LinkedTask & {
   assignee?: { id: string; displayName: string } | null
 }
 
-type EditableField = "severity" | "priority" | "assigneeId" | "title" | "description"
+type EditableField = "severity" | "priority" | "assigneeId" | "dueAt" | "title" | "description"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status config — spec sections 8 + 9.1
@@ -634,6 +636,10 @@ export default function IncidentDetailPage() {
     (v: string) => commitDetailField("assigneeId", v),
     [commitDetailField]
   )
+  const handleSelectDueDate = React.useCallback(
+    (v: string) => commitDetailField("dueAt", v),
+    [commitDetailField]
+  )
 
   // ── More menu ──────────────────────────────────────────────────────────────
 
@@ -766,6 +772,21 @@ export default function IncidentDetailPage() {
           </Box>
         ),
       },
+      {
+        key: "dueAt",
+        label: "Due date",
+        editable: true,
+        editorKind: "date",
+        currentValue: incident.dueAt ? incident.dueAt.slice(0, 10) : "",
+        onSelect: handleSelectDueDate,
+        value: (
+          <Box sx={valueWrapperSx}>
+            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+              {incident.dueAt ? formatDate(incident.dueAt) : "N/A"}
+            </Typography>
+          </Box>
+        ),
+      },
     ]
   }, [
     incident,
@@ -776,6 +797,7 @@ export default function IncidentDetailPage() {
     handleSelectSeverity,
     handleSelectPriority,
     handleSelectAssignee,
+    handleSelectDueDate,
   ])
 
   // ── Centre sections ────────────────────────────────────────────────────────
