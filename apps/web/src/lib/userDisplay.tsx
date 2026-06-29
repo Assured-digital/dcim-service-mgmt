@@ -20,6 +20,25 @@ export function userLabel(user: UserRef, fallback = "Unassigned"): string {
   return user.displayName?.trim() || user.email?.trim() || fallback
 }
 
+// Resolve a person's label from RAW profile fields (knownAs / first / last / email) — for the
+// few client-side call sites that hold the unresolved user record rather than the server's
+// pre-resolved `displayName` (e.g. the account menu reading GET /auth/me). Precedence mirrors
+// the server's computeDisplayName: knownAs rendered VERBATIM (exactly as the user stored it —
+// no case transform), then "First Last", then the email local-part as a last resort. Read
+// responses already carry a resolved displayName — use userLabel() for those, not this.
+export function personName(p: {
+  knownAs?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+}): string {
+  const known = p.knownAs?.trim()
+  if (known) return known
+  const full = [p.firstName, p.lastName].map((s) => s?.trim()).filter(Boolean).join(" ")
+  if (full) return full
+  return p.email?.split("@")[0]?.trim() || ""
+}
+
 // Two-letter initials derived from the display label (handles names and email local-parts).
 export function userInitials(user: UserRef): string {
   const label = userLabel(user, "")

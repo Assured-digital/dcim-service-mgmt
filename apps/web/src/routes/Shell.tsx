@@ -45,6 +45,7 @@ import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
 import { useThemeMode } from "../lib/theme"
+import { personName, userInitials } from "../lib/userDisplay"
 
 // ── Breadcrumb context ─────────────────────────────────────────────────────
 // Detail pages call setRecordLabel(record.reference) to populate the top bar
@@ -508,8 +509,8 @@ function NavSubGroup({ group, open, onToggle, pathname, onNavigate, expanded }: 
   )
 }
 
-function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
-  initials: string; email: string; roleLabel: string; loggingOut: boolean; onLogout: () => void
+function UserMenu({ name, initials, email, roleLabel, loggingOut, onLogout }: {
+  name: string; initials: string; email: string; roleLabel: string; loggingOut: boolean; onLogout: () => void
 }) {
   const [open, setOpen] = React.useState(false)
   const nav = useNavigate()
@@ -530,7 +531,7 @@ function UserMenu({ initials, email, roleLabel, loggingOut, onLogout }: {
     <>
       <Box onClick={() => setOpen(o => !o)} sx={{ display: "flex", alignItems: "center", gap: "8px", px: "10px", py: "4px", borderRadius: "6px", cursor: "pointer", "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
         <Box sx={{ width: 32, height: 32, borderRadius: "50%", bgcolor: "rgba(59,130,246,0.25)", color: "#7db4f5", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, flexShrink: 0 }}>{initials}</Box>
-        <Typography sx={{ fontSize: 12.5, color: "#a3b4c9" }}>{email.split("@")[0]}</Typography>
+        <Typography sx={{ fontSize: 12.5, color: "#a3b4c9" }}>{name || email.split("@")[0]}</Typography>
         <Typography sx={{ fontSize: 10, color: "#64748b" }}>▾</Typography>
       </Box>
       {open ? (
@@ -685,6 +686,15 @@ export default function Shell() {
   // The list that populates the selector + flyout for this user.
   const clientList = isOrgSuper ? (clients.data ?? []) : (myClients.data ?? [])
 
+  // The JWT (and thus getCurrentUser) carries no name — only email. Fetch the profile so the
+  // account menu can show the person's actual name (knownAs verbatim, see personName) rather
+  // than the email local-part. Until it loads, personName falls back to the email prefix.
+  const me = useQuery({
+    queryKey: ["auth-me"], enabled: !!currentUser,
+    queryFn: async () =>
+      (await api.get<{ knownAs: string | null; firstName: string | null; lastName: string | null; email: string | null }>("/auth/me")).data
+  })
+
   // Invalidate everything EXCEPT the two client-list queries (which are scope-
   // independent themselves) when the active client changes.
   const invalidateScoped = () =>
@@ -733,7 +743,14 @@ export default function Shell() {
   async function onLogout() { if (loggingOut) return; setLoggingOut(true); await revokeAndLogout(); setLoggingOut(false) }
   function navigateTo(path: string) { nav(path); setMobileOpen(false); setFlyout(null) }
 
-  const initials = currentUser?.email ? currentUser.email.split("@")[0].slice(0, 2).toUpperCase() : "??"
+  // Resolved account-menu name: knownAs (verbatim) -> "First Last" -> email local-part.
+  const userMenuName = personName({
+    knownAs: me.data?.knownAs,
+    firstName: me.data?.firstName,
+    lastName: me.data?.lastName,
+    email: me.data?.email ?? currentUser?.email
+  })
+  const initials = userMenuName ? userInitials({ displayName: userMenuName }) : "??"
   const roleLabel = currentUser?.role?.toLowerCase().replace(/_/g, " ") ?? ""
   const flatNavItems: NavItem[] = [
     ...personalItems,
@@ -1089,7 +1106,7 @@ export default function Shell() {
             <IconButton size="small" sx={{ width: 36, height: 36, color: "#64748b", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" } }}><HelpOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
             <NotificationBell clientId={selectedClientId} />
             <Box sx={{ width: 1, height: 22, bgcolor: "rgba(255,255,255,0.1)", mx: "10px" }} />
-            <UserMenu initials={initials} email={currentUser?.email ?? ""} roleLabel={roleLabel} loggingOut={loggingOut} onLogout={onLogout} />
+            <UserMenu name={userMenuName} initials={initials} email={currentUser?.email ?? ""} roleLabel={roleLabel} loggingOut={loggingOut} onLogout={onLogout} />
           </Box>
         </Box>
 
