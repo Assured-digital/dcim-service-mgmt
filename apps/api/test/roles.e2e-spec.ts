@@ -116,4 +116,24 @@ describe("Role × endpoint guard matrix", () => {
     expect(res.status).not.toBe(403);
     expect(res.status).not.toBe(401);
   });
+
+  // ENGINEER now has a SCOPED Service Desk view, so the four read endpoints behind it must
+  // admit ENGINEER at the guard. (This asserts only the authorization boundary; the per-row
+  // "only my assigned records" scoping is proven behaviourally in engineer-scope.e2e-spec.)
+  describe("ENGINEER is admitted to the Service Desk read endpoints (guard passes, not 403)", () => {
+    const READ_ENDPOINTS: Case[] = [
+      { method: "get", path: "/service-requests", label: "list service requests" },
+      { method: "get", path: "/incidents", label: "list incidents" },
+      { method: "get", path: "/changes", label: "list changes" },
+      { method: "get", path: "/tasks", label: "list tasks" }
+    ];
+    it.each(READ_ENDPOINTS.map((c) => [`${c.method.toUpperCase()} ${c.path} (${c.label})`, c] as const))(
+      "%s → not 403",
+      async (_label, c) => {
+        const res = await send(c, Role.ENGINEER);
+        expect(res.status).not.toBe(403);
+        expect(res.status).not.toBe(401);
+      }
+    );
+  });
 });
