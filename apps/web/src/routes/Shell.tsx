@@ -46,6 +46,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
 import { useThemeMode } from "../lib/theme"
 import { personName, userInitials } from "../lib/userDisplay"
+import { useMe } from "../lib/useMe"
 
 // ── Breadcrumb context ─────────────────────────────────────────────────────
 // Detail pages call setRecordLabel(record.reference) to populate the top bar
@@ -538,7 +539,8 @@ function UserMenu({ name, initials, email, roleLabel, loggingOut, onLogout }: {
         <>
           <Box sx={{ position: "fixed", top: HEADER_HEIGHT + 4, right: 12, zIndex: 1400, bgcolor: panelBg, border: `1px solid ${panelBorder}`, borderRadius: "8px", boxShadow: isDark ? "0 4px 16px rgba(0,0,0,0.45)" : "0 4px 16px rgba(15,23,42,0.10)", minWidth: 200, py: "4px" }}>
             <Box sx={{ px: "12px", py: "8px", borderBottom: `1px solid ${headerBorder}` }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 500, color: primaryText }}>{email}</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 500, color: primaryText }}>{name || email.split("@")[0]}</Typography>
+              <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: "1px", wordBreak: "break-all" }}>{email}</Typography>
               <Typography sx={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize", mt: "2px" }}>{roleLabel}</Typography>
             </Box>
             {/* Dark mode — same item pattern as Settings/Sign out; the row toggles, the
@@ -689,11 +691,7 @@ export default function Shell() {
   // The JWT (and thus getCurrentUser) carries no name — only email. Fetch the profile so the
   // account menu can show the person's actual name (knownAs verbatim, see personName) rather
   // than the email local-part. Until it loads, personName falls back to the email prefix.
-  const me = useQuery({
-    queryKey: ["auth-me"], enabled: !!currentUser,
-    queryFn: async () =>
-      (await api.get<{ knownAs: string | null; firstName: string | null; lastName: string | null; email: string | null }>("/auth/me")).data
-  })
+  const me = useMe()
 
   // Invalidate everything EXCEPT the two client-list queries (which are scope-
   // independent themselves) when the active client changes.

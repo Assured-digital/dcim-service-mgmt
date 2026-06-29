@@ -10,7 +10,9 @@ import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty"
 import EventIcon from "@mui/icons-material/Event"
 import { StatusPill, TypeBadge, semanticToken, ragToken, slate } from "./shared"
 import { useThemeMode } from "../lib/theme"
-import { getCurrentUser, type CurrentUser } from "../lib/auth"
+import { getCurrentUser } from "../lib/auth"
+import { useMe } from "../lib/useMe"
+import { personName } from "../lib/userDisplay"
 import type { Ticket } from "../lib/tickets"
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -19,13 +21,6 @@ function greetingByHour(hour: number): string {
   if (hour < 12) return "Good morning"
   if (hour < 18) return "Good afternoon"
   return "Good evening"
-}
-
-function userFirstName(user: CurrentUser | null): string {
-  if (!user?.email) return "there"
-  const local = user.email.split("@")[0]
-  const first = local.split(/[._-]/)[0]
-  return first ? first.charAt(0).toUpperCase() + first.slice(1) : "there"
 }
 
 function hoursOld(iso: string): number {
@@ -153,6 +148,19 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
   const theme = useTheme()
   const user = React.useMemo(() => getCurrentUser(), [])
 
+  // First name for the greeting, sourced from the shared /auth/me fetch (the JWT carries no
+  // name). knownAs is rendered verbatim — no force-capitalise. Empty until the profile loads,
+  // so the greeting simply omits the name rather than flashing the email prefix.
+  const me = useMe()
+  const greetingName = me.data
+    ? personName({
+        knownAs: me.data.knownAs,
+        firstName: me.data.firstName,
+        lastName: me.data.lastName,
+        email: me.data.email ?? user?.email
+      }).split(/\s+/)[0]
+    : ""
+
   const myTickets = React.useMemo(
     () => user ? tickets.filter(t => t.assignee?.id === user.userId) : [],
     [tickets, user]
@@ -189,7 +197,7 @@ export function PersonalBriefing({ tickets }: { tickets: Ticket[] }) {
             fontFamily: "Space Grotesk, Manrope", fontSize: 26, fontWeight: 700,
             color: "text.primary", letterSpacing: "-0.02em",
           }}>
-            {greetingByHour(now.getHours())}, {userFirstName(user)}
+            {greetingByHour(now.getHours())}{greetingName ? `, ${greetingName}` : ""}
           </Typography>
         </Stack>
         <Typography sx={{ fontSize: 14, color: "text.secondary", lineHeight: 1.6 }}>
