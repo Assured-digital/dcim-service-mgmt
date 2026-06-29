@@ -27,7 +27,7 @@ export function DetailHeader({
       }}>
         {reference}
       </Typography>
-      <Box sx={{ width: 1, height: 14, bgcolor: "var(--color-border-tertiary)" }} />
+      <Box sx={{ width: "1px", height: 14, bgcolor: "var(--color-border-tertiary)" }} />
       <Chip size="small" sx={chipSx(status)}
         label={statusLabel ?? status} />
       {priority ? (

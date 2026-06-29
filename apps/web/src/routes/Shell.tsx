@@ -25,7 +25,6 @@ import LogoutIcon from "@mui/icons-material/Logout"
 import SettingsIcon from "@mui/icons-material/Settings"
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline"
 import SupportAgentIcon from "@mui/icons-material/SupportAgent"
 import EngineeringIcon from "@mui/icons-material/Engineering"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
@@ -1101,9 +1100,8 @@ export default function Shell() {
             <RecordBreadcrumbTrail breadcrumbs={effectiveBreadcrumbs} nav={nav} />
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
-            <IconButton size="small" sx={{ width: 36, height: 36, color: "#64748b", borderRadius: "8px", "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" } }}><HelpOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
             <NotificationBell clientId={selectedClientId} />
-            <Box sx={{ width: 1, height: 22, bgcolor: "rgba(255,255,255,0.1)", mx: "10px" }} />
+            <Box sx={{ width: "1px", height: 22, bgcolor: "rgba(255,255,255,0.1)", mx: "10px" }} />
             <UserMenu name={userMenuName} initials={initials} email={currentUser?.email ?? ""} roleLabel={roleLabel} loggingOut={loggingOut} onLogout={onLogout} />
           </Box>
         </Box>
