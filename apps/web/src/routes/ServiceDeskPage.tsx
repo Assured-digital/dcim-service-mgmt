@@ -390,6 +390,17 @@ function UnifiedServiceDeskView() {
     return c
   }, [tickets, currentUser])
 
+  // Per-TYPE badge counts reflect the active TICKETS view ONLY — never the type
+  // filter — so selecting a type doesn't zero the others. Filter with the type
+  // forced to "all" (same view / SLA / search), then tally by kind. "all" row =
+  // total of the active view. Same useTickets() feed, no extra fetch.
+  const typeCounts = React.useMemo(() => {
+    const viewOnly = filterTickets(tickets, { ...queueParams, typeFilter: "all" }, currentUser)
+    const c: Record<TicketKind | "all", number> = { all: viewOnly.length, SR: 0, INC: 0, CHG: 0, TASK: 0 }
+    for (const t of viewOnly) c[t.kind]++
+    return c
+  }, [tickets, queueParams, currentUser])
+
   const assigneeOptions = React.useMemo(() => {
     const set = new Set<string>()
     let hasUnassigned = false
@@ -496,11 +507,11 @@ function UnifiedServiceDeskView() {
     activeId: typeFilter,
     onPick: (id) => handleTypeFilterChange(id as TicketKind | "all"),
     items: [
-      { id: "all", label: "All", icon: <FilterListIcon sx={{ fontSize: 18 }} /> },
-      { id: "SR", label: "Service requests", icon: <AssignmentIcon sx={{ fontSize: 18 }} /> },
-      { id: "INC", label: "Incidents", icon: <ReportProblemIcon sx={{ fontSize: 18 }} /> },
-      { id: "CHG", label: "Change", icon: <BuildIcon sx={{ fontSize: 18 }} /> },
-      { id: "TASK", label: "Tasks", icon: <TaskAltIcon sx={{ fontSize: 18 }} /> },
+      { id: "all", label: "All", count: typeCounts.all, icon: <FilterListIcon sx={{ fontSize: 18 }} /> },
+      { id: "SR", label: "Service requests", count: typeCounts.SR, icon: <AssignmentIcon sx={{ fontSize: 18 }} /> },
+      { id: "INC", label: "Incidents", count: typeCounts.INC, icon: <ReportProblemIcon sx={{ fontSize: 18 }} /> },
+      { id: "CHG", label: "Change", count: typeCounts.CHG, icon: <BuildIcon sx={{ fontSize: 18 }} /> },
+      { id: "TASK", label: "Tasks", count: typeCounts.TASK, icon: <TaskAltIcon sx={{ fontSize: 18 }} /> },
     ],
   }
 
