@@ -1,12 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { Role, TaskStatus } from "@prisma/client";
+import { NotificationType, Role, TaskStatus } from "@prisma/client";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
+import { emitNotification } from "../notifications/emit-notification";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 
 function makeRef() {
@@ -210,6 +211,16 @@ export class TasksService {
       comment: comment?.trim() || null
     });
 
+    // Notify the current assignee that the status moved. Best-effort; self-skip in helper.
+    await emitNotification(this.prisma, {
+      type: NotificationType.STATUS_CHANGED,
+      recipientIds: [task.assigneeId],
+      actorId: actorUserId,
+      clientId,
+      sourceType: "Task",
+      sourceId: task.id
+    });
+
     return updated;
   }
 
@@ -280,6 +291,19 @@ export class TasksService {
         actorUserId,
         clientId,
         changes
+      })
+    }
+
+    // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
+    // skipped inside the helper (recipient === actor).
+    if (updated.assigneeId && updated.assigneeId !== task.assigneeId) {
+      await emitNotification(this.prisma, {
+        type: NotificationType.ASSIGNED,
+        recipientIds: [updated.assigneeId],
+        actorId: actorUserId,
+        clientId,
+        sourceType: "Task",
+        sourceId: task.id
       })
     }
 

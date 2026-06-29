@@ -6,8 +6,9 @@ import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
+import { emitNotification } from "../notifications/emit-notification"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
-import { Role } from "@prisma/client"
+import { NotificationType, Role } from "@prisma/client"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -189,6 +190,19 @@ export class IssuesService {
       })
     }
 
+    // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
+    // skipped inside the helper (recipient === actor).
+    if (updated.assigneeId && updated.assigneeId !== issue.assigneeId) {
+      await emitNotification(this.prisma, {
+        type: NotificationType.ASSIGNED,
+        recipientIds: [updated.assigneeId],
+        actorId: actorUserId,
+        clientId,
+        sourceType: "Issue",
+        sourceId: issue.id
+      })
+    }
+
     return { ...updated, assignee: newAssignee }
   }
 
@@ -221,6 +235,17 @@ export class IssuesService {
       ],
       comment: dto.resolution?.trim() || null
     })
+
+    // Notify the current assignee that the status moved. Best-effort; self-skip in helper.
+    await emitNotification(this.prisma, {
+      type: NotificationType.STATUS_CHANGED,
+      recipientIds: [issue.assigneeId],
+      actorId: actorUserId,
+      clientId,
+      sourceType: "Issue",
+      sourceId: issue.id
+    })
+
     return updated
   }
 }
