@@ -123,12 +123,26 @@ function buildChartData(
 
 // ── Zone heading ────────────────────────────────────────────────────────────
 // A subtle uppercase label introducing each zone (not a page title — the app's
-// convention is no page titles; the breadcrumb identifies the page).
-function ZoneHeading({ label }: { label: string }) {
+// convention is no page titles; the breadcrumb identifies the page). Anchored
+// treatment: the label sits inline with a hairline rule that runs to the right
+// edge of the content area, so it reads as a section header rather than floating
+// text. The `&&` selector outranks the parent Stack's child-margin spacing to give
+// a consistent rhythm — a modest gap above and ~12px below before the cards —
+// matched across both zones (the first zone keeps its natural page-top above).
+function ZoneHeading({ label, first }: { label: string; first?: boolean }) {
   return (
-    <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-      {label}
-    </Typography>
+    <Box sx={{
+      display: "flex", alignItems: "center", gap: "12px",
+      "&&": { mt: first ? 0 : "12px", mb: "-8px" },
+    }}>
+      <Typography sx={{
+        fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase",
+        color: "var(--color-text-secondary)", whiteSpace: "nowrap",
+      }}>
+        {label}
+      </Typography>
+      <Box sx={{ flex: 1, height: 0, borderTop: "0.5px solid", borderColor: "var(--color-border-tertiary)" }} />
+    </Box>
   )
 }
 
@@ -576,7 +590,7 @@ export default function DashboardPage() {
         <Stack spacing="20px">
 
           {/* ══ ZONE 1 · OPERATIONAL ═══════════════════════════════════════ */}
-          <ZoneHeading label="Operational" />
+          <ZoneHeading label="Operational" first />
 
           {/* Row A — SLA compliance (hero) + Open tickets */}
           <Grid container spacing="16px">
