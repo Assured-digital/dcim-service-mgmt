@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Role } from "@prisma/client";
 import { applyAssignedScope } from "../src/auth/role-scope";
 import { TasksService } from "../src/tasks/tasks.service";
@@ -52,11 +52,16 @@ function mockPrisma(rows: Row[]): any {
   return {
     task: {
       findMany: jest.fn(async ({ where }: any) => rows.filter((r) => matches(r, where))),
-      findFirst: jest.fn(async ({ where }: any) => rows.find((r) => matches(r, where)) ?? null)
+      findFirst: jest.fn(async ({ where }: any) => rows.find((r) => matches(r, where)) ?? null),
+      update: jest.fn(async ({ where, data }: any) => {
+        const r = rows.find((x) => x.id === where.id);
+        return { ...r, ...data, assignee: null, incident: null };
+      })
     },
     // getForClient grafts links/attachments after the row is found — empty is fine here.
     recordLink: { findMany: jest.fn(async () => []) },
-    attachment: { findMany: jest.fn(async () => []) }
+    attachment: { findMany: jest.fn(async () => []) },
+    auditEvent: { create: jest.fn(async () => ({})) }
   };
 }
 
@@ -118,5 +123,34 @@ describe("TasksService scoping (rule A — list + detail)", () => {
   it("a non-ENGINEER can open ANY in-client record by id", async () => {
     const rec = await svc.getForClient(CLIENT, "t-c", { role: Role.SERVICE_MANAGER, userId: "sm" });
     expect(rec.id).toBe("t-c");
+  });
+});
+
+describe("TasksService assignee lock (rule B — ENGINEER cannot reassign)", () => {
+  let svc: TasksService;
+
+  beforeEach(() => {
+    svc = new TasksService(mockPrisma(makeRows()));
+  });
+
+  it("ENGINEER changing the assignee on update → 403", async () => {
+    await expect(
+      svc.updateForClient(CLIENT, "t-a", ENG1, { assigneeId: ENG2 }, { role: Role.ENGINEER, userId: ENG1 })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("ENGINEER editing other fields (no assignee change) succeeds", async () => {
+    const out = await svc.updateForClient(CLIENT, "t-a", ENG1, { title: "renamed" }, { role: Role.ENGINEER, userId: ENG1 });
+    expect(out.id).toBe("t-a");
+  });
+
+  it("ENGINEER re-submitting the SAME assignee (full-record PATCH echo) is allowed", async () => {
+    const out = await svc.updateForClient(CLIENT, "t-a", ENG1, { assigneeId: ENG1 }, { role: Role.ENGINEER, userId: ENG1 });
+    expect(out.id).toBe("t-a");
+  });
+
+  it("a non-ENGINEER (SERVICE_MANAGER) CAN reassign — the lock is ENGINEER-only", async () => {
+    const out = await svc.updateForClient(CLIENT, "t-a", "sm", { assigneeId: ENG2 }, { role: Role.SERVICE_MANAGER, userId: "sm" });
+    expect(out.id).toBe("t-a");
   });
 });

@@ -7,6 +7,7 @@ import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
+import { Role } from "@prisma/client"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -149,6 +150,12 @@ export class IssuesService {
     linkedEntityId?: string
   }, viewer: ScopeViewer) {
     const issue = await this.getForClient(clientId, id, viewer)
+
+    // Assignee lock (rule B): an ENGINEER may edit other fields but never reassign.
+    if (viewer.role === Role.ENGINEER && dto.assigneeId !== undefined && dto.assigneeId !== issue.assigneeId) {
+      throw new ForbiddenException("Engineers cannot change the assignee")
+    }
+
     const updated = await this.prisma.issue.update({
       where: { id: issue.id },
       data: {

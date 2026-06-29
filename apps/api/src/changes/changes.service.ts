@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
+import { Role } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import { resolveCreator } from "../users/creator"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
@@ -249,6 +250,11 @@ export class ChangesService {
     scheduledEnd?: string
   }, viewer: ScopeViewer) {
     const change = await this.getForClient(clientId, id, viewer)
+
+    // Assignee lock (rule B): an ENGINEER may edit other fields but never reassign.
+    if (viewer.role === Role.ENGINEER && dto.assigneeId !== undefined && dto.assigneeId !== change.assigneeId) {
+      throw new ForbiddenException("Engineers cannot change the assignee")
+    }
 
     const updated = await this.prisma.changeRequest.update({
       where: { id: change.id },

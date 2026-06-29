@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { ServiceRequestStatus } from "@prisma/client";
+import { Role, ServiceRequestStatus } from "@prisma/client";
 import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
@@ -217,6 +217,11 @@ async updateForClient(
 ) {
   this.assertClientScope(clientId);
   const sr = await this.getForClient(clientId, id, viewer);
+
+  // Assignee lock (rule B): an ENGINEER may edit other fields but never reassign.
+  if (viewer.role === Role.ENGINEER && dto.assigneeId !== undefined && dto.assigneeId !== sr.assigneeId) {
+    throw new ForbiddenException("Engineers cannot change the assignee");
+  }
 
   // SLA: a hand-set/cleared dueAt pins (dueAtManual: true). Otherwise, on a real
   // priority change of an unpinned record, recompute dueAt from createdAt + policy.
