@@ -16,6 +16,8 @@ import { useThemeMode } from "../lib/theme"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { useTickets } from "../lib/tickets"
 import { computeSlaStatus, type SlaFilter } from "../lib/serviceDeskQueue"
+import { getSelectedClientId } from "../lib/scope"
+import type { Site as InfraSite, Cabinet as InfraCabinet } from "../lib/infrastructure"
 
 // ── One card system ─────────────────────────────────────────────────────────
 // Every dashboard card shares ONE surface: paper ground, a single hairline border,
@@ -485,6 +487,111 @@ function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
   )
 }
 
+// ── Infrastructure band (Zone 2) ─────────────────────────────────────────────
+// Per-client DCIM glance: Sites / Cabinets / Assets counts + a short sites list.
+// Everything derives from the existing GET /sites call (each site carries its full
+// cabinets[] array and a _count of assets) — NO assets are fetched. Keyed on the
+// selected client so it refetches on client switch; the x-client-id interceptor
+// injects scope automatically. The asset total sums each site's _count.assets, so
+// it counts SITED assets only (an asset with no site is excluded) — the cell is
+// labelled accordingly so the number is never read as a true org-wide total.
+type InfraSiteRow = InfraSite & { cabinets: InfraCabinet[]; _count: { assets: number; checks: number } }
+
+function pluralCabinets(n: number) {
+  return `${n} ${n === 1 ? "cabinet" : "cabinets"}`
+}
+
+function SiteListRow({ name, cabinets, onClick }: { name: string; cabinets: number; onClick: () => void }) {
+  return (
+    <Box onClick={onClick} sx={{
+      display: "flex", alignItems: "center", gap: "10px",
+      py: "9px", cursor: "pointer",
+      borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)", "&:last-child": { borderBottom: "none" },
+      "&:hover .site-name": { color: "primary.main" }
+    }}>
+      <Typography className="site-name" sx={{ flex: 1, minWidth: 0, fontSize: 13, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.1s" }}>
+        {name}
+      </Typography>
+      <Typography sx={{ fontSize: 11, color: "text.tertiary", flexShrink: 0 }}>{pluralCabinets(cabinets)}</Typography>
+    </Box>
+  )
+}
+
+function InfrastructureCard() {
+  const { mode } = useThemeMode()
+  const navigate = useNavigate()
+  const clientId = getSelectedClientId() ?? "self"
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["infrastructure", clientId],
+    queryFn: async () => (await api.get<InfraSiteRow[]>("/sites")).data,
+  })
+
+  const sites = data ?? []
+  const totalSites = sites.length
+  const totalCabinets = sites.reduce((sum, s) => sum + s.cabinets.length, 0)
+  const totalAssets = sites.reduce((sum, s) => sum + s._count.assets, 0)
+
+  const siteRows = sites
+    .map(s => ({ id: s.id, name: s.name, cabinets: s.cabinets.length }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const visibleRows = siteRows.slice(0, 5)
+  const moreCount = siteRows.length - visibleRows.length
+
+  // Counts are informational, not status — neutral cells yield a neutral stripe.
+  const cells: MetricCellProps[] = [
+    { label: "Sites", value: totalSites },
+    { label: "Cabinets", value: totalCabinets },
+    { label: "Assets (sited)", value: totalAssets },
+  ]
+  const stripe = stripeColorFor(cells, mode)
+
+  return (
+    <Card variant="outlined" sx={countCardSx(stripe)}>
+      <CardContent sx={CARD_CONTENT_SX}>
+        <SectionHeader
+          label="Infrastructure"
+          action={
+            <Button size="small" variant="text" onClick={() => navigate("/asset-hierarchy")}
+              sx={{ fontSize: 11, fontWeight: 600, color: "primary.main", minWidth: 0, px: "4px" }}>
+              View all
+            </Button>
+          }
+        />
+
+        <Box sx={{ display: "flex", gap: "10px", mt: "12px" }}>
+          {cells.map((c, i) => <MetricCell key={i} {...c} />)}
+        </Box>
+        <Typography sx={{ fontSize: 10, color: "var(--color-text-muted)", mt: "6px" }}>
+          Sited assets only — excludes any unplaced assets.
+        </Typography>
+
+        <Box sx={{ mt: "14px" }}>
+          {isLoading ? (
+            <Typography variant="body2" color="text.secondary">Loading…</Typography>
+          ) : error ? (
+            <Typography variant="body2" color="text.secondary">Couldn’t load sites.</Typography>
+          ) : siteRows.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No sites yet.</Typography>
+          ) : (
+            <>
+              {visibleRows.map(s => (
+                <SiteListRow key={s.id} name={s.name} cabinets={s.cabinets}
+                  onClick={() => navigate(`/asset-hierarchy/${s.id}`)} />
+              ))}
+              {moreCount > 0 ? (
+                <Typography sx={{ fontSize: 11, color: "text.tertiary", pt: "9px" }}>
+                  +{moreCount} more
+                </Typography>
+              ) : null}
+            </>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -638,9 +745,14 @@ export default function DashboardPage() {
           {/* ══ ZONE 2 · CLIENT ════════════════════════════════════════════ */}
           <ZoneHeading label="Client" />
 
-          {/* RESERVED — Part B (Infrastructure) + Part C (Contacts) cards slot here:
-              a <Grid container spacing="16px"> of two <Grid item xs={12} md={6}> cards,
-              above the trend & activity row. Left as a comment until those parts land. */}
+          {/* Part B (Infrastructure) + Part C (Contacts) cards: a row of two
+              half-width cards above the trend & activity row. Contacts (Part C)
+              fills the right half later. */}
+          <Grid container spacing="16px">
+            <Grid item xs={12} md={6}>
+              <InfrastructureCard />
+            </Grid>
+          </Grid>
 
           {/* Row C — de-emphasised Trend Snapshot + Recent Activity */}
           <Grid container spacing="16px">
