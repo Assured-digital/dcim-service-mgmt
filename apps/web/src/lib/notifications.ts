@@ -5,7 +5,20 @@ import { api } from "./api"
 // x-client-id is auto-injected by the api interceptor; recipient = the JWT user.
 // All shapes mirror NotificationsService.listForUser / unreadCount (apps/api).
 
-export type NotificationKind = "MENTION"
+export type NotificationKind = "MENTION" | "REPLY" | "ASSIGNED" | "STATUS_CHANGED"
+
+// The feed line reads "{actor} {verb}" — one verb per kind. Mirrors the backend
+// NotificationType enum. Unknown kinds fall back to a neutral phrase.
+const NOTIFICATION_VERBS: Record<string, string> = {
+  MENTION: "mentioned you",
+  REPLY: "replied to you",
+  ASSIGNED: "assigned this to you",
+  STATUS_CHANGED: "updated the status",
+}
+
+export function notificationVerb(type: string): string {
+  return NOTIFICATION_VERBS[type] ?? "updated a record"
+}
 
 export interface NotificationActor {
   id: string

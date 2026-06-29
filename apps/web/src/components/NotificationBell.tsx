@@ -12,6 +12,7 @@ import {
   formatRelativeTime,
   markAllNotificationsRead,
   markNotificationRead,
+  notificationVerb,
   routeForNotificationSource,
   sourceTypeLabel,
   type NotificationItem,
@@ -161,7 +162,7 @@ export default function NotificationBell({ clientId }: { clientId: string }) {
                   <Avatar name={actorName} size="md" variant="neutral" mode={mode} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontSize: 13, color: "text.primary", fontWeight: unread ? 600 : 400, lineHeight: 1.4 }}>
-                      <Box component="span" sx={{ fontWeight: 600 }}>{actorName}</Box> mentioned you
+                      <Box component="span" sx={{ fontWeight: 600 }}>{actorName}</Box> {notificationVerb(n.type)}
                     </Typography>
                     <Typography sx={{ fontSize: 12, color: isDark ? "#94a3b8" : "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       in {sourceTypeLabel(n.sourceType)}

@@ -7,6 +7,8 @@ import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
+import { emitNotification } from "../notifications/emit-notification";
+import { NotificationType } from "@prisma/client";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 
@@ -243,6 +245,19 @@ export class IncidentsService {
       });
     }
 
+    // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
+    // skipped inside the helper (recipient === actor).
+    if (updated.assigneeId && updated.assigneeId !== incident.assigneeId) {
+      await emitNotification(this.prisma, {
+        type: NotificationType.ASSIGNED,
+        recipientIds: [updated.assigneeId],
+        actorId: actorUserId,
+        clientId,
+        sourceType: "Incident",
+        sourceId: incident.id
+      });
+    }
+
     return { ...updated, assignee: newAssignee };
   }
 
@@ -275,6 +290,18 @@ export class IncidentsService {
         }
       ],
       comment: comment?.trim() || null
+    });
+
+    // Notify the current assignee that the status moved. Best-effort; if the actor IS
+    // the assignee (the common case) the helper self-skips, so this fires mainly when
+    // someone else (a manager/analyst) transitions the record.
+    await emitNotification(this.prisma, {
+      type: NotificationType.STATUS_CHANGED,
+      recipientIds: [incident.assigneeId],
+      actorId: actorUserId,
+      clientId,
+      sourceType: "Incident",
+      sourceId: incident.id
     });
 
     return updated;

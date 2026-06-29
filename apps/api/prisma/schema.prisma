@@ -110,6 +110,8 @@ enum ConnectionStatus {
 enum NotificationType {
   MENTION
   REPLY
+  ASSIGNED
+  STATUS_CHANGED
 }
 
 model Client {
