@@ -8,6 +8,7 @@ import { resolveAttachments } from "../attachments/resolve-attachments";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
+import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 
 type ListFilters = {
   dateFrom?: string;
@@ -61,15 +62,18 @@ export class IncidentsService {
     if (!clientId) throw new ForbiddenException("Missing client scope");
   }
 
-  async listForClient(clientId: string, filters: ListFilters = {}) {
+  async listForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
     const rows = await this.prisma.incident.findMany({
-      where: {
-        clientId,
-        assigneeId: filters.assigneeId || undefined,
-        createdAt
-      },
+      where: applyAssignedScope(
+        {
+          clientId,
+          assigneeId: filters.assigneeId || undefined,
+          createdAt
+        },
+        viewer
+      ),
       orderBy: { updatedAt: "desc" },
       include: {
         assignee: {
@@ -80,8 +84,8 @@ export class IncidentsService {
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }));
   }
 
-  async exportCsvForClient(clientId: string, filters: ListFilters = {}) {
-    const rows = await this.listForClient(clientId, filters);
+  async exportCsvForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
+    const rows = await this.listForClient(clientId, viewer, filters);
     return rows.map((incident) => ({
       reference: incident.reference,
       title: incident.title,
@@ -94,10 +98,10 @@ export class IncidentsService {
     }));
   }
 
-  async getForClient(clientId: string, id: string) {
+  async getForClient(clientId: string, id: string, viewer: ScopeViewer) {
     this.assertClientScope(clientId);
     const incident = await this.prisma.incident.findFirst({
-      where: { id, clientId },
+      where: applyAssignedScope({ id, clientId }, viewer),
       include: {
         assignee: {
           select: userDisplaySelect
@@ -174,9 +178,10 @@ export class IncidentsService {
       priority?: string;
       dueAt?: string | null;
       assigneeId?: string;
-    }
+    },
+    viewer: ScopeViewer
   ) {
-    const incident = await this.getForClient(clientId, id);
+    const incident = await this.getForClient(clientId, id, viewer);
 
     // SLA: a hand-set/cleared dueAt pins (dueAtManual: true). Otherwise, on a real
     // priority change of an unpinned record, recompute dueAt from createdAt + policy.
@@ -241,9 +246,10 @@ export class IncidentsService {
     id: string,
     status: IncidentStatus,
     actorUserId: string,
+    viewer: ScopeViewer,
     comment?: string
   ) {
-    const incident = await this.getForClient(clientId, id);
+    const incident = await this.getForClient(clientId, id, viewer);
     const updated = await this.prisma.incident.update({
       where: { id: incident.id },
       data: { status }

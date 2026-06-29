@@ -6,6 +6,7 @@ import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
+import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -61,7 +62,7 @@ export class IssuesService {
     if (!clientId) throw new ForbiddenException("Missing client scope")
   }
 
-  async listForClient(clientId: string, filters: {
+  async listForClient(clientId: string, viewer: ScopeViewer, filters: {
     dateFrom?: string
     dateTo?: string
     linkedEntityType?: string
@@ -70,22 +71,25 @@ export class IssuesService {
     this.assertClientScope(clientId)
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
     const rows = await this.prisma.issue.findMany({
-      where: {
-        clientId,
-        linkedEntityType: filters.linkedEntityType || undefined,
-        linkedEntityId: filters.linkedEntityId || undefined,
-        createdAt
-      },
+      where: applyAssignedScope(
+        {
+          clientId,
+          linkedEntityType: filters.linkedEntityType || undefined,
+          linkedEntityId: filters.linkedEntityId || undefined,
+          createdAt
+        },
+        viewer
+      ),
       orderBy: { createdAt: "desc" },
       include: { assignee: { select: userDisplaySelect } }
     })
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
   }
 
-  async getForClient(clientId: string, id: string) {
+  async getForClient(clientId: string, id: string, viewer: ScopeViewer) {
     this.assertClientScope(clientId)
     const issue = await this.prisma.issue.findFirst({
-      where: { id, clientId },
+      where: applyAssignedScope({ id, clientId }, viewer),
       include: { assignee: { select: userDisplaySelect } }
     })
     if (!issue) throw new NotFoundException("Issue not found")
@@ -143,8 +147,8 @@ export class IssuesService {
     assigneeId?: string
     linkedEntityType?: string
     linkedEntityId?: string
-  }) {
-    const issue = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const issue = await this.getForClient(clientId, id, viewer)
     const updated = await this.prisma.issue.update({
       where: { id: issue.id },
       data: {
@@ -184,8 +188,8 @@ export class IssuesService {
   async updateStatusForClient(clientId: string, id: string, actorUserId: string, dto: {
     status: string
     resolution?: string
-  }) {
-    const issue = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const issue = await this.getForClient(clientId, id, viewer)
     const updated = await this.prisma.issue.update({
       where: { id: issue.id },
       data: {

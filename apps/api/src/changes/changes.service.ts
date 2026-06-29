@@ -6,6 +6,7 @@ import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
+import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -61,10 +62,10 @@ export class ChangesService {
     if (!clientId) throw new ForbiddenException("Missing client scope")
   }
 
-  async listForClient(clientId: string) {
+  async listForClient(clientId: string, viewer: ScopeViewer) {
     this.assertClientScope(clientId)
     const rows = await this.prisma.changeRequest.findMany({
-      where: { clientId },
+      where: applyAssignedScope({ clientId }, viewer),
       orderBy: { createdAt: "desc" },
       include: {
         assignee: { select: userDisplaySelect },
@@ -74,10 +75,10 @@ export class ChangesService {
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
   }
 
-  async getForClient(clientId: string, id: string) {
+  async getForClient(clientId: string, id: string, viewer: ScopeViewer) {
     this.assertClientScope(clientId)
     const change = await this.prisma.changeRequest.findFirst({
-      where: { id, clientId },
+      where: applyAssignedScope({ id, clientId }, viewer),
       include: {
         assignee: { select: userDisplaySelect },
         approvals: {
@@ -157,8 +158,8 @@ export class ChangesService {
     status: string
     implementationNotes?: string
     postImplReview?: string
-  }) {
-    const change = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const change = await this.getForClient(clientId, id, viewer)
 
     const updated = await this.prisma.changeRequest.update({
       where: { id: change.id },
@@ -194,8 +195,8 @@ export class ChangesService {
   async addApproval(clientId: string, id: string, actorUserId: string, dto: {
     decision: string
     notes?: string
-  }) {
-    const change = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const change = await this.getForClient(clientId, id, viewer)
 
     const approval = await this.prisma.changeApproval.create({
       data: {
@@ -246,8 +247,8 @@ export class ChangesService {
     assigneeId?: string
     scheduledStart?: string
     scheduledEnd?: string
-  }) {
-    const change = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const change = await this.getForClient(clientId, id, viewer)
 
     const updated = await this.prisma.changeRequest.update({
       where: { id: change.id },

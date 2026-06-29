@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { type ScopeViewer } from "../auth/role-scope";
 import { ServiceRequestsService } from "../service-requests/service-requests.service";
 import { IncidentsService } from "../incidents/incidents.service";
 import { ChangesService } from "../changes/changes.service";
@@ -248,9 +249,10 @@ export class RecordReportService {
   async generatePdf(
     type: RecordReportType,
     clientId: string,
-    id: string
+    id: string,
+    viewer: ScopeViewer
   ): Promise<{ filename: string; buffer: Buffer }> {
-    const built = await this.buildRecord(type, clientId, id);
+    const built = await this.buildRecord(type, clientId, id, viewer);
     const attachments = await assemblePhotos(this.attachments, clientId, built.attachments);
     const model: RecordReportModel = {
       ...built.base,
@@ -263,30 +265,30 @@ export class RecordReportService {
 
   // Fetch the record (client-scoped) and map it to the uniform model. The switch keeps each
   // case fully typed against its service's concrete return shape.
-  private async buildRecord(type: RecordReportType, clientId: string, id: string): Promise<BuiltRecord> {
+  private async buildRecord(type: RecordReportType, clientId: string, id: string, viewer: ScopeViewer): Promise<BuiltRecord> {
     switch (type) {
       case "service_request": {
-        const sr = await this.serviceRequests.getForClient(clientId, id);
+        const sr = await this.serviceRequests.getForClient(clientId, id, viewer);
         return { prefix: "service-request", base: mapServiceRequest(sr), attachments: sr.attachments };
       }
       case "incident": {
-        const i = await this.incidents.getForClient(clientId, id);
+        const i = await this.incidents.getForClient(clientId, id, viewer);
         return { prefix: "incident", base: mapIncident(i), attachments: i.attachments };
       }
       case "change": {
-        const ch = await this.changes.getForClient(clientId, id);
+        const ch = await this.changes.getForClient(clientId, id, viewer);
         return { prefix: "change", base: mapChange(ch), attachments: ch.attachments };
       }
       case "risk": {
-        const r = await this.risks.getForClient(clientId, id);
+        const r = await this.risks.getForClient(clientId, id, viewer);
         return { prefix: "risk", base: mapRisk(r), attachments: r.attachments };
       }
       case "issue": {
-        const is = await this.issues.getForClient(clientId, id);
+        const is = await this.issues.getForClient(clientId, id, viewer);
         return { prefix: "issue", base: mapIssue(is), attachments: is.attachments };
       }
       case "task": {
-        const t = await this.tasks.getForClient(clientId, id);
+        const t = await this.tasks.getForClient(clientId, id, viewer);
         return { prefix: "task", base: mapTask(t), attachments: t.attachments };
       }
       default: {

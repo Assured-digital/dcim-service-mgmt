@@ -34,7 +34,7 @@ export class TasksController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.tasks.listForClient(clientId, query);
+    return this.tasks.listForClient(clientId, user, query);
   }
 
   @Get("export")
@@ -53,7 +53,7 @@ export class TasksController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    const rows = await this.tasks.exportCsvForClient(clientId, query);
+    const rows = await this.tasks.exportCsvForClient(clientId, user, query);
     const csv = toCsv(
       ["title", "status", "priority", "assignee", "incidentReference", "dueAt", "createdAt", "updatedAt"],
       rows
@@ -74,7 +74,7 @@ export class TasksController {
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.tasks.getForClient(clientId, id);
+    return this.tasks.getForClient(clientId, id, user);
   }
 
   @Post(":id/status")
@@ -87,7 +87,7 @@ export class TasksController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.tasks.updateStatusForClient(clientId, id, dto.status, user.userId, dto.comment);
+    return this.tasks.updateStatusForClient(clientId, id, dto.status, user.userId, user, dto.comment);
   }
 
   @Post()
@@ -112,6 +112,6 @@ export class TasksController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.tasks.updateForClient(clientId, id, user.userId, dto)
+    return this.tasks.updateForClient(clientId, id, user.userId, dto, user)
   }
 }

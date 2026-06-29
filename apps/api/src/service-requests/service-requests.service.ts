@@ -8,6 +8,7 @@ import { resolveAttachments } from "../attachments/resolve-attachments";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
+import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 
 type ListFilters = {
   dateFrom?: string;
@@ -59,17 +60,20 @@ export class ServiceRequestsService {
     if (!clientId) throw new ForbiddenException("Missing client scope");
   }
 
-  async listForClient(clientId: string, filters: ListFilters = {}) {
+  async listForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
     const rows = await this.prisma.serviceRequest.findMany({
-      where: {
-        clientId,
-        assigneeId: filters.assigneeId || undefined,
-        linkedEntityType: filters.linkedEntityType || undefined,
-        linkedEntityId: filters.linkedEntityId || undefined,
-        createdAt
-      },
+      where: applyAssignedScope(
+        {
+          clientId,
+          assigneeId: filters.assigneeId || undefined,
+          linkedEntityType: filters.linkedEntityType || undefined,
+          linkedEntityId: filters.linkedEntityId || undefined,
+          createdAt
+        },
+        viewer
+      ),
       orderBy: { updatedAt: "desc" },
       include: {
         assignee: {
@@ -80,8 +84,8 @@ export class ServiceRequestsService {
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }));
   }
 
-  async exportCsvForClient(clientId: string, filters: ListFilters = {}) {
-    const rows = await this.listForClient(clientId, filters);
+  async exportCsvForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
+    const rows = await this.listForClient(clientId, viewer, filters);
     return rows.map((sr) => ({
       reference: sr.reference,
       subject: sr.subject,
@@ -137,10 +141,10 @@ export class ServiceRequestsService {
     return sr;
   }
 
-  async getForClient(clientId: string, id: string) {
+  async getForClient(clientId: string, id: string, viewer: ScopeViewer) {
   this.assertClientScope(clientId);
   const sr = await this.prisma.serviceRequest.findFirst({
-    where: { id, clientId },
+    where: applyAssignedScope({ id, clientId }, viewer),
     include: {
       assignee: { select: userDisplaySelect },
       client: { select: { id: true, name: true } },
@@ -160,7 +164,8 @@ async updateStatusForClient(
   clientId: string,
   id: string,
   actorUserId: string,
-  dto: { status: string; closureSummary?: string }
+  dto: { status: string; closureSummary?: string },
+  viewer: ScopeViewer
 ) {
   this.assertClientScope(clientId);
 
@@ -173,7 +178,7 @@ async updateStatusForClient(
     }
   }
 
-  const sr = await this.getForClient(clientId, id);
+  const sr = await this.getForClient(clientId, id, viewer);
 
   const updated = await this.prisma.serviceRequest.update({
     where: { id: sr.id },
@@ -207,10 +212,11 @@ async updateForClient(
   clientId: string,
   id: string,
   actorUserId: string,
-  dto: { subject?: string; description?: string; assigneeId?: string; priority?: string; dueAt?: string | null; linkedEntityType?: string; linkedEntityId?: string }
+  dto: { subject?: string; description?: string; assigneeId?: string; priority?: string; dueAt?: string | null; linkedEntityType?: string; linkedEntityId?: string },
+  viewer: ScopeViewer
 ) {
   this.assertClientScope(clientId);
-  const sr = await this.getForClient(clientId, id);
+  const sr = await this.getForClient(clientId, id, viewer);
 
   // SLA: a hand-set/cleared dueAt pins (dueAtManual: true). Otherwise, on a real
   // priority change of an unpinned record, recompute dueAt from createdAt + policy.
@@ -267,13 +273,13 @@ async updateForClient(
   return { ...updated, assignee: newAssignee };
 }
 
-  async closeForClient(clientId: string, id: string, actorUserId: string, closureSummary: string) {
+  async closeForClient(clientId: string, id: string, actorUserId: string, closureSummary: string, viewer: ScopeViewer) {
     this.assertClientScope(clientId);
     if (!closureSummary || closureSummary.trim().length < 5) {
       throw new BadRequestException("Closure summary is required to close a Service Request.");
     }
 
-    const sr = await this.getForClient(clientId, id);
+    const sr = await this.getForClient(clientId, id, viewer);
 
     const updated = await this.prisma.serviceRequest.update({
       where: { id: sr.id },

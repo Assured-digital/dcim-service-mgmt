@@ -31,7 +31,7 @@ export class RisksController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.risks.listForClient(clientId, query)
+    return this.risks.listForClient(clientId, user, query)
   }
 
   @Get(":id")
@@ -39,7 +39,7 @@ export class RisksController {
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.risks.getForClient(clientId, id)
+    return this.risks.getForClient(clientId, id, user)
   }
 
   @Post()
@@ -60,7 +60,7 @@ export class RisksController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.risks.updateStatusForClient(clientId, id, user.userId, dto)
+    return this.risks.updateStatusForClient(clientId, id, user.userId, dto, user)
   }
 
   @Put(":id")
@@ -73,6 +73,6 @@ export class RisksController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.risks.updateForClient(clientId, id, user.userId, dto)
+    return this.risks.updateForClient(clientId, id, user.userId, dto, user)
   }
 }

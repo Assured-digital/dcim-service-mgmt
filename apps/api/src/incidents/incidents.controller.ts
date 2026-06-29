@@ -34,7 +34,7 @@ export class IncidentsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.incidents.listForClient(clientId, query);
+    return this.incidents.listForClient(clientId, user, query);
   }
 
   @Get("export")
@@ -53,7 +53,7 @@ export class IncidentsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    const rows = await this.incidents.exportCsvForClient(clientId, query);
+    const rows = await this.incidents.exportCsvForClient(clientId, user, query);
     const csv = toCsv(
       ["reference", "title", "status", "severity", "priority", "assignee", "createdAt", "updatedAt"],
       rows
@@ -74,7 +74,7 @@ export class IncidentsController {
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.incidents.getForClient(clientId, id);
+    return this.incidents.getForClient(clientId, id, user);
   }
 
   @Post()
@@ -104,7 +104,7 @@ export class IncidentsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.incidents.updateForClient(clientId, id, user.userId, dto);
+    return this.incidents.updateForClient(clientId, id, user.userId, dto, user);
   }
 
   @Post(":id/status")
@@ -117,6 +117,6 @@ export class IncidentsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.incidents.updateStatusForClient(clientId, id, dto.status, user.userId, dto.comment);
+    return this.incidents.updateStatusForClient(clientId, id, dto.status, user.userId, user, dto.comment);
   }
 }

@@ -6,6 +6,7 @@ import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
+import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -65,7 +66,7 @@ export class RisksService {
     if (!clientId) throw new ForbiddenException("Missing client scope")
   }
 
-  async listForClient(clientId: string, filters: {
+  async listForClient(clientId: string, viewer: ScopeViewer, filters: {
     dateFrom?: string
     dateTo?: string
     linkedEntityType?: string
@@ -74,22 +75,25 @@ export class RisksService {
     this.assertClientScope(clientId)
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
     const rows = await this.prisma.risk.findMany({
-      where: {
-        clientId,
-        linkedEntityType: filters.linkedEntityType || undefined,
-        linkedEntityId: filters.linkedEntityId || undefined,
-        createdAt
-      },
+      where: applyAssignedScope(
+        {
+          clientId,
+          linkedEntityType: filters.linkedEntityType || undefined,
+          linkedEntityId: filters.linkedEntityId || undefined,
+          createdAt
+        },
+        viewer
+      ),
       orderBy: { createdAt: "desc" },
       include: { assignee: { select: userDisplaySelect } }
     })
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
   }
 
-  async getForClient(clientId: string, id: string) {
+  async getForClient(clientId: string, id: string, viewer: ScopeViewer) {
     this.assertClientScope(clientId)
     const risk = await this.prisma.risk.findFirst({
-      where: { id, clientId },
+      where: applyAssignedScope({ id, clientId }, viewer),
       include: { assignee: { select: userDisplaySelect } }
     })
     if (!risk) throw new NotFoundException("Risk not found")
@@ -148,8 +152,8 @@ export class RisksService {
   async updateStatusForClient(clientId: string, id: string, actorUserId: string, dto: {
     status: string
     acceptanceNote?: string
-  }) {
-    const risk = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const risk = await this.getForClient(clientId, id, viewer)
     const updated = await this.prisma.risk.update({
       where: { id: risk.id },
       data: {
@@ -185,8 +189,8 @@ export class RisksService {
     assigneeId?: string
     linkedEntityType?: string
     linkedEntityId?: string
-  }) {
-    const risk = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const risk = await this.getForClient(clientId, id, viewer)
     const updated = await this.prisma.risk.update({
       where: { id: risk.id },
       data: {

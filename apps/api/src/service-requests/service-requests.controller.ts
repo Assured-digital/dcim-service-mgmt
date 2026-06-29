@@ -35,7 +35,7 @@ export class ServiceRequestsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.srs.listForClient(clientId, query);
+    return this.srs.listForClient(clientId, user, query);
   }
 
   @Get("export")
@@ -54,7 +54,7 @@ export class ServiceRequestsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    const rows = await this.srs.exportCsvForClient(clientId, query);
+    const rows = await this.srs.exportCsvForClient(clientId, user, query);
     const csv = toCsv(
       ["reference", "subject", "status", "priority", "assignee", "createdAt", "updatedAt", "closureSummary"],
       rows
@@ -75,7 +75,7 @@ export class ServiceRequestsController {
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.srs.getForClient(clientId, id);
+    return this.srs.getForClient(clientId, id, user);
   }
 
   @Post()
@@ -102,7 +102,7 @@ export class ServiceRequestsController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     const userId = user.userId;
-    return this.srs.closeForClient(clientId, id, userId, dto.closureSummary);
+    return this.srs.closeForClient(clientId, id, userId, dto.closureSummary, user);
   }
   @Post(":id/status")
   @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
@@ -114,7 +114,7 @@ export class ServiceRequestsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.srs.updateStatusForClient(clientId, id, user.userId, dto);
+    return this.srs.updateStatusForClient(clientId, id, user.userId, dto, user);
   }
 
   @Put(":id")
@@ -127,6 +127,6 @@ export class ServiceRequestsController {
   ) {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    return this.srs.updateForClient(clientId, id, user.userId, dto);
+    return this.srs.updateForClient(clientId, id, user.userId, dto, user);
   }
 }

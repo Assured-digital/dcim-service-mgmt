@@ -31,7 +31,7 @@ export class IssuesController {
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.issues.listForClient(clientId, query)
+    return this.issues.listForClient(clientId, user, query)
   }
 
   @Get(":id")
@@ -39,7 +39,7 @@ export class IssuesController {
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.issues.getForClient(clientId, id)
+    return this.issues.getForClient(clientId, id, user)
   }
 
   @Post()
@@ -55,7 +55,7 @@ export class IssuesController {
   async update(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateIssueDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.issues.updateForClient(clientId, id, user.userId, dto)
+    return this.issues.updateForClient(clientId, id, user.userId, dto, user)
   }
 
   @Post(":id/status")
@@ -63,6 +63,6 @@ export class IssuesController {
   async updateStatus(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateIssueStatusDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.issues.updateStatusForClient(clientId, id, user.userId, dto)
+    return this.issues.updateStatusForClient(clientId, id, user.userId, dto, user)
   }
 }

@@ -22,7 +22,7 @@ export class ChangesController {
   async list(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.changes.listForClient(clientId)
+    return this.changes.listForClient(clientId, user)
   }
 
   @Get(":id")
@@ -30,7 +30,7 @@ export class ChangesController {
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.changes.getForClient(clientId, id)
+    return this.changes.getForClient(clientId, id, user)
   }
 
   @Post()
@@ -46,7 +46,7 @@ export class ChangesController {
   async updateStatus(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateChangeStatusDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.changes.updateStatusForClient(clientId, id, user.userId, dto)
+    return this.changes.updateStatusForClient(clientId, id, user.userId, dto, user)
   }
 
   @Post(":id/approve")
@@ -54,7 +54,7 @@ export class ChangesController {
   async approve(@Req() req: any, @Param("id") id: string, @Body() dto: AddApprovalDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.changes.addApproval(clientId, id, user.userId, dto)
+    return this.changes.addApproval(clientId, id, user.userId, dto, user)
   }
 
   @Put(":id")
@@ -62,6 +62,6 @@ export class ChangesController {
   async update(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateChangeDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.changes.updateForClient(clientId, id, user.userId, dto)
+    return this.changes.updateForClient(clientId, id, user.userId, dto, user)
   }
 }

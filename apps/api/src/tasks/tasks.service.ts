@@ -7,6 +7,7 @@ import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
+import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -53,17 +54,20 @@ export class TasksService {
     if (!clientId) throw new ForbiddenException("Missing client scope");
   }
 
-  async listForClient(clientId: string, filters: ListFilters = {}) {
+  async listForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
     const rows = await this.prisma.task.findMany({
-      where: {
-        clientId,
-        assigneeId: filters.assigneeId || undefined,
-        linkedEntityType: filters.linkedEntityType || undefined,
-        linkedEntityId: filters.linkedEntityId || undefined,
-        createdAt
-      },
+      where: applyAssignedScope(
+        {
+          clientId,
+          assigneeId: filters.assigneeId || undefined,
+          linkedEntityType: filters.linkedEntityType || undefined,
+          linkedEntityId: filters.linkedEntityId || undefined,
+          createdAt
+        },
+        viewer
+      ),
       orderBy: { updatedAt: "desc" },
       include: {
         assignee: {
@@ -77,8 +81,8 @@ export class TasksService {
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }));
   }
 
-  async exportCsvForClient(clientId: string, filters: ListFilters = {}) {
-    const rows = await this.listForClient(clientId, filters);
+  async exportCsvForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
+    const rows = await this.listForClient(clientId, viewer, filters);
     return rows.map((task) => ({
       title: task.title,
       status: task.status,
@@ -91,10 +95,10 @@ export class TasksService {
     }));
   }
 
-  async getForClient(clientId: string, id: string) {
+  async getForClient(clientId: string, id: string, viewer: ScopeViewer) {
     this.assertClientScope(clientId);
     const task = await this.prisma.task.findFirst({
-      where: { id, clientId },
+      where: applyAssignedScope({ id, clientId }, viewer),
       include: {
         incident: true,
         assignee: { select: userDisplaySelect }
@@ -175,9 +179,10 @@ export class TasksService {
     id: string,
     status: TaskStatus,
     actorUserId: string,
+    viewer: ScopeViewer,
     comment?: string
   ) {
-    const task = await this.getForClient(clientId, id);
+    const task = await this.getForClient(clientId, id, viewer);
     const updated = await this.prisma.task.update({
       where: { id: task.id },
       data: { status },
@@ -233,8 +238,8 @@ export class TasksService {
     priority?: string
     dueAt?: string | null
     assigneeId?: string
-  }) {
-    const task = await this.getForClient(clientId, id)
+  }, viewer: ScopeViewer) {
+    const task = await this.getForClient(clientId, id, viewer)
     const updated = await this.prisma.task.update({
       where: { id: task.id },
       data: {

@@ -40,7 +40,7 @@ export class RecordReportController {
     }
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
-    const { filename, buffer } = await this.report.generatePdf(type, clientId, id);
+    const { filename, buffer } = await this.report.generatePdf(type, clientId, id, user);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Length", String(buffer.length));
