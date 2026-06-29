@@ -16,6 +16,9 @@ import { useThemeMode } from "../lib/theme"
 import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { useTickets } from "../lib/tickets"
 import { computeSlaStatus, type SlaFilter } from "../lib/serviceDeskQueue"
+import {
+  useMttrTrend, useSlaComplianceTrend, bucketForRange, formatDurationMs, msToHours
+} from "../lib/metrics"
 import { getSelectedClientId } from "../lib/scope"
 import type { Site as InfraSite, Cabinet as InfraCabinet } from "../lib/infrastructure"
 
@@ -449,6 +452,179 @@ function TrendCard({ label, opened, closed, closedLabel, chartData, onExport, ex
   )
 }
 
+// ── Trend chart chrome (shared by the two metrics widgets) ─────────────────
+// A real (non-sparkline) line over the period, with hidden axes and first/last date
+// labels below — matching the dashboard's quiet chart language. `points` may contain
+// nulls for empty buckets; the line breaks there (connectNulls off) so missing data
+// reads as a gap, never an invented straight line.
+function MetricLineChart({ points, labels, color, valueFormatter, yMax }: {
+  points: (number | null)[]; labels: string[]; color: string
+  valueFormatter?: (v: number | null) => string; yMax?: number
+}) {
+  const { mode } = useThemeMode()
+  const edge = mode === "dark" ? slate[600] : slate[300]
+  return (
+    <>
+      <Box sx={{ height: 120, mx: "-8px" }}>
+        <LineChart
+          xAxis={[{ data: points.map((_, i) => i), tickInterval: [], disableLine: true, disableTicks: true }]}
+          yAxis={[{ min: 0, ...(yMax != null ? { max: yMax } : {}), disableLine: true, disableTicks: true }]}
+          series={[{ data: points, color, showMark: true, area: true, connectNulls: false, valueFormatter: (v) => (valueFormatter ? valueFormatter(v as number | null) : String(v)) }]}
+          height={120}
+          margin={{ top: 10, right: 8, left: -20, bottom: 8 }}
+          sx={{
+            "& .MuiAreaElement-root": { fillOpacity: 0.08 },
+            "& .MuiChartsAxis-root": { display: "none" },
+            "& .MuiChartsGrid-root": { "& line": { stroke: "var(--color-background-tertiary)" } }
+          }}
+          hideLegend
+        />
+      </Box>
+      {labels.length > 1 ? (
+        <Stack direction="row" justifyContent="space-between" sx={{ px: "4px", mt: "-2px" }}>
+          <Typography sx={{ fontSize: 9, color: edge }}>{labels[0]}</Typography>
+          <Typography sx={{ fontSize: 9, color: edge }}>{labels[labels.length - 1]}</Typography>
+        </Stack>
+      ) : null}
+    </>
+  )
+}
+
+// ── MTTR trend widget ───────────────────────────────────────────────────────
+// Mean time to resolve (SR + INC) over the selected period, from the honest server
+// `resolvedAt` aggregate. Headline = overall mean + median; the denominator ("N
+// resolved") is always shown so the figure is never mistaken for total coverage.
+function MttrTrendCard({ dateFrom, dateTo, assigneeId }: { dateFrom: string; dateTo: string; assigneeId: string }) {
+  const { mode } = useThemeMode()
+  const bucket = bucketForRange(dateFrom, dateTo)
+  const { data, isLoading, error } = useMttrTrend({ from: dateFrom, to: dateTo, bucket, assigneeId })
+  const line = mode === "dark" ? slate[400] : slate[500]
+
+  return (
+    <Card variant="outlined" sx={DASH_CARD_SX}>
+      <CardContent sx={CARD_CONTENT_SX}>
+        <SectionHeader
+          label="Resolution time"
+          tooltip="Mean time to resolve Service Requests & Incidents, by resolution date, for the selected client. Based only on records with a recorded resolution time."
+        />
+        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", mt: "3px" }}>
+          Service Requests &amp; Incidents · time to resolve
+        </Typography>
+
+        {isLoading ? (
+          <Box sx={{ mt: "12px" }}><LoadingState /></Box>
+        ) : error ? (
+          <Box sx={{ mt: "12px" }}><ErrorState title="Failed to load resolution metrics" /></Box>
+        ) : !data || data.totalResolved === 0 ? (
+          <Box sx={{ mt: "18px", mb: "8px" }}>
+            <Typography sx={{ fontSize: 13, color: "text.secondary" }}>No resolutions recorded in this period.</Typography>
+            <Typography sx={{ fontSize: 11.5, color: "text.tertiary", mt: "4px" }}>
+              Resolution time is captured when a record is resolved or closed — older records may not have it yet.
+            </Typography>
+          </Box>
+        ) : (
+          <>
+            <Stack direction="row" gap="18px" sx={{ mt: "14px", mb: "10px" }} alignItems="baseline">
+              <Box>
+                <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>Mean</Typography>
+                <Typography sx={{ fontSize: 28, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>
+                  {formatDurationMs(data.overallMeanMs)}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>Median</Typography>
+                <Typography sx={{ fontSize: 18, fontWeight: 700, lineHeight: 1, color: "text.secondary" }}>
+                  {formatDurationMs(data.overallMedianMs)}
+                </Typography>
+              </Box>
+              <Box sx={{ ml: "auto", textAlign: "right" }}>
+                <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>Resolved</Typography>
+                <Typography sx={{ fontSize: 18, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>
+                  {data.totalResolved}
+                </Typography>
+              </Box>
+            </Stack>
+            <MetricLineChart
+              points={data.buckets.map(b => msToHours(b.meanMs))}
+              labels={data.buckets.map(b => formatDateShort(b.bucketStart))}
+              color={line}
+              valueFormatter={(v) => (v == null ? "—" : `${v}h`)}
+            />
+            <Typography sx={{ fontSize: 10.5, color: "text.tertiary", mt: "8px" }}>
+              Mean hours to resolve, per {bucket}. Based on {data.totalResolved} resolved in period.
+            </Typography>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── SLA compliance trend widget ─────────────────────────────────────────────
+// % of SR + INC resolved on-or-before their SLA due date, over the period (the
+// historical counterpart to the point-in-time SLA card). Records with no due target
+// are excluded from the % and surfaced separately, so the figure stays honest.
+function SlaComplianceTrendCard({ dateFrom, dateTo, assigneeId }: { dateFrom: string; dateTo: string; assigneeId: string }) {
+  const { mode } = useThemeMode()
+  const bucket = bucketForRange(dateFrom, dateTo)
+  const { data, isLoading, error } = useSlaComplianceTrend({ from: dateFrom, to: dateTo, bucket, assigneeId })
+  const success = semanticToken("success", mode).solid
+
+  const judged = data ? data.overallMet + data.overallBreached : 0
+  const pctMet = judged > 0 ? Math.round((data!.overallMet / judged) * 100) : 0
+
+  return (
+    <Card variant="outlined" sx={DASH_CARD_SX}>
+      <CardContent sx={CARD_CONTENT_SX}>
+        <SectionHeader
+          label="SLA compliance trend"
+          tooltip="Share of Service Requests & Incidents resolved within their SLA due date, by resolution date. Records with no due target are excluded."
+        />
+        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", mt: "3px" }}>
+          Service Requests &amp; Incidents · % resolved within SLA
+        </Typography>
+
+        {isLoading ? (
+          <Box sx={{ mt: "12px" }}><LoadingState /></Box>
+        ) : error ? (
+          <Box sx={{ mt: "12px" }}><ErrorState title="Failed to load SLA compliance" /></Box>
+        ) : !data || judged === 0 ? (
+          <Box sx={{ mt: "18px", mb: "8px" }}>
+            <Typography sx={{ fontSize: 13, color: "text.secondary" }}>No resolved records with an SLA due target in this period.</Typography>
+            {data && data.noDueTarget > 0 ? (
+              <Typography sx={{ fontSize: 11.5, color: "text.tertiary", mt: "4px" }}>
+                {data.noDueTarget} resolved {data.noDueTarget === 1 ? "record has" : "records have"} no due date set.
+              </Typography>
+            ) : null}
+          </Box>
+        ) : (
+          <>
+            <Stack direction="row" alignItems="baseline" gap="8px" sx={{ mt: "14px", mb: "10px" }}>
+              <Typography sx={{ fontSize: 30, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{pctMet}%</Typography>
+              <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>resolved within SLA</Typography>
+            </Stack>
+            <Box sx={{ display: "flex", gap: "10px", mb: "12px" }}>
+              <MetricCell label="Within SLA" value={data.overallMet} intent="success" />
+              <MetricCell label="Breached" value={data.overallBreached} intent="danger" />
+            </Box>
+            <MetricLineChart
+              points={data.buckets.map(b => (b.total > 0 ? Math.round((b.met / b.total) * 100) : null))}
+              labels={data.buckets.map(b => formatDateShort(b.bucketStart))}
+              color={success}
+              valueFormatter={(v) => (v == null ? "—" : `${v}%`)}
+              yMax={100}
+            />
+            <Typography sx={{ fontSize: 10.5, color: "text.tertiary", mt: "8px" }}>
+              % resolved within SLA, per {bucket}. Based on {judged} with a due target
+              {data.noDueTarget > 0 ? ` · ${data.noDueTarget} excluded (no due date)` : ""}.
+            </Typography>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Recent row ─────────────────────────────────────────────────────────────
 function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
   type: string; reference: string; title: string; status: string; updatedAt: string; onClick: () => void
@@ -850,6 +1026,17 @@ export default function DashboardPage() {
                   ))}
                 </CardContent>
               </Card>
+            </Grid>
+          </Grid>
+
+          {/* Row D — Resolution & SLA trends (honest server aggregates over resolvedAt).
+              Driven by the same period + assignee filter as the Trend Snapshot above. */}
+          <Grid container spacing="16px">
+            <Grid item xs={12} md={6}>
+              <MttrTrendCard dateFrom={dateFrom} dateTo={dateTo} assigneeId={assigneeId} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <SlaComplianceTrendCard dateFrom={dateFrom} dateTo={dateTo} assigneeId={assigneeId} />
             </Grid>
           </Grid>
 

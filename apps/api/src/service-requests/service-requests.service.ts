@@ -10,6 +10,7 @@ import { emitAudit } from "../audit-events/emit-audit";
 import { emitNotification } from "../notifications/emit-notification";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
+import { resolvedAtUpdate, SR_RESOLVED_STATUSES } from "../metrics/resolved-status";
 
 type ListFilters = {
   dateFrom?: string;
@@ -185,7 +186,8 @@ async updateStatusForClient(
     where: { id: sr.id },
     data: {
       status: dto.status as ServiceRequestStatus,
-      closureSummary: dto.closureSummary
+      closureSummary: dto.closureSummary,
+      ...resolvedAtUpdate(sr.status, dto.status, SR_RESOLVED_STATUSES)
     }
   });
 
@@ -314,7 +316,8 @@ async updateForClient(
       where: { id: sr.id },
       data: {
         status: ServiceRequestStatus.CLOSED,
-        closureSummary
+        closureSummary,
+        ...resolvedAtUpdate(sr.status, ServiceRequestStatus.CLOSED, SR_RESOLVED_STATUSES)
       }
     });
 

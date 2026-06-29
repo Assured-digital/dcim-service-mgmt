@@ -9,6 +9,7 @@ import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
 import { emitNotification } from "../notifications/emit-notification";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
+import { resolvedAtUpdate, TASK_RESOLVED_STATUSES } from "../metrics/resolved-status";
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -186,7 +187,7 @@ export class TasksService {
     const task = await this.getForClient(clientId, id, viewer);
     const updated = await this.prisma.task.update({
       where: { id: task.id },
-      data: { status },
+      data: { status, ...resolvedAtUpdate(task.status, status, TASK_RESOLVED_STATUSES) },
       include: {
         incident: {
           select: { id: true, reference: true, title: true }
