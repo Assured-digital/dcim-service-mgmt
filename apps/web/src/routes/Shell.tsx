@@ -260,15 +260,18 @@ const clientSections: NavSection[] = [
     ]
   },
   {
+    // DCIM is gated to ORG-super roles only — the module is unfinished, so it's hidden
+    // from non-admin roles in nav. Routes stay reachable by direct URL (deliberate: not
+    // route-guarded — DCIM isn't sensitive, just not ready for general use yet).
     title: "DCIM", icon: <DnsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Overview", path: "/dcim/overview", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) },
-      { kind: "group", label: "Assets", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, matchPaths: ["/asset-hierarchy", "/asset-register", "/asset-management"], roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER], items: [
-        { label: "Hierarchy", path: "/asset-hierarchy", icon: <AccountTreeIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-        { label: "Register",  path: "/asset-register",  icon: <ViewListIcon sx={{ fontSize: ICON_SIZE }} />,    roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Overview", path: "/dcim/overview", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
+      { kind: "group", label: "Assets", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, matchPaths: ["/asset-hierarchy", "/asset-register", "/asset-management"], roles: [...ORG_SUPER_ROLES], items: [
+        { label: "Hierarchy", path: "/asset-hierarchy", icon: <AccountTreeIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
+        { label: "Register",  path: "/asset-register",  icon: <ViewListIcon sx={{ fontSize: ICON_SIZE }} />,    roles: [...ORG_SUPER_ROLES] },
       ]},
-      { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-      { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-      { label: "Pending Deletions", path: "/pending-deletions", icon: <DeleteSweepIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
+      { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
+      { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
+      { label: "Pending Deletions", path: "/pending-deletions", icon: <DeleteSweepIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
     ]
   },
   {
