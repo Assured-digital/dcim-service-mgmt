@@ -253,7 +253,7 @@ const clientSections: NavSection[] = [
   { title: "", items: [{ label: "Dashboard", path: "/dashboard", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) }] },
   {
     title: "Service Management", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] },
+      { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Risks & Issues", path: "/risks-issues", icon: <ReportProblemIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
       // Changes + Incidents are unified into Service Desk — they no longer have their own nav entries.
     ]

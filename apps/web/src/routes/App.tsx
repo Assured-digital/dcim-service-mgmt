@@ -148,7 +148,7 @@ export default function App() {
           <Route
             path="service-desk/*"
             element={
-              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]}>
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
                 <ServiceDeskNavigator />
               </RequireRoles>
             }
