@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Req, Res } fr
 import type { Response } from "express"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { AssetsService } from "./assets.service";
-import { CreateAssetDto, UpdateAssetDto } from "./dto";
+import { CreateAssetDto, RejectAssetDeletionDto, RequestAssetDeletionDto, UpdateAssetDto } from "./dto";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
 import { UseGuards } from "@nestjs/common";
@@ -30,6 +30,17 @@ export class AssetsController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.assets.listForClient(clientId, user.role);
+  }
+
+  // Approver queue: pending deletion requests in the current client scope.
+  // IMPORTANT: this static route must precede "@Get(:id)" or ":id" captures
+  // "deletion-requests" (NestJS matches top-down).
+  @Get("deletion-requests")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  async listPendingDeletions(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.assets.listPendingDeletions(clientId);
   }
 
   // IMPORTANT: this must be BEFORE "site/:siteId" — NestJS matches top-down
@@ -63,8 +74,10 @@ export class AssetsController {
     return this.assets.create(dto, clientId, user.role, user.userId);
   }
 
+  // Direct delete is now restricted to the approver set (ORG-super + SERVICE_MANAGER).
+  // ENGINEER / SERVICE_DESK_ANALYST route through the request-and-approve flow below.
   @Delete(":id")
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
   async remove(
     @Req() req: any,
     @Param("id") id: string,
@@ -73,6 +86,46 @@ export class AssetsController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.assets.removeForClient(id, clientId, user.role, user.userId);
+  }
+
+  // ENGINEER / SERVICE_DESK_ANALYST raise a deletion request instead of deleting directly.
+  @Post(":id/deletion-request")
+  @Roles(Role.ENGINEER, Role.SERVICE_DESK_ANALYST)
+  async requestDeletion(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: RequestAssetDeletionDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.assets.requestDeletion(id, clientId, user.role, user.userId, dto?.reason);
+  }
+
+  // Approvers (ORG-super + SERVICE_MANAGER) action a pending request.
+  @Post(":id/deletion-request/approve")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  async approveDeletion(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.assets.approveDeletion(id, clientId, user.role, user.userId);
+  }
+
+  @Post(":id/deletion-request/reject")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  async rejectDeletion(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: RejectAssetDeletionDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.assets.rejectDeletion(id, clientId, user.role, user.userId, dto?.notes);
   }
 
   @Put(":id")

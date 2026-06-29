@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service";
 import { AssetLifecycleState, OwnerType, Role } from "@prisma/client";
 import { isOrgSuperRole } from "../auth/role-scope";
+import { emitAudit } from "../audit-events/emit-audit";
+import { computeDisplayName, userDisplaySelect } from "../users/display";
 
 @Injectable()
 export class AssetsService {
@@ -157,6 +159,168 @@ export class AssetsService {
     });
 
     return deleted;
+  }
+
+  // Shared scope guard for the deletion-request flow (mirrors the inline checks in
+  // removeForClient/updateForClient): non-super actors are confined to their own
+  // CLIENT-owned assets; org-super must have the matching client scope selected.
+  private assertAssetInScope(
+    asset: { ownerType: OwnerType; clientId: string | null },
+    requesterClientId: string,
+    requesterRole: Role,
+    verb: string
+  ) {
+    if (!isOrgSuperRole(requesterRole)) {
+      if (asset.ownerType !== OwnerType.CLIENT || asset.clientId !== requesterClientId) {
+        throw new ForbiddenException(`Cannot ${verb} assets outside your client scope.`);
+      }
+    } else if (asset.ownerType === OwnerType.CLIENT && asset.clientId !== requesterClientId) {
+      throw new ForbiddenException("Selected scope does not match this client-owned asset.");
+    }
+  }
+
+  // ENGINEER / SERVICE_DESK_ANALYST raise a deletion request (no direct delete).
+  async requestDeletion(
+    assetId: string,
+    requesterClientId: string,
+    requesterRole: Role,
+    actorUserId: string,
+    reason?: string
+  ) {
+    if (!requesterClientId) throw new ForbiddenException("Missing client scope");
+
+    const asset = await this.prisma.asset.findUnique({ where: { id: assetId } });
+    if (!asset) throw new BadRequestException("Asset not found.");
+    this.assertAssetInScope(asset, requesterClientId, requesterRole, "request deletion for");
+
+    if (asset.deletionStatus === "PENDING") {
+      throw new BadRequestException("A deletion request is already pending for this asset.");
+    }
+
+    const updated = await this.prisma.asset.update({
+      where: { id: asset.id },
+      data: {
+        deletionStatus: "PENDING",
+        deletionRequestedById: actorUserId,
+        deletionRequestedAt: new Date(),
+        deletionReason: reason ?? null
+      }
+    });
+
+    await emitAudit(this.prisma, {
+      entityType: "Asset",
+      entityId: asset.id,
+      action: "DELETION_REQUESTED",
+      actorUserId,
+      clientId: asset.clientId ?? requesterClientId,
+      reference: asset.assetTag,
+      title: asset.name,
+      comment: reason ?? null
+    });
+
+    return updated;
+  }
+
+  // Approver queue: assets in this client scope awaiting a deletion decision.
+  async listPendingDeletions(clientId: string) {
+    if (!clientId) throw new ForbiddenException("Missing client scope");
+
+    const assets = await this.prisma.asset.findMany({
+      where: { clientId, deletionStatus: "PENDING" },
+      include: {
+        cabinet: { include: { room: { select: { id: true, name: true } } } },
+        site: true
+      },
+      orderBy: { deletionRequestedAt: "desc" }
+    });
+
+    // Resolve requester display names in one batch (bare-id pattern, mirrors resolveCreator).
+    const requesterIds = [
+      ...new Set(assets.map((a) => a.deletionRequestedById).filter((id): id is string => !!id))
+    ];
+    const users = requesterIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: requesterIds } }, select: userDisplaySelect })
+      : [];
+    const nameById = new Map(users.map((u) => [u.id, computeDisplayName(u)]));
+
+    return assets.map((a) => ({
+      ...a,
+      requestedBy: a.deletionRequestedById
+        ? { id: a.deletionRequestedById, displayName: nameById.get(a.deletionRequestedById) ?? null }
+        : null
+    }));
+  }
+
+  // Approve → the actual hard delete happens (reuses removeForClient, which also
+  // emits the existing DELETED audit event).
+  async approveDeletion(
+    assetId: string,
+    requesterClientId: string,
+    requesterRole: Role,
+    actorUserId: string
+  ) {
+    if (!requesterClientId) throw new ForbiddenException("Missing client scope");
+
+    const asset = await this.prisma.asset.findUnique({ where: { id: assetId } });
+    if (!asset) throw new BadRequestException("Asset not found.");
+    if (asset.deletionStatus !== "PENDING") {
+      throw new BadRequestException("No pending deletion request for this asset.");
+    }
+    this.assertAssetInScope(asset, requesterClientId, requesterRole, "approve deletion for");
+
+    await emitAudit(this.prisma, {
+      entityType: "Asset",
+      entityId: asset.id,
+      action: "DELETION_APPROVED",
+      actorUserId,
+      clientId: asset.clientId ?? requesterClientId,
+      reference: asset.assetTag,
+      title: asset.name,
+      changes: [{ field: "deletionStatus", label: "Deletion", from: "Pending", to: "Approved" }]
+    });
+
+    return this.removeForClient(asset.id, requesterClientId, requesterRole, actorUserId);
+  }
+
+  // Reject → clear the request (fields back to null); the asset survives.
+  async rejectDeletion(
+    assetId: string,
+    requesterClientId: string,
+    requesterRole: Role,
+    actorUserId: string,
+    notes?: string
+  ) {
+    if (!requesterClientId) throw new ForbiddenException("Missing client scope");
+
+    const asset = await this.prisma.asset.findUnique({ where: { id: assetId } });
+    if (!asset) throw new BadRequestException("Asset not found.");
+    if (asset.deletionStatus !== "PENDING") {
+      throw new BadRequestException("No pending deletion request for this asset.");
+    }
+    this.assertAssetInScope(asset, requesterClientId, requesterRole, "reject deletion for");
+
+    const updated = await this.prisma.asset.update({
+      where: { id: asset.id },
+      data: {
+        deletionStatus: null,
+        deletionRequestedById: null,
+        deletionRequestedAt: null,
+        deletionReason: null
+      }
+    });
+
+    await emitAudit(this.prisma, {
+      entityType: "Asset",
+      entityId: asset.id,
+      action: "DELETION_REJECTED",
+      actorUserId,
+      clientId: asset.clientId ?? requesterClientId,
+      reference: asset.assetTag,
+      title: asset.name,
+      comment: notes ?? null
+    });
+
+    return updated;
   }
 
   async updateForClient(assetId: string, dto: {

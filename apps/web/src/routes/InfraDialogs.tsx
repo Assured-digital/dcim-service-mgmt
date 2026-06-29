@@ -391,6 +391,46 @@ export function DeleteConfirmDialog({ type, label, onClose, onConfirm }: {
   )
 }
 
+// ─── Request deletion (ENGINEER / SERVICE_DESK_ANALYST → approval queue) ─────
+
+export function RequestDeletionDialog({ label, onClose, onConfirm }: {
+  label: string
+  onClose: () => void
+  onConfirm: (reason: string) => Promise<void>
+}) {
+  const [reason, setReason] = React.useState("")
+  const [submitting, setSubmitting] = React.useState(false)
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    try { await onConfirm(reason.trim()); onClose() }
+    catch { }
+    finally { setSubmitting(false) }
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Request deletion</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mt: 0.5, mb: 2 }}>
+          Request deletion of asset <strong>{label}</strong>. An approver will review it before the asset is removed.
+        </Typography>
+        <TextField
+          label="Reason (optional)"
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          fullWidth multiline minRows={2}
+          placeholder="Why should this asset be deleted?"
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={submitting}>{submitting ? "Submitting..." : "Submit request"}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ─── Change asset status ───────────────────────────────────────────────────
 
 export function ChangeAssetStatusDialog({ asset, onClose, onSave }: {

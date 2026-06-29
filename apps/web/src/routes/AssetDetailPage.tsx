@@ -19,7 +19,7 @@ import {
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import {
-  ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog
+  ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog, RequestDeletionDialog
 } from "./InfraDialogs"
 import { CreateTaskModal } from "./modals/CreateTaskModal"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
@@ -30,7 +30,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 // ─── Types ────────────────────────────────────────────────────────────────
 
 type TabKey = "overview" | "connections" | "linked" | "maintenance" | "history"
-type ActionDialog = "status" | "move" | "delete" | "logMaintenance" | null
+type ActionDialog = "status" | "move" | "delete" | "requestDelete" | "logMaintenance" | null
 type CreateModal = "task" | "risk" | "issue" | "serviceRequest" | null
 
 type MaintenanceLog = {
@@ -181,6 +181,9 @@ export default function AssetDetailPage({
   const { setBreadcrumbs } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
+  // Direct delete is the approver set; ENGINEER/SDA request deletion via the approval queue.
+  const canDeleteDirect = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
+  const canRequestDeletion = hasAnyRole([ROLES.ENGINEER, ROLES.SERVICE_DESK_ANALYST])
 
   const [tab, setTab] = React.useState<TabKey>("overview")
   const [editMode, setEditMode] = React.useState(false)
@@ -343,6 +346,15 @@ export default function AssetDetailPage({
     } catch (e) { notify.error(getApiErrorMessage(e, "Failed to delete asset")); throw e }
   }, [asset, qc, siteId, navigate, notify])
 
+  const handleRequestDeletion = React.useCallback(async (reason: string) => {
+    if (!asset) return
+    try {
+      await api.post(`/assets/${asset.id}/deletion-request`, { reason: reason || undefined })
+      qc.invalidateQueries({ queryKey: ["asset-detail", asset.id] })
+      notify.success("Deletion request submitted for approval")
+    } catch (e) { notify.error(getApiErrorMessage(e, "Failed to submit deletion request")); throw e }
+  }, [asset, qc, notify])
+
   const handleLogMaintenance = React.useCallback(async (data: any) => {
     if (!asset) return
     try {
@@ -444,7 +456,16 @@ export default function AssetDetailPage({
                     { label: "Change status", onClick: () => setActiveDialog("status") },
                     { label: "Move asset", onClick: () => setActiveDialog("move") },
                     { divider: true },
-                    { label: "Delete asset", danger: true, onClick: () => setActiveDialog("delete") },
+                    ...(canDeleteDirect
+                      ? [{ label: "Delete asset", danger: true, onClick: () => setActiveDialog("delete") }]
+                      : canRequestDeletion
+                        ? [{
+                            label: asset.deletionStatus === "PENDING" ? "Deletion requested" : "Request deletion",
+                            danger: true,
+                            disabled: asset.deletionStatus === "PENDING",
+                            onClick: () => setActiveDialog("requestDelete"),
+                          }]
+                        : []),
                   ]}
                 />
               </Box>
@@ -552,6 +573,9 @@ export default function AssetDetailPage({
       )}
       {activeDialog === "delete" && (
         <DeleteConfirmDialog type="asset" label={asset.name} onClose={() => setActiveDialog(null)} onConfirm={handleDelete} />
+      )}
+      {activeDialog === "requestDelete" && (
+        <RequestDeletionDialog label={asset.name} onClose={() => setActiveDialog(null)} onConfirm={handleRequestDeletion} />
       )}
       {activeDialog === "logMaintenance" && (
         <LogMaintenanceDialog onClose={() => setActiveDialog(null)} onSave={handleLogMaintenance} />

@@ -35,6 +35,7 @@ import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturi
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
 import ViewListIcon from "@mui/icons-material/ViewList"
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
 import NotificationBell from "../components/NotificationBell"
@@ -266,6 +267,7 @@ const clientSections: NavSection[] = [
       ]},
       { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
       { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Pending Deletions", path: "/pending-deletions", icon: <DeleteSweepIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
     ]
   },
   {

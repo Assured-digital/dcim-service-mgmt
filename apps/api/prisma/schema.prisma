@@ -433,6 +433,13 @@ model Asset {
   locationArea        String?
   location            String?
   lastMaintenanceAt   DateTime?
+  // Deletion request-and-approve workflow: ENGINEER/SERVICE_DESK_ANALYST request a
+  // delete (sets PENDING); ORG-super/SERVICE_MANAGER approve (hard-delete) or reject
+  // (fields cleared back to null). Audit history lives in AuditEvent, keyed by asset id.
+  deletionStatus        String?           // null = none | "PENDING"
+  deletionRequestedById String?           // bare user id (no FK), mirrors AuditEvent.actorUserId
+  deletionRequestedAt   DateTime?
+  deletionReason        String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   installDate         DateTime?

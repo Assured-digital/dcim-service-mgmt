@@ -21,8 +21,17 @@ export type Asset = {
   cabinetId: string | null
   warrantyExpiry: string | null
   installDate: string | null
+  deletionStatus: string | null
+  deletionRequestedById: string | null
+  deletionRequestedAt: string | null
+  deletionReason: string | null
   site?: { id: string; name: string } | null
   cabinet?: { id: string; name: string; roomId: string | null; room?: { id: string; name: string } | null } | null
+}
+
+// Approver queue row (GET /assets/deletion-requests): an Asset plus the resolved requester.
+export type PendingDeletion = Asset & {
+  requestedBy: { id: string; displayName: string | null } | null
 }
 
 export type Cabinet = {

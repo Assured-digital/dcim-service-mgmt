@@ -18,6 +18,7 @@ const CheckDetailPage          = React.lazy(() => import("./CheckDetailPage"))
 const CheckTemplatesPage       = React.lazy(() => import("./CheckTemplatesPage"))
 const CheckTemplateDetailPage  = React.lazy(() => import("./CheckTemplateDetailPage"))
 const WorkPackagesPage         = React.lazy(() => import("./WorkPackagesPage"))
+const PendingDeletionsPage     = React.lazy(() => import("./PendingDeletionsPage").then(m => ({ default: m.PendingDeletionsPage })))
 const AuditTrailPage           = React.lazy(() => import("./AuditTrailPage"))
 const UsersPage                = React.lazy(() => import("./UsersPage"))
 const AdminUsersPage           = React.lazy(() => import("./AdminUsersPage"))
@@ -224,6 +225,16 @@ export default function App() {
             element={
               <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]}>
                 <WorkPackagesPage />
+              </RequireRoles>
+            }
+          />
+
+          {/* Asset deletion approvals — approver queue (ORG-super + SERVICE_MANAGER) */}
+          <Route
+            path="pending-deletions"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+                <PendingDeletionsPage />
               </RequireRoles>
             }
           />

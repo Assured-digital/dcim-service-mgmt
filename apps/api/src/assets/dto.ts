@@ -152,3 +152,15 @@ export class UpdateAssetDto {
   @IsString()
   rackSide?: "FRONT" | "REAR" | null
 }
+
+export class RequestAssetDeletionDto {
+  @IsOptional()
+  @IsString()
+  reason?: string
+}
+
+export class RejectAssetDeletionDto {
+  @IsOptional()
+  @IsString()
+  notes?: string
+}
