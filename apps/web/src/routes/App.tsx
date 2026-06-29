@@ -144,7 +144,14 @@ export default function App() {
               whole /service-desk/* subtree (queue → record → association), driven
               entirely by the URL. More-specific siblings below still win by RR v6
               route ranking (static/dynamic outrank the splat). */}
-          <Route path="service-desk/*" element={<ServiceDeskNavigator />} />
+          <Route
+            path="service-desk/*"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]}>
+                <ServiceDeskNavigator />
+              </RequireRoles>
+            }
+          />
           {/* Service Management dashboard removed (#160) — it overlapped the main
               Dashboard. Old deep links fall back to the Service Desk queue. */}
           <Route path="service-management/dashboard" element={<Navigate to="/service-desk" replace />} />
@@ -212,7 +219,14 @@ export default function App() {
           <Route path="check-templates/:id" element={<CheckTemplateDetailPage />} />
 
           {/* Service Scope */}
-          <Route path="work-packages" element={<WorkPackagesPage />} />
+          <Route
+            path="work-packages"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]}>
+                <WorkPackagesPage />
+              </RequireRoles>
+            }
+          />
 
           {/* Admin */}
           {/* Audit: explicit live-admin roles (excludes deprecated ADMIN) to match the API gate */}

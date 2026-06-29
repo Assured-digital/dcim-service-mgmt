@@ -34,7 +34,9 @@ export class SitesController {
   }
 
   @Post()
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  // Site creation is restricted to ORG-super + service-desk roles. ENGINEER manages
+  // sub-site structure (cabinets/rooms) and assets, but not top-level Sites.
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST)
   async create(@Req() req: any, @Body() dto: CreateSiteDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
