@@ -5,6 +5,7 @@ import { api } from "../lib/api"
 import { Box, Card, CardContent, Stack, Typography } from "@mui/material"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded"
+import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { semanticToken, ragToken, type RAGLevel, type ThemeMode } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
@@ -28,14 +29,24 @@ function healthDot(level: HealthLevel, mode: ThemeMode): string {
   return level === "NEUTRAL" ? semanticToken("neutral", mode).solid : ragToken(level, mode).dot
 }
 
+// Responsive: at sm+ the dot sits beside a stacked label-over-status cell (the grid lays
+// these 4-across → 2×2). On a phone (xs) the grid collapses to a single column and each
+// item becomes a list row — dot + label on the left, status right-aligned — because 2×2
+// cells get unreadably small at ~380px. One DOM, two layouts via flex-direction.
 function HealthItem({ label, level, status }: { label: string; level: HealthLevel; status: string }) {
   const { mode } = useThemeMode()
   return (
-    <Box sx={{ display: "flex", alignItems: "flex-start", gap: "10px", minWidth: 0 }}>
-      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: healthDot(level, mode), mt: "4px", flexShrink: 0 }} />
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary", lineHeight: 1.3 }}>{label}</Typography>
-        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.3 }}>{status}</Typography>
+    <Box sx={{ display: "flex", alignItems: { xs: "center", sm: "flex-start" }, gap: "10px", minWidth: 0 }}>
+      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: healthDot(level, mode), mt: { xs: 0, sm: "4px" }, flexShrink: 0 }} />
+      <Box sx={{
+        flex: 1, minWidth: 0, display: "flex",
+        flexDirection: { xs: "row", sm: "column" },
+        alignItems: { xs: "baseline", sm: "stretch" },
+        justifyContent: { xs: "space-between", sm: "flex-start" },
+        gap: { xs: "10px", sm: 0 },
+      }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary", lineHeight: 1.3, whiteSpace: "nowrap" }}>{label}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.3, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: { xs: "right", sm: "left" } }}>{status}</Typography>
       </Box>
     </Box>
   )
@@ -117,6 +128,34 @@ function Placeholder({ label, note, minHeight = 96 }: { label: string; note: str
         {label}
       </Typography>
       <Typography sx={{ fontSize: 12, color: "text.tertiary" }}>{note}</Typography>
+    </Box>
+  )
+}
+
+// ── Contacts — explicit RESERVED slot ────────────────────────────────────────
+// Not a generic placeholder, not a blank void, not a fake: a dashed card with an icon,
+// header and a "Reserved" chip, until the Contact model lands (#174). A distinct, styled
+// reserved state — the spec's honest answer for a slot whose backing model doesn't exist.
+function ContactsReserved() {
+  return (
+    <Box sx={{
+      border: "1px dashed", borderColor: "var(--color-border-secondary)", borderRadius: "10px",
+      p: "18px", minHeight: 120, display: "flex", flexDirection: "column", gap: "8px",
+    }}>
+      <Stack direction="row" alignItems="center" gap="8px">
+        <PeopleAltOutlinedIcon sx={{ fontSize: 16, color: "var(--color-text-muted)" }} />
+        <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
+          Contacts
+        </Typography>
+        <Box sx={{ ml: "auto", px: "8px", py: "2px", borderRadius: "6px", bgcolor: "var(--color-background-tertiary)" }}>
+          <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
+            Reserved
+          </Typography>
+        </Box>
+      </Stack>
+      <Typography sx={{ fontSize: 12.5, color: "text.tertiary", maxWidth: 380, lineHeight: 1.5 }}>
+        Client contacts will live here once the Contact model lands (#174).
+      </Typography>
     </Box>
   )
 }
@@ -221,10 +260,12 @@ function NeedsAttentionRow({ item, onClick }: { item: NeedsAttentionItem; onClic
         "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "-2px" },
       }}
     >
-      {/* Fixed-width severity column — dot + label, the only colour in the row. */}
-      <Box sx={{ width: 90, flexShrink: 0, display: "flex", alignItems: "center", gap: "7px" }}>
+      {/* Fixed-width severity column — dot + label, the only colour in the row. On a phone
+          (xs) the label drops to dot-only so squeezed titles keep room; the dot's colour
+          still carries the severity. */}
+      <Box sx={{ width: { xs: "auto", sm: 90 }, flexShrink: 0, display: "flex", alignItems: "center", gap: "7px" }}>
         <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
-        <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: t.text, whiteSpace: "nowrap" }}>
+        <Typography sx={{ display: { xs: "none", sm: "block" }, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: t.text, whiteSpace: "nowrap" }}>
           {meta.label}
         </Typography>
       </Box>
@@ -471,15 +512,16 @@ export default function DashboardPage() {
             <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
               <Box sx={{
                 display: "grid",
-                gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
-                columnGap: "20px", rowGap: "18px",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(4, 1fr)" },
+                columnGap: "20px", rowGap: { xs: "14px", sm: "18px" },
                 "& > *": { position: "relative" },
+                // Vertical column hairline — only from sm up (the phone single-column list
+                // has no columns, so no rules). First cell of each row carries no divider:
+                // at md (4-across) that's the 1st cell; at sm (2×2) the 1st and 3rd.
                 "& > *::before": {
                   content: '""', position: "absolute", top: 0, bottom: 0, left: "-10px",
-                  width: "0.5px", bgcolor: "var(--color-border-primary)", display: "block",
+                  width: "0.5px", bgcolor: "var(--color-border-primary)", display: { xs: "none", sm: "block" },
                 },
-                // First cell of each row carries no divider: at md (4-across) that's the
-                // 1st cell; below md (2×2) it's the 1st and 3rd.
                 "& > *:nth-of-type(2n+1)::before": { display: { xs: "none", md: "block" } },
                 "& > *:nth-of-type(4n+1)::before": { display: { md: "none" } },
               }}>
@@ -543,7 +585,7 @@ export default function DashboardPage() {
               Calm-by-exception: counts neutral at rest, colour only on the enriched
               breached/active sub-signals; drill-through stays role-gated. */}
           <SectionBar label="Open work by type" />
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(3, 1fr)", md: "repeat(6, 1fr)" }, gap: "10px" }}>
             <TypeTile
               label="Requests" count={m.sr}
               onClick={() => navigate("/service-desk?type=sr&status=open")}
@@ -613,7 +655,7 @@ export default function DashboardPage() {
               </Box>
             )}
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Placeholder label="Contacts" note="Reserved — blocked on the Contact model (#174 / #161)." minHeight={120} />
+              <ContactsReserved />
             </Box>
           </Stack>
         </Stack>
