@@ -71,8 +71,11 @@ function CountStat({ label, value, activeLevel, onClick }: {
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
       sx={{
-        flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "9px",
-        px: "8px", py: "6px", borderRadius: "6px", cursor: "pointer",
+        minWidth: 0, display: "flex", alignItems: "center", gap: "9px",
+        px: "10px", py: "8px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        // Same grey hover affordance as the open-work-by-type tiles (TypeTile).
+        "&:hover": { bgcolor: "var(--color-background-tertiary)" },
         "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "1px" },
       }}
     >
@@ -89,21 +92,13 @@ function CountStat({ label, value, activeLevel, onClick }: {
   )
 }
 
-// Hairline separator between adjacent alert-band stats so they read as discrete
-// readouts, not a loose row. Neutral + mode-aware (--color-border-primary, defined
-// for both themes in styles.css); full-height via align-self stretch; even padding
-// either side (the mx). NEVER coloured — the stats earn colour, the dividers don't.
-function BandDivider() {
-  return <Box sx={{ alignSelf: "stretch", width: "0.5px", flexShrink: 0, mx: "6px", bgcolor: "var(--color-border-primary)" }} />
-}
-
 // SLA % cell — point-in-time, honest denominator; informational (NOT clickable) and
 // dot-less (a percentage has no RAG state). Neutral text always. When data exists it
 // shows "88% · of N covered"; when no open SR/INC carries an SLA due time it shows just
 // "—" (never a bare alarming 0%). No tooltip.
 function SlaStat({ pct, covered }: { pct: number | null; covered: number }) {
   return (
-    <Box sx={{ flex: "0 0 auto", minWidth: 0, px: "8px", py: "6px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+    <Box sx={{ minWidth: 0, px: "10px", py: "8px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
       <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px" }}>
         SLA
       </Typography>
@@ -480,23 +475,33 @@ export default function DashboardPage() {
               badge). Order: SLA · Unassigned · Due soon · Breached. SLA is informational +
               dot-less; the three count-stats carry a RAG dot (green at 0, amber/red when
               active) with the number coloured to match — calm-by-exception via dots, NOT
-              fills, consistent with the RAG row. No tooltips. Hairline dividers between
-              stats; each count-stat is clickable to its filtered queue. */}
+              fills, consistent with the RAG row. No tooltips; each count-stat is clickable.
+              Same grid + centred-hairline pattern as the RAG card: even distribution (SLA a
+              touch wider for "88% · of N covered"; its empty "—" keeps the same gap to its
+              divider), reflowing to 2×2 below md without dangling rules. */}
           <Card variant="outlined" sx={DASH_CARD_SX}>
             <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
-              <Box sx={{ display: "flex", alignItems: "stretch", flexWrap: "wrap" }}>
+              <Box sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr 1fr", md: "1.3fr 1fr 1fr 1fr" },
+                columnGap: "16px", rowGap: "14px",
+                "& > *": { position: "relative" },
+                "& > *::before": {
+                  content: '""', position: "absolute", top: 0, bottom: 0, left: "-8px",
+                  width: "0.5px", bgcolor: "var(--color-border-primary)", display: "block",
+                },
+                "& > *:nth-of-type(2n+1)::before": { display: { xs: "none", md: "block" } },
+                "& > *:nth-of-type(4n+1)::before": { display: { md: "none" } },
+              }}>
                 <SlaStat pct={m.pct} covered={m.covered} />
-                <BandDivider />
                 <CountStat
                   label="Unassigned" value={m.unassigned} activeLevel="AMBER"
                   onClick={() => navigate("/service-desk?status=unassigned")}
                 />
-                <BandDivider />
                 <CountStat
                   label="Due soon" value={m.dueSoon} activeLevel="AMBER"
                   onClick={() => navigate("/service-desk?sla=due-soon")}
                 />
-                <BandDivider />
                 <CountStat
                   label="Breached" value={m.breached} activeLevel="RED"
                   onClick={() => navigate("/service-desk?sla=breached")}
@@ -538,8 +543,8 @@ export default function DashboardPage() {
               severity-ordered action queue: SectionBar header carries the total
               count; the list caps at 5 rows with an "N more" overflow; the calm
               green empty state shows when nothing needs action. */}
-          <Stack direction={{ xs: "column", md: "row" }} gap="16px">
-            <Box sx={{ flex: 7, minWidth: 0 }}>
+          <Stack direction={{ xs: "column", md: "row" }} gap="16px" alignItems={{ md: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
               <Stack spacing="12px">
                 <SectionBar
                   label="Needs attention"
@@ -567,7 +572,7 @@ export default function DashboardPage() {
                 </Card>
               </Stack>
             </Box>
-            <Box sx={{ flex: 5, minWidth: 0 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
               <Placeholder label="Recent activity" note="Latest status changes & assignments. Added in a later commit." minHeight={140} />
             </Box>
           </Stack>
