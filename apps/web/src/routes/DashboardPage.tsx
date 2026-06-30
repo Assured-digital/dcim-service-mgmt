@@ -1,4 +1,5 @@
 import React from "react"
+import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import { Box, Card, CardContent, Stack, Typography } from "@mui/material"
@@ -38,7 +39,7 @@ function healthDot(level: HealthLevel, mode: ThemeMode): string {
 function HealthItem({ label, level, status }: { label: string; level: HealthLevel; status: string }) {
   const { mode } = useThemeMode()
   return (
-    <Box sx={{ flex: { xs: "1 1 45%", md: "1 1 0" }, minWidth: { xs: 0, md: 150 }, display: "flex", alignItems: "flex-start", gap: "10px", py: "4px" }}>
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: "10px", minWidth: 0 }}>
       <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: healthDot(level, mode), mt: "4px", flexShrink: 0 }} />
       <Box sx={{ minWidth: 0 }}>
         <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary", lineHeight: 1.3 }}>{label}</Typography>
@@ -165,34 +166,94 @@ function RefreshControl({ busy, onClick, label = "Refresh" }: { busy: boolean; o
   )
 }
 
+// ── Section header ───────────────────────────────────────────────────────────
+// Uppercase label + 0.5px hairline beneath — one treatment shared across the page's
+// titled sections so they read as a consistent stack. Optional right-aligned content
+// (e.g. the as-of stamp + Refresh on OPERATIONAL) drops below the label on narrow
+// widths (flex-wrap) rather than colliding.
+function SectionBar({ label, right }: { label: string; right?: React.ReactNode }) {
+  return (
+    <Box sx={{
+      display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "8px", columnGap: "16px",
+      pb: "8px", borderBottom: "0.5px solid", borderColor: "var(--color-border-primary)",
+    }}>
+      <Typography sx={{ flex: "1 1 auto", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+        {label}
+      </Typography>
+      {right ? <Box sx={{ flexShrink: 0 }}>{right}</Box> : null}
+    </Box>
+  )
+}
+
+// ── Navigation tile (open work by type) ──────────────────────────────────────
+// Clickable count tile → that type's pre-filtered open queue. Calm-by-exception:
+// the count is neutral text.primary at rest; only the enriched sub-signal (breached /
+// active) carries colour, and it deep-links its own filtered slice (stopping click
+// propagation so it doesn't also fire the tile's whole-type navigation).
+type TileEnrich = { text: string; intent: "danger" | "warning"; onClick: () => void }
+function TypeTile({ label, count, onClick, enrich }: { label: string; count: number; onClick: () => void; enrich?: TileEnrich | null }) {
+  const { mode } = useThemeMode()
+  return (
+    <Box onClick={onClick} sx={{
+      bgcolor: "var(--color-background-secondary)", borderRadius: "8px",
+      px: "12px", py: "11px", cursor: "pointer", minWidth: 0,
+      transition: "background-color 0.12s",
+      "&:hover": { bgcolor: "var(--color-background-tertiary)" },
+    }}>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px" }}>
+        {label}
+      </Typography>
+      <Stack direction="row" alignItems="baseline" gap="8px" flexWrap="wrap">
+        <Typography sx={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{count}</Typography>
+        {enrich ? (
+          <Typography
+            component="span"
+            onClick={(e) => { e.stopPropagation(); enrich.onClick() }}
+            sx={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1, color: semanticToken(enrich.intent, mode).solid, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
+          >
+            {enrich.text}
+          </Typography>
+        ) : null}
+      </Stack>
+    </Box>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const { mode } = useThemeMode()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const clientId = getSelectedClientId()
   const [refreshing, setRefreshing] = React.useState(false)
 
   // ── Queries — the layer already in place. Tickets via the shared useTickets
-  //    hook; checks / risks / sites direct. (Issues join when needs-attention
-  //    lands — nothing in this skeleton consumes them yet.) ──────────────────
+  //    hook (SR/INC/CHG/TASK); checks / risks / issues / sites direct. ────────
   const tickets = useTickets()
   const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<Check[]>("/checks")).data })
   const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<RIRisk[]>("/risks")).data })
+  const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<{ id: string; status: string }[]>("/issues")).data })
   const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], queryFn: async () => (await api.get<unknown[]>("/sites")).data })
 
-  const isLoading = tickets.isLoading || checks.isLoading || risks.isLoading || sites.isLoading
-  const hasError = !!(tickets.error || checks.error || risks.error || sites.error)
+  const isLoading = tickets.isLoading || checks.isLoading || risks.isLoading || issues.isLoading || sites.isLoading
+  const hasError = !!(tickets.error || checks.error || risks.error || issues.error || sites.error)
 
-  // ── Service Desk + alert-band metrics (open SR/INC for SLA; open work items
-  //    across the ticket union for unassigned) ────────────────────────────────
+  // ── Service Desk + alert-band metrics + per-type open counts. One pass over the
+  //    ticket union: SLA buckets (SR/INC), unassigned (all open work), and the
+  //    nav-row open counts per kind. srBreached feeds the Requests tile's enriched
+  //    "N breached" sub-signal (SR only — it deep-links ?type=sr&sla=breached). ──
   const m = React.useMemo(() => {
-    let breached = 0, dueSoon = 0, onTrack = 0, unassigned = 0
+    let breached = 0, dueSoon = 0, onTrack = 0, unassigned = 0, srBreached = 0
+    let sr = 0, inc = 0, chg = 0, task = 0
     for (const t of tickets.data) {
       if (t.chipIntent === "done") continue                      // open work only
       if (!t.assignee) unassigned++
+      if (t.kind === "SR") sr++
+      else if (t.kind === "INC") inc++
+      else if (t.kind === "CHG") chg++
+      else if (t.kind === "TASK") task++
       if (t.kind === "SR" || t.kind === "INC") {
         switch (computeSlaStatus(t.dueAt, false)) {
-          case "breached": breached++; break
+          case "breached": breached++; if (t.kind === "SR") srBreached++; break
           case "due-soon": dueSoon++; break
           case "on-track": onTrack++; break
           default: break                                          // no due date → outside SLA
@@ -201,8 +262,13 @@ export default function DashboardPage() {
     }
     const covered = breached + dueSoon + onTrack
     const pct = covered > 0 ? Math.round((onTrack / covered) * 100) : null
-    return { breached, dueSoon, onTrack, covered, pct, unassigned }
+    return { breached, dueSoon, onTrack, covered, pct, unassigned, srBreached, sr, inc, chg, task }
   }, [tickets.data])
+
+  // Nav-row open counts for Risks / Issues (client-wide; same terminal-state
+  // definitions the queues use). Risks "N active" reuses activeRedRisks below.
+  const risksOpen = (risks.data ?? []).filter(r => !["ACCEPTED", "CLOSED"].includes(r.status)).length
+  const issuesOpen = (issues.data ?? []).filter(i => !["RESOLVED", "CLOSED"].includes(i.status)).length
 
   // ── Domain-health RAG derivations ────────────────────────────────────────
   // Service Desk — red on any breach; amber on due-soon or unassigned; else green.
@@ -243,9 +309,9 @@ export default function DashboardPage() {
     : { level: "GREEN", text: "All on track" }
 
   // ── Point-in-time stamp (most recent successful fetch across the queries) ──
-  const stampMs = Math.max(tickets.dataUpdatedAt, checks.dataUpdatedAt, risks.dataUpdatedAt, sites.dataUpdatedAt)
+  const stampMs = Math.max(tickets.dataUpdatedAt, checks.dataUpdatedAt, risks.dataUpdatedAt, issues.dataUpdatedAt, sites.dataUpdatedAt)
   const stamp = stampMs > 0 ? new Date(stampMs).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"
-  const busy = refreshing || tickets.isFetching || checks.isFetching || risks.isFetching || sites.isFetching
+  const busy = refreshing || tickets.isFetching || checks.isFetching || risks.isFetching || issues.isFetching || sites.isFetching
 
   async function refresh() {
     setRefreshing(true)
@@ -254,6 +320,7 @@ export default function DashboardPage() {
         queryClient.invalidateQueries({ queryKey: ["tickets"] }),
         queryClient.invalidateQueries({ queryKey: ["checks"] }),
         queryClient.invalidateQueries({ queryKey: ["risks"] }),
+        queryClient.invalidateQueries({ queryKey: ["issues"] }),
         queryClient.invalidateQueries({ queryKey: ["infrastructure"] }),
       ])
     } finally { setRefreshing(false) }
@@ -277,37 +344,43 @@ export default function DashboardPage() {
       {!isLoading && !hasError ? (
         <Stack spacing="16px">
           {/* OPERATIONAL section header — the as-of stamp + Refresh sit inline on the
-              right. Wraps gracefully: at narrow widths the stamp + Refresh drop below
-              the label (flex-wrap) rather than overflowing or colliding. The hairline
-              runs beneath the whole row. */}
-          <Box sx={{
-            display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "8px", columnGap: "16px",
-            pb: "8px", borderBottom: "0.5px solid", borderColor: "var(--color-border-primary)",
-          }}>
-            <Typography sx={{ flex: "1 1 auto", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
-              Operational
-            </Typography>
-            <Stack direction="row" alignItems="center" gap="12px" sx={{ flexShrink: 0 }}>
+              right (they drop below the label on narrow widths via SectionBar's wrap). */}
+          <SectionBar label="Operational" right={
+            <Stack direction="row" alignItems="center" gap="12px">
               <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
                 Data as of {stamp}
               </Typography>
               <RefreshControl busy={busy} onClick={refresh} />
             </Stack>
-          </Box>
+          } />
 
-          {/* 1 · Domain health — the only always-coloured element. */}
+          {/* 1 · Domain health — the only always-coloured element. Four defined cells
+              in BOTH layouts: 4-across (md) and 2×2 (below md). The column hairline is a
+              centred ::before in each gap (var(--color-border-primary) — same weight as
+              the alert band), hidden on the first cell of each row so wrapped rows show no
+              dangling rule. rowGap gives the 2×2 layout breathing room. Dividers are
+              neutral — the domain dots are the only colour in this card. */}
           <Card variant="outlined" sx={DASH_CARD_SX}>
             <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
-              {/* 4-across on desktop with hairline dividers; reflows to 2×2 below md
-                  (the HealthItem flex-basis), where the dividers hide so wrapped rows
-                  don't show dangling rules. */}
-              <Stack direction="row" flexWrap="wrap" gap="12px"
-                divider={<Box sx={{ width: "0.5px", alignSelf: "stretch", bgcolor: "var(--color-border-tertiary)", display: { xs: "none", md: "block" } }} />}>
+              <Box sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
+                columnGap: "20px", rowGap: "18px",
+                "& > *": { position: "relative" },
+                "& > *::before": {
+                  content: '""', position: "absolute", top: 0, bottom: 0, left: "-10px",
+                  width: "0.5px", bgcolor: "var(--color-border-primary)", display: "block",
+                },
+                // First cell of each row carries no divider: at md (4-across) that's the
+                // 1st cell; below md (2×2) it's the 1st and 3rd.
+                "& > *:nth-of-type(2n+1)::before": { display: { xs: "none", md: "block" } },
+                "& > *:nth-of-type(4n+1)::before": { display: { md: "none" } },
+              }}>
                 <HealthItem label="Service Desk" level={serviceDesk.level} status={serviceDesk.status} />
                 <HealthItem label="Checks" level={checksHealth.level} status={checksHealth.status} />
                 <HealthItem label="Governance" level={governance.level} status={governance.status} />
                 <HealthItem label="Infrastructure" level={infrastructure.level} status={infrastructure.status} />
-              </Stack>
+              </Box>
             </CardContent>
           </Card>
 
@@ -332,8 +405,33 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 3 · Open work by type (nav row) — later commit. */}
-          <Placeholder label="Open work by type" note="Navigation row — Requests · Incidents · Changes · Tasks · Risks · Issues. Added in a later commit." />
+          {/* 3 · Open work by type — six clickable tiles → pre-filtered open queues.
+              SCOPE (Approach A, frontend-only): counts come from the role-scoped list
+              endpoints via useTickets/risks/issues, so they are client-wide for every
+              role EXCEPT ENGINEER, whose list endpoints applyAssignedScope (assignee-only)
+              — an ENGINEER therefore sees their own open counts here. This is consistent
+              with the RAG row + alert band (same useTickets source). True client-wide
+              counts for ENGINEER would need a backend count aggregate (Approach B, the
+              follow-on-summary precedent) — out of scope for this frontend-only commit.
+              Calm-by-exception: counts neutral at rest, colour only on the enriched
+              breached/active sub-signals; drill-through stays role-gated. */}
+          <SectionBar label="Open work by type" />
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" }}>
+            <TypeTile
+              label="Requests" count={m.sr}
+              onClick={() => navigate("/service-desk?type=sr&status=open")}
+              enrich={m.srBreached > 0 ? { text: `${m.srBreached} breached`, intent: "danger", onClick: () => navigate("/service-desk?type=sr&sla=breached") } : null}
+            />
+            <TypeTile label="Incidents" count={m.inc} onClick={() => navigate("/service-desk?type=inc&status=open")} />
+            <TypeTile label="Changes" count={m.chg} onClick={() => navigate("/service-desk?type=chg&status=open")} />
+            <TypeTile label="Tasks" count={m.task} onClick={() => navigate("/service-desk?type=task&status=open")} />
+            <TypeTile
+              label="Risks" count={risksOpen}
+              onClick={() => navigate("/risks-issues?type=risks")}
+              enrich={activeRedRisks > 0 ? { text: `${activeRedRisks} active`, intent: "warning", onClick: () => navigate("/risks-issues?type=risks&view=urgent") } : null}
+            />
+            <TypeTile label="Issues" count={issuesOpen} onClick={() => navigate("/risks-issues?type=issues")} />
+          </Box>
 
           {/* 4 + 5 · Needs attention + Recent activity (two-up) — later commit. */}
           <Stack direction={{ xs: "column", md: "row" }} gap="16px">
