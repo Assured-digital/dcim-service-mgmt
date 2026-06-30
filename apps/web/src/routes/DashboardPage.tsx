@@ -2,7 +2,7 @@ import React from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
-import { Box, Card, CardContent, Stack, Tooltip, Typography } from "@mui/material"
+import { Box, Card, CardContent, Stack, Typography } from "@mui/material"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded"
 import { LoadingState, ErrorState } from "../components/PageState"
@@ -51,47 +51,41 @@ function HealthItem({ label, level, status }: { label: string; level: HealthLeve
   )
 }
 
-// ── Alert-band count-stat (ALWAYS-COLOURED — follows the RAG row, NOT calm-by-
-//    exception) ──────────────────────────────────────────────────────────────
-// A RAG status dot anchors each count: GREEN at 0 ("actively fine", not absent),
-// else AMBER (Unassigned / Due soon) or RED (Breached). The dot is its own column,
-// vertically centred against the cell; the label + number stack to its right. At >0
-// the colour also drives the number (token text) and the cell highlight (token bg);
-// at 0 the number stays neutral and the cell carries no tint (calm = green dot only).
-// Clickable → its filtered queue; an info tooltip explains the metric (hover/focus/tap).
-function CountStat({ label, value, activeLevel, tooltip, onClick }: {
-  label: string; value: number; activeLevel: "AMBER" | "RED"; tooltip: string; onClick: () => void
+// ── Alert-band count-stat (ALWAYS-COLOURED via the DOT — follows the RAG row, calm-
+//    by-exception via dots NOT fills) ───────────────────────────────────────────
+// A RAG status dot anchors each count: GREEN at 0 ("actively fine", not absent), else
+// AMBER (Unassigned / Due soon) or RED (Breached). The dot is its own column, vertically
+// centred against the cell; the label + number stack to its right, the number coloured to
+// match the dot (neutral at 0). NO cell background tint (no fills — consistent with the
+// RAG domain row) and NO tooltip; the whole stat is clickable through to its filtered queue.
+function CountStat({ label, value, activeLevel, onClick }: {
+  label: string; value: number; activeLevel: "AMBER" | "RED"; onClick: () => void
 }) {
   const { mode } = useThemeMode()
   const active = value > 0
   const t = ragToken(active ? activeLevel : "GREEN", mode)
   return (
-    <Tooltip title={tooltip} arrow>
-      <Box
-        onClick={onClick}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
-        sx={{
-          flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "9px",
-          px: "11px", py: "8px", borderRadius: "8px", cursor: "pointer",
-          bgcolor: active ? t.bg : "transparent",
-          transition: "background-color 0.12s",
-          "&:hover": { bgcolor: active ? t.bg : "var(--color-background-secondary)" },
-          "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "1px" },
-        }}
-      >
-        <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px", whiteSpace: "nowrap" }}>
-            {label}
-          </Typography>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: active ? t.text : "text.primary" }}>
-            {value}
-          </Typography>
-        </Box>
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+      sx={{
+        flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "9px",
+        px: "8px", py: "6px", borderRadius: "6px", cursor: "pointer",
+        "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "1px" },
+      }}
+    >
+      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px", whiteSpace: "nowrap" }}>
+          {label}
+        </Typography>
+        <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: active ? t.text : "text.primary" }}>
+          {value}
+        </Typography>
       </Box>
-    </Tooltip>
+    </Box>
   )
 }
 
@@ -106,38 +100,21 @@ function BandDivider() {
 // SLA % cell — point-in-time, honest denominator; informational (NOT clickable) and
 // dot-less (a percentage has no RAG state). Neutral text always. When data exists it
 // shows "88% · of N covered"; when no open SR/INC carries an SLA due time it shows just
-// "—" (the "no SLA-covered tickets" explanation lives in the tooltip, never a bare 0%).
+// "—" (never a bare alarming 0%). No tooltip.
 function SlaStat({ pct, covered }: { pct: number | null; covered: number }) {
-  const tooltip = pct === null
-    ? "No open service requests or incidents currently have an SLA due time."
-    : `${pct}% of ${covered} SLA-covered open service requests & incidents are on track.`
   return (
-    <Tooltip title={tooltip} arrow>
-      <Box tabIndex={0} sx={{ flex: "0 0 auto", minWidth: 0, px: "11px", py: "8px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px" }}>
-          SLA
-        </Typography>
-        {pct === null ? (
-          <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>—</Typography>
-        ) : (
-          <Stack direction="row" alignItems="baseline" gap="6px">
-            <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{pct}%</Typography>
-            <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>· of {covered} covered</Typography>
-          </Stack>
-        )}
-      </Box>
-    </Tooltip>
-  )
-}
-
-// Worst-state summary badge for the alert band.
-function SummaryBadge({ level, text }: { level: RAGLevel; text: string }) {
-  const { mode } = useThemeMode()
-  const t = ragToken(level, mode)
-  return (
-    <Box sx={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: "8px", px: "12px", py: "8px", borderRadius: "8px", bgcolor: t.bg }}>
-      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
-      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: t.text, whiteSpace: "nowrap" }}>{text}</Typography>
+    <Box sx={{ flex: "0 0 auto", minWidth: 0, px: "8px", py: "6px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px" }}>
+        SLA
+      </Typography>
+      {pct === null ? (
+        <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>—</Typography>
+      ) : (
+        <Stack direction="row" alignItems="baseline" gap="6px">
+          <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{pct}%</Typography>
+          <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>· of {covered} covered</Typography>
+        </Stack>
+      )}
     </Box>
   )
 }
@@ -423,13 +400,6 @@ export default function DashboardPage() {
     status: `${siteCount} site${siteCount === 1 ? "" : "s"}`,
   }
 
-  // ── Alert-band summary badge (worst current state) ───────────────────────
-  const needsLook = m.dueSoon + m.unassigned
-  const summary: { level: RAGLevel; text: string } =
-    m.breached > 0 ? { level: "RED", text: `${m.breached} breached` }
-    : needsLook > 0 ? { level: "AMBER", text: `${needsLook} needs a look` }
-    : { level: "GREEN", text: "All on track" }
-
   // ── Point-in-time stamp (most recent successful fetch across the queries) ──
   const stampMs = Math.max(tickets.dataUpdatedAt, checks.dataUpdatedAt, risks.dataUpdatedAt, issues.dataUpdatedAt, sites.dataUpdatedAt)
   const stamp = stampMs > 0 ? new Date(stampMs).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"
@@ -506,38 +476,32 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 2 · Alert band — ALWAYS-COLOURED (RAG dots per count-stat), following the
-              RAG row's logic, NOT calm-by-exception. Order: SLA · Unassigned · Due soon ·
-              Breached. SLA is informational + dot-less; the three count-stats carry a RAG
-              dot (green at 0), are clickable to their filtered queues, and tint amber/red
-              when non-zero. Hairline dividers between stats; the worst-state summary badge
-              stays separate to the left (the Stack's gap), with no divider before SLA. */}
+          {/* 2 · Alert band — state reads off the individual stats only (NO summary
+              badge). Order: SLA · Unassigned · Due soon · Breached. SLA is informational +
+              dot-less; the three count-stats carry a RAG dot (green at 0, amber/red when
+              active) with the number coloured to match — calm-by-exception via dots, NOT
+              fills, consistent with the RAG row. No tooltips. Hairline dividers between
+              stats; each count-stat is clickable to its filtered queue. */}
           <Card variant="outlined" sx={DASH_CARD_SX}>
             <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
-              <Stack direction="row" alignItems="center" flexWrap="wrap" gap="16px">
-                <SummaryBadge level={summary.level} text={summary.text} />
-                <Box sx={{ display: "flex", alignItems: "stretch", flex: 1, minWidth: 0 }}>
-                  <SlaStat pct={m.pct} covered={m.covered} />
-                  <BandDivider />
-                  <CountStat
-                    label="Unassigned" value={m.unassigned} activeLevel="AMBER"
-                    tooltip="Open work items with no assignee."
-                    onClick={() => navigate("/service-desk?status=unassigned")}
-                  />
-                  <BandDivider />
-                  <CountStat
-                    label="Due soon" value={m.dueSoon} activeLevel="AMBER"
-                    tooltip="Open service requests & incidents due within the next 24 hours."
-                    onClick={() => navigate("/service-desk?sla=due-soon")}
-                  />
-                  <BandDivider />
-                  <CountStat
-                    label="Breached" value={m.breached} activeLevel="RED"
-                    tooltip="Open service requests & incidents past their SLA due time."
-                    onClick={() => navigate("/service-desk?sla=breached")}
-                  />
-                </Box>
-              </Stack>
+              <Box sx={{ display: "flex", alignItems: "stretch", flexWrap: "wrap" }}>
+                <SlaStat pct={m.pct} covered={m.covered} />
+                <BandDivider />
+                <CountStat
+                  label="Unassigned" value={m.unassigned} activeLevel="AMBER"
+                  onClick={() => navigate("/service-desk?status=unassigned")}
+                />
+                <BandDivider />
+                <CountStat
+                  label="Due soon" value={m.dueSoon} activeLevel="AMBER"
+                  onClick={() => navigate("/service-desk?sla=due-soon")}
+                />
+                <BandDivider />
+                <CountStat
+                  label="Breached" value={m.breached} activeLevel="RED"
+                  onClick={() => navigate("/service-desk?sla=breached")}
+                />
+              </Box>
             </CardContent>
           </Card>
 
