@@ -247,6 +247,13 @@ export interface UseTicketsResult {
   data: Ticket[]
   isLoading: boolean
   error: unknown
+  /** True while any of the four ticket queries is fetching (incl. background refetch). */
+  isFetching: boolean
+  /** Epoch ms of the most recent successful fetch across the four queries (0 if none).
+   *  Feeds the dashboard's point-in-time "data as of" stamp. */
+  dataUpdatedAt: number
+  /** Refetch all four ticket queries (e.g. the dashboard's manual Refresh). */
+  refetch: () => void
 }
 
 /**
@@ -283,7 +290,10 @@ export function useTickets(): UseTicketsResult {
 
   const [srQ, incQ, chgQ, taskQ] = results
   const isLoading = results.some(r => r.isLoading)
+  const isFetching = results.some(r => r.isFetching)
   const error = results.find(r => r.error)?.error ?? null
+  const dataUpdatedAt = results.reduce((max, r) => Math.max(max, r.dataUpdatedAt), 0)
+  const refetch = () => results.forEach(r => r.refetch())
 
   const data: Ticket[] = [
     ...((srQ.data ?? []).map(r => normaliseSR(r, now))),
@@ -292,7 +302,7 @@ export function useTickets(): UseTicketsResult {
     ...((taskQ.data ?? []).map(r => normaliseTask(r, now))),
   ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
-  return { data, isLoading, error }
+  return { data, isLoading, error, isFetching, dataUpdatedAt, refetch }
 }
 
 // ── Detail-field specs per kind ────────────────────────────────────────────
