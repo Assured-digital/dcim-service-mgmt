@@ -4,11 +4,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import { Box, Card, CardContent, Stack, Tooltip, Typography } from "@mui/material"
 import RefreshIcon from "@mui/icons-material/Refresh"
+import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { semanticToken, ragToken, type RAGLevel, type ThemeMode } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
 import { useTickets } from "../lib/tickets"
 import { computeSlaStatus } from "../lib/serviceDeskQueue"
+import { buildNeedsAttention, type NeedsAttentionItem, type Severity } from "../lib/needsAttention"
 import { deriveRag, type Risk as RIRisk } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
 
@@ -245,6 +247,94 @@ function TypeTile({ label, count, onClick, enrich }: { label: string; count: num
   )
 }
 
+// ── Needs-attention row (the hero action queue) ──────────────────────────────
+// Calm-by-exception governs this list (unlike the always-coloured alert band):
+// rows are NEUTRAL, colour lives ONLY in the leading severity dot + label. A
+// fixed-width severity column (a dot + lightweight label — NOT a StatusPill) keeps
+// every title aligned to one left edge. Then the title (truncated) and ref +
+// pressure ("INC-0012 · 4h over"). The whole row is clickable to the record;
+// drill-through is role-gated downstream (ENGINEER assigned-only → 404).
+const SEV_META: Record<Severity, { label: string; level: RAGLevel }> = {
+  breached:     { label: "Breached", level: "RED" },
+  "due-soon":   { label: "Due soon", level: "AMBER" },
+  unassigned:   { label: "Unassigned", level: "AMBER" },
+}
+
+function NeedsAttentionRow({ item, onClick }: { item: NeedsAttentionItem; onClick: () => void }) {
+  const { mode } = useThemeMode()
+  const meta = SEV_META[item.severity]
+  const t = ragToken(meta.level, mode)
+  return (
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+      sx={{
+        display: "flex", alignItems: "center", gap: "12px",
+        px: "10px", py: "9px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        "&:hover": { bgcolor: "var(--color-background-secondary)" },
+        "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "-2px" },
+      }}
+    >
+      {/* Fixed-width severity column — dot + label, the only colour in the row. */}
+      <Box sx={{ width: 90, flexShrink: 0, display: "flex", alignItems: "center", gap: "7px" }}>
+        <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
+        <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: t.text, whiteSpace: "nowrap" }}>
+          {meta.label}
+        </Typography>
+      </Box>
+      {/* Title — truncates with ellipsis; all titles align to the column's right edge. */}
+      <Typography sx={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.subject}
+      </Typography>
+      {/* Ref + pressure — neutral metadata. */}
+      <Typography sx={{ flexShrink: 0, fontSize: 11.5, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+        {item.reference} · {item.pressure}
+      </Typography>
+    </Box>
+  )
+}
+
+// "N more →" footer link when the queue exceeds the 5-row cap — to the broad open
+// work queue (no dedicated needs-attention route exists; this is the closest full
+// view). Row-styled so it reads as the list's continuation, not a button.
+function MoreLink({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+      sx={{
+        display: "flex", alignItems: "center", px: "10px", py: "8px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        "&:hover": { bgcolor: "var(--color-background-secondary)" },
+        "&:focus-visible": { outline: "2px solid", outlineColor: "var(--color-border-secondary)", outlineOffset: "-2px" },
+      }}
+    >
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>
+        {count} more →
+      </Typography>
+    </Box>
+  )
+}
+
+// Calm, honest empty state — a quiet green check, no apology. Reinforces glanceable
+// calm: when the board is fine, this section says so plainly.
+function NeedsAttentionEmpty() {
+  const { mode } = useThemeMode()
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", py: "30px" }}>
+      <CheckCircleOutlineRoundedIcon sx={{ fontSize: 26, color: ragToken("GREEN", mode).dot }} />
+      <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+        Nothing else needs attention right now.
+      </Typography>
+    </Box>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -295,6 +385,12 @@ export default function DashboardPage() {
   // definitions the queues use). Risks "N active" reuses activeRedRisks below.
   const risksOpen = (risks.data ?? []).filter(r => !["ACCEPTED", "CLOSED"].includes(r.status)).length
   const issuesOpen = (issues.data ?? []).filter(i => !["RESOLVED", "CLOSED"].includes(i.status)).length
+
+  // ── Needs-attention queue — the merged, severity-ordered cross-type action list
+  //    (breached → due-soon → unassigned), derived from the SAME ticket union the
+  //    alert band reads. Capped at 5 rows in the UI; the full count drives the
+  //    header total + the "N more" overflow link. ────────────────────────────────
+  const needsAttention = React.useMemo(() => buildNeedsAttention(tickets.data), [tickets.data])
 
   // ── Domain-health RAG derivations ────────────────────────────────────────
   // Service Desk — red on any breach; amber on due-soon or unassigned; else green.
@@ -473,10 +569,39 @@ export default function DashboardPage() {
             <TypeTile label="Issues" count={issuesOpen} onClick={() => navigate("/risks-issues?type=issues")} />
           </Box>
 
-          {/* 4 + 5 · Needs attention + Recent activity (two-up) — later commit. */}
+          {/* 4 · Needs attention (hero list) + 5 · Recent activity (placeholder —
+              later commit), two-up on laptop. Needs-attention is the merged,
+              severity-ordered action queue: SectionBar header carries the total
+              count; the list caps at 5 rows with an "N more" overflow; the calm
+              green empty state shows when nothing needs action. */}
           <Stack direction={{ xs: "column", md: "row" }} gap="16px">
             <Box sx={{ flex: 7, minWidth: 0 }}>
-              <Placeholder label="Needs attention" note="Prioritised cross-type action list (breached · due-soon · unassigned). Added in a later commit." minHeight={140} />
+              <Stack spacing="12px">
+                <SectionBar
+                  label="Needs attention"
+                  right={needsAttention.length > 0
+                    ? <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                        {needsAttention.length} item{needsAttention.length === 1 ? "" : "s"}
+                      </Typography>
+                    : undefined}
+                />
+                <Card variant="outlined" sx={DASH_CARD_SX}>
+                  <CardContent sx={{ p: "6px", "&:last-child": { pb: "6px" } }}>
+                    {needsAttention.length === 0 ? (
+                      <NeedsAttentionEmpty />
+                    ) : (
+                      <Stack>
+                        {needsAttention.slice(0, 5).map(item => (
+                          <NeedsAttentionRow key={item.id} item={item} onClick={() => navigate(item.detailPath)} />
+                        ))}
+                        {needsAttention.length > 5 ? (
+                          <MoreLink count={needsAttention.length - 5} onClick={() => navigate("/service-desk?status=open")} />
+                        ) : null}
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
+              </Stack>
             </Box>
             <Box sx={{ flex: 5, minWidth: 0 }}>
               <Placeholder label="Recent activity" note="Latest status changes & assignments. Added in a later commit." minHeight={140} />
