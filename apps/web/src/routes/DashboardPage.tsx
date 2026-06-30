@@ -15,7 +15,8 @@ import { deriveRag, type Risk as RIRisk } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
 import { SectionBar, DASH_CARD_SX, CARD_CONTENT_SX } from "../components/dashboard/primitives"
 import ChecksPanel from "../components/dashboard/ChecksPanel"
-import { type DashCheck } from "../lib/checksPanel"
+import { type DashCheck, isInRework } from "../lib/checksPanel"
+import { OnboardingCard, EstateHero, AllClearLine, deriveColdState, type EstateSite } from "../components/dashboard/ColdStart"
 
 // ── Domain-health RAG (the ONLY always-coloured element) ────────────────────
 // NEUTRAL is a calm resting grey (no standing signal) — used for Infrastructure
@@ -290,7 +291,7 @@ export default function DashboardPage() {
   const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<DashCheck[]>("/checks")).data })
   const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<RIRisk[]>("/risks")).data })
   const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<{ id: string; status: string }[]>("/issues")).data })
-  const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], queryFn: async () => (await api.get<unknown[]>("/sites")).data })
+  const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], queryFn: async () => (await api.get<EstateSite[]>("/sites")).data })
 
   const isLoading = tickets.isLoading || checks.isLoading || risks.isLoading || issues.isLoading || sites.isLoading
   const hasError = !!(tickets.error || checks.error || risks.error || issues.error || sites.error)
@@ -365,6 +366,33 @@ export default function DashboardPage() {
     status: `${siteCount} site${siteCount === 1 ? "" : "s"}`,
   }
 
+  // ── Cold-start state machine — a derived resting state from already-fetched data
+  //    (no new query). Computed only inside the loaded branch below, so it is never
+  //    confused with a loading/error state. "Checks needing attention" = awaiting review
+  //    or in rework (the same signals the checks panel escalates on). ────────────────
+  const openWorkCount = m.sr + m.inc + m.chg + m.task + risksOpen + issuesOpen
+  const checksCount = checks.data?.length ?? 0
+  const inReworkCount = (checks.data ?? []).filter(isInRework).length
+  const checksNeedAttention = pendingReview > 0 || inReworkCount > 0
+  const coldState = deriveColdState({
+    hasEstate: siteCount > 0,
+    checksCount,
+    openWorkCount,
+    checksNeedAttention,
+  })
+
+  // Client name for the onboarding headline (CDS voice names the space) — read from the
+  // Shell's already-cached client list (org-super → ["clients"], client-scoped →
+  // ["clients-mine"]); no extra fetch. Falls back to "this client" if not yet populated.
+  const clientName = React.useMemo(() => {
+    for (const key of [["clients"], ["clients-mine"]]) {
+      const list = queryClient.getQueryData<Array<{ id: string; name: string }>>(key)
+      const hit = list?.find((c) => c.id === clientId)
+      if (hit) return hit.name
+    }
+    return null
+  }, [queryClient, clientId, sites.dataUpdatedAt])
+
   // ── Point-in-time stamp (most recent successful fetch across the queries) ──
   const stampMs = Math.max(tickets.dataUpdatedAt, checks.dataUpdatedAt, risks.dataUpdatedAt, issues.dataUpdatedAt, sites.dataUpdatedAt)
   const stamp = stampMs > 0 ? new Date(stampMs).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"
@@ -398,8 +426,23 @@ export default function DashboardPage() {
         </Box>
       ) : null}
 
-      {!isLoading && !hasError ? (
+      {/* Onboarding (state a) — newly-set-up client: a friendly setup checklist replaces
+          the operational zone entirely. Distinct from loading (spinner) and error (retry). */}
+      {!isLoading && !hasError && coldState === "onboarding" ? (
+        <OnboardingCard clientName={clientName} onNavigate={(to) => navigate(to)} />
+      ) : null}
+
+      {!isLoading && !hasError && coldState !== "onboarding" ? (
         <Stack spacing="16px">
+          {/* Estate-forward (state b) — quiet-but-configured client: the estate leads as
+              the hero, above the operational zone (which collapses to a calm line below). */}
+          {coldState === "estate" ? (
+            <>
+              <SectionBar label="Estate" />
+              <EstateHero sites={sites.data ?? []} onNavigate={(to) => navigate(to)} />
+            </>
+          ) : null}
+
           {/* OPERATIONAL section header — the as-of stamp + Refresh sit inline on the
               right (they drop below the label on narrow widths via SectionBar's wrap). */}
           <SectionBar label="Operational" right={
@@ -411,6 +454,13 @@ export default function DashboardPage() {
             </Stack>
           } />
 
+          {/* 1 + 2 · Operational band (domain health + alert band) — the always-coloured
+              element. In the estate-forward state it collapses to a single calm "all on
+              track" line (no wall of zero-stats); otherwise it renders in full. */}
+          {coldState === "estate" ? (
+            <AllClearLine />
+          ) : (
+          <>
           {/* 1 · Domain health — the only always-coloured element. Four defined cells
               in BOTH layouts: 4-across (md) and 2×2 (below md). The column hairline is a
               centred ::before in each gap (var(--color-border-primary) — same weight as
@@ -479,6 +529,8 @@ export default function DashboardPage() {
               </Box>
             </CardContent>
           </Card>
+          </>
+          )}
 
           {/* 3 · Open work by type — six clickable tiles → pre-filtered open queues.
               SCOPE (Approach A, frontend-only): counts come from the role-scoped list
@@ -552,11 +604,14 @@ export default function DashboardPage() {
 
           <ZoneHeading label="Client" />
 
-          {/* 7 + 8 · Infrastructure band + Contacts — later commit. */}
+          {/* 7 + 8 · Infrastructure band + Contacts — later commit. In estate-forward the
+              estate is already the hero above, so the Infrastructure slot is omitted here. */}
           <Stack direction={{ xs: "column", md: "row" }} gap="16px">
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Placeholder label="Infrastructure" note="Sites · Cabinets · Assets band. Added in a later commit." minHeight={120} />
-            </Box>
+            {coldState === "estate" ? null : (
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Placeholder label="Infrastructure" note="Sites · Cabinets · Assets band. Added in a later commit." minHeight={120} />
+              </Box>
+            )}
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Placeholder label="Contacts" note="Reserved — blocked on the Contact model (#174 / #161)." minHeight={120} />
             </Box>
