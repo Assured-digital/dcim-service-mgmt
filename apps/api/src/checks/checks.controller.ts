@@ -120,6 +120,17 @@ export class ChecksController {
     return this.checks.listForClient(clientId, query)
   }
 
+  // Per-site open follow-on counts for the dashboard (Tasks/Risks/Issues raised from checks).
+  // Declared BEFORE @Get(":id") so the static path wins route matching. Client-wide glance —
+  // see followOnCountsBySite for the deliberate no-applyAssignedScope decision.
+  @Get("follow-on-summary")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER, Role.CLIENT_VIEWER)
+  async followOnSummary(@Req() req: any, @Headers("x-client-id") requestedClientId?: string) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.checks.followOnCountsBySite(clientId)
+  }
+
   @Get(":id")
   @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER, Role.CLIENT_VIEWER)
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {

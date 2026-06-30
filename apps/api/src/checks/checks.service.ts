@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
-import { CheckStatus } from "@prisma/client"
+import { CheckStatus, TaskStatus } from "@prisma/client"
 import { resolveAttachments, resolveAttachmentsForRecords } from "../attachments/resolve-attachments"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
 import { emitAudit } from "../audit-events/emit-audit"
@@ -35,6 +35,22 @@ const RESPONSE_LABELS: Record<string, string> = {
   NA: "N/A"
 }
 const respLabel = (v: string | null): string | null => (v ? RESPONSE_LABELS[v] ?? v : null)
+
+// "Open" definition for the dashboard follow-on glance counts, defined by EXCLUSION of the
+// terminal state so any future intermediate status still counts as open (an outstanding-work
+// count must never silently drop items). Task completes at DONE; Risk and Issue close at
+// CLOSED. NB: an Issue in RESOLVED is reversible → counted as still-open here.
+const TASK_TERMINAL: TaskStatus[] = [TaskStatus.DONE]
+const RISK_TERMINAL = ["CLOSED"]
+const ISSUE_TERMINAL = ["CLOSED"]
+
+type FollowOnSiteCount = {
+  siteId: string
+  siteName: string
+  tasksFromChecks: number
+  risksFromChecks: number
+  issuesFromChecks: number
+}
 
 function calcPassRate(items: { response: string | null; isRequired: boolean }[]): number {
   const answered = items.filter(i => i.response !== null)
@@ -659,6 +675,10 @@ export class ChecksService {
     let entityRef: string
 
     if (dto.entityType === "Task") {
+      // The check→follow-on link is recorded ONLY on the canonical CheckItemFollowOn row
+      // written below — NOT on Task's linkedEntityType/linkedEntityId scalars (those remain
+      // the live parent-context pointer for Asset/Cabinet/Incident/Change links and must not
+      // be co-opted for checks). Risk/Issue already follow this pattern.
       const task = await this.prisma.task.create({
         data: {
           reference: makeRef("TSK"),
@@ -666,8 +686,6 @@ export class ChecksService {
           title: dto.title,
           description: dto.description,
           priority: dto.priority ?? "medium",
-          linkedEntityType: "Check",
-          linkedEntityId: checkId,
           createdById: actorUserId ?? undefined
         }
       })
@@ -731,6 +749,82 @@ export class ChecksService {
       include: { checkItem: { select: { id: true, label: true, section: true } } },
       orderBy: { createdAt: "asc" }
     })
+  }
+
+  /**
+   * Per-site open follow-on counts for the dashboard. Derived from the canonical
+   * CheckItemFollowOn table joined to each follow-on's LIVE entity status (NOT the dead
+   * linkedEntity scalars), grouped by the originating check's site.
+   *
+   * Tenant isolation: scoped to checks of `clientId` (resolved by the controller at the
+   * edge); every entity sub-query is ALSO clientId-filtered as defence-in-depth. CLIENT-WIDE
+   * by design — this is an operational glance over the whole client, so `applyAssignedScope`
+   * is deliberately NOT applied: an ENGINEER sees the same site totals as a manager, unlike
+   * their assigned-scoped task list.
+   */
+  async followOnCountsBySite(clientId: string) {
+    this.assertClientScope(clientId)
+    const followOns = await this.prisma.checkItemFollowOn.findMany({
+      where: { checkItem: { check: { clientId } } },
+      select: {
+        entityType: true,
+        entityId: true,
+        checkItem: { select: { check: { select: { siteId: true, site: { select: { name: true } } } } } }
+      }
+    })
+    if (followOns.length === 0) return { sites: [] as FollowOnSiteCount[] }
+
+    const idsByType: Record<"Task" | "Risk" | "Issue", string[]> = { Task: [], Risk: [], Issue: [] }
+    for (const fo of followOns) {
+      if (fo.entityType === "Task" || fo.entityType === "Risk" || fo.entityType === "Issue") {
+        idsByType[fo.entityType].push(fo.entityId)
+      }
+    }
+
+    // Resolve which referenced entities are still open. Each query re-applies clientId so a
+    // follow-on can never pull a count from another tenant's record.
+    const [openTasks, openRisks, openIssues] = await Promise.all([
+      idsByType.Task.length
+        ? this.prisma.task.findMany({
+            where: { id: { in: idsByType.Task }, clientId, status: { notIn: TASK_TERMINAL } },
+            select: { id: true }
+          })
+        : Promise.resolve([] as { id: string }[]),
+      idsByType.Risk.length
+        ? this.prisma.risk.findMany({
+            where: { id: { in: idsByType.Risk }, clientId, status: { notIn: RISK_TERMINAL } },
+            select: { id: true }
+          })
+        : Promise.resolve([] as { id: string }[]),
+      idsByType.Issue.length
+        ? this.prisma.issue.findMany({
+            where: { id: { in: idsByType.Issue }, clientId, status: { notIn: ISSUE_TERMINAL } },
+            select: { id: true }
+          })
+        : Promise.resolve([] as { id: string }[])
+    ])
+    const openByType = {
+      Task: new Set(openTasks.map((r) => r.id)),
+      Risk: new Set(openRisks.map((r) => r.id)),
+      Issue: new Set(openIssues.map((r) => r.id))
+    }
+
+    const bySite = new Map<string, FollowOnSiteCount>()
+    for (const fo of followOns) {
+      const type = fo.entityType
+      if (type !== "Task" && type !== "Risk" && type !== "Issue") continue
+      if (!openByType[type].has(fo.entityId)) continue
+      const { siteId, site } = fo.checkItem.check
+      let row = bySite.get(siteId)
+      if (!row) {
+        row = { siteId, siteName: site.name, tasksFromChecks: 0, risksFromChecks: 0, issuesFromChecks: 0 }
+        bySite.set(siteId, row)
+      }
+      if (type === "Task") row.tasksFromChecks++
+      else if (type === "Risk") row.risksFromChecks++
+      else row.issuesFromChecks++
+    }
+    return { sites: Array.from(bySite.values()).sort((a, b) => a.siteName.localeCompare(b.siteName)) }
   }
 
   async updateTemplate(clientId: string, id: string, dto: any) {
