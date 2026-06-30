@@ -102,14 +102,14 @@ function SlaStat({ pct, covered }: { pct: number | null; covered: number }) {
       <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px" }}>
         SLA
       </Typography>
-      {pct === null ? (
-        <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>—</Typography>
-      ) : (
-        <Stack direction="row" alignItems="baseline" gap="6px">
-          <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{pct}%</Typography>
-          <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>· of {covered} covered</Typography>
-        </Stack>
-      )}
+      <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>
+        {pct === null ? "—" : `${pct}%`}
+      </Typography>
+      {pct !== null ? (
+        <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap", mt: "3px" }}>
+          of {covered} covered
+        </Typography>
+      ) : null}
     </Box>
   )
 }
@@ -483,7 +483,7 @@ export default function DashboardPage() {
             <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
               <Box sx={{
                 display: "grid",
-                gridTemplateColumns: { xs: "1fr 1fr", md: "1.3fr 1fr 1fr 1fr" },
+                gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
                 columnGap: "16px", rowGap: "14px",
                 "& > *": { position: "relative" },
                 "& > *::before": {
