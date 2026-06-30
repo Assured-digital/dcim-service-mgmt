@@ -1,146 +1,141 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
-import {
-  Box, Button, ButtonGroup, Card, CardContent,
-  Divider, Grid, MenuItem, Stack, TextField,
-  Typography, Chip
-} from "@mui/material"
-import { LineChart } from "@mui/x-charts/LineChart"
-import FileDownloadIcon from "@mui/icons-material/FileDownload"
-import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import { Box, Card, CardContent, Stack, Typography } from "@mui/material"
+import RefreshIcon from "@mui/icons-material/Refresh"
+import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded"
 import { LoadingState, ErrorState } from "../components/PageState"
-import { StatusPill, semanticToken, slate, type ThemeMode } from "../components/shared"
+import { semanticToken, ragToken, type RAGLevel, type ThemeMode } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
-import { SectionHeader } from "../components/shared/primitives/SectionHeader"
 import { useTickets } from "../lib/tickets"
-import { computeSlaStatus, type SlaFilter } from "../lib/serviceDeskQueue"
+import { computeSlaStatus } from "../lib/serviceDeskQueue"
+import { buildNeedsAttention, type NeedsAttentionItem, type Severity } from "../lib/needsAttention"
+import { deriveRag, type Risk as RIRisk } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
-import type { Site as InfraSite, Cabinet as InfraCabinet } from "../lib/infrastructure"
 
-// ── One card system ─────────────────────────────────────────────────────────
-// Every dashboard card shares ONE surface: paper ground, a single hairline border,
-// one radius, flat (the theme's heavy MuiCard shadow is overridden locally — the
-// theme itself is left untouched for other pages). Inner content padding is uniform.
+// ── One card system (shared with later dashboard commits) ───────────────────
+// Paper ground, single hairline, one radius, flat. Inner padding uniform.
 const DASH_CARD_SX = {
   bgcolor: "background.paper",
   border: "0.5px solid",
   borderColor: "divider",
   borderRadius: "10px",
   boxShadow: "none",
-  height: "100%",
 } as const
 const CARD_CONTENT_SX = { p: "18px", "&:last-child": { pb: "18px" } } as const
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type SR = { id: string; status: string; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; displayName: string } | null }
-type Task = { id: string; reference: string; title: string; status: string; priority: string; dueAt: string | null; createdAt: string; updatedAt: string; assigneeId?: string | null; assignee?: { id: string; displayName: string } | null }
-type Risk = { id: string; status: string; reviewDate?: string | null; createdAt: string; updatedAt: string }
-type Issue = { id: string; status: string; createdAt: string; updatedAt: string }
-type Check = { id: string; reference: string; title: string; status: string; scheduledAt: string | null; createdAt: string; updatedAt: string; site?: { name: string } | null }
+type Check = { id: string; status: string }
 
-// ── Date helpers ───────────────────────────────────────────────────────────
-function formatDateForInput(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
-function formatDateShort(value: string) {
-  const d = new Date(value)
-  return isNaN(d.getTime()) ? value : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
-}
-function inDateRange(value: string, dateFrom: string, dateTo: string) {
-  const date = new Date(value)
-  if (isNaN(date.getTime())) return false
-  const from = dateFrom ? new Date(`${dateFrom}T00:00:00.000Z`) : null
-  const to = dateTo ? new Date(`${dateTo}T23:59:59.999Z`) : null
-  if (from && date < from) return false
-  if (to && date > to) return false
-  return true
-}
-function getDateRangeFromPreset(preset: "7d" | "30d" | "90d" | "ytd") {
-  const now = new Date()
-  const to = formatDateForInput(now)
-  if (preset === "ytd") return { from: `${now.getUTCFullYear()}-01-01`, to }
-  const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 90
-  return { from: formatDateForInput(new Date(now.getTime() - 1000 * 60 * 60 * 24 * days)), to }
-}
-function isOverdue(dueAt: string | null) {
-  if (!dueAt) return false
-  return new Date(dueAt) < new Date()
+// ── Domain-health RAG (the ONLY always-coloured element) ────────────────────
+// NEUTRAL is a calm resting grey (no standing signal) — used for Infrastructure
+// when there is no estate yet, and never to mean "good/bad". GREEN/AMBER/RED
+// carry the standing signal; everything beneath this row rests neutral.
+type HealthLevel = RAGLevel | "NEUTRAL"
+
+function healthDot(level: HealthLevel, mode: ThemeMode): string {
+  return level === "NEUTRAL" ? semanticToken("neutral", mode).solid : ragToken(level, mode).dot
 }
 
-// Build daily chart data: bucket items by created date within period
-function buildChartData(
-  items: { createdAt: string; updatedAt: string; status: string }[],
-  dateFrom: string,
-  dateTo: string,
-  resolvedStatuses: string[]
-) {
-  const from = new Date(`${dateFrom}T00:00:00.000Z`)
-  const to = new Date(`${dateTo}T23:59:59.999Z`)
-  const days: { date: string; opened: number; closed: number }[] = []
-
-  const cursor = new Date(from)
-  while (cursor <= to) {
-    days.push({ date: formatDateShort(cursor.toISOString()), opened: 0, closed: 0 })
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-  }
-
-  const bucketByWeek = days.length > 60
-
-  const getBucketLabel = (dateStr: string) => {
-    const d = new Date(dateStr)
-    if (bucketByWeek) {
-      const weekStart = new Date(d)
-      weekStart.setUTCDate(d.getUTCDate() - d.getUTCDay())
-      return formatDateShort(weekStart.toISOString())
-    }
-    return formatDateShort(d.toISOString())
-  }
-
-  const buckets = new Map<string, { opened: number; closed: number }>()
-
-  const cur = new Date(from)
-  while (cur <= to) {
-    const label = getBucketLabel(cur.toISOString())
-    if (!buckets.has(label)) buckets.set(label, { opened: 0, closed: 0 })
-    cur.setUTCDate(cur.getUTCDate() + (bucketByWeek ? 7 : 1))
-  }
-
-  items.forEach(item => {
-    if (inDateRange(item.createdAt, dateFrom, dateTo)) {
-      const label = getBucketLabel(item.createdAt)
-      const b = buckets.get(label)
-      if (b) b.opened++
-    }
-    if (resolvedStatuses.includes(item.status) && inDateRange(item.updatedAt, dateFrom, dateTo)) {
-      const label = getBucketLabel(item.updatedAt)
-      const b = buckets.get(label)
-      if (b) b.closed++
-    }
-  })
-
-  return Array.from(buckets.entries()).map(([date, v]) => ({ date, ...v }))
+function HealthItem({ label, level, status }: { label: string; level: HealthLevel; status: string }) {
+  const { mode } = useThemeMode()
+  return (
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: "10px", minWidth: 0 }}>
+      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: healthDot(level, mode), mt: "4px", flexShrink: 0 }} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary", lineHeight: 1.3 }}>{label}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.3 }}>{status}</Typography>
+      </Box>
+    </Box>
+  )
 }
 
-// ── Zone heading ────────────────────────────────────────────────────────────
-// A subtle uppercase label introducing each zone (not a page title — the app's
-// convention is no page titles; the breadcrumb identifies the page). Anchored
-// treatment: the label sits inline with a hairline rule that runs to the right
-// edge of the content area, so it reads as a section header rather than floating
-// text. The `&&` selector outranks the parent Stack's child-margin spacing to give
-// a consistent rhythm — a modest gap above and ~12px below before the cards —
-// matched across both zones (the first zone keeps its natural page-top above).
-function ZoneHeading({ label, first }: { label: string; first?: boolean }) {
+// ── Alert-band count-stat (ALWAYS-COLOURED via the DOT — follows the RAG row, calm-
+//    by-exception via dots NOT fills) ───────────────────────────────────────────
+// A RAG status dot anchors each count: GREEN at 0 ("actively fine", not absent), else
+// AMBER (Unassigned / Due soon) or RED (Breached). The dot is its own column, vertically
+// centred against the cell; the label + number stack to its right, the number coloured to
+// match the dot (neutral at 0). NO cell background tint (no fills — consistent with the
+// RAG domain row) and NO tooltip; the whole stat is clickable through to its filtered queue.
+function CountStat({ label, value, activeLevel, onClick }: {
+  label: string; value: number; activeLevel: "AMBER" | "RED"; onClick: () => void
+}) {
+  const { mode } = useThemeMode()
+  const active = value > 0
+  const t = ragToken(active ? activeLevel : "GREEN", mode)
+  return (
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+      sx={{
+        minWidth: 0, display: "flex", alignItems: "center", gap: "9px",
+        px: "10px", py: "8px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        // Same grey hover affordance as the open-work-by-type tiles (TypeTile).
+        "&:hover": { bgcolor: "var(--color-background-tertiary)" },
+        "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "1px" },
+      }}
+    >
+      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px", whiteSpace: "nowrap" }}>
+          {label}
+        </Typography>
+        <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: active ? t.text : "text.primary" }}>
+          {value}
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
+
+// SLA % cell — point-in-time, honest denominator; informational (NOT clickable) and
+// dot-less (a percentage has no RAG state). Neutral text always. When data exists it
+// shows "88% · of N covered"; when no open SR/INC carries an SLA due time it shows just
+// "—" (never a bare alarming 0%). No tooltip.
+function SlaStat({ pct, covered }: { pct: number | null; covered: number }) {
+  return (
+    <Box sx={{ minWidth: 0, px: "10px", py: "8px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px" }}>
+        SLA
+      </Typography>
+      <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>
+        {pct === null ? "—" : `${pct}%`}
+      </Typography>
+      {pct !== null ? (
+        <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap", mt: "3px" }}>
+          of {covered} covered
+        </Typography>
+      ) : null}
+    </Box>
+  )
+}
+
+// ── Placeholder (a later commit fills this slot) ─────────────────────────────
+// Honest, clearly-marked reserved slot — makes the new IA visible without faking
+// content. Dashed, muted, never a calm-looking blank.
+function Placeholder({ label, note, minHeight = 96 }: { label: string; note: string; minHeight?: number }) {
   return (
     <Box sx={{
-      display: "flex", alignItems: "center", gap: "12px",
-      "&&": { mt: first ? 0 : "12px", mb: "-8px" },
+      border: "1px dashed", borderColor: "var(--color-border-secondary)", borderRadius: "10px",
+      p: "16px", minHeight, display: "flex", flexDirection: "column", justifyContent: "center", gap: "4px",
     }}>
-      <Typography sx={{
-        fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase",
-        color: "var(--color-text-secondary)", whiteSpace: "nowrap",
-      }}>
+      <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 12, color: "text.tertiary" }}>{note}</Typography>
+    </Box>
+  )
+}
+
+// ── Zone heading ─────────────────────────────────────────────────────────────
+function ZoneHeading({ label, first }: { label: string; first?: boolean }) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: "12px", "&&": { mt: first ? 0 : "12px", mb: "-4px" } }}>
+      <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
         {label}
       </Typography>
       <Box sx={{ flex: 1, height: 0, borderTop: "0.5px solid", borderColor: "var(--color-border-tertiary)" }} />
@@ -148,711 +143,454 @@ function ZoneHeading({ label, first }: { label: string; first?: boolean }) {
   )
 }
 
-// ── Metric cell (navigable sub-tile) ────────────────────────────────────────
-// Each counter is its own distinct, clickable unit: at rest it sits on a faint
-// filled ground (--color-background-secondary), rounded + padded, so it reads as
-// a tile even before hover; hover deepens the fill (--color-background-tertiary,
-// the app's standard interactive fill). Colour discipline — the VALUE carries
-// status colour only (danger/warning/success when present); neutral metrics and
-// zero values stay text.primary. The tile ground is always neutral.
-type MetricIntent = "danger" | "warning" | "success" | "neutral"
-interface MetricCellProps { label: string; value: number; intent?: MetricIntent; onClick?: () => void }
-
-function MetricCell({ label, value, intent = "neutral", onClick }: MetricCellProps) {
-  const { mode } = useThemeMode()
-  const active = value > 0
-  const valueColor = intent === "neutral" || !active ? "text.primary" : semanticToken(intent, mode).solid
+// ── Refresh control (point-in-time contract) ────────────────────────────────
+// Shared by the OPERATIONAL section header and the error retry. Spins while busy.
+function RefreshControl({ busy, onClick, label = "Refresh" }: { busy: boolean; onClick: () => void; label?: string }) {
   return (
     <Box
+      component="button"
       onClick={onClick}
+      disabled={busy}
       sx={{
-        flex: 1, minWidth: 0,
-        bgcolor: "var(--color-background-secondary)",
-        borderRadius: "8px",
-        px: "11px", py: "10px",
-        cursor: onClick ? "pointer" : "default",
-        transition: "background-color 0.12s",
-        "&:hover": onClick ? { bgcolor: "var(--color-background-tertiary)" } : {}
+        display: "inline-flex", alignItems: "center", gap: "5px", flexShrink: 0,
+        px: "10px", py: "5px", borderRadius: "7px", cursor: busy ? "default" : "pointer",
+        border: "0.5px solid", borderColor: "divider", bgcolor: "background.paper",
+        color: "var(--color-text-secondary)", font: "inherit", fontSize: 11.5, fontWeight: 600,
+        opacity: busy ? 0.6 : 1, transition: "background-color 0.12s",
+        "&:hover": busy ? {} : { bgcolor: "var(--color-background-secondary)" },
       }}
     >
+      <RefreshIcon sx={{ fontSize: 14, animation: busy ? "spin 0.8s linear infinite" : "none", "@keyframes spin": { to: { transform: "rotate(360deg)" } } }} />
+      {label}
+    </Box>
+  )
+}
+
+// ── Section header ───────────────────────────────────────────────────────────
+// Uppercase label + 0.5px hairline beneath — one treatment shared across the page's
+// titled sections so they read as a consistent stack. Optional right-aligned content
+// (e.g. the as-of stamp + Refresh on OPERATIONAL) drops below the label on narrow
+// widths (flex-wrap) rather than colliding.
+function SectionBar({ label, right }: { label: string; right?: React.ReactNode }) {
+  return (
+    <Box sx={{
+      display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "8px", columnGap: "16px",
+      pb: "8px", borderBottom: "0.5px solid", borderColor: "var(--color-border-primary)",
+    }}>
+      <Typography sx={{ flex: "1 1 auto", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+        {label}
+      </Typography>
+      {right ? <Box sx={{ flexShrink: 0 }}>{right}</Box> : null}
+    </Box>
+  )
+}
+
+// ── Navigation tile (open work by type) ──────────────────────────────────────
+// Clickable count tile → that type's pre-filtered open queue. Calm-by-exception:
+// the count is neutral text.primary at rest; only the enriched sub-signal (breached /
+// active) carries colour, and it deep-links its own filtered slice (stopping click
+// propagation so it doesn't also fire the tile's whole-type navigation).
+type TileEnrich = { text: string; intent: "danger" | "warning"; onClick: () => void }
+function TypeTile({ label, count, onClick, enrich }: { label: string; count: number; onClick: () => void; enrich?: TileEnrich | null }) {
+  const { mode } = useThemeMode()
+  return (
+    <Box onClick={onClick} sx={{
+      bgcolor: "var(--color-background-secondary)", borderRadius: "8px",
+      px: "12px", py: "11px", cursor: "pointer", minWidth: 0,
+      transition: "background-color 0.12s",
+      "&:hover": { bgcolor: "var(--color-background-tertiary)" },
+    }}>
       <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "5px" }}>
         {label}
       </Typography>
-      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: valueColor }}>
-        {value}
-      </Typography>
-    </Box>
-  )
-}
-
-// ── Count-card chrome: status accent stripe, content-sized ──────────────────
-// Stripe colour means STATUS: red when an attention metric is present (a danger
-// cell with value > 0), else a faint neutral (--color-border-secondary) — colour
-// is never decorative. Cards size to their content (height auto, overriding the
-// shared height:100%) so short cards don't pool dead space at the top. Hover lives
-// on the counter sub-tiles, not the card.
-function stripeColorFor(cells: MetricCellProps[], mode: ThemeMode): string {
-  if (cells.some(c => c.intent === "danger" && c.value > 0)) return semanticToken("danger", mode).solid
-  return "var(--color-border-secondary)"
-}
-
-function countCardSx(stripe: string) {
-  return {
-    ...DASH_CARD_SX,
-    height: "auto",
-    borderTopWidth: "2px",
-    borderTopStyle: "solid",
-    borderTopColor: stripe,
-  } as const
-}
-
-// ── Summary card (titled card of 1–2 metric cells) ──────────────────────────
-function MetricCard({ title, cells }: { title: string; cells: MetricCellProps[] }) {
-  const { mode } = useThemeMode()
-  const stripe = stripeColorFor(cells, mode)
-  return (
-    <Card variant="outlined" sx={countCardSx(stripe)}>
-      <CardContent sx={CARD_CONTENT_SX}>
-        <SectionHeader label={title} />
-        <Box sx={{ display: "flex", gap: "10px", mt: "12px" }}>
-          {cells.map((c, i) => <MetricCell key={i} {...c} />)}
-        </Box>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ── SLA compliance widget (HERO) ───────────────────────────────────────────
-// Per selected client: SLA health of OPEN Service Requests + Incidents only.
-// Buckets (and the click-through queue filter) share computeSlaStatus — single
-// source of truth for the thresholds. Click a tile → the queue, pre-filtered.
-function SlaComplianceCard() {
-  const { mode } = useThemeMode()
-  const navigate = useNavigate()
-  const { data: tickets, isLoading, error } = useTickets()
-
-  const buckets = React.useMemo(() => {
-    let breached = 0, dueSoon = 0, onTrack = 0, none = 0
-    for (const t of tickets) {
-      if (t.kind !== "SR" && t.kind !== "INC") continue
-      if (t.chipIntent === "done") continue                 // open SR + INC only
-      switch (computeSlaStatus(t.dueAt, false)) {
-        case "breached":  breached++; break
-        case "due-soon":  dueSoon++;  break
-        case "on-track":  onTrack++;  break
-        default:          none++;     break                 // no due date
-      }
-    }
-    return { breached, dueSoon, onTrack, none }
-  }, [tickets])
-
-  const { breached, dueSoon, onTrack, none } = buckets
-  const withDue = breached + dueSoon + onTrack
-  const pctOnTrack = withDue > 0 ? Math.round((onTrack / withDue) * 100) : 0
-
-  const danger = semanticToken("danger", mode).solid
-  const warning = semanticToken("warning", mode).solid
-  const success = semanticToken("success", mode).solid
-  const track = mode === "dark" ? slate[700] : slate[200]
-  // Stripe is status-driven: green when nothing is breached, red on any breach.
-  const slaStripe = breached > 0 ? danger : success
-
-  const go = (sla: SlaFilter) => navigate(`/service-desk?sla=${sla}`)
-
-  return (
-    <Card variant="outlined" sx={countCardSx(slaStripe)}>
-      <CardContent sx={CARD_CONTENT_SX}>
-        <SectionHeader
-          label="SLA compliance"
-          tooltip="Open service requests & incidents, by SLA due date for the selected client."
-        />
-        <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", mt: "3px" }}>
-          Service Requests &amp; Incidents · resolution
-        </Typography>
-
-        {isLoading ? (
-          <Box sx={{ mt: "12px" }}><LoadingState /></Box>
-        ) : error ? (
-          <Box sx={{ mt: "12px" }}><ErrorState title="Failed to load SLA data" /></Box>
-        ) : (
-          <>
-            {/* Compliance headline + segmented bar (no legend strip — tiles carry counts) */}
-            <Stack direction="row" alignItems="baseline" gap="8px" sx={{ mt: "14px", mb: "8px" }}>
-              <Typography sx={{ fontSize: 30, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>
-                {pctOnTrack}%
-              </Typography>
-              <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>
-                on track
-              </Typography>
-            </Stack>
-
-            <Box sx={{ display: "flex", height: 10, borderRadius: "5px", overflow: "hidden", bgcolor: track }}>
-              {onTrack > 0 ? <Box sx={{ flexGrow: onTrack, bgcolor: success }} /> : null}
-              {dueSoon > 0 ? <Box sx={{ flexGrow: dueSoon, bgcolor: warning }} /> : null}
-              {breached > 0 ? <Box sx={{ flexGrow: breached, bgcolor: danger }} /> : null}
-            </Box>
-
-            {/* Clickable sub-tiles → pre-filtered Service Desk queue */}
-            <Box sx={{ display: "flex", gap: "10px", mt: "16px" }}>
-              <MetricCell label="Breached" value={breached} intent="danger" onClick={() => go("breached")} />
-              <MetricCell label="Due soon" value={dueSoon} intent="warning" onClick={() => go("due-soon")} />
-              <MetricCell label="On track" value={onTrack} intent="success" onClick={() => go("on-track")} />
-            </Box>
-
-            {/* Honest caveat: tickets with no due date sit outside the %. Kept
-                visible but de-emphasised, below a hairline. */}
-            {none > 0 ? (
-              <>
-                <Divider sx={{ mt: "14px", mb: "10px" }} />
-                <Typography sx={{ fontSize: 11.5, color: "text.tertiary" }}>
-                  {none === 1 ? "1 ticket has" : `${none} tickets have`} no due date set
-                </Typography>
-              </>
-            ) : null}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ── Open tickets card ───────────────────────────────────────────────────────
-// Open SR / INC / CHG counts for the selected client, from the same unified
-// ticket feed the SLA widget uses (react-query dedupes — no extra fetch). Each
-// count clicks through to the queue pre-filtered by type. Neutral colour: these
-// are workload counts, not a status to flag.
-function OpenTicketsCard() {
-  const navigate = useNavigate()
-  const { mode } = useThemeMode()
-  const { data: tickets, isLoading, error } = useTickets()
-
-  const counts = React.useMemo(() => {
-    let sr = 0, inc = 0, chg = 0
-    for (const t of tickets) {
-      if (t.chipIntent === "done") continue
-      if (t.kind === "SR") sr++
-      else if (t.kind === "INC") inc++
-      else if (t.kind === "CHG") chg++
-    }
-    return { sr, inc, chg }
-  }, [tickets])
-
-  // Open-ticket counts are workload, not a status — always a faint neutral stripe.
-  const stripe = stripeColorFor([], mode)
-
-  return (
-    <Card variant="outlined" sx={countCardSx(stripe)}>
-      <CardContent sx={CARD_CONTENT_SX}>
-        <SectionHeader
-          label="Open tickets"
-          tooltip="Open service requests, incidents and changes for the selected client."
-        />
-        {isLoading ? (
-          <Box sx={{ mt: "12px" }}><LoadingState /></Box>
-        ) : error ? (
-          <Box sx={{ mt: "12px" }}><ErrorState title="Failed to load tickets" /></Box>
-        ) : (
-          <Box sx={{ display: "flex", gap: "10px", mt: "14px" }}>
-            <MetricCell label="Requests" value={counts.sr} onClick={() => navigate("/service-desk?type=sr")} />
-            <MetricCell label="Incidents" value={counts.inc} onClick={() => navigate("/service-desk?type=inc")} />
-            <MetricCell label="Changes" value={counts.chg} onClick={() => navigate("/service-desk?type=chg")} />
-          </Box>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ── Trend card with area chart (de-emphasised, supporting) ─────────────────
-// Smaller figures + a single neutral line (the per-category hue was decorative).
-// Charts/controls/export stay fully functional — this is supporting context.
-function TrendCard({ label, opened, closed, closedLabel, chartData, onExport, exporting }: {
-  label: string; opened: number; closed: number; closedLabel: string
-  chartData: { date: string; opened: number; closed: number }[]
-  onExport?: () => void; exporting?: boolean
-}) {
-  const { mode } = useThemeMode()
-  const total = opened + closed
-  const pct = total > 0 ? Math.round((closed / total) * 100) : 0
-  const edge = mode === "dark" ? slate[600] : slate[300]
-  const line = mode === "dark" ? slate[400] : slate[500]   // neutral, de-emphasised
-
-  return (
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: "8px" }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>{label}</Typography>
-        {onExport ? (
-          <Box
-            onClick={onExport}
-            sx={{
-              display: "flex", alignItems: "center", gap: "4px",
-              px: "7px", py: "3px", borderRadius: "5px", cursor: "pointer",
-              border: "1px solid", borderColor: "divider", color: "var(--color-text-muted)",
-              "&:hover": { bgcolor: "var(--color-background-secondary)", borderColor: edge }
-            }}
+      <Stack direction="row" alignItems="baseline" gap="8px" flexWrap="wrap">
+        <Typography sx={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{count}</Typography>
+        {enrich ? (
+          <Typography
+            component="span"
+            onClick={(e) => { e.stopPropagation(); enrich.onClick() }}
+            sx={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1, color: semanticToken(enrich.intent, mode).solid, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
           >
-            <FileDownloadIcon sx={{ fontSize: 12 }} />
-            <Typography sx={{ fontSize: 11, fontWeight: 500 }}>{exporting ? "..." : "Export"}</Typography>
-          </Box>
+            {enrich.text}
+          </Typography>
         ) : null}
       </Stack>
-
-      <Stack direction="row" gap="16px" sx={{ mb: "8px" }}>
-        <Box>
-          <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>Opened</Typography>
-          <Typography sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{opened}</Typography>
-        </Box>
-        <Box>
-          <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>{closedLabel}</Typography>
-          <Typography sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{closed}</Typography>
-        </Box>
-        <Box sx={{ ml: "auto", textAlign: "right" }}>
-          <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mb: "1px" }}>Rate</Typography>
-          <Typography sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>{pct}%</Typography>
-        </Box>
-      </Stack>
-
-      <Box sx={{ height: 60, mx: "-8px" }}>
-        <LineChart
-          xAxis={[{
-            data: chartData.map((_, i) => i),
-            tickInterval: [],
-            disableLine: true,
-            disableTicks: true
-          }]}
-          series={[
-            {
-              data: chartData.map(d => d.opened),
-              label: "Opened",
-              color: line,
-              showMark: false,
-              area: true
-            }
-          ]}
-          height={60}
-          margin={{ top: 8, right: 8, left: -40, bottom: 8 }}
-          sx={{
-            "& .MuiAreaElement-root": { fillOpacity: 0.1 },
-            "& .MuiChartsAxis-root": { display: "none" },
-            "& .MuiChartsGrid-root": { "& line": { stroke: "var(--color-background-tertiary)" } }
-          }}
-          hideLegend
-        />
-      </Box>
-      {chartData.length > 1 ? (
-        <Stack direction="row" justifyContent="space-between" sx={{ px: "4px", mt: "-4px" }}>
-          <Typography sx={{ fontSize: 9, color: edge }}>{chartData[0]?.date}</Typography>
-          <Typography sx={{ fontSize: 9, color: edge }}>{chartData[chartData.length - 1]?.date}</Typography>
-        </Stack>
-      ) : null}
     </Box>
   )
 }
 
-// ── Recent row ─────────────────────────────────────────────────────────────
-function RecentRow({ type, reference, title, status, updatedAt, onClick }: {
-  type: string; reference: string; title: string; status: string; updatedAt: string; onClick: () => void
-}) {
-  const ago = (() => {
-    const diff = Date.now() - new Date(updatedAt).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(diff / 3600000)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.floor(diff / 86400000)}d ago`
-  })()
+// ── Needs-attention row (the hero action queue) ──────────────────────────────
+// Calm-by-exception governs this list (unlike the always-coloured alert band):
+// rows are NEUTRAL, colour lives ONLY in the leading severity dot + label. A
+// fixed-width severity column (a dot + lightweight label — NOT a StatusPill) keeps
+// every title aligned to one left edge. Then the title (truncated) and ref +
+// pressure ("INC-0012 · 4h over"). The whole row is clickable to the record;
+// drill-through is role-gated downstream (ENGINEER assigned-only → 404).
+const SEV_META: Record<Severity, { label: string; level: RAGLevel }> = {
+  breached:     { label: "Breached", level: "RED" },
+  "due-soon":   { label: "Due soon", level: "AMBER" },
+  unassigned:   { label: "Unassigned", level: "AMBER" },
+}
+
+function NeedsAttentionRow({ item, onClick }: { item: NeedsAttentionItem; onClick: () => void }) {
   const { mode } = useThemeMode()
-  // Type chips: a neutral tag per kind — the chip identifies the record type, it is
-  // not a status, so it stays neutral (status colour lives on the StatusPill).
-  const neutralChip = { bg: "var(--color-background-tertiary)", color: mode === "dark" ? slate[300] : slate[600] }
+  const meta = SEV_META[item.severity]
+  const t = ragToken(meta.level, mode)
   return (
-    <Box onClick={onClick} sx={{
-      display: "flex", alignItems: "center", gap: "10px",
-      py: "9px", cursor: "pointer",
-      borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)", "&:last-child": { borderBottom: "none" },
-      "&:hover .recent-title": { color: "primary.main" }
-    }}>
-      <Chip label={type} size="small" sx={{ fontSize: 10, fontWeight: 600, flexShrink: 0, bgcolor: neutralChip.bg, color: neutralChip.color, borderRadius: "4px", height: 18 }} />
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography className="recent-title" sx={{ fontSize: 13, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.1s" }}>
-          {title}
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+      sx={{
+        display: "flex", alignItems: "center", gap: "12px",
+        px: "10px", py: "9px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        "&:hover": { bgcolor: "var(--color-background-secondary)" },
+        "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "-2px" },
+      }}
+    >
+      {/* Fixed-width severity column — dot + label, the only colour in the row. */}
+      <Box sx={{ width: 90, flexShrink: 0, display: "flex", alignItems: "center", gap: "7px" }}>
+        <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
+        <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: t.text, whiteSpace: "nowrap" }}>
+          {meta.label}
         </Typography>
-        <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>{reference}</Typography>
       </Box>
-      <Stack direction="row" alignItems="center" gap="8px" sx={{ flexShrink: 0 }}>
-        <StatusPill value={status} label={status.toLowerCase().replace(/_/g, " ")} size="sm" />
-        <Typography sx={{ fontSize: 11, color: "text.tertiary", minWidth: 36, textAlign: "right" }}>{ago}</Typography>
-      </Stack>
-    </Box>
-  )
-}
-
-// ── Infrastructure band (Zone 2) ─────────────────────────────────────────────
-// Per-client DCIM glance: Sites / Cabinets / Assets counts + a short sites list.
-// Everything derives from the existing GET /sites call (each site carries its full
-// cabinets[] array and a _count of assets) — NO assets are fetched. Keyed on the
-// selected client so it refetches on client switch; the x-client-id interceptor
-// injects scope automatically. The asset total sums each site's _count.assets, so
-// it counts SITED assets only (an asset with no site is excluded) — the cell is
-// labelled accordingly so the number is never read as a true org-wide total.
-type InfraSiteRow = InfraSite & { cabinets: InfraCabinet[]; _count: { assets: number; checks: number } }
-
-function pluralCabinets(n: number) {
-  return `${n} ${n === 1 ? "cabinet" : "cabinets"}`
-}
-
-function SiteListRow({ name, cabinets, onClick }: { name: string; cabinets: number; onClick: () => void }) {
-  return (
-    <Box onClick={onClick} sx={{
-      display: "flex", alignItems: "center", gap: "10px",
-      py: "9px", cursor: "pointer",
-      borderBottom: "1px solid", borderColor: "var(--color-background-tertiary)", "&:last-child": { borderBottom: "none" },
-      "&:hover .site-name": { color: "primary.main" }
-    }}>
-      <Typography className="site-name" sx={{ flex: 1, minWidth: 0, fontSize: 13, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.1s" }}>
-        {name}
+      {/* Title — truncates with ellipsis; all titles align to the column's right edge. */}
+      <Typography sx={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.subject}
       </Typography>
-      <Typography sx={{ fontSize: 11, color: "text.tertiary", flexShrink: 0 }}>{pluralCabinets(cabinets)}</Typography>
+      {/* Ref + pressure — neutral metadata. */}
+      <Typography sx={{ flexShrink: 0, fontSize: 11.5, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+        {item.reference} · {item.pressure}
+      </Typography>
     </Box>
   )
 }
 
-function InfrastructureCard() {
-  const { mode } = useThemeMode()
-  const navigate = useNavigate()
-  const clientId = getSelectedClientId() ?? "self"
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["infrastructure", clientId],
-    queryFn: async () => (await api.get<InfraSiteRow[]>("/sites")).data,
-  })
-
-  const sites = data ?? []
-  const totalSites = sites.length
-  const totalCabinets = sites.reduce((sum, s) => sum + s.cabinets.length, 0)
-  const totalAssets = sites.reduce((sum, s) => sum + s._count.assets, 0)
-
-  const siteRows = sites
-    .map(s => ({ id: s.id, name: s.name, cabinets: s.cabinets.length }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-  const visibleRows = siteRows.slice(0, 5)
-  const moreCount = siteRows.length - visibleRows.length
-
-  // Counts are informational, not status — neutral cells yield a neutral stripe.
-  const cells: MetricCellProps[] = [
-    { label: "Sites", value: totalSites },
-    { label: "Cabinets", value: totalCabinets },
-    { label: "Assets (sited)", value: totalAssets },
-  ]
-  const stripe = stripeColorFor(cells, mode)
-
+// "N more →" footer link when the queue exceeds the 5-row cap — to the broad open
+// work queue (no dedicated needs-attention route exists; this is the closest full
+// view). Row-styled so it reads as the list's continuation, not a button.
+function MoreLink({ count, onClick }: { count: number; onClick: () => void }) {
   return (
-    <Card variant="outlined" sx={countCardSx(stripe)}>
-      <CardContent sx={CARD_CONTENT_SX}>
-        <SectionHeader
-          label="Infrastructure"
-          action={
-            <Button size="small" variant="text" onClick={() => navigate("/asset-hierarchy")}
-              sx={{ fontSize: 11, fontWeight: 600, color: "primary.main", minWidth: 0, px: "4px" }}>
-              View all
-            </Button>
-          }
-        />
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+      sx={{
+        display: "flex", alignItems: "center", px: "10px", py: "8px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        "&:hover": { bgcolor: "var(--color-background-secondary)" },
+        "&:focus-visible": { outline: "2px solid", outlineColor: "var(--color-border-secondary)", outlineOffset: "-2px" },
+      }}
+    >
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>
+        {count} more →
+      </Typography>
+    </Box>
+  )
+}
 
-        <Box sx={{ display: "flex", gap: "10px", mt: "12px" }}>
-          {cells.map((c, i) => <MetricCell key={i} {...c} />)}
-        </Box>
-        <Typography sx={{ fontSize: 10, color: "var(--color-text-muted)", mt: "6px" }}>
-          Sited assets only — excludes any unplaced assets.
-        </Typography>
-
-        <Box sx={{ mt: "14px" }}>
-          {isLoading ? (
-            <Typography variant="body2" color="text.secondary">Loading…</Typography>
-          ) : error ? (
-            <Typography variant="body2" color="text.secondary">Couldn’t load sites.</Typography>
-          ) : siteRows.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No sites yet.</Typography>
-          ) : (
-            <>
-              {visibleRows.map(s => (
-                <SiteListRow key={s.id} name={s.name} cabinets={s.cabinets}
-                  onClick={() => navigate(`/asset-hierarchy/${s.id}`)} />
-              ))}
-              {moreCount > 0 ? (
-                <Typography sx={{ fontSize: 11, color: "text.tertiary", pt: "9px" }}>
-                  +{moreCount} more
-                </Typography>
-              ) : null}
-            </>
-          )}
-        </Box>
-      </CardContent>
-    </Card>
+// Calm, honest empty state — a quiet green check, no apology. Reinforces glanceable
+// calm: when the board is fine, this section says so plainly.
+function NeedsAttentionEmpty() {
+  const { mode } = useThemeMode()
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", py: "30px" }}>
+      <CheckCircleOutlineRoundedIcon sx={{ fontSize: 26, color: ragToken("GREEN", mode).dot }} />
+      <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+        Nothing else needs attention right now.
+      </Typography>
+    </Box>
   )
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const clientId = getSelectedClientId()
+  const [refreshing, setRefreshing] = React.useState(false)
 
-  const defaultRange = getDateRangeFromPreset("30d")
-  const [dateFrom, setDateFrom] = React.useState(defaultRange.from)
-  const [dateTo, setDateTo] = React.useState(defaultRange.to)
-  const [assigneeId, setAssigneeId] = React.useState("")
-  const [activePreset, setActivePreset] = React.useState<"7d" | "30d" | "90d" | "ytd">("30d")
-  const [isExporting, setIsExporting] = React.useState<string | null>(null)
-
-  // ── Queries ────────────────────────────────────────────────────────────
-  const srs = useQuery({ queryKey: ["srs"], queryFn: async () => (await api.get<SR[]>("/service-requests")).data })
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: async () => (await api.get<Task[]>("/tasks")).data })
-  const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<Risk[]>("/risks")).data })
-  const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<Issue[]>("/issues")).data })
+  // ── Queries — the layer already in place. Tickets via the shared useTickets
+  //    hook (SR/INC/CHG/TASK); checks / risks / issues / sites direct. ────────
+  const tickets = useTickets()
   const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<Check[]>("/checks")).data })
-  const isLoading = srs.isLoading || tasks.isLoading || risks.isLoading || issues.isLoading || checks.isLoading
-  const hasError = !!(srs.error || tasks.error || risks.error || issues.error || checks.error)
+  const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<RIRisk[]>("/risks")).data })
+  const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<{ id: string; status: string }[]>("/issues")).data })
+  const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], queryFn: async () => (await api.get<unknown[]>("/sites")).data })
 
-  // ── Assignees (Trend filter) ─────────────────────────────────────────────
-  const assignees = React.useMemo(() => {
-    const byId = new Map<string, { id: string; displayName: string }>()
-    ;[...(srs.data ?? []), ...(tasks.data ?? [])].forEach(item => {
-      if (item.assignee?.id) byId.set(item.assignee.id, item.assignee)
-    })
-    return Array.from(byId.values()).sort((a, b) => a.displayName.localeCompare(b.displayName))
-  }, [srs.data, tasks.data])
+  const isLoading = tickets.isLoading || checks.isLoading || risks.isLoading || issues.isLoading || sites.isLoading
+  const hasError = !!(tickets.error || checks.error || risks.error || issues.error || sites.error)
 
-  function applyAssignee<T extends { assigneeId?: string | null }>(items: T[]) {
-    return assigneeId ? items.filter(x => x.assigneeId === assigneeId) : items
-  }
+  // ── Service Desk + alert-band metrics + per-type open counts. One pass over the
+  //    ticket union: SLA buckets (SR/INC), unassigned (all open work), and the
+  //    nav-row open counts per kind. srBreached feeds the Requests tile's enriched
+  //    "N breached" sub-signal (SR only — it deep-links ?type=sr&sla=breached). ──
+  const m = React.useMemo(() => {
+    let breached = 0, dueSoon = 0, onTrack = 0, unassigned = 0, srBreached = 0
+    let sr = 0, inc = 0, chg = 0, task = 0
+    for (const t of tickets.data) {
+      if (t.chipIntent === "done") continue                      // open work only
+      if (!t.assignee) unassigned++
+      if (t.kind === "SR") sr++
+      else if (t.kind === "INC") inc++
+      else if (t.kind === "CHG") chg++
+      else if (t.kind === "TASK") task++
+      if (t.kind === "SR" || t.kind === "INC") {
+        switch (computeSlaStatus(t.dueAt, false)) {
+          case "breached": breached++; if (t.kind === "SR") srBreached++; break
+          case "due-soon": dueSoon++; break
+          case "on-track": onTrack++; break
+          default: break                                          // no due date → outside SLA
+        }
+      }
+    }
+    const covered = breached + dueSoon + onTrack
+    const pct = covered > 0 ? Math.round((onTrack / covered) * 100) : null
+    return { breached, dueSoon, onTrack, covered, pct, unassigned, srBreached, sr, inc, chg, task }
+  }, [tickets.data])
 
-  // Trend is assignee-scoped (the filter lives with it, in Zone 2).
-  const filteredSrs = applyAssignee(srs.data ?? [])
-  const filteredTasks = applyAssignee(tasks.data ?? [])
+  // Nav-row open counts for Risks / Issues (client-wide; same terminal-state
+  // definitions the queues use). Risks "N active" reuses activeRedRisks below.
+  const risksOpen = (risks.data ?? []).filter(r => !["ACCEPTED", "CLOSED"].includes(r.status)).length
+  const issuesOpen = (issues.data ?? []).filter(i => !["RESOLVED", "CLOSED"].includes(i.status)).length
 
-  // ── Zone-1 operational counts (NOT assignee-filtered — a Zone-2 control must
-  //    not silently move a Zone-1 glance number) ─────────────────────────────
-  const openRisks = (risks.data ?? []).filter(x => !["ACCEPTED", "CLOSED"].includes(x.status)).length
-  const reviewSoonCutoff = Date.now() + 7 * 24 * 60 * 60 * 1000
-  const risksReviewDue = (risks.data ?? []).filter(
-    x => !["ACCEPTED", "CLOSED"].includes(x.status) && x.reviewDate && new Date(x.reviewDate).getTime() <= reviewSoonCutoff
+  // ── Needs-attention queue — the merged, severity-ordered cross-type action list
+  //    (breached → due-soon → unassigned), derived from the SAME ticket union the
+  //    alert band reads. Capped at 5 rows in the UI; the full count drives the
+  //    header total + the "N more" overflow link. ────────────────────────────────
+  const needsAttention = React.useMemo(() => buildNeedsAttention(tickets.data), [tickets.data])
+
+  // ── Domain-health RAG derivations ────────────────────────────────────────
+  // Service Desk — red on any breach; amber on due-soon or unassigned; else green.
+  const serviceDesk: { level: HealthLevel; status: string } =
+    m.breached > 0 ? { level: "RED", status: `${m.breached} breached` }
+    : m.dueSoon > 0 ? { level: "AMBER", status: `${m.dueSoon} due soon` }
+    : m.unassigned > 0 ? { level: "AMBER", status: `${m.unassigned} unassigned` }
+    : { level: "GREEN", status: "On track" }
+
+  // Checks — amber if any awaiting review; else green. (There is NO overdue check
+  // state — never derived. A null passRate is "not yet scored", never a failure.
+  // "In rework" is NOT derivable from the flat /checks list — no rework status and
+  // the list omits item.reworkFlagged; it joins when the checks-panel aggregate lands.)
+  const pendingReview = (checks.data ?? []).filter(c => c.status === "PENDING_REVIEW").length
+  const checksHealth: { level: HealthLevel; status: string } =
+    pendingReview > 0 ? { level: "AMBER", status: `${pendingReview} awaiting review` } : { level: "GREEN", status: "On track" }
+
+  // Governance — amber if any active RED-RAG (urgent) risk; else green.
+  const activeRedRisks = (risks.data ?? []).filter(
+    r => !["ACCEPTED", "CLOSED"].includes(r.status) && deriveRag(r.likelihood, r.impact) === "RED"
   ).length
-  const openIssues = (issues.data ?? []).filter(x => !["RESOLVED", "CLOSED"].includes(x.status)).length
-  const openTasks = (tasks.data ?? []).filter(x => x.status !== "DONE").length
-  const overdueChecks = (checks.data ?? []).filter(c => !["COMPLETED", "CLOSED", "CANCELLED"].includes(c.status) && isOverdue(c.scheduledAt))
-  const pendingReviewChecks = (checks.data ?? []).filter(x => x.status === "PENDING_REVIEW").length
+  const governance: { level: HealthLevel; status: string } =
+    activeRedRisks > 0 ? { level: "AMBER", status: `${activeRedRisks} active risk${activeRedRisks === 1 ? "" : "s"}` } : { level: "GREEN", status: "On track" }
 
-  // ── Trend data (period-filtered) ───────────────────────────────────────
-  const srInPeriod = filteredSrs.filter(x => inDateRange(x.createdAt, dateFrom, dateTo))
-  const srClosedInPeriod = filteredSrs.filter(x => ["COMPLETED", "CLOSED"].includes(x.status) && inDateRange(x.updatedAt, dateFrom, dateTo))
-  const risksInPeriod = (risks.data ?? []).filter(x => inDateRange(x.createdAt, dateFrom, dateTo))
-  const risksClosed = (risks.data ?? []).filter(x => ["ACCEPTED", "CLOSED"].includes(x.status) && inDateRange(x.updatedAt, dateFrom, dateTo))
-  const issuesInPeriod = (issues.data ?? []).filter(x => inDateRange(x.createdAt, dateFrom, dateTo))
-  const issuesClosed = (issues.data ?? []).filter(x => ["RESOLVED", "CLOSED"].includes(x.status) && inDateRange(x.updatedAt, dateFrom, dateTo))
-  const tasksInPeriod = filteredTasks.filter(x => inDateRange(x.createdAt, dateFrom, dateTo))
-  const tasksDone = filteredTasks.filter(x => x.status === "DONE" && inDateRange(x.updatedAt, dateFrom, dateTo))
-
-  // ── Chart data ─────────────────────────────────────────────────────────
-  const srChart = buildChartData(filteredSrs, dateFrom, dateTo, ["COMPLETED", "CLOSED"])
-  const riChart = buildChartData([...(risks.data ?? []), ...(issues.data ?? [])], dateFrom, dateTo, ["ACCEPTED", "CLOSED", "RESOLVED"])
-  const taskChart = buildChartData(filteredTasks, dateFrom, dateTo, ["DONE"])
-
-  // ── Recent activity ────────────────────────────────────────────────────
-  const recentItems = [
-    ...(srs.data ?? []).map(x => ({ kind: "SR", id: x.id, reference: "", title: `Service request · ${x.status}`, status: x.status, updatedAt: x.updatedAt })),
-    ...(tasks.data ?? []).map(x => ({ kind: "TASK", id: x.id, reference: x.reference, title: x.title, status: x.status, updatedAt: x.updatedAt })),
-    ...(checks.data ?? []).map(x => ({ kind: "CHECK", id: x.id, reference: x.reference, title: x.title, status: x.status, updatedAt: x.updatedAt })),
-    ...(risks.data ?? []).map(x => ({ kind: "RISK", id: x.id, reference: "", title: `Risk · ${x.status}`, status: x.status, updatedAt: x.updatedAt }))
-  ]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 6)
-
-  // ── Export ─────────────────────────────────────────────────────────────
-  async function exportCsv(kind: "service-requests" | "tasks") {
-    setIsExporting(kind)
-    try {
-      const res = await api.get<Blob>(`/${kind}/export`, {
-        params: { dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, assigneeId: assigneeId || undefined },
-        responseType: "blob"
-      })
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: "text/csv;charset=utf-8;" }))
-      const a = document.createElement("a")
-      a.href = url; a.download = `${kind}-${new Date().toISOString().slice(0, 10)}.csv`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } finally { setIsExporting(null) }
+  // Infrastructure — calm resting state (estate health deferred to the DCIM module:
+  // no fill bars, no capacity-derived health). Green when an estate exists, else neutral.
+  const siteCount = (sites.data ?? []).length
+  const infrastructure: { level: HealthLevel; status: string } = {
+    level: siteCount > 0 ? "GREEN" : "NEUTRAL",
+    status: `${siteCount} site${siteCount === 1 ? "" : "s"}`,
   }
 
-  function applyPreset(preset: "7d" | "30d" | "90d" | "ytd") {
-    const range = getDateRangeFromPreset(preset)
-    setDateFrom(range.from); setDateTo(range.to); setActivePreset(preset)
+  // ── Point-in-time stamp (most recent successful fetch across the queries) ──
+  const stampMs = Math.max(tickets.dataUpdatedAt, checks.dataUpdatedAt, risks.dataUpdatedAt, issues.dataUpdatedAt, sites.dataUpdatedAt)
+  const stamp = stampMs > 0 ? new Date(stampMs).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"
+  const busy = refreshing || tickets.isFetching || checks.isFetching || risks.isFetching || issues.isFetching || sites.isFetching
+
+  async function refresh() {
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["tickets"] }),
+        queryClient.invalidateQueries({ queryKey: ["checks"] }),
+        queryClient.invalidateQueries({ queryKey: ["risks"] }),
+        queryClient.invalidateQueries({ queryKey: ["issues"] }),
+        queryClient.invalidateQueries({ queryKey: ["infrastructure"] }),
+      ])
+    } finally { setRefreshing(false) }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
+  // No page title — the top-bar breadcrumb ("{client} › Dashboard") is the sole
+  // identifier (no-page-titles convention). The point-in-time stamp + Refresh live
+  // inline on the OPERATIONAL section header below.
   return (
     <Box>
       {isLoading ? <LoadingState label="Loading dashboard..." /> : null}
-      {hasError ? <ErrorState title="Failed to load dashboard data" /> : null}
+      {/* A failed load is an explicit error WITH retry — never dressed up as a calm/empty state. */}
+      {hasError && !isLoading ? (
+        <Box>
+          <ErrorState title="Failed to load dashboard data" detail="The snapshot could not be loaded." />
+          <RefreshControl busy={busy} onClick={refresh} label="Try again" />
+        </Box>
+      ) : null}
 
       {!isLoading && !hasError ? (
-        <Stack spacing="20px">
+        <Stack spacing="16px">
+          {/* OPERATIONAL section header — the as-of stamp + Refresh sit inline on the
+              right (they drop below the label on narrow widths via SectionBar's wrap). */}
+          <SectionBar label="Operational" right={
+            <Stack direction="row" alignItems="center" gap="12px">
+              <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                Data as of {stamp}
+              </Typography>
+              <RefreshControl busy={busy} onClick={refresh} />
+            </Stack>
+          } />
 
-          {/* ══ ZONE 1 · OPERATIONAL ═══════════════════════════════════════ */}
-          <ZoneHeading label="Operational" first />
+          {/* 1 · Domain health — the only always-coloured element. Four defined cells
+              in BOTH layouts: 4-across (md) and 2×2 (below md). The column hairline is a
+              centred ::before in each gap (var(--color-border-primary) — same weight as
+              the alert band), hidden on the first cell of each row so wrapped rows show no
+              dangling rule. rowGap gives the 2×2 layout breathing room. Dividers are
+              neutral — the domain dots are the only colour in this card. */}
+          <Card variant="outlined" sx={DASH_CARD_SX}>
+            <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
+              <Box sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
+                columnGap: "20px", rowGap: "18px",
+                "& > *": { position: "relative" },
+                "& > *::before": {
+                  content: '""', position: "absolute", top: 0, bottom: 0, left: "-10px",
+                  width: "0.5px", bgcolor: "var(--color-border-primary)", display: "block",
+                },
+                // First cell of each row carries no divider: at md (4-across) that's the
+                // 1st cell; below md (2×2) it's the 1st and 3rd.
+                "& > *:nth-of-type(2n+1)::before": { display: { xs: "none", md: "block" } },
+                "& > *:nth-of-type(4n+1)::before": { display: { md: "none" } },
+              }}>
+                <HealthItem label="Service Desk" level={serviceDesk.level} status={serviceDesk.status} />
+                <HealthItem label="Checks" level={checksHealth.level} status={checksHealth.status} />
+                <HealthItem label="Governance" level={governance.level} status={governance.status} />
+                <HealthItem label="Infrastructure" level={infrastructure.level} status={infrastructure.status} />
+              </Box>
+            </CardContent>
+          </Card>
 
-          {/* Row A — SLA compliance (hero) + Open tickets */}
-          <Grid container spacing="16px">
-            <Grid item xs={12} md={7}><SlaComplianceCard /></Grid>
-            <Grid item xs={12} md={5}><OpenTicketsCard /></Grid>
-          </Grid>
+          {/* 2 · Alert band — state reads off the individual stats only (NO summary
+              badge). Order: SLA · Unassigned · Due soon · Breached. SLA is informational +
+              dot-less; the three count-stats carry a RAG dot (green at 0, amber/red when
+              active) with the number coloured to match — calm-by-exception via dots, NOT
+              fills, consistent with the RAG row. No tooltips; each count-stat is clickable.
+              Same grid + centred-hairline pattern as the RAG card: even distribution (SLA a
+              touch wider for "88% · of N covered"; its empty "—" keeps the same gap to its
+              divider), reflowing to 2×2 below md without dangling rules. */}
+          <Card variant="outlined" sx={DASH_CARD_SX}>
+            <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
+              <Box sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
+                columnGap: "16px", rowGap: "14px",
+                "& > *": { position: "relative" },
+                "& > *::before": {
+                  content: '""', position: "absolute", top: 0, bottom: 0, left: "-8px",
+                  width: "0.5px", bgcolor: "var(--color-border-primary)", display: "block",
+                },
+                "& > *:nth-of-type(2n+1)::before": { display: { xs: "none", md: "block" } },
+                "& > *:nth-of-type(4n+1)::before": { display: { md: "none" } },
+              }}>
+                <SlaStat pct={m.pct} covered={m.covered} />
+                <CountStat
+                  label="Unassigned" value={m.unassigned} activeLevel="AMBER"
+                  onClick={() => navigate("/service-desk?status=unassigned")}
+                />
+                <CountStat
+                  label="Due soon" value={m.dueSoon} activeLevel="AMBER"
+                  onClick={() => navigate("/service-desk?sla=due-soon")}
+                />
+                <CountStat
+                  label="Breached" value={m.breached} activeLevel="RED"
+                  onClick={() => navigate("/service-desk?sla=breached")}
+                />
+              </Box>
+            </CardContent>
+          </Card>
 
-          {/* Row B — Needs-attention summary cards */}
-          <Grid container spacing="16px">
-            <Grid item xs={12} sm={4}>
-              {/* FLAG: /checks has no per-status URL filter today — both counters land
-                  on the unfiltered list. Wire to ?status=overdue / ?status=pending-review
-                  if/when ChecksPage gains query-param filtering. */}
-              <MetricCard
-                title="Checks"
-                cells={[
-                  { label: "Overdue", value: overdueChecks.length, intent: "danger", onClick: () => navigate("/checks") },
-                  { label: "Pending review", value: pendingReviewChecks, intent: "warning", onClick: () => navigate("/checks") }
-                ]}
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <MetricCard
-                title="Risks"
-                cells={[
-                  { label: "Active", value: openRisks, intent: "danger", onClick: () => navigate("/risks-issues/risks?view=all") },
-                  { label: "Review due", value: risksReviewDue, intent: "warning", onClick: () => navigate("/risks-issues/risks?view=review_due") }
-                ]}
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <MetricCard
-                title="Issues & tasks"
-                cells={[
-                  { label: "Open issues", value: openIssues, intent: "danger", onClick: () => navigate("/risks-issues/issues?view=all") },
-                  { label: "Open tasks", value: openTasks, intent: "neutral", onClick: () => navigate("/service-desk?type=task") }
-                ]}
-              />
-            </Grid>
-          </Grid>
+          {/* 3 · Open work by type — six clickable tiles → pre-filtered open queues.
+              SCOPE (Approach A, frontend-only): counts come from the role-scoped list
+              endpoints via useTickets/risks/issues, so they are client-wide for every
+              role EXCEPT ENGINEER, whose list endpoints applyAssignedScope (assignee-only)
+              — an ENGINEER therefore sees their own open counts here. This is consistent
+              with the RAG row + alert band (same useTickets source). True client-wide
+              counts for ENGINEER would need a backend count aggregate (Approach B, the
+              follow-on-summary precedent) — out of scope for this frontend-only commit.
+              Calm-by-exception: counts neutral at rest, colour only on the enriched
+              breached/active sub-signals; drill-through stays role-gated. */}
+          <SectionBar label="Open work by type" />
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" }}>
+            <TypeTile
+              label="Requests" count={m.sr}
+              onClick={() => navigate("/service-desk?type=sr&status=open")}
+              enrich={m.srBreached > 0 ? { text: `${m.srBreached} breached`, intent: "danger", onClick: () => navigate("/service-desk?type=sr&sla=breached") } : null}
+            />
+            <TypeTile label="Incidents" count={m.inc} onClick={() => navigate("/service-desk?type=inc&status=open")} />
+            <TypeTile label="Changes" count={m.chg} onClick={() => navigate("/service-desk?type=chg&status=open")} />
+            <TypeTile label="Tasks" count={m.task} onClick={() => navigate("/service-desk?type=task&status=open")} />
+            <TypeTile
+              label="Risks" count={risksOpen}
+              onClick={() => navigate("/risks-issues?type=risks")}
+              enrich={activeRedRisks > 0 ? { text: `${activeRedRisks} active`, intent: "warning", onClick: () => navigate("/risks-issues?type=risks&view=urgent") } : null}
+            />
+            <TypeTile label="Issues" count={issuesOpen} onClick={() => navigate("/risks-issues?type=issues")} />
+          </Box>
 
-          {/* Light section divider between zones */}
-          <Divider />
+          {/* 4 · Needs attention (hero list) + 5 · Recent activity (placeholder —
+              later commit), two-up on laptop. Needs-attention is the merged,
+              severity-ordered action queue: SectionBar header carries the total
+              count; the list caps at 5 rows with an "N more" overflow; the calm
+              green empty state shows when nothing needs action. */}
+          <Stack direction={{ xs: "column", md: "row" }} gap="16px" alignItems={{ md: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Stack spacing="12px">
+                <SectionBar
+                  label="Needs attention"
+                  right={needsAttention.length > 0
+                    ? <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                        {needsAttention.length} item{needsAttention.length === 1 ? "" : "s"}
+                      </Typography>
+                    : undefined}
+                />
+                <Card variant="outlined" sx={DASH_CARD_SX}>
+                  <CardContent sx={{ p: "6px", "&:last-child": { pb: "6px" } }}>
+                    {needsAttention.length === 0 ? (
+                      <NeedsAttentionEmpty />
+                    ) : (
+                      <Stack>
+                        {needsAttention.slice(0, 5).map(item => (
+                          <NeedsAttentionRow key={item.id} item={item} onClick={() => navigate(item.detailPath)} />
+                        ))}
+                        {needsAttention.length > 5 ? (
+                          <MoreLink count={needsAttention.length - 5} onClick={() => navigate("/service-desk?status=open")} />
+                        ) : null}
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
+              </Stack>
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Placeholder label="Recent activity" note="Latest status changes & assignments. Added in a later commit." minHeight={140} />
+            </Box>
+          </Stack>
 
-          {/* ══ ZONE 2 · CLIENT ════════════════════════════════════════════ */}
+          {/* 6 · Checks panel (site-organised) — later commit. */}
+          <Placeholder label="Checks" note="Site-organised panel — review state, scores + 90-day delta, follow-on counts. Added in a later commit." minHeight={120} />
+
           <ZoneHeading label="Client" />
 
-          {/* Part B (Infrastructure) + Part C (Contacts) cards: a row of two
-              half-width cards above the trend & activity row. Contacts (Part C)
-              fills the right half later. */}
-          <Grid container spacing="16px">
-            <Grid item xs={12} md={6}>
-              <InfrastructureCard />
-            </Grid>
-          </Grid>
-
-          {/* Row C — de-emphasised Trend Snapshot + Recent Activity */}
-          <Grid container spacing="16px">
-            <Grid item xs={12} md={7}>
-              <Card variant="outlined" sx={DASH_CARD_SX}>
-                <CardContent sx={CARD_CONTENT_SX}>
-
-                  {/* Filter bar */}
-                  <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} gap="12px" sx={{ mb: "18px" }}>
-                    <SectionHeader
-                      label="Trend Snapshot"
-                      action={<TrendingUpIcon sx={{ fontSize: 15, color: "var(--color-text-secondary)" }} />}
-                    />
-                    <Stack direction="row" alignItems="center" gap="8px" flexWrap="wrap">
-                      <TextField
-                        select size="small" label="Assignee" value={assigneeId}
-                        onChange={e => setAssigneeId(e.target.value)}
-                        sx={{ minWidth: 150, "& .MuiInputBase-root": { fontSize: 12 } }}
-                      >
-                        <MenuItem value="" sx={{ fontSize: 12 }}>All assignees</MenuItem>
-                        {assignees.map(a => (
-                          <MenuItem key={a.id} value={a.id} sx={{ fontSize: 12 }}>{a.displayName}</MenuItem>
-                        ))}
-                      </TextField>
-                      <ButtonGroup size="small" variant="outlined">
-                        {(["7d", "30d", "90d", "ytd"] as const).map(p => (
-                          <Button key={p}
-                            variant={activePreset === p ? "contained" : "outlined"}
-                            onClick={() => applyPreset(p)}
-                            sx={{ fontSize: 11, fontWeight: 500, px: "10px", minWidth: 0 }}>
-                            {p.toUpperCase()}
-                          </Button>
-                        ))}
-                      </ButtonGroup>
-                      <Button size="small" variant="text"
-                        onClick={() => { applyPreset("30d"); setAssigneeId("") }}
-                        sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-                        Reset
-                      </Button>
-                    </Stack>
-                  </Stack>
-
-                  {/* Three trend cards with charts */}
-                  <Stack direction={{ xs: "column", md: "row" }} gap="20px" divider={<Divider orientation="vertical" flexItem />}>
-                    <TrendCard
-                      label="Service Requests"
-                      opened={srInPeriod.length} closed={srClosedInPeriod.length}
-                      closedLabel="Closed" chartData={srChart}
-                      onExport={() => exportCsv("service-requests")}
-                      exporting={isExporting === "service-requests"}
-                    />
-                    <TrendCard
-                      label="Risks & Issues"
-                      opened={risksInPeriod.length + issuesInPeriod.length}
-                      closed={risksClosed.length + issuesClosed.length}
-                      closedLabel="Closed" chartData={riChart}
-                    />
-                    <TrendCard
-                      label="Tasks"
-                      opened={tasksInPeriod.length} closed={tasksDone.length}
-                      closedLabel="Done" chartData={taskChart}
-                      onExport={() => exportCsv("tasks")}
-                      exporting={isExporting === "tasks"}
-                    />
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} md={5}>
-              <Card variant="outlined" sx={DASH_CARD_SX}>
-                <CardContent sx={CARD_CONTENT_SX}>
-                  <Box sx={{ mb: "12px" }}>
-                    <SectionHeader
-                      label="Recent Activity"
-                      action={<Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>Last updated items</Typography>}
-                    />
-                  </Box>
-                  {recentItems.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">No recent activity.</Typography>
-                  ) : null}
-                  {recentItems.map(item => (
-                    <RecentRow
-                      key={`${item.kind}-${item.id}`}
-                      type={item.kind} reference={item.reference ?? ""} title={item.title}
-                      status={item.status} updatedAt={item.updatedAt}
-                      onClick={() => {
-                        if (item.kind === "SR") navigate("/service-desk")
-                        else if (item.kind === "TASK") navigate(`/service-desk/task/${item.id}`)
-                        else if (item.kind === "CHECK") navigate(`/checks/${item.id}`)
-                        else if (item.kind === "RISK") navigate("/risks-issues/risks?view=all")
-                        else if (item.kind === "ISSUE") navigate("/risks-issues/issues?view=all")
-                      }}
-                    />
-                  ))}
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-
+          {/* 7 + 8 · Infrastructure band + Contacts — later commit. */}
+          <Stack direction={{ xs: "column", md: "row" }} gap="16px">
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Placeholder label="Infrastructure" note="Sites · Cabinets · Assets band. Added in a later commit." minHeight={120} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Placeholder label="Contacts" note="Reserved — blocked on the Contact model (#174 / #161)." minHeight={120} />
+            </Box>
+          </Stack>
         </Stack>
       ) : null}
     </Box>

@@ -79,8 +79,15 @@ set (not per-record-type duplication). When extending either, mirror the existin
   endpoints in-scope before writing; `DELETE` clientId-scoped; `GET /record-links/search`. Resolved
   links (`ref + title + status`) attach in each `getForClient`. Frontend: shared `LinkedRecordsContent`
   + `LinkRecordDialog` + `lib/linkedRecords.ts`. Linkable types = the six work-items
-  (`LINK_RECORD_TYPES`). The old single-scalar `linkedEntityType`/`linkedEntityId` fields are DEAD
-  (superseded by the join table) — left in place for an additive migration; carded to drop.
+  (`LINK_RECORD_TYPES`). The single-scalar `linkedEntityType`/`linkedEntityId` fields are NOT dead and
+  must NOT be dropped (the "drop these columns" plan is CANCELLED): they are the LIVE generic
+  parent-context pointer for non-work-item parents (Asset/Cabinet/Incident/Change), actively READ in the
+  list filters across tasks/risks/issues/service-requests and in `AssetDetailPage`/`CabinetDetailView`.
+  The `RecordLink` join table superseded them only for peer-linking AMONG the six work-items, not for this
+  generic parent context. Separately, **check→follow-on** linkage is canonicalised on `CheckItemFollowOn`:
+  `createFollowOn` no longer writes these scalars for check-raised Task/Risk/Issue — those links live ONLY
+  in that join table. So the two linkage systems coexist by purpose: `CheckItemFollowOn` for check
+  provenance, `linkedEntity*` for generic parent context.
 - **Attachments** (`apps/api/src/attachments/`): an `Attachment` model — metadata + `storageKey` in DB,
   bytes in object storage via the `StorageService` abstraction (routes on `STORAGE_PROVIDER`: `s3` against
   local MinIO in dev, `azure` Blob in cloud — BOTH LIVE; see Storage backend below). Files stream THROUGH
