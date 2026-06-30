@@ -2,7 +2,7 @@ import React from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
-import { Box, Card, CardContent, Stack, Typography } from "@mui/material"
+import { Box, Card, CardContent, Stack, Tooltip, Typography } from "@mui/material"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { semanticToken, ragToken, type RAGLevel, type ThemeMode } from "../components/shared"
@@ -49,24 +49,47 @@ function HealthItem({ label, level, status }: { label: string; level: HealthLeve
   )
 }
 
-// ── Alert-band cell (calm-by-exception) ─────────────────────────────────────
-// Neutral at rest; the value earns colour only when its threshold trips. A "good
-// zero" (0 breached) stays muted, never red. Mirrors the count-tile language used
-// elsewhere on the dashboard.
-type CellIntent = "danger" | "warning"
-function BandStat({ label, value, intent }: { label: string; value: number; intent: CellIntent }) {
+// ── Alert-band count-stat (ALWAYS-COLOURED — follows the RAG row, NOT calm-by-
+//    exception) ──────────────────────────────────────────────────────────────
+// A RAG status dot anchors each count: GREEN at 0 ("actively fine", not absent),
+// else AMBER (Unassigned / Due soon) or RED (Breached). The dot is its own column,
+// vertically centred against the cell; the label + number stack to its right. At >0
+// the colour also drives the number (token text) and the cell highlight (token bg);
+// at 0 the number stays neutral and the cell carries no tint (calm = green dot only).
+// Clickable → its filtered queue; an info tooltip explains the metric (hover/focus/tap).
+function CountStat({ label, value, activeLevel, tooltip, onClick }: {
+  label: string; value: number; activeLevel: "AMBER" | "RED"; tooltip: string; onClick: () => void
+}) {
   const { mode } = useThemeMode()
   const active = value > 0
-  const color = active ? semanticToken(intent, mode).solid : "var(--color-text-muted)"
+  const t = ragToken(active ? activeLevel : "GREEN", mode)
   return (
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "4px" }}>
-        {label}
-      </Typography>
-      <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: active ? color : "text.primary" }}>
-        {value}
-      </Typography>
-    </Box>
+    <Tooltip title={tooltip} arrow>
+      <Box
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+        sx={{
+          flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "9px",
+          px: "11px", py: "8px", borderRadius: "8px", cursor: "pointer",
+          bgcolor: active ? t.bg : "transparent",
+          transition: "background-color 0.12s",
+          "&:hover": { bgcolor: active ? t.bg : "var(--color-background-secondary)" },
+          "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "1px" },
+        }}
+      >
+        <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px", whiteSpace: "nowrap" }}>
+            {label}
+          </Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: active ? t.text : "text.primary" }}>
+            {value}
+          </Typography>
+        </Box>
+      </Box>
+    </Tooltip>
   )
 }
 
@@ -75,30 +98,33 @@ function BandStat({ label, value, intent }: { label: string; value: number; inte
 // for both themes in styles.css); full-height via align-self stretch; even padding
 // either side (the mx). NEVER coloured — the stats earn colour, the dividers don't.
 function BandDivider() {
-  return <Box sx={{ alignSelf: "stretch", width: "0.5px", flexShrink: 0, mx: "14px", bgcolor: "var(--color-border-primary)" }} />
+  return <Box sx={{ alignSelf: "stretch", width: "0.5px", flexShrink: 0, mx: "6px", bgcolor: "var(--color-border-primary)" }} />
 }
 
-// SLA % cell — point-in-time, honest denominator. Neutral text always (the breach
-// CELL carries the red, not the percentage). `covered === 0` shows a calm dash +
-// "no SLA-covered tickets", never a bare alarming 0%.
+// SLA % cell — point-in-time, honest denominator; informational (NOT clickable) and
+// dot-less (a percentage has no RAG state). Neutral text always. When data exists it
+// shows "88% · of N covered"; when no open SR/INC carries an SLA due time it shows just
+// "—" (the "no SLA-covered tickets" explanation lives in the tooltip, never a bare 0%).
 function SlaStat({ pct, covered }: { pct: number | null; covered: number }) {
+  const tooltip = pct === null
+    ? "No open service requests or incidents currently have an SLA due time."
+    : `${pct}% of ${covered} SLA-covered open service requests & incidents are on track.`
   return (
-    <Box sx={{ flex: "0 0 auto", minWidth: 120 }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "4px" }}>
-        SLA
-      </Typography>
-      {pct === null ? (
-        <Stack direction="row" alignItems="baseline" gap="6px">
+    <Tooltip title={tooltip} arrow>
+      <Box tabIndex={0} sx={{ flex: "0 0 auto", minWidth: 0, px: "11px", py: "8px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px" }}>
+          SLA
+        </Typography>
+        {pct === null ? (
           <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>—</Typography>
-          <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>no SLA-covered tickets</Typography>
-        </Stack>
-      ) : (
-        <Stack direction="row" alignItems="baseline" gap="6px">
-          <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{pct}%</Typography>
-          <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)" }}>· of {covered} covered</Typography>
-        </Stack>
-      )}
-    </Box>
+        ) : (
+          <Stack direction="row" alignItems="baseline" gap="6px">
+            <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>{pct}%</Typography>
+            <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>· of {covered} covered</Typography>
+          </Stack>
+        )}
+      </Box>
+    </Tooltip>
   )
 }
 
@@ -384,22 +410,36 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 2 · Alert band — calm-by-exception. Summary badge + SLA% + threshold cells. */}
+          {/* 2 · Alert band — ALWAYS-COLOURED (RAG dots per count-stat), following the
+              RAG row's logic, NOT calm-by-exception. Order: SLA · Unassigned · Due soon ·
+              Breached. SLA is informational + dot-less; the three count-stats carry a RAG
+              dot (green at 0), are clickable to their filtered queues, and tint amber/red
+              when non-zero. Hairline dividers between stats; the worst-state summary badge
+              stays separate to the left (the Stack's gap), with no divider before SLA. */}
           <Card variant="outlined" sx={DASH_CARD_SX}>
             <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
               <Stack direction="row" alignItems="center" flexWrap="wrap" gap="16px">
                 <SummaryBadge level={summary.level} text={summary.text} />
-                {/* Four discrete readouts: hairline neutral dividers between adjacent stats.
-                    The summary badge stays separate to the left (the Stack's gap), with no
-                    divider before the first stat. */}
                 <Box sx={{ display: "flex", alignItems: "stretch", flex: 1, minWidth: 0 }}>
                   <SlaStat pct={m.pct} covered={m.covered} />
                   <BandDivider />
-                  <BandStat label="Breached" value={m.breached} intent="danger" />
+                  <CountStat
+                    label="Unassigned" value={m.unassigned} activeLevel="AMBER"
+                    tooltip="Open work items with no assignee."
+                    onClick={() => navigate("/service-desk?status=unassigned")}
+                  />
                   <BandDivider />
-                  <BandStat label="Due soon" value={m.dueSoon} intent="warning" />
+                  <CountStat
+                    label="Due soon" value={m.dueSoon} activeLevel="AMBER"
+                    tooltip="Open service requests & incidents due within the next 24 hours."
+                    onClick={() => navigate("/service-desk?sla=due-soon")}
+                  />
                   <BandDivider />
-                  <BandStat label="Unassigned" value={m.unassigned} intent="warning" />
+                  <CountStat
+                    label="Breached" value={m.breached} activeLevel="RED"
+                    tooltip="Open service requests & incidents past their SLA due time."
+                    onClick={() => navigate("/service-desk?sla=breached")}
+                  />
                 </Box>
               </Stack>
             </CardContent>

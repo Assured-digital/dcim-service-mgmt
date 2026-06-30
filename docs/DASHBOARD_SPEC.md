@@ -46,17 +46,28 @@ live data; the stamp + explicit refresh are the contract.
   so the detail below can stay neutral at rest.
 - Detail below this row obeys calm-by-exception (neutral at rest; colour only on threshold).
 
-**2. Alert band** (calm-by-exception health signals; one horizontal strip)
-- Left: a summary badge reflecting the worst current state — "All on track" (green) /
-  "N needs a look" (amber) / "N breached" (red).
+**2. Alert band** (ALWAYS-COLOURED health signals — one horizontal strip)
+- **Scope change (commit 3.5):** the band is now **always-coloured** (RAG dots — green /
+  amber / red), following the domain-health RAG row's logic, **NOT** calm-by-exception
+  grey-at-rest. Calm-by-exception still governs the **needs-attention list** and the
+  **nav-row counts**; the alert band is the second always-on-colour element after the RAG row.
+- Order, left → right: **SLA · Unassigned · Due soon · Breached**.
+- Left of the stats: a summary badge reflecting the worst current state — "All on track"
+  (green) / "N needs a look" (amber) / "N breached" (red).
 - **SLA compliance %** — point-in-time: of currently-open, SLA-covered (have a `dueAt`)
-  SR + Incidents, the proportion NOT breached (on-track ÷ covered). **Show the
-  denominator inline** ("94% · of 12 covered"). If few/no open tickets carry a `dueAt`, show the
-  **"limited SLA visibility"** state (see SLA % definition) — calm, never an alarming low %.
-- **Breached** — open SR/INC past `dueAt`. Red when > 0.
-- **Due soon** — open SR/INC approaching `dueAt` (within the due-soon window). Amber when > 0.
-- **Unassigned** — open work items with no assignee. Amber when > 0.
-- Each stat: neutral at rest; threshold drives amber/red on that cell only.
+  SR + Incidents, the proportion NOT breached (on-track ÷ covered). Informational (not
+  clickable) and **dot-less** (a percentage has no RAG state). Shows "94% · of 12 covered";
+  when **no** open SR/INC carries a `dueAt` it shows just **"—"**, with the "no SLA-covered
+  tickets" explanation in the info tooltip (never a bare alarming 0%).
+- **Unassigned** — open work items with no assignee. RAG dot; green at 0, amber when > 0.
+- **Due soon** — open SR/INC approaching `dueAt` (within the due-soon window). Green at 0,
+  amber when > 0.
+- **Breached** — open SR/INC past `dueAt`. Green at 0, red when > 0.
+- Each **count-stat** carries a RAG status dot (left, vertically centred; label + number
+  to its right) and is **always coloured**: a **green dot at 0** ("actively fine", not
+  absent, no cell tint); when non-zero the amber/red drives the dot, the number, AND the
+  cell highlight (`--bg-warning` / `--bg-danger`). Each count-stat is clickable to its
+  filtered queue and carries an info tooltip (hover / focus / tap).
 - (Checks are **not** represented here — they are never "overdue"; see the Checks panel below.)
 
 **3. Open work by type** (navigation row — click → pre-filtered queue)
@@ -142,9 +153,10 @@ as a calm or empty state.
 
 ## Colour discipline (calm-by-exception)
 
-- **Always-coloured exception:** the domain health RAG row (top of the board) is the **single**
-  always-coloured element — its dots carry the standing signal so everything below can rest neutral.
-  The rules below govern everything beneath it.
+- **Always-coloured exceptions:** the domain health RAG row (top of the board) AND the
+  alert band (commit 3.5 — see Alert band above) are always-coloured: their RAG dots carry
+  the standing signal. A count-stat dot is **green at 0** ("actively fine"), amber/red when
+  non-zero. The rules below govern everything ELSE (needs-attention list, nav-row counts).
 - **Neutral/rest:** `--text-primary` number, `--text-muted` label. The default.
 - **Amber ("look"):** `--bg-warning` cell tint + `--text-warning` — for due-soon,
   unassigned, active risks.
