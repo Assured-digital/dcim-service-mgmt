@@ -13,20 +13,9 @@ import { computeSlaStatus } from "../lib/serviceDeskQueue"
 import { buildNeedsAttention, type NeedsAttentionItem, type Severity } from "../lib/needsAttention"
 import { deriveRag, type Risk as RIRisk } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
-
-// ── One card system (shared with later dashboard commits) ───────────────────
-// Paper ground, single hairline, one radius, flat. Inner padding uniform.
-const DASH_CARD_SX = {
-  bgcolor: "background.paper",
-  border: "0.5px solid",
-  borderColor: "divider",
-  borderRadius: "10px",
-  boxShadow: "none",
-} as const
-const CARD_CONTENT_SX = { p: "18px", "&:last-child": { pb: "18px" } } as const
-
-// ── Types ──────────────────────────────────────────────────────────────────
-type Check = { id: string; status: string }
+import { SectionBar, DASH_CARD_SX, CARD_CONTENT_SX } from "../components/dashboard/primitives"
+import ChecksPanel from "../components/dashboard/ChecksPanel"
+import { type DashCheck } from "../lib/checksPanel"
 
 // ── Domain-health RAG (the ONLY always-coloured element) ────────────────────
 // NEUTRAL is a calm resting grey (no standing signal) — used for Infrastructure
@@ -166,25 +155,6 @@ function RefreshControl({ busy, onClick, label = "Refresh" }: { busy: boolean; o
   )
 }
 
-// ── Section header ───────────────────────────────────────────────────────────
-// Uppercase label + 0.5px hairline beneath — one treatment shared across the page's
-// titled sections so they read as a consistent stack. Optional right-aligned content
-// (e.g. the as-of stamp + Refresh on OPERATIONAL) drops below the label on narrow
-// widths (flex-wrap) rather than colliding.
-function SectionBar({ label, right }: { label: string; right?: React.ReactNode }) {
-  return (
-    <Box sx={{
-      display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "8px", columnGap: "16px",
-      pb: "8px", borderBottom: "0.5px solid", borderColor: "var(--color-border-primary)",
-    }}>
-      <Typography sx={{ flex: "1 1 auto", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
-        {label}
-      </Typography>
-      {right ? <Box sx={{ flexShrink: 0 }}>{right}</Box> : null}
-    </Box>
-  )
-}
-
 // ── Navigation tile (open work by type) ──────────────────────────────────────
 // Clickable count tile → that type's pre-filtered open queue. Calm-by-exception:
 // the count is neutral text.primary at rest; only the enriched sub-signal (breached /
@@ -317,7 +287,7 @@ export default function DashboardPage() {
   // ── Queries — the layer already in place. Tickets via the shared useTickets
   //    hook (SR/INC/CHG/TASK); checks / risks / issues / sites direct. ────────
   const tickets = useTickets()
-  const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<Check[]>("/checks")).data })
+  const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<DashCheck[]>("/checks")).data })
   const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<RIRisk[]>("/risks")).data })
   const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<{ id: string; status: string }[]>("/issues")).data })
   const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], queryFn: async () => (await api.get<unknown[]>("/sites")).data })
@@ -577,8 +547,8 @@ export default function DashboardPage() {
             </Box>
           </Stack>
 
-          {/* 6 · Checks panel (site-organised) — later commit. */}
-          <Placeholder label="Checks" note="Site-organised panel — review state, scores + 90-day delta, follow-on counts. Added in a later commit." minHeight={120} />
+          {/* 6 · Checks panel (site-organised) — summary strip + per-site spine + site drill. */}
+          <ChecksPanel checks={checks.data ?? []} />
 
           <ZoneHeading label="Client" />
 
