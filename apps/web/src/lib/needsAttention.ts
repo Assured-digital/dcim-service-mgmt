@@ -15,6 +15,7 @@
 // contribute — they are never "overdue" (handled in the checks panel).
 
 import { computeSlaStatus } from "./serviceDeskQueue"
+import { formatDurationLong } from "./notifications"
 import type { Ticket } from "./tickets"
 
 export type Severity = "breached" | "due-soon" | "unassigned"
@@ -25,27 +26,17 @@ export interface NeedsAttentionItem {
   reference: string
   subject: string
   detailPath: string
-  /** Short right-aligned pressure label: "4h over" · "due 2h" · "3d old". */
-  pressure: string
+  /** Clean relative age of the record ("8 days" · "2 hours"). Neutral — the severity dot
+   *  carries urgency; the reference is intentionally not surfaced on the dashboard. */
+  age: string
 }
 
 // Tier order for the merged queue: breached first, then due-soon, then unassigned.
 const TIER_RANK: Record<Severity, number> = { breached: 0, "due-soon": 1, unassigned: 2 }
 
-// Compact relative duration: "45m" → "3h" → "2d". Derives each unit from the one
-// below so the rounding is consistent; never returns "0m" (clamps to 1m).
-function humaniseDuration(ms: number): string {
-  const mins = Math.max(1, Math.round(ms / 60000))
-  if (mins < 60) return `${mins}m`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.round(hours / 24)
-  return `${days}d`
-}
-
 /**
  * Build the prioritised needs-attention queue from the ticket union.
- * Ordered breached → due-soon → unassigned; within each tier by pressure
+ * Ordered breached → due-soon → unassigned; within each tier by SLA urgency
  * (most overdue / closest-to-due / oldest first). One row per record.
  */
 export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsAttentionItem[] {
@@ -66,20 +57,12 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
     const dueMs = t.dueAt ? new Date(t.dueAt).getTime() : null
     const createdMs = new Date(t.createdAt).getTime()
 
-    // pressure label + within-tier sort key. SLA tiers order by dueAt ascending
+    // Within-tier sort key (display is separate): SLA tiers order by dueAt ascending
     // (most overdue / soonest-due first); unassigned orders by age (oldest first).
-    let pressure: string
-    let sortKey: number
-    if (severity === "breached" && dueMs !== null) {
-      pressure = `${humaniseDuration(now - dueMs)} over`
-      sortKey = dueMs
-    } else if (severity === "due-soon" && dueMs !== null) {
-      pressure = `due ${humaniseDuration(dueMs - now)}`
-      sortKey = dueMs
-    } else {
-      pressure = `${humaniseDuration(now - createdMs)} old`
-      sortKey = createdMs
-    }
+    const sortKey = severity === "unassigned" ? createdMs : (dueMs ?? createdMs)
+    // Displayed time = the record's age, in a clean neutral format. It can differ from the
+    // sort key (e.g. a due-soon row sorts by dueAt but shows how long it has been open).
+    const age = formatDurationLong(now - createdMs)
 
     ranked.push({
       id: t.id,
@@ -87,7 +70,7 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
       reference: t.reference,
       subject: t.subject,
       detailPath: t.detailPath,
-      pressure,
+      age,
       tier: TIER_RANK[severity],
       sortKey,
     })
@@ -100,6 +83,6 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
     reference: r.reference,
     subject: r.subject,
     detailPath: r.detailPath,
-    pressure: r.pressure,
+    age: r.age,
   }))
 }

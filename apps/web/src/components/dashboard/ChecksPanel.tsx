@@ -1,9 +1,10 @@
 import React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Box, Card, CardContent, Stack, Tooltip, Typography } from "@mui/material"
+import { Box, Card, CardContent, Collapse, Stack, Tooltip, Typography } from "@mui/material"
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined"
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded"
 import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined"
+import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded"
 import { api } from "../../lib/api"
 import { useThemeMode } from "../../lib/theme"
 import { ragToken, semanticToken } from "../shared"
@@ -15,7 +16,7 @@ import {
   type FollowOnSummary,
   type SiteRow,
 } from "../../lib/checksPanel"
-import { ChecksSiteDrill } from "./ChecksSiteDrill"
+import { SiteChecksExpansion } from "./ChecksSiteExpansion"
 
 // Top sites by attention shown before the "+N more" expander (calm — most-needing-action
 // first; the long tail folds away rather than scrolling the whole board).
@@ -77,8 +78,9 @@ function reviewStateText(row: SiteRow): string {
 }
 
 // One site row — health dot · name · context subtext (review-state when it needs action,
-// else next planned) · score+delta · follow-on counts. Whole row opens the site drill.
-function SiteRowView({ row, onOpen }: { row: SiteRow; onOpen: () => void }) {
+// else next planned) · score+delta · follow-on counts · chevron. Clicking toggles the
+// inline expansion of the site's checks beneath it; the chevron + bg reflect open state.
+function SiteRowView({ row, expanded, onToggle }: { row: SiteRow; expanded: boolean; onToggle: () => void }) {
   const { mode } = useThemeMode()
   const needsAction = row.attention > 0
   const dot = ragToken(needsAction ? "AMBER" : "GREEN", mode).dot
@@ -89,14 +91,17 @@ function SiteRowView({ row, onOpen }: { row: SiteRow; onOpen: () => void }) {
       : "No upcoming checks"
   return (
     <Box
-      onClick={onOpen}
+      onClick={onToggle}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen() } }}
+      aria-expanded={expanded}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle() } }}
       sx={{
         display: "flex", alignItems: "center", gap: "12px",
         px: "12px", py: "11px", borderRadius: "8px", cursor: "pointer",
         transition: "background-color 0.12s",
+        // When expanded the row shares the expansion's surface so the two read as one unit.
+        bgcolor: expanded ? "var(--color-background-secondary)" : "transparent",
         "&:hover": { bgcolor: "var(--color-background-secondary)" },
         "&:focus-visible": { outline: "2px solid", outlineColor: dot, outlineOffset: "-2px" },
       }}
@@ -114,6 +119,8 @@ function SiteRowView({ row, onOpen }: { row: SiteRow; onOpen: () => void }) {
         <ScoreReadout score={row.score} size="sm" />
       </Box>
       <FollowOnCounts row={row} />
+      {/* Expand affordance — points right when collapsed, down when open. */}
+      <KeyboardArrowDownRoundedIcon sx={{ fontSize: 18, color: "var(--color-text-muted)", flexShrink: 0, transition: "transform 0.15s", transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }} />
     </Box>
   )
 }
@@ -140,8 +147,8 @@ function MoreSitesLink({ count, onClick }: { count: number; onClick: () => void 
 
 // ── Panel ──────────────────────────────────────────────────────────────────────
 // Self-contained: owns the follow-on-summary query (keyed under ["checks", …] so the
-// dashboard's Refresh, which prefix-invalidates ["checks"], refreshes it too). Parts A+B
-// render at rest; clicking a site row swaps in the separable drill (Part C).
+// dashboard's Refresh, which prefix-invalidates ["checks"], refreshes it too). Clicking a
+// site row expands its recent checks inline (single-open accordion).
 export default function ChecksPanel({ checks }: { checks: DashCheck[] }) {
   const [openSiteId, setOpenSiteId] = React.useState<string | null>(null)
   const [showAll, setShowAll] = React.useState(false)
@@ -156,13 +163,6 @@ export default function ChecksPanel({ checks }: { checks: DashCheck[] }) {
   const nowMs = React.useMemo(() => Date.now(), [checks, followOns.data])
   const summary = React.useMemo(() => buildSummary(checks, nowMs), [checks, nowMs])
   const siteRows = React.useMemo(() => buildSiteRows(checks, followOns.data, nowMs), [checks, followOns.data, nowMs])
-
-  const openRow = openSiteId ? siteRows.find((r) => r.siteId === openSiteId) ?? null : null
-
-  // Drill (Part C) — replaces the panel body; its own header is the back/breadcrumb.
-  if (openRow) {
-    return <ChecksSiteDrill row={openRow} onBack={() => setOpenSiteId(null)} />
-  }
 
   const visibleRows = showAll ? siteRows : siteRows.slice(0, SITE_CAP)
   const hiddenCount = siteRows.length - visibleRows.length
@@ -218,12 +218,22 @@ export default function ChecksPanel({ checks }: { checks: DashCheck[] }) {
               </Typography>
             </Box>
           ) : (
-            <Stack>
-              {visibleRows.map((row) => (
-                <SiteRowView key={row.siteId} row={row} onOpen={() => setOpenSiteId(row.siteId)} />
-              ))}
+            <Box>
+              {/* Single-open accordion: each row toggles its own inline expansion; setting
+                  one open id collapses any other (Collapse unmounts → no stale fetches). */}
+              {visibleRows.map((row) => {
+                const isOpen = openSiteId === row.siteId
+                return (
+                  <Box key={row.siteId}>
+                    <SiteRowView row={row} expanded={isOpen} onToggle={() => setOpenSiteId(isOpen ? null : row.siteId)} />
+                    <Collapse in={isOpen} unmountOnExit timeout={160}>
+                      <SiteChecksExpansion row={row} />
+                    </Collapse>
+                  </Box>
+                )
+              })}
               {hiddenCount > 0 ? <MoreSitesLink count={hiddenCount} onClick={() => setShowAll(true)} /> : null}
-            </Stack>
+            </Box>
           )}
         </CardContent>
       </Card>

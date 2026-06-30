@@ -273,9 +273,11 @@ function NeedsAttentionRow({ item, onClick }: { item: NeedsAttentionItem; onClic
       <Typography sx={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {item.subject}
       </Typography>
-      {/* Ref + pressure — neutral metadata. */}
-      <Typography sx={{ flexShrink: 0, fontSize: 11.5, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
-        {item.reference} · {item.pressure}
+      {/* Time — the prominent trailing element. Neutral (the severity dot carries urgency,
+          so the time is NOT coloured); the record reference is intentionally dropped as
+          dashboard noise. The whole row still links to the record on click. */}
+      <Typography sx={{ flexShrink: 0, fontSize: 13, fontWeight: 500, color: "text.primary", whiteSpace: "nowrap" }}>
+        {item.age}
       </Typography>
     </Box>
   )
