@@ -5,14 +5,15 @@ import { api } from "../lib/api"
 import { Box, Card, CardContent, Stack, Typography } from "@mui/material"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded"
-import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined"
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded"
 import { LoadingState, ErrorState } from "../components/PageState"
 import { semanticToken, ragToken, type RAGLevel, type ThemeMode } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
 import { useTickets } from "../lib/tickets"
 import { computeSlaStatus } from "../lib/serviceDeskQueue"
 import { buildNeedsAttention, type NeedsAttentionItem, type Severity } from "../lib/needsAttention"
-import { deriveRag, type Risk as RIRisk } from "../lib/risksIssuesQueue"
+import { buildRecentActivity, type RecentActivityItem } from "../lib/recentActivity"
+import { deriveRag, type Risk as RIRisk, type Issue as RIIssue } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
 import { SectionBar, DASH_CARD_SX, CARD_CONTENT_SX } from "../components/dashboard/primitives"
 import ChecksPanel from "../components/dashboard/ChecksPanel"
@@ -33,11 +34,14 @@ function healthDot(level: HealthLevel, mode: ThemeMode): string {
 // these 4-across → 2×2). On a phone (xs) the grid collapses to a single column and each
 // item becomes a list row — dot + label on the left, status right-aligned — because 2×2
 // cells get unreadably small at ~380px. One DOM, two layouts via flex-direction.
+// Dot size (9px), the domain-name label scale (13px / weight 500) and the dot's
+// left-anchor gap (8px) mirror the alert band's count-stat labels below, so the two
+// rows read as visual siblings.
 function HealthItem({ label, level, status }: { label: string; level: HealthLevel; status: string }) {
   const { mode } = useThemeMode()
   return (
-    <Box sx={{ display: "flex", alignItems: { xs: "center", sm: "flex-start" }, gap: "10px", minWidth: 0 }}>
-      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: healthDot(level, mode), mt: { xs: 0, sm: "4px" }, flexShrink: 0 }} />
+    <Box sx={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: healthDot(level, mode), flexShrink: 0 }} />
       <Box sx={{
         flex: 1, minWidth: 0, display: "flex",
         flexDirection: { xs: "row", sm: "column" },
@@ -45,129 +49,132 @@ function HealthItem({ label, level, status }: { label: string; level: HealthLeve
         justifyContent: { xs: "space-between", sm: "flex-start" },
         gap: { xs: "10px", sm: 0 },
       }}>
-        <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary", lineHeight: 1.3, whiteSpace: "nowrap" }}>{label}</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "text.primary", lineHeight: 1.3, whiteSpace: "nowrap" }}>{label}</Typography>
         <Typography sx={{ fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.3, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: { xs: "right", sm: "left" } }}>{status}</Typography>
       </Box>
     </Box>
   )
 }
 
+// ── Alert-band per-type breakdown ────────────────────────────────────────────
+// The three service-desk ticket types each alert-band count-stat itemises. The
+// figure is "N SR" — N bold (text.primary when non-zero, muted at zero) and the
+// type tag always muted; a non-zero figure deep-links to that type's slice of the
+// stat's queue, a zero is inert (not clickable).
+type AlertKind = "SR" | "INC" | "CHG"
+type TypeBreakdown = Record<AlertKind, number>
+const ALERT_KINDS: AlertKind[] = ["SR", "INC", "CHG"]
+const ALERT_KIND_PARAM: Record<AlertKind, string> = { SR: "sr", INC: "inc", CHG: "chg" }
+
+function TypeFigure({ n, kind, onClick }: { n: number; kind: AlertKind; onClick: () => void }) {
+  const clickable = n > 0
+  return (
+    <Box
+      component="span"
+      onClick={clickable ? (e) => { e.stopPropagation(); onClick() } : undefined}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onClick() } } : undefined}
+      sx={{
+        display: "inline-flex", alignItems: "baseline", gap: "3px", borderRadius: "4px",
+        cursor: clickable ? "pointer" : "default",
+        "&:hover": clickable ? { textDecoration: "underline" } : undefined,
+        "&:focus-visible": clickable
+          ? { outline: "1.5px solid", outlineColor: "var(--color-border-secondary)", outlineOffset: "2px" }
+          : undefined,
+      }}
+    >
+      <Typography component="span" sx={{ fontSize: 13, fontWeight: 700, lineHeight: 1, color: n > 0 ? "text.primary" : "var(--color-text-muted)" }}>
+        {n}
+      </Typography>
+      <Typography component="span" sx={{ fontSize: 11.5, fontWeight: 600, letterSpacing: "0.03em", lineHeight: 1, color: "var(--color-text-muted)" }}>
+        {kind}
+      </Typography>
+    </Box>
+  )
+}
+
 // ── Alert-band count-stat (ALWAYS-COLOURED via the DOT — follows the RAG row, calm-
 //    by-exception via dots NOT fills) ───────────────────────────────────────────
-// A RAG status dot anchors each count: GREEN at 0 ("actively fine", not absent), else
-// AMBER (Unassigned / Due soon) or RED (Breached). The dot is its own column, vertically
-// centred against the cell; the label + number stack to its right, the number coloured to
-// match the dot (neutral at 0). NO cell background tint (no fills — consistent with the
-// RAG domain row) and NO tooltip; the whole stat is clickable through to its filtered queue.
-function CountStat({ label, value, activeLevel, onClick }: {
-  label: string; value: number; activeLevel: "AMBER" | "RED"; onClick: () => void
+// Layout: a left anchor pair — the RAG status dot (GREEN at 0 "actively fine", else
+// AMBER/RED) + the big total number right beside it (coloured to the active level,
+// muted at 0) — then a column to their right: the stat label over the per-type
+// breakdown. The dot+total is one click target → the stat's whole filtered queue;
+// each non-zero type figure deep-links its own slice (?type=…). No fills, no tooltip.
+function CountStat({ label, value, breakdown, activeLevel, onWhole, onType }: {
+  label: string
+  value: number
+  breakdown: TypeBreakdown
+  activeLevel: "AMBER" | "RED"
+  onWhole: () => void
+  onType: (kind: AlertKind) => void
 }) {
   const { mode } = useThemeMode()
   const active = value > 0
   const t = ragToken(active ? activeLevel : "GREEN", mode)
   return (
-    <Box
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
-      sx={{
-        minWidth: 0, display: "flex", alignItems: "center", gap: "9px",
-        px: "10px", py: "8px", borderRadius: "8px", cursor: "pointer",
-        transition: "background-color 0.12s",
-        // Same grey hover affordance as the open-work-by-type tiles (TypeTile).
-        "&:hover": { bgcolor: "var(--color-background-tertiary)" },
-        "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "1px" },
-      }}
-    >
-      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px", whiteSpace: "nowrap" }}>
-          {label}
-        </Typography>
-        <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: active ? t.text : "text.primary" }}>
+    <Box sx={{ minWidth: 0, display: "flex", alignItems: "center", gap: "11px", py: "2px" }}>
+      {/* Left anchor pair: dot + big total → the stat's whole filtered queue. */}
+      <Box
+        onClick={onWhole}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onWhole() } }}
+        sx={{
+          flexShrink: 0, display: "flex", alignItems: "center", gap: "8px",
+          px: "6px", py: "4px", borderRadius: "8px", cursor: "pointer",
+          "&:hover": { textDecoration: "underline" },
+          "&:focus-visible": { outline: "2px solid", outlineColor: t.dot, outlineOffset: "1px" },
+        }}
+      >
+        <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: t.dot, flexShrink: 0 }} />
+        <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1, color: active ? t.text : "var(--color-text-muted)" }}>
           {value}
         </Typography>
+      </Box>
+      {/* Right column: stat label over the SR/INC/CHG breakdown. */}
+      <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "5px" }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "text.primary", lineHeight: 1, whiteSpace: "nowrap" }}>
+          {label}
+        </Typography>
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: "9px" }}>
+          {ALERT_KINDS.map(k => (
+            <TypeFigure key={k} n={breakdown[k]} kind={k} onClick={() => onType(k)} />
+          ))}
+        </Box>
       </Box>
     </Box>
   )
 }
 
-// SLA % cell — point-in-time, honest denominator; informational (NOT clickable) and
-// dot-less (a percentage has no RAG state). Neutral text always. When data exists it
-// shows "88% · of N covered"; when no open SR/INC carries an SLA due time it shows just
-// "—" (never a bare alarming 0%). No tooltip.
-function SlaStat({ pct, covered }: { pct: number | null; covered: number }) {
+// SLA stat — point-in-time, honest denominator. Keeps its own cell shape: NO dot,
+// NO breakdown (it's a ratio, not a count). Reads "N of M on track" over a thin
+// progress bar showing onTrack/covered; the bar colour follows the ratio (amber when
+// on-track is a minority, green when most are on track, red when mostly breached).
+// Empty (no open SR/INC carries an SLA due time): "—" + a neutral, unfilled bar.
+function SlaStat({ onTrack, covered, breached }: { onTrack: number; covered: number; breached: number }) {
+  const { mode } = useThemeMode()
+  const empty = covered === 0
+  const ratio = empty ? 0 : onTrack / covered
+  const level: HealthLevel =
+    empty ? "NEUTRAL"
+    : breached / covered > 0.5 ? "RED"
+    : ratio >= 0.66 ? "GREEN"
+    : "AMBER"
   return (
-    <Box sx={{ minWidth: 0, px: "10px", py: "8px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", mb: "3px" }}>
-        SLA
-      </Typography>
-      <Typography sx={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: "text.primary" }}>
-        {pct === null ? "—" : `${pct}%`}
-      </Typography>
-      {pct !== null ? (
-        <Typography sx={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap", mt: "3px" }}>
-          of {covered} covered
+    <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "6px", py: "2px", px: "6px" }}>
+      {/* "SLA" label inline with the ratio (one line), bar beneath. */}
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: "8px", minWidth: 0 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "text.primary", lineHeight: 1, flexShrink: 0 }}>
+          SLA
         </Typography>
-      ) : null}
-    </Box>
-  )
-}
-
-// ── Placeholder (a later commit fills this slot) ─────────────────────────────
-// Honest, clearly-marked reserved slot — makes the new IA visible without faking
-// content. Dashed, muted, never a calm-looking blank.
-function Placeholder({ label, note, minHeight = 96 }: { label: string; note: string; minHeight?: number }) {
-  return (
-    <Box sx={{
-      border: "1px dashed", borderColor: "var(--color-border-secondary)", borderRadius: "10px",
-      p: "16px", minHeight, display: "flex", flexDirection: "column", justifyContent: "center", gap: "4px",
-    }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-        {label}
-      </Typography>
-      <Typography sx={{ fontSize: 12, color: "text.tertiary" }}>{note}</Typography>
-    </Box>
-  )
-}
-
-// ── Contacts — explicit RESERVED slot ────────────────────────────────────────
-// Not a generic placeholder, not a blank void, not a fake: a dashed card with an icon,
-// header and a "Reserved" chip, until the Contact model lands (#174). A distinct, styled
-// reserved state — the spec's honest answer for a slot whose backing model doesn't exist.
-function ContactsReserved() {
-  return (
-    <Box sx={{
-      border: "1px dashed", borderColor: "var(--color-border-secondary)", borderRadius: "10px",
-      p: "18px", minHeight: 120, display: "flex", flexDirection: "column", gap: "8px",
-    }}>
-      <Stack direction="row" alignItems="center" gap="8px">
-        <PeopleAltOutlinedIcon sx={{ fontSize: 16, color: "var(--color-text-muted)" }} />
-        <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-          Contacts
+        <Typography sx={{ fontSize: 13, fontWeight: 600, lineHeight: 1, color: empty ? "var(--color-text-muted)" : "text.primary", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {empty ? "—" : `${onTrack} of ${covered} on track`}
         </Typography>
-        <Box sx={{ ml: "auto", px: "8px", py: "2px", borderRadius: "6px", bgcolor: "var(--color-background-tertiary)" }}>
-          <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-            Reserved
-          </Typography>
-        </Box>
-      </Stack>
-      <Typography sx={{ fontSize: 12.5, color: "text.tertiary", maxWidth: 380, lineHeight: 1.5 }}>
-        Client contacts will live here once the Contact model lands (#174).
-      </Typography>
-    </Box>
-  )
-}
-
-// ── Zone heading ─────────────────────────────────────────────────────────────
-function ZoneHeading({ label, first }: { label: string; first?: boolean }) {
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: "12px", "&&": { mt: first ? 0 : "12px", mb: "-4px" } }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
-        {label}
-      </Typography>
-      <Box sx={{ flex: 1, height: 0, borderTop: "0.5px solid", borderColor: "var(--color-border-tertiary)" }} />
+      </Box>
+      <Box sx={{ height: 4, borderRadius: "2px", bgcolor: "var(--color-background-tertiary)", overflow: "hidden" }}>
+        <Box sx={{ height: "100%", width: empty ? "0%" : `${Math.round(ratio * 100)}%`, bgcolor: healthDot(level, mode), borderRadius: "2px", transition: "width 0.2s" }} />
+      </Box>
     </Box>
   )
 }
@@ -273,10 +280,11 @@ function NeedsAttentionRow({ item, onClick }: { item: NeedsAttentionItem; onClic
       <Typography sx={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {item.subject}
       </Typography>
-      {/* Time — the prominent trailing element. Neutral (the severity dot carries urgency,
-          so the time is NOT coloured); the record reference is intentionally dropped as
-          dashboard noise. The whole row still links to the record on click. */}
-      <Typography sx={{ flexShrink: 0, fontSize: 13, fontWeight: 500, color: "text.primary", whiteSpace: "nowrap" }}>
+      {/* Time — the prominent trailing element. Directional ("1 day ago" / "in 2 hours" /
+          "14 days" — set per severity in buildNeedsAttention, no repeated severity word).
+          Bold + neutral (the severity dot carries urgency, so the time is NOT coloured); the
+          record reference is intentionally dropped as dashboard noise. Row links on click. */}
+      <Typography sx={{ flexShrink: 0, fontSize: 13, fontWeight: 600, color: "text.primary", whiteSpace: "nowrap" }}>
         {item.age}
       </Typography>
     </Box>
@@ -321,19 +329,116 @@ function NeedsAttentionEmpty() {
   )
 }
 
+// ── Recent-activity row (the context feed) ───────────────────────────────────
+// Calm-by-exception, dense and neutral: the plain-language line on the left (ref +
+// derived event), the relative time, then a trailing chevron — the feed is NOT a
+// dead-end, every row is a door into its record. The chevron + the hover highlight
+// make the drill-in obvious; the click is role-gated downstream like every other
+// dashboard drill-through. NO severity colour — this is context, not the action queue.
+function RecentActivityRow({ item, onClick }: { item: RecentActivityItem; onClick: () => void }) {
+  return (
+    <Box
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } }}
+      sx={{
+        display: "flex", alignItems: "center", gap: "12px",
+        px: "10px", py: "7px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        "&:hover": { bgcolor: "var(--color-background-secondary)" },
+        "&:hover .activity-chevron": { color: "var(--color-text-secondary)" },
+        "&:focus-visible": { outline: "2px solid", outlineColor: "var(--color-border-secondary)", outlineOffset: "-2px" },
+      }}
+    >
+      <Typography sx={{ flex: 1, minWidth: 0, fontSize: 13, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.line}
+      </Typography>
+      <Typography sx={{ flexShrink: 0, fontSize: 12, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+        {item.ago}
+      </Typography>
+      <ChevronRightRoundedIcon className="activity-chevron" sx={{ flexShrink: 0, fontSize: 18, color: "var(--color-text-muted)", transition: "color 0.12s" }} />
+    </Box>
+  )
+}
+
+// Inline expander for the recent-activity feed — "Show more" reveals up to the ceiling,
+// "Show less" collapses back. Pure in-page disclosure (no navigation); row-styled so it
+// reads as the list's own control, not a button. (A future "View all activity →" to a
+// full log belongs here once such a page exists — not added yet, there's no destination.)
+function ShowMoreLink({ expanded, hiddenCount, onToggle }: { expanded: boolean; hiddenCount: number; onToggle: () => void }) {
+  return (
+    <Box
+      onClick={onToggle}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle() } }}
+      sx={{
+        display: "flex", alignItems: "center", px: "10px", py: "8px", borderRadius: "8px", cursor: "pointer",
+        transition: "background-color 0.12s",
+        "&:hover": { bgcolor: "var(--color-background-secondary)" },
+        "&:focus-visible": { outline: "2px solid", outlineColor: "var(--color-border-secondary)", outlineOffset: "-2px" },
+      }}
+    >
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>
+        {expanded ? "Show less" : `Show more (${hiddenCount})`}
+      </Typography>
+    </Box>
+  )
+}
+
+// Honest empty state — plain, no apology (mirrors the needs-attention empty voice).
+function RecentActivityEmpty() {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", py: "28px" }}>
+      <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)" }}>No recent activity.</Typography>
+    </Box>
+  )
+}
+
+// Infrastructure empty state — a real (not blank/dashed) card for a client that has
+// live work but no estate yet: states it plainly and offers the route to add one.
+function InfrastructureEmpty({ onAdd }: { onAdd: () => void }) {
+  return (
+    <Card variant="outlined" sx={DASH_CARD_SX}>
+      <CardContent sx={{ ...CARD_CONTENT_SX, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", py: "28px" }}>
+        <Typography sx={{ fontSize: 13, color: "var(--color-text-muted)" }}>No sites yet.</Typography>
+        <Box
+          onClick={onAdd}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAdd() } }}
+          sx={{
+            px: "10px", py: "5px", borderRadius: "7px", cursor: "pointer",
+            transition: "background-color 0.12s",
+            "&:hover": { bgcolor: "var(--color-background-secondary)" },
+            "&:focus-visible": { outline: "2px solid", outlineColor: "var(--color-border-secondary)", outlineOffset: "-2px" },
+          }}
+        >
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>Add a site →</Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const clientId = getSelectedClientId()
   const [refreshing, setRefreshing] = React.useState(false)
+  // Recent-activity inline disclosure: start collapsed at COLLAPSED rows, expand to the
+  // builder's ceiling (20) via "Show more" / collapse via "Show less" — no navigation.
+  const [activityExpanded, setActivityExpanded] = React.useState(false)
+  const ACTIVITY_COLLAPSED = 7
 
   // ── Queries — the layer already in place. Tickets via the shared useTickets
   //    hook (SR/INC/CHG/TASK); checks / risks / issues / sites direct. ────────
   const tickets = useTickets()
   const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<DashCheck[]>("/checks")).data })
   const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<RIRisk[]>("/risks")).data })
-  const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<{ id: string; status: string }[]>("/issues")).data })
+  const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<RIIssue[]>("/issues")).data })
   const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], queryFn: async () => (await api.get<EstateSite[]>("/sites")).data })
 
   const isLoading = tickets.isLoading || checks.isLoading || risks.isLoading || issues.isLoading || sites.isLoading
@@ -346,25 +451,36 @@ export default function DashboardPage() {
   const m = React.useMemo(() => {
     let breached = 0, dueSoon = 0, onTrack = 0, unassigned = 0, srBreached = 0
     let sr = 0, inc = 0, chg = 0, task = 0
+    // Alert-band per-type breakdowns (SR/INC/CHG only — the three service-desk
+    // ticket types each stat itemises). Unassigned tallies all three; Due soon /
+    // Breached only SR+INC carry an SLA bucket (CHG is outside the queue's SLA
+    // filter — serviceDeskQueue.ts), so chg stays 0 there and each SLA stat's
+    // breakdown sums to its total. TASK is open work (it feeds the `unassigned`
+    // total + Service-Desk health) but is not one of the three itemised tags.
+    const un: TypeBreakdown = { SR: 0, INC: 0, CHG: 0 }
+    const ds: TypeBreakdown = { SR: 0, INC: 0, CHG: 0 }
+    const br: TypeBreakdown = { SR: 0, INC: 0, CHG: 0 }
     for (const t of tickets.data) {
       if (t.chipIntent === "done") continue                      // open work only
-      if (!t.assignee) unassigned++
+      if (!t.assignee) {
+        unassigned++
+        if (t.kind === "SR" || t.kind === "INC" || t.kind === "CHG") un[t.kind]++
+      }
       if (t.kind === "SR") sr++
       else if (t.kind === "INC") inc++
       else if (t.kind === "CHG") chg++
       else if (t.kind === "TASK") task++
       if (t.kind === "SR" || t.kind === "INC") {
         switch (computeSlaStatus(t.dueAt, false)) {
-          case "breached": breached++; if (t.kind === "SR") srBreached++; break
-          case "due-soon": dueSoon++; break
+          case "breached": breached++; br[t.kind]++; if (t.kind === "SR") srBreached++; break
+          case "due-soon": dueSoon++; ds[t.kind]++; break
           case "on-track": onTrack++; break
           default: break                                          // no due date → outside SLA
         }
       }
     }
     const covered = breached + dueSoon + onTrack
-    const pct = covered > 0 ? Math.round((onTrack / covered) * 100) : null
-    return { breached, dueSoon, onTrack, covered, pct, unassigned, srBreached, sr, inc, chg, task }
+    return { breached, dueSoon, onTrack, covered, unassigned, srBreached, sr, inc, chg, task, un, ds, br }
   }, [tickets.data])
 
   // Nav-row open counts for Risks / Issues (client-wide; same terminal-state
@@ -377,6 +493,14 @@ export default function DashboardPage() {
   //    alert band reads. Capped at 5 rows in the UI; the full count drives the
   //    header total + the "N more" overflow link. ────────────────────────────────
   const needsAttention = React.useMemo(() => buildNeedsAttention(tickets.data), [tickets.data])
+
+  // ── Recent activity — the dense, most-recent-first context feed across ALL record
+  //    types (tickets + risks + issues + checks), derived from the same already-fetched
+  //    lists; capped at 7. Context, not an action list (that's needs-attention above). ─
+  const recentActivity = React.useMemo(
+    () => buildRecentActivity(tickets.data, risks.data ?? [], issues.data ?? [], checks.data ?? []),
+    [tickets.data, risks.data, issues.data, checks.data],
+  )
 
   // ── Domain-health RAG derivations ────────────────────────────────────────
   // Service Desk — red on any breach; amber on due-soon or unassigned; else green.
@@ -511,9 +635,9 @@ export default function DashboardPage() {
               dangling rule. rowGap gives the 2×2 layout breathing room. Dividers are
               neutral — the domain dots are the only colour in this card. */}
           <Card variant="outlined" sx={DASH_CARD_SX}>
-            <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
+            <CardContent sx={{ ...CARD_CONTENT_SX, py: "12px", "&:last-child": { pb: "12px" } }}>
               <Box sx={{
-                display: "grid",
+                display: "grid", alignItems: "center",
                 gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(4, 1fr)" },
                 columnGap: "20px", rowGap: { xs: "14px", sm: "18px" },
                 "& > *": { position: "relative" },
@@ -536,17 +660,18 @@ export default function DashboardPage() {
           </Card>
 
           {/* 2 · Alert band — state reads off the individual stats only (NO summary
-              badge). Order: SLA · Unassigned · Due soon · Breached. SLA is informational +
-              dot-less; the three count-stats carry a RAG dot (green at 0, amber/red when
-              active) with the number coloured to match — calm-by-exception via dots, NOT
-              fills, consistent with the RAG row. No tooltips; each count-stat is clickable.
-              Same grid + centred-hairline pattern as the RAG card: even distribution (SLA a
-              touch wider for "88% · of N covered"; its empty "—" keeps the same gap to its
-              divider), reflowing to 2×2 below md without dangling rules. */}
+              badge). Order: SLA · Unassigned · Due soon · Breached. Each count-stat pairs a
+              RAG dot + the big total (green at 0, amber/red when active, the number coloured
+              to match) on the left, with the stat label over its SR/INC/CHG breakdown to the
+              right — calm-by-exception via dots, NOT fills, consistent with the RAG row. SLA
+              keeps its own dot-less shape (a "N of M on track" ratio + thin bar). No
+              tooltips; the total deep-links the whole queue, each non-zero type figure its
+              slice. Same grid + centred-hairline + matched height as the RAG card, reflowing
+              to 2×2 below md without dangling rules. */}
           <Card variant="outlined" sx={DASH_CARD_SX}>
-            <CardContent sx={{ ...CARD_CONTENT_SX, py: "14px", "&:last-child": { pb: "14px" } }}>
+            <CardContent sx={{ ...CARD_CONTENT_SX, py: "12px", "&:last-child": { pb: "12px" } }}>
               <Box sx={{
-                display: "grid",
+                display: "grid", alignItems: "center",
                 gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
                 columnGap: "16px", rowGap: "14px",
                 "& > *": { position: "relative" },
@@ -557,18 +682,21 @@ export default function DashboardPage() {
                 "& > *:nth-of-type(2n+1)::before": { display: { xs: "none", md: "block" } },
                 "& > *:nth-of-type(4n+1)::before": { display: { md: "none" } },
               }}>
-                <SlaStat pct={m.pct} covered={m.covered} />
+                <SlaStat onTrack={m.onTrack} covered={m.covered} breached={m.breached} />
                 <CountStat
-                  label="Unassigned" value={m.unassigned} activeLevel="AMBER"
-                  onClick={() => navigate("/service-desk?status=unassigned")}
+                  label="Unassigned" value={m.unassigned} breakdown={m.un} activeLevel="AMBER"
+                  onWhole={() => navigate("/service-desk?status=unassigned")}
+                  onType={(k) => navigate(`/service-desk?status=unassigned&type=${ALERT_KIND_PARAM[k]}`)}
                 />
                 <CountStat
-                  label="Due soon" value={m.dueSoon} activeLevel="AMBER"
-                  onClick={() => navigate("/service-desk?sla=due-soon")}
+                  label="Due soon" value={m.dueSoon} breakdown={m.ds} activeLevel="AMBER"
+                  onWhole={() => navigate("/service-desk?sla=due-soon")}
+                  onType={(k) => navigate(`/service-desk?sla=due-soon&type=${ALERT_KIND_PARAM[k]}`)}
                 />
                 <CountStat
-                  label="Breached" value={m.breached} activeLevel="RED"
-                  onClick={() => navigate("/service-desk?sla=breached")}
+                  label="Breached" value={m.breached} breakdown={m.br} activeLevel="RED"
+                  onWhole={() => navigate("/service-desk?sla=breached")}
+                  onType={(k) => navigate(`/service-desk?sla=breached&type=${ALERT_KIND_PARAM[k]}`)}
                 />
               </Box>
             </CardContent>
@@ -604,61 +732,82 @@ export default function DashboardPage() {
             <TypeTile label="Issues" count={issuesOpen} onClick={() => navigate("/risks-issues?type=issues")} />
           </Box>
 
-          {/* 4 · Needs attention (hero list) + 5 · Recent activity (placeholder —
-              later commit), two-up on laptop. Needs-attention is the merged,
-              severity-ordered action queue: SectionBar header carries the total
-              count; the list caps at 5 rows with an "N more" overflow; the calm
-              green empty state shows when nothing needs action. */}
-          <Stack direction={{ xs: "column", md: "row" }} gap="16px" alignItems={{ md: "flex-start" }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Stack spacing="12px">
-                <SectionBar
-                  label="Needs attention"
-                  right={needsAttention.length > 0
-                    ? <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
-                        {needsAttention.length} item{needsAttention.length === 1 ? "" : "s"}
-                      </Typography>
-                    : undefined}
-                />
-                <Card variant="outlined" sx={DASH_CARD_SX}>
-                  <CardContent sx={{ p: "6px", "&:last-child": { pb: "6px" } }}>
-                    {needsAttention.length === 0 ? (
-                      <NeedsAttentionEmpty />
-                    ) : (
-                      <Stack>
-                        {needsAttention.slice(0, 5).map(item => (
-                          <NeedsAttentionRow key={item.id} item={item} onClick={() => navigate(item.detailPath)} />
-                        ))}
-                        {needsAttention.length > 5 ? (
-                          <MoreLink count={needsAttention.length - 5} onClick={() => navigate("/service-desk?status=open")} />
-                        ) : null}
-                      </Stack>
-                    )}
-                  </CardContent>
-                </Card>
-              </Stack>
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Placeholder label="Recent activity" note="Latest status changes & assignments. Added in a later commit." minHeight={140} />
-            </Box>
+          {/* 4 · Needs attention (hero list) — full width. The merged, severity-ordered
+              action queue (caps at 5 rows with an "N more" overflow). Recent activity no
+              longer sits beside it (moved to the page foot), so it claims the full width. */}
+          <Stack spacing="12px">
+            <SectionBar
+              label="Needs attention"
+              right={needsAttention.length > 0
+                ? <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                    {needsAttention.length} item{needsAttention.length === 1 ? "" : "s"}
+                  </Typography>
+                : undefined}
+            />
+            <Card variant="outlined" sx={DASH_CARD_SX}>
+              <CardContent sx={{ p: "6px", "&:last-child": { pb: "6px" } }}>
+                {needsAttention.length === 0 ? (
+                  <NeedsAttentionEmpty />
+                ) : (
+                  <Stack>
+                    {needsAttention.slice(0, 5).map(item => (
+                      <NeedsAttentionRow key={item.id} item={item} onClick={() => navigate(item.detailPath)} />
+                    ))}
+                    {needsAttention.length > 5 ? (
+                      <MoreLink count={needsAttention.length - 5} onClick={() => navigate("/service-desk?status=open")} />
+                    ) : null}
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
           </Stack>
 
           {/* 6 · Checks panel (site-organised) — summary strip + per-site spine + site drill. */}
           <ChecksPanel checks={checks.data ?? []} />
 
-          <ZoneHeading label="Client" />
+          {/* 7 · Infrastructure summary — full width (Contacts removed; returns with #174).
+              A light estate presence: Sites/Cabinets/Assets counts + a short sites list
+              (each → the asset hierarchy) + "View estate →", reusing EstateHero off the
+              already-fetched /sites query; NO health/fill bars (deferred to DCIM). In
+              estate-forward the estate is already the hero above, so this slot is omitted. */}
+          {coldState === "estate" ? null : (
+            <Stack spacing="12px">
+              <SectionBar label="Infrastructure" />
+              {siteCount === 0 ? (
+                <InfrastructureEmpty onAdd={() => navigate("/asset-hierarchy")} />
+              ) : (
+                <EstateHero sites={sites.data ?? []} onNavigate={(to) => navigate(to)} />
+              )}
+            </Stack>
+          )}
 
-          {/* 7 + 8 · Infrastructure band + Contacts — later commit. In estate-forward the
-              estate is already the hero above, so the Infrastructure slot is omitted here. */}
-          <Stack direction={{ xs: "column", md: "row" }} gap="16px">
-            {coldState === "estate" ? null : (
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Placeholder label="Infrastructure" note="Sites · Cabinets · Assets band. Added in a later commit." minHeight={120} />
-              </Box>
-            )}
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <ContactsReserved />
-            </Box>
+          {/* 8 · Recent activity — full width at the page foot. The dense, most-recent-first
+              cross-type context feed: status changes, assignments, new records. Context, not
+              an action list (that's needs-attention above). Every row drills into its record
+              (chevron + hover, role-gated). Starts collapsed; "Show more" expands inline up
+              to the builder's ceiling, "Show less" collapses back — no navigation. */}
+          <Stack spacing="12px">
+            <SectionBar label="Recent activity" />
+            <Card variant="outlined" sx={DASH_CARD_SX}>
+              <CardContent sx={{ p: "6px", "&:last-child": { pb: "6px" } }}>
+                {recentActivity.length === 0 ? (
+                  <RecentActivityEmpty />
+                ) : (
+                  <Stack>
+                    {(activityExpanded ? recentActivity : recentActivity.slice(0, ACTIVITY_COLLAPSED)).map(item => (
+                      <RecentActivityRow key={item.id} item={item} onClick={() => navigate(item.detailPath)} />
+                    ))}
+                    {recentActivity.length > ACTIVITY_COLLAPSED ? (
+                      <ShowMoreLink
+                        expanded={activityExpanded}
+                        hiddenCount={recentActivity.length - ACTIVITY_COLLAPSED}
+                        onToggle={() => setActivityExpanded(v => !v)}
+                      />
+                    ) : null}
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
           </Stack>
         </Stack>
       ) : null}

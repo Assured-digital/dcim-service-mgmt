@@ -26,8 +26,10 @@ export interface NeedsAttentionItem {
   reference: string
   subject: string
   detailPath: string
-  /** Clean relative age of the record ("8 days" · "2 hours"). Neutral — the severity dot
-   *  carries urgency; the reference is intentionally not surfaced on the dashboard. */
+  /** Directional relative time, disambiguated by severity (the severity word is NOT
+   *  repeated): breached "1 day ago" (since breach), due-soon "in 2 hours" (until due),
+   *  unassigned "14 days" (since opened). Neutral — the severity dot carries urgency; the
+   *  reference is intentionally not surfaced on the dashboard. */
   age: string
 }
 
@@ -60,9 +62,16 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
     // Within-tier sort key (display is separate): SLA tiers order by dueAt ascending
     // (most overdue / soonest-due first); unassigned orders by age (oldest first).
     const sortKey = severity === "unassigned" ? createdMs : (dueMs ?? createdMs)
-    // Displayed time = the record's age, in a clean neutral format. It can differ from the
-    // sort key (e.g. a due-soon row sorts by dueAt but shows how long it has been open).
-    const age = formatDurationLong(now - createdMs)
+    // Directional time — disambiguates the bare duration by severity WITHOUT repeating the
+    // row's severity word: breached shows time SINCE the breach ("1 day ago"), due-soon time
+    // UNTIL due ("in 2 hours"), unassigned plain elapsed since opened ("14 days"). The
+    // "ago"/"in"/plain form alone signals past-vs-future. breached/due-soon always carry a
+    // dueMs (computeSlaStatus only returns those when dueAt is set); the guard falls back to
+    // elapsed if somehow absent.
+    const age =
+      severity === "breached" && dueMs !== null ? `${formatDurationLong(now - dueMs)} ago`
+      : severity === "due-soon" && dueMs !== null ? `in ${formatDurationLong(dueMs - now)}`
+      : formatDurationLong(now - createdMs)
 
     ranked.push({
       id: t.id,

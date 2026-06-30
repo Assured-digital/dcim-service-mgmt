@@ -191,7 +191,7 @@ export function EstateHero({ sites, onNavigate }: { sites: EstateSite[]; onNavig
           }}
         >
           <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>
-            {hidden > 0 ? `View all ${sites.length} sites →` : "View all →"}
+            {hidden > 0 ? `View all ${sites.length} sites →` : "View estate →"}
           </Typography>
         </Box>
       </CardContent>
