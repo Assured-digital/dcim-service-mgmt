@@ -245,7 +245,7 @@ export class ChecksService {
         site: { select: { id: true, name: true } },
         assignee: { select: userDisplaySelect },
         template: { select: { id: true, name: true, checkType: true } },
-        items: { select: { id: true, response: true, isRequired: true, isCritical: true } }
+        items: { select: { id: true, response: true, isRequired: true, isCritical: true, reworkFlagged: true } }
       },
       orderBy: { updatedAt: "desc" }
     })

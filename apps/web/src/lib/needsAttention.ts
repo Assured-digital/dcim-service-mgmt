@@ -15,6 +15,7 @@
 // contribute — they are never "overdue" (handled in the checks panel).
 
 import { computeSlaStatus } from "./serviceDeskQueue"
+import { formatDurationLong } from "./notifications"
 import type { Ticket } from "./tickets"
 
 export type Severity = "breached" | "due-soon" | "unassigned"
@@ -25,27 +26,19 @@ export interface NeedsAttentionItem {
   reference: string
   subject: string
   detailPath: string
-  /** Short right-aligned pressure label: "4h over" · "due 2h" · "3d old". */
-  pressure: string
+  /** Directional relative time, disambiguated by severity (the severity word is NOT
+   *  repeated): breached "1 day ago" (since breach), due-soon "in 2 hours" (until due),
+   *  unassigned "14 days" (since opened). Neutral — the severity dot carries urgency; the
+   *  reference is intentionally not surfaced on the dashboard. */
+  age: string
 }
 
 // Tier order for the merged queue: breached first, then due-soon, then unassigned.
 const TIER_RANK: Record<Severity, number> = { breached: 0, "due-soon": 1, unassigned: 2 }
 
-// Compact relative duration: "45m" → "3h" → "2d". Derives each unit from the one
-// below so the rounding is consistent; never returns "0m" (clamps to 1m).
-function humaniseDuration(ms: number): string {
-  const mins = Math.max(1, Math.round(ms / 60000))
-  if (mins < 60) return `${mins}m`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.round(hours / 24)
-  return `${days}d`
-}
-
 /**
  * Build the prioritised needs-attention queue from the ticket union.
- * Ordered breached → due-soon → unassigned; within each tier by pressure
+ * Ordered breached → due-soon → unassigned; within each tier by SLA urgency
  * (most overdue / closest-to-due / oldest first). One row per record.
  */
 export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsAttentionItem[] {
@@ -66,20 +59,19 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
     const dueMs = t.dueAt ? new Date(t.dueAt).getTime() : null
     const createdMs = new Date(t.createdAt).getTime()
 
-    // pressure label + within-tier sort key. SLA tiers order by dueAt ascending
+    // Within-tier sort key (display is separate): SLA tiers order by dueAt ascending
     // (most overdue / soonest-due first); unassigned orders by age (oldest first).
-    let pressure: string
-    let sortKey: number
-    if (severity === "breached" && dueMs !== null) {
-      pressure = `${humaniseDuration(now - dueMs)} over`
-      sortKey = dueMs
-    } else if (severity === "due-soon" && dueMs !== null) {
-      pressure = `due ${humaniseDuration(dueMs - now)}`
-      sortKey = dueMs
-    } else {
-      pressure = `${humaniseDuration(now - createdMs)} old`
-      sortKey = createdMs
-    }
+    const sortKey = severity === "unassigned" ? createdMs : (dueMs ?? createdMs)
+    // Directional time — disambiguates the bare duration by severity WITHOUT repeating the
+    // row's severity word: breached shows time SINCE the breach ("1 day ago"), due-soon time
+    // UNTIL due ("in 2 hours"), unassigned plain elapsed since opened ("14 days"). The
+    // "ago"/"in"/plain form alone signals past-vs-future. breached/due-soon always carry a
+    // dueMs (computeSlaStatus only returns those when dueAt is set); the guard falls back to
+    // elapsed if somehow absent.
+    const age =
+      severity === "breached" && dueMs !== null ? `${formatDurationLong(now - dueMs)} ago`
+      : severity === "due-soon" && dueMs !== null ? `in ${formatDurationLong(dueMs - now)}`
+      : formatDurationLong(now - createdMs)
 
     ranked.push({
       id: t.id,
@@ -87,7 +79,7 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
       reference: t.reference,
       subject: t.subject,
       detailPath: t.detailPath,
-      pressure,
+      age,
       tier: TIER_RANK[severity],
       sortKey,
     })
@@ -100,6 +92,6 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
     reference: r.reference,
     subject: r.subject,
     detailPath: r.detailPath,
-    pressure: r.pressure,
+    age: r.age,
   }))
 }

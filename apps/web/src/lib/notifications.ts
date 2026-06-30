@@ -111,3 +111,15 @@ export function formatRelativeTime(iso: string): string {
   if (day < 7) return `${day}d ago`
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
 }
+
+// Clean, spelled-out duration from a millisecond span: "5 minutes" → "3 hours" → "8 days".
+// Neutral phrasing (no abbreviation, no "old"/"ago") for dashboards where a severity cue
+// already carries urgency; callers append " ago" when a past-tense reading is wanted.
+export function formatDurationLong(ms: number): string {
+  const mins = Math.max(1, Math.round(ms / 60000))
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"}`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"}`
+  const days = Math.round(hrs / 24)
+  return `${days} day${days === 1 ? "" : "s"}`
+}
