@@ -405,6 +405,37 @@ model ServiceRequest {
   auditEvents AuditEvent[]
 }
 
+// Global hardware catalogue — Manufacturer + DeviceType. NOT client-scoped: a
+// "Dell PowerEdge R740" is the same everywhere, shared across tenants (same
+// rationale as the shared check-template library). Tenant isolation still applies
+// to Assets, which reference a DeviceType via the optional deviceTypeId FK.
+model Manufacturer {
+  id          String   @id @default(uuid())
+  name        String   @unique // "Dell", "Cisco", "APC"
+  slug        String   @unique // netbox slug, for seed matching / dedupe
+  createdAt   DateTime @default(now())
+
+  deviceTypes DeviceType[]
+}
+
+model DeviceType {
+  id             String       @id @default(uuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id])
+  model          String // "PowerEdge R740"
+  slug           String       @unique // netbox slug
+  uHeight        Float? // nameplate U height — Float supports 0.5U (half-U kit)
+  isFullDepth    Boolean?     @default(true) // consumes both faces — drives the rear elevation view
+  powerDrawW     Float? // nameplate power [LATENT] — auto-fills Asset.powerDrawW on placement
+  partNumber     String?
+  isSeeded       Boolean      @default(false) // true = from NetBox seed, false = user-created (guards re-seed)
+  createdAt      DateTime     @default(now())
+
+  assets         Asset[]
+
+  @@unique([manufacturerId, model])
+}
+
 model Asset {
   id                  String              @id @default(uuid())
   assetTag            String              @unique
@@ -417,6 +448,11 @@ model Asset {
   site                Site?               @relation(fields: [siteId], references: [id])
   cabinetId           String?
   cabinet             Cabinet?            @relation(fields: [cabinetId], references: [id])
+  // Optional catalogue FK. null = free-text (legacy/manual). The denormalised
+  // manufacturer/modelNumber/uHeight/powerDrawW strings below REMAIN — the catalogue
+  // populates them, never replaces them. Legacy assets untouched.
+  deviceTypeId        String?
+  deviceType          DeviceType?         @relation(fields: [deviceTypeId], references: [id])
   status              String              @default("ACTIVE")
   manufacturer        String?
   modelNumber         String?

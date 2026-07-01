@@ -30,6 +30,7 @@ import { RecordLinksModule } from "./record-links/record-links.module"
 import { AttachmentsModule } from "./attachments/attachments.module"
 import { NotificationsModule } from "./notifications/notifications.module"
 import { RecordReportModule } from "./records-report/record-report.module"
+import { DeviceTypesModule } from "./device-types/device-types.module"
 
 @Module({
   imports: [
@@ -62,7 +63,8 @@ import { RecordReportModule } from "./records-report/record-report.module"
     RecordLinksModule,
     AttachmentsModule,
     NotificationsModule,
-    RecordReportModule
+    RecordReportModule,
+    DeviceTypesModule
   ],
   controllers: [HealthController]
 })
