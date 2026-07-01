@@ -99,6 +99,7 @@ export class AssetsService {
         clientId: dto.ownerType === OwnerType.CLIENT ? targetClientId : null,
         siteId: dto.siteId ?? null,
         cabinetId: dto.cabinetId ?? null,
+        deviceTypeId: dto.deviceTypeId ?? null,
         status: dto.status ?? "ACTIVE",
         manufacturer: dto.manufacturer ?? null,
         modelNumber: dto.modelNumber ?? null,

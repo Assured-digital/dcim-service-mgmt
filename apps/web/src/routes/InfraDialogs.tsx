@@ -11,6 +11,8 @@ import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import { Room, ROOM_TYPE_LABELS, ASSET_LIFECYCLE_OPTIONS, ElevationSide, Cabinet, Site } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { DeviceTypePicker } from "./DeviceTypePicker"
+import { DeviceType, formatU } from "../lib/deviceTypes"
 
 // User-friendly labels for the MaintenanceWorkType prisma enum
 const MAINTENANCE_WORK_TYPES: { value: string; label: string }[] = [
@@ -268,6 +270,27 @@ export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClo
   const [rackSide, setRackSide] = React.useState<ElevationSide>("FRONT")
   const [cabinetId, setCabinetId] = React.useState(defaultCabinetId ?? "")
   const [saving, setSaving] = React.useState(false)
+  // Optional catalogue link. When a device type is picked we copy its specs onto
+  // the denormalised fields below (keeping them in sync for display, per spec §3.2)
+  // and remember the FK to persist. Hand-editing manufacturer/model clears the link.
+  const [deviceTypeId, setDeviceTypeId] = React.useState<string | null>(null)
+  const [deviceTypeLabel, setDeviceTypeLabel] = React.useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = React.useState(false)
+
+  function applyDeviceType(dt: DeviceType) {
+    setDeviceTypeId(dt.id)
+    setDeviceTypeLabel(`${dt.manufacturer.name} ${dt.model}`)
+    setManufacturer(dt.manufacturer.name)
+    setModel(dt.model)
+    if (dt.uHeight != null) setUHeight(String(dt.uHeight))
+    if (dt.powerDrawW != null) setPower(String(dt.powerDrawW))
+    setPickerOpen(false)
+  }
+
+  function clearDeviceType() {
+    setDeviceTypeId(null)
+    setDeviceTypeLabel(null)
+  }
 
   async function handleSave() {
     if (!assetTag.trim() || !name.trim() || !type.trim()) return
@@ -275,7 +298,8 @@ export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClo
     try {
       await onSave({
         assetTag: assetTag.trim(), name: name.trim(), assetType: type.trim(),
-        cabinetId: cabinetId || undefined, manufacturer: manufacturer || undefined,
+        cabinetId: cabinetId || undefined, deviceTypeId: deviceTypeId || undefined,
+        manufacturer: manufacturer || undefined,
         modelNumber: model || undefined, serialNumber: serial || undefined,
         ipAddress: ip || undefined, uPosition: uPos ? parseInt(uPos) : undefined,
         uHeight: uHeight ? parseInt(uHeight) : undefined,
@@ -287,6 +311,7 @@ export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClo
   }
 
   return (
+    <>
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Add asset{contextLabel ? ` to ${contextLabel}` : ""}</DialogTitle>
       <DialogContent>
@@ -294,14 +319,33 @@ export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClo
           <Stack direction="row" spacing={2}><TextField label="Asset tag" value={assetTag} onChange={e => setAssetTag(e.target.value)} required fullWidth autoFocus /><TextField label="Name" value={name} onChange={e => setName(e.target.value)} required fullWidth /></Stack>
           <TextField label="Type" value={type} onChange={e => setType(e.target.value)} required fullWidth />
           <TextField select label="Cabinet" value={cabinetId} onChange={e => setCabinetId(e.target.value)} fullWidth><MenuItem value="">Unassigned</MenuItem>{cabinets.map(cab => <MenuItem key={cab.id} value={cab.id}>{cab.name}</MenuItem>)}</TextField>
-          <Stack direction="row" spacing={2}><TextField label="Manufacturer" value={manufacturer} onChange={e => setManufacturer(e.target.value)} fullWidth /><TextField label="Model" value={model} onChange={e => setModel(e.target.value)} fullWidth /></Stack>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, border: "1px solid #e2e8f0", bgcolor: "#f8fafc" }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="caption" sx={{ color: "#64748b" }}>Device type (catalogue)</Typography>
+                <Typography variant="body2" noWrap>{deviceTypeLabel ?? "Free text — no catalogue type"}</Typography>
+              </Box>
+              <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+                {deviceTypeId && <Button size="small" variant="text" onClick={clearDeviceType} sx={{ textTransform: "none" }}>Clear</Button>}
+                <Button size="small" variant="outlined" onClick={() => setPickerOpen(true)} sx={{ textTransform: "none" }}>{deviceTypeId ? "Change" : "Choose from catalogue"}</Button>
+              </Stack>
+            </Stack>
+          </Box>
+          <Stack direction="row" spacing={2}><TextField label="Manufacturer" value={manufacturer} onChange={e => { setManufacturer(e.target.value); clearDeviceType() }} fullWidth /><TextField label="Model" value={model} onChange={e => { setModel(e.target.value); clearDeviceType() }} fullWidth /></Stack>
           <Stack direction="row" spacing={2}><TextField label="Serial number" value={serial} onChange={e => setSerial(e.target.value)} fullWidth /><TextField label="IP address" value={ip} onChange={e => setIp(e.target.value)} fullWidth /></Stack>
           <Stack direction="row" spacing={2}><TextField label="U position" type="number" value={uPos} onChange={e => setUPos(e.target.value)} fullWidth /><TextField label="U height" type="number" value={uHeight} onChange={e => setUHeight(e.target.value)} fullWidth /><TextField label="Power draw (W)" type="number" value={power} onChange={e => setPower(e.target.value)} fullWidth /></Stack>
+          {deviceTypeId && uHeight && !Number.isInteger(parseFloat(uHeight)) && (
+            <Typography variant="caption" sx={{ color: "#64748b" }}>
+              Catalogue U-height is {formatU(parseFloat(uHeight))}; the asset stores whole U, so it is rounded on save.
+            </Typography>
+          )}
           <TextField select label="Cabinet side" value={rackSide} onChange={e => setRackSide(e.target.value as ElevationSide)} fullWidth><MenuItem value="FRONT">Front</MenuItem><MenuItem value="REAR">Rear</MenuItem></TextField>
         </Stack>
       </DialogContent>
       <DialogActions><Button onClick={onClose}>Cancel</Button><Button variant="contained" onClick={handleSave} disabled={saving || !assetTag.trim() || !name.trim() || !type.trim()}>{saving ? "Creating..." : "Add asset"}</Button></DialogActions>
     </Dialog>
+    {pickerOpen && <DeviceTypePicker onSelect={applyDeviceType} onClose={() => setPickerOpen(false)} />}
+    </>
   )
 }
 

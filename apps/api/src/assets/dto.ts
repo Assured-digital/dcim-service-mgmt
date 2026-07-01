@@ -26,6 +26,13 @@ export class CreateAssetDto {
   @IsString()
   cabinetId?: string
 
+  // Optional catalogue FK — set when the asset was created via the device-type
+  // picker. null = free-text/manual entry (the denormalised strings below carry
+  // the manufacturer/model in that case).
+  @IsOptional()
+  @IsString()
+  deviceTypeId?: string
+
   @IsOptional()
   @IsString()
   status?: string
