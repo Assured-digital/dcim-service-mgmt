@@ -422,7 +422,7 @@ function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children
             display: "flex", alignItems: "center", justifyContent: "center",
             overflow: "hidden",
             width: expanded ? 16 : 0, height: 16, flexShrink: 0,
-            ...(launcher ? { ml: "auto" } : {}),
+            ml: "auto", // right-align every section's chevron (matches DCIM)
             opacity: expanded ? (launcher ? 0.7 : 1) : 0,
             transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease, transform 0.2s ease",
             transform: !launcher && isOpen ? "rotate(90deg)" : "rotate(0deg)",
