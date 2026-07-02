@@ -26,6 +26,16 @@ export class CreateConnectionDto {
   @IsUUID()
   toAssetId!: string
 
+  // Optional port-level endpoints (DCIM_SCHEMA_SPEC §6). Each must belong to its
+  // asset; null/absent keeps the cable an asset-level link (today's behaviour).
+  @IsOptional()
+  @IsUUID()
+  fromPortId?: string | null
+
+  @IsOptional()
+  @IsUUID()
+  toPortId?: string | null
+
   @IsString()
   connectionType!: string
 
@@ -58,6 +68,14 @@ export class UpdateConnectionDto {
   @IsOptional()
   @IsUUID()
   toAssetId?: string
+
+  @IsOptional()
+  @IsUUID()
+  fromPortId?: string | null
+
+  @IsOptional()
+  @IsUUID()
+  toPortId?: string | null
 
   @IsOptional()
   @IsString()

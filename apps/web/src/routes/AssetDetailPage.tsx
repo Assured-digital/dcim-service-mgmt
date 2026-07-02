@@ -26,6 +26,8 @@ import { CreateTaskModal } from "./modals/CreateTaskModal"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import { CreateRiskModal, CreateIssueModal } from "./RisksIssuesPage"
 import { CreateServiceRequestModal } from "./ServiceDeskPage"
+import { DeviceTypePicker } from "./DeviceTypePicker"
+import AssetPortsPanel from "./AssetPortsPanel"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -522,7 +524,7 @@ export default function AssetDetailPage({
           />
         ) : null}
 
-        {tab === "connections" ? <ConnectionsTab asset={asset} /> : null}
+        {tab === "connections" ? <ConnectionsTab asset={asset} canManage={canManage} /> : null}
 
         {tab === "linked" ? (
           <LinkedTab
@@ -635,20 +637,55 @@ const OverviewTab = React.memo(function OverviewTab({
 }) {
   const warrantyCol = warrantyColor(asset.warrantyExpiry)
   const draft = editDraft ?? {}
+  const [pickerOpen, setPickerOpen] = React.useState(false)
 
   return (
     <Box>
+      {pickerOpen ? (
+        <DeviceTypePicker
+          onClose={() => setPickerOpen(false)}
+          onSelect={(dt) => {
+            // Copy the type's specs onto the draft (catalogue populates the
+            // denormalised fields); the server re-stamps weight/budget/isFullDepth.
+            onPatchDraft({
+              deviceTypeId: dt.id,
+              manufacturer: dt.manufacturer.name,
+              modelNumber: dt.model,
+              ...(dt.uHeight != null ? { uHeight: Math.round(dt.uHeight) } : {}),
+              ...(dt.powerDrawW != null ? { powerDrawW: dt.powerDrawW } : {}),
+            })
+            setPickerOpen(false)
+          }}
+        />
+      ) : null}
       <Box sx={{ display: "grid", gap: "12px", gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" } }}>
         {/* Hardware */}
         <PropertyCard title="Hardware">
+          {editMode ? (
+            <PropertyRow label="Device type">
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
+                <Typography sx={{ ...valueSx, flex: 1, color: draft.deviceTypeId ? "text.primary" : "text.secondary" }}>
+                  {draft.deviceTypeId ? `${draft.manufacturer ?? ""} ${draft.modelNumber ?? ""}`.trim() || "Linked" : "Free-text (not linked)"}
+                </Typography>
+                <Button size="small" variant="outlined" onClick={() => setPickerOpen(true)} sx={{ textTransform: "none", fontSize: 11.5 }}>
+                  {draft.deviceTypeId ? "Change" : "Choose from catalogue"}
+                </Button>
+                {draft.deviceTypeId ? (
+                  <Button size="small" onClick={() => onPatchDraft({ deviceTypeId: null })} sx={{ textTransform: "none", fontSize: 11.5, minWidth: 0 }}>Unlink</Button>
+                ) : null}
+              </Stack>
+            </PropertyRow>
+          ) : null}
           <PropertyRow label="Manufacturer">
             {editMode ? (
-              <TextField size="small" value={draft.manufacturer ?? ""} onChange={e => onPatchDraft({ manufacturer: e.target.value })} fullWidth />
+              // Hand-editing the manufacturer/model clears the catalogue link (the
+              // denormalised strings become free-text again) — mirrors AddAssetDialog.
+              <TextField size="small" value={draft.manufacturer ?? ""} onChange={e => onPatchDraft({ manufacturer: e.target.value, deviceTypeId: null })} fullWidth />
             ) : <PropertyValue value={asset.manufacturer} />}
           </PropertyRow>
           <PropertyRow label="Model">
             {editMode ? (
-              <TextField size="small" value={draft.modelNumber ?? ""} onChange={e => onPatchDraft({ modelNumber: e.target.value })} fullWidth />
+              <TextField size="small" value={draft.modelNumber ?? ""} onChange={e => onPatchDraft({ modelNumber: e.target.value, deviceTypeId: null })} fullWidth />
             ) : <PropertyValue value={asset.modelNumber} />}
           </PropertyRow>
           <PropertyRow label="Serial">
@@ -790,7 +827,7 @@ const OverviewTab = React.memo(function OverviewTab({
 
 // ─── Connections tab ──────────────────────────────────────────────────────
 
-const ConnectionsTab = React.memo(function ConnectionsTab({ asset }: { asset: Asset }) {
+const ConnectionsTab = React.memo(function ConnectionsTab({ asset, canManage }: { asset: Asset; canManage: boolean }) {
   const { mode } = useThemeMode()
   return (
     <Stack spacing={1.5} sx={{ maxWidth: 880 }}>
@@ -813,11 +850,7 @@ const ConnectionsTab = React.memo(function ConnectionsTab({ asset }: { asset: As
         </Box>
       </PropertyCard>
 
-      <PropertyCard title="Network interfaces">
-        <Box sx={{ m: "12px", py: "20px", border: "1.5px dashed", borderColor: "divider", borderRadius: "8px", textAlign: "center" }}>
-          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>Network interface tracking coming soon</Typography>
-        </Box>
-      </PropertyCard>
+      <AssetPortsPanel assetId={asset.id} assetName={asset.name} canManage={canManage} />
     </Stack>
   )
 })

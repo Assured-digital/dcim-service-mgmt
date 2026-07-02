@@ -12,7 +12,7 @@ import { hasAnyRole, ROLES } from "../lib/rbac"
 import { getApiErrorMessage } from "../lib/infrastructure"
 import { kw, pctColor } from "../lib/capacity"
 import {
-  FloorCabinet, FloorLens, createFloorObject, deleteFloorObject,
+  FloorCabinet, FloorLens, createAisleZone, createFloorObject, deleteAisleZone, deleteFloorObject,
   getFloorPlan, placeCabinet,
 } from "../lib/floorPlan"
 import { FloorCanvas } from "../components/floorplan/FloorCanvas"
@@ -41,9 +41,11 @@ export default function FloorPlanPage() {
   const [edit, setEdit] = React.useState(false)
   const [selectedCabinetId, setSelectedCabinetId] = React.useState<string | null>(null)
   const [placing, setPlacing] = React.useState<Placing>(null)
-  const [findSpace, setFindSpace] = React.useState(false)
+  const [findSpaceU, setFindSpaceU] = React.useState<number | null>(null) // null = off
   const [setupOpen, setSetupOpen] = React.useState(false)
   const [importOpen, setImportOpen] = React.useState(false)
+  // Aisle draw: pick a type, click two grid corners → a zone spanning them.
+  const [aisleDraw, setAisleDraw] = React.useState<{ type: "HOT" | "COLD"; first: { x: number; y: number } | null } | null>(null)
 
   React.useEffect(() => {
     setHideModuleLabel(true); setPageFullBleed(true); setBreadcrumbs([{ label: "Floor plan" }])
@@ -65,7 +67,20 @@ export default function FloorPlanPage() {
   const selectedCabinet = plan?.cabinets.find(c => c.id === selectedCabinetId) ?? null
 
   async function handleCellClick(x: number, y: number) {
-    if (!placing || !roomId) return
+    if (!roomId) return
+    // Aisle draw: first click sets a corner, second creates the spanning zone.
+    if (aisleDraw) {
+      if (!aisleDraw.first) { setAisleDraw({ ...aisleDraw, first: { x, y } }); return }
+      const a = aisleDraw.first
+      const geometry = { x: Math.min(a.x, x), y: Math.min(a.y, y), w: Math.abs(x - a.x) + 1, h: Math.abs(y - a.y) + 1 }
+      try {
+        await createAisleZone(roomId, { type: aisleDraw.type, geometry, label: `${aisleDraw.type === "HOT" ? "Hot" : "Cold"} aisle` })
+        notify.success(`${aisleDraw.type === "HOT" ? "Hot" : "Cold"} aisle added`)
+        setAisleDraw(null); refresh()
+      } catch (e: unknown) { notify.error(getApiErrorMessage((e as any)?.response?.data ?? e, "Failed to add aisle")) }
+      return
+    }
+    if (!placing) return
     try {
       if (placing.kind === "cabinet") {
         await placeCabinet(placing.id, { posX: x, posY: y })
@@ -105,7 +120,12 @@ export default function FloorPlanPage() {
           <ToggleButton value="power" sx={{ textTransform: "none", px: 1.5 }}>Power</ToggleButton>
           <ToggleButton value="status" sx={{ textTransform: "none", px: 1.5 }}>Status</ToggleButton>
         </ToggleButtonGroup>
-        <Button size="small" variant={findSpace ? "contained" : "outlined"} onClick={() => setFindSpace(f => !f)} sx={{ textTransform: "none" }}>Find space (≥10U)</Button>
+        <Button size="small" variant={findSpaceU != null ? "contained" : "outlined"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)} sx={{ textTransform: "none" }}>Find space</Button>
+        {findSpaceU != null ? (
+          <TextField size="small" type="number" label="≥ U free" value={findSpaceU}
+            onChange={e => setFindSpaceU(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            inputProps={{ min: 1, max: 60 }} sx={{ width: 92 }} />
+        ) : null}
         <Box sx={{ flex: 1 }} />
         <LensLegend lens={lens} mode={mode} />
         {canEdit ? <Button size="small" variant={edit ? "contained" : "outlined"} onClick={() => { setEdit(e => !e); setPlacing(null) }} sx={{ textTransform: "none" }}>{edit ? "Done" : "Edit layout"}</Button> : null}
@@ -116,24 +136,32 @@ export default function FloorPlanPage() {
           <Typography sx={{ fontSize: 12.5 }}>Click a grid cell to place <b>{placing.kind === "cabinet" ? "the cabinet" : placing.objectType}</b></Typography>
           <Button size="small" onClick={() => setPlacing(null)} sx={{ textTransform: "none", ml: "auto" }}>Cancel</Button>
         </Box>
+      ) : aisleDraw ? (
+        <Box sx={{ px: 2, py: 0.75, bgcolor: mode === "dark" ? "#172033" : "#eff6ff", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography sx={{ fontSize: 12.5 }}>{aisleDraw.first ? "Click the opposite corner of the aisle" : `Click a corner to start the ${aisleDraw.type.toLowerCase()} aisle`}</Typography>
+          <Button size="small" onClick={() => setAisleDraw(null)} sx={{ textTransform: "none", ml: "auto" }}>Cancel</Button>
+        </Box>
       ) : null}
 
-      <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      {/* Stack canvas over rail on narrow screens (the fixed rail would otherwise
+          squash the canvas); side-by-side from md up. */}
+      <Box sx={{ flex: 1, display: "flex", flexDirection: { xs: "column", md: "row" }, overflow: "hidden", minHeight: 0 }}>
         {/* Canvas */}
-        <Box sx={{ flex: 1, overflow: "auto", bgcolor: "background.default" }}>
+        <Box sx={{ flex: 1, overflow: "auto", bgcolor: "background.default", minHeight: { xs: 280, md: 0 } }}>
           {plan ? (
             <FloorCanvas plan={plan} lens={lens} mode={edit ? "edit" : "view"} selectedCabinetId={selectedCabinetId}
-              findSpaceMinU={findSpace ? 10 : null} placing={!!placing}
+              findSpaceMinU={findSpaceU} placing={!!placing || !!aisleDraw}
               onCabinetClick={(id) => { setSelectedCabinetId(id); setPlacing(null) }}
               onObjectClick={async (id) => { if (edit && roomId) { await deleteFloorObject(roomId, id); refresh(); notify.success("Object removed") } }}
+              onAisleClick={async (id) => { if (edit && roomId) { await deleteAisleZone(roomId, id); refresh(); notify.success("Aisle removed") } }}
               onCellClick={handleCellClick} />
           ) : (
             <Box sx={{ p: 4 }}><Typography sx={{ fontSize: 13, color: "text.secondary" }}>{roomId ? "Loading floor plan…" : "This site has no rooms yet — add a room in the hierarchy."}</Typography></Box>
           )}
         </Box>
 
-        {/* Right rail: edit palette / cabinet panel */}
-        <Box sx={{ width: 260, flexShrink: 0, borderLeft: "1px solid", borderColor: "divider", bgcolor: railBg, overflowY: "auto", p: 1.75 }}>
+        {/* Right rail: edit palette / cabinet panel (full-width below on narrow) */}
+        <Box sx={{ width: { xs: "100%", md: 260 }, flexShrink: 0, borderLeft: { xs: "none", md: "1px solid" }, borderTop: { xs: "1px solid", md: "none" }, borderColor: "divider", bgcolor: railBg, overflowY: "auto", p: 1.75 }}>
           {edit ? (
             <Stack spacing={1.5}>
               <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "text.secondary" }}>Unplaced cabinets</Typography>
@@ -153,7 +181,14 @@ export default function FloorPlanPage() {
                     variant={placing?.kind === "object" && placing.objectType === t ? "filled" : "outlined"} color={placing?.kind === "object" && placing.objectType === t ? "primary" : "default"} />
                 ))}
               </Stack>
-              <Typography sx={{ fontSize: 11, color: "text.secondary" }}>Click an item then a grid cell to place it. Click a placed object to remove it. Select a cabinet for rotate / return.</Typography>
+              <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "text.secondary", pt: 1 }}>Aisle zones</Typography>
+              <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+                <Chip label="Cold aisle" size="small" onClick={() => { setPlacing(null); setAisleDraw({ type: "COLD", first: null }) }}
+                  variant={aisleDraw?.type === "COLD" ? "filled" : "outlined"} color={aisleDraw?.type === "COLD" ? "primary" : "default"} />
+                <Chip label="Hot aisle" size="small" onClick={() => { setPlacing(null); setAisleDraw({ type: "HOT", first: null }) }}
+                  variant={aisleDraw?.type === "HOT" ? "filled" : "outlined"} color={aisleDraw?.type === "HOT" ? "primary" : "default"} />
+              </Stack>
+              <Typography sx={{ fontSize: 11, color: "text.secondary" }}>Place cabinets/objects then a grid cell. Click a placed object or aisle to remove it. Draw an aisle with two corner clicks. Select a cabinet for rotate / return.</Typography>
 
               <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "text.secondary", pt: 1 }}>Setup</Typography>
               <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
