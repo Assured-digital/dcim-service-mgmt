@@ -18,24 +18,21 @@ export class ConnectionsService {
     if (!asset) throw new BadRequestException("Asset not found in selected client scope")
   }
 
+  // A port endpoint (DCIM_SCHEMA_SPEC §6) must belong to the asset on that side —
+  // you can't wire a cable to a port on a different device.
+  private async ensurePortOnAsset(portId: string, assetId: string) {
+    const port = await this.prisma.port.findFirst({ where: { id: portId, assetId }, select: { id: true } })
+    if (!port) throw new BadRequestException("Port does not belong to the connection endpoint")
+  }
+
   private getInclude() {
+    const assetSel = { id: true, assetTag: true, name: true, site: { select: { id: true, name: true } } }
+    const portSel = { select: { id: true, name: true, portType: true } }
     return {
-      fromAsset: {
-        select: {
-          id: true,
-          assetTag: true,
-          name: true,
-          site: { select: { id: true, name: true } }
-        }
-      },
-      toAsset: {
-        select: {
-          id: true,
-          assetTag: true,
-          name: true,
-          site: { select: { id: true, name: true } }
-        }
-      }
+      fromAsset: { select: assetSel },
+      toAsset: { select: assetSel },
+      fromPort: portSel,
+      toPort: portSel,
     }
   }
 
@@ -71,12 +68,16 @@ export class ConnectionsService {
     }
     await this.ensureAssetInScope(clientId, dto.fromAssetId)
     await this.ensureAssetInScope(clientId, dto.toAssetId)
+    if (dto.fromPortId) await this.ensurePortOnAsset(dto.fromPortId, dto.fromAssetId)
+    if (dto.toPortId) await this.ensurePortOnAsset(dto.toPortId, dto.toAssetId)
 
     return this.prisma.connection.create({
       data: {
         clientId,
         fromAssetId: dto.fromAssetId,
         toAssetId: dto.toAssetId,
+        fromPortId: dto.fromPortId ?? null,
+        toPortId: dto.toPortId ?? null,
         connectionType: dto.connectionType,
         status: dto.status ?? "ACTIVE",
         label: dto.label ?? null,
@@ -100,12 +101,19 @@ export class ConnectionsService {
     }
     await this.ensureAssetInScope(clientId, fromAssetId)
     await this.ensureAssetInScope(clientId, toAssetId)
+    // Port endpoints: explicit null clears; a value must sit on the (new) asset.
+    const fromPortId = dto.fromPortId !== undefined ? dto.fromPortId : existing.fromPortId
+    const toPortId = dto.toPortId !== undefined ? dto.toPortId : existing.toPortId
+    if (fromPortId) await this.ensurePortOnAsset(fromPortId, fromAssetId)
+    if (toPortId) await this.ensurePortOnAsset(toPortId, toAssetId)
 
     return this.prisma.connection.update({
       where: { id: existing.id },
       data: {
         fromAssetId,
         toAssetId,
+        fromPortId,
+        toPortId,
         connectionType: dto.connectionType ?? existing.connectionType,
         status: dto.status ?? existing.status,
         label: dto.label ?? existing.label,

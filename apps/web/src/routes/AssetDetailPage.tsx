@@ -27,6 +27,7 @@ import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import { CreateRiskModal, CreateIssueModal } from "./RisksIssuesPage"
 import { CreateServiceRequestModal } from "./ServiceDeskPage"
 import { DeviceTypePicker } from "./DeviceTypePicker"
+import AssetPortsPanel from "./AssetPortsPanel"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -523,7 +524,7 @@ export default function AssetDetailPage({
           />
         ) : null}
 
-        {tab === "connections" ? <ConnectionsTab asset={asset} /> : null}
+        {tab === "connections" ? <ConnectionsTab asset={asset} canManage={canManage} /> : null}
 
         {tab === "linked" ? (
           <LinkedTab
@@ -826,7 +827,7 @@ const OverviewTab = React.memo(function OverviewTab({
 
 // ─── Connections tab ──────────────────────────────────────────────────────
 
-const ConnectionsTab = React.memo(function ConnectionsTab({ asset }: { asset: Asset }) {
+const ConnectionsTab = React.memo(function ConnectionsTab({ asset, canManage }: { asset: Asset; canManage: boolean }) {
   const { mode } = useThemeMode()
   return (
     <Stack spacing={1.5} sx={{ maxWidth: 880 }}>
@@ -849,11 +850,7 @@ const ConnectionsTab = React.memo(function ConnectionsTab({ asset }: { asset: As
         </Box>
       </PropertyCard>
 
-      <PropertyCard title="Network interfaces">
-        <Box sx={{ m: "12px", py: "20px", border: "1.5px dashed", borderColor: "divider", borderRadius: "8px", textAlign: "center" }}>
-          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>Network interface tracking coming soon</Typography>
-        </Box>
-      </PropertyCard>
+      <AssetPortsPanel assetId={asset.id} assetName={asset.name} canManage={canManage} />
     </Stack>
   )
 })

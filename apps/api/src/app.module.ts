@@ -32,6 +32,7 @@ import { NotificationsModule } from "./notifications/notifications.module"
 import { RecordReportModule } from "./records-report/record-report.module"
 import { DeviceTypesModule } from "./device-types/device-types.module"
 import { CapacityModule } from "./dcim/capacity.module"
+import { PortsModule } from "./ports/ports.module"
 
 @Module({
   imports: [
@@ -66,7 +67,8 @@ import { CapacityModule } from "./dcim/capacity.module"
     NotificationsModule,
     RecordReportModule,
     DeviceTypesModule,
-    CapacityModule
+    CapacityModule,
+    PortsModule
   ],
   controllers: [HealthController]
 })

@@ -5,6 +5,7 @@ import { CapacityService } from "../src/dcim/capacity.service";
 import { FloorPlanService } from "../src/dcim/floor-plan.service";
 import { InfrastructureReportService } from "../src/dcim/infrastructure-report.service";
 import { ReservationsService } from "../src/cabinets/reservations.service";
+import { PortsService } from "../src/ports/ports.service";
 
 // Tenant-isolation proof for the DCIM surfaces (the CLAUDE.md-flagged gap). Two
 // layers, both driven against a fixture-backed mock Prisma (no DB):
@@ -23,6 +24,7 @@ const ORG = "org-1";
 const S = "site-s";
 const R = "room-r";
 const C = "cab-c";
+const AST = "asset-1"; // a CLIENT-owned asset of client A (for ports scoping)
 
 const sites = [{ id: S, clientId: A, name: "Site S", client: { name: "Client A" } }];
 const rooms = [{ id: R, siteId: S, name: "Room R", widthMm: null, depthMm: null, gridCols: 16, gridRows: 12, shellType: null, backgroundOpacity: 0.4, backgroundImageKey: null, backgroundImageType: null, shellShape: null }];
@@ -72,11 +74,27 @@ function mockPrisma(): any {
       }),
       findMany: jest.fn(async () => []),
     },
+    // Ports scope indirectly via asset.clientId (or ownerType INTERNAL for
+    // org-super). AST belongs to client A; B must not resolve it.
+    asset: {
+      findFirst: jest.fn(async ({ where }: any) => {
+        if (where.id !== AST) return null
+        // AST is CLIENT-owned by A; evaluate each OR clause against the real row.
+        const row = { id: AST, clientId: A, ownerType: "CLIENT" }
+        const orMatch = !where.OR || where.OR.some((o: any) =>
+          (o.clientId !== undefined && row.clientId === o.clientId) ||
+          (o.ownerType !== undefined && row.ownerType === o.ownerType)
+        )
+        return orMatch ? row : null
+      }),
+      findMany: jest.fn(async () => []),
+      groupBy: jest.fn(async () => []),
+    },
+    port: { findMany: jest.fn(async () => []) },
     // Downstream reads on the owner-success paths — empty is enough (the gate is
     // what these tests exercise; these just keep the happy path from crashing).
     floorObject: { findMany: jest.fn(async () => []) },
     aisleZone: { findMany: jest.fn(async () => []) },
-    asset: { findMany: jest.fn(async () => []), groupBy: jest.fn(async () => []) },
     cabinetReservation: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
     maintenanceLog: { count: jest.fn(async () => 0), findMany: jest.fn(async () => []) },
   };
@@ -153,6 +171,12 @@ describe("DCIM services — query scoping refuses another client's resource (404
 
   it("report: getModel refuses a foreign client's site (404)", async () => {
     await expect(report.getModel(B, S)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("ports: listForAsset refuses a foreign client's asset (404)", async () => {
+    const ports = new PortsService(prisma);
+    await expect(ports.listForAsset(B, AST)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(ports.listForAsset(A, AST)).resolves.toEqual([]);
   });
 
   it("assertions are real: a missing clientId is rejected before any lookup", async () => {
