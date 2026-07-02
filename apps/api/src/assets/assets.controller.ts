@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Req, Res } fr
 import type { Response } from "express"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { AssetsService } from "./assets.service";
-import { CreateAssetDto, RejectAssetDeletionDto, RequestAssetDeletionDto, UpdateAssetDto } from "./dto";
+import { CreateAssetDto, DecommissionAssetDto, RejectAssetDeletionDto, RequestAssetDeletionDto, UpdateAssetDto } from "./dto";
 import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
 import { UseGuards } from "@nestjs/common";
@@ -86,6 +86,22 @@ export class AssetsController {
     const user = getJwtUser(req);
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
     return this.assets.removeForClient(id, clientId, user.role, user.userId);
+  }
+
+  // Decommission workflow steps (DCIM_SCHEMA_SPEC §4.2): retire / physically
+  // remove / dispose — audited lifecycle transitions, NOT deletion (the asset
+  // and its history survive). Operational roles, same as asset updates.
+  @Post(":id/decommission")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER)
+  async decommission(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() dto: DecommissionAssetDto,
+    @Headers("x-client-id") requestedClientId?: string
+  ) {
+    const user = getJwtUser(req);
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma);
+    return this.assets.decommission(id, dto.step, clientId, user.role, user.userId);
   }
 
   // ENGINEER / SERVICE_DESK_ANALYST raise a deletion request instead of deleting directly.

@@ -177,7 +177,7 @@ export default function ConnectionDetailPage() {
 
           <Stack spacing={1.5} sx={{ mt: 3 }}>
             <Box>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 From asset
               </Typography>
               <Button
@@ -189,7 +189,7 @@ export default function ConnectionDetailPage() {
               </Button>
             </Box>
             <Box>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 To asset
               </Typography>
               <Button

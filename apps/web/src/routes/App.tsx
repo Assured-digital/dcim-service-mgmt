@@ -26,6 +26,9 @@ const ClientsPage              = React.lazy(() => import("./ClientsPage"))
 const MyWorkPage               = React.lazy(() => import("./MyWorkPage"))
 const OverviewPage             = React.lazy(() => import("./OverviewPage"))
 const DcimOverviewPage         = React.lazy(() => import("./DcimOverviewPage"))
+const DeviceCataloguePage      = React.lazy(() => import("./DeviceCataloguePage"))
+const FloorPlanPage            = React.lazy(() => import("./FloorPlanPage"))
+const InfrastructureReportPage = React.lazy(() => import("./InfrastructureReportPage"))
 const MaintenancePage          = React.lazy(() => import("./MaintenancePage"))
 const MaintenanceDetailPage    = React.lazy(() => import("./MaintenanceDetailPage"))
 const ConnectionsPage          = React.lazy(() => import("./ConnectionsPage"))
@@ -121,6 +124,9 @@ export default function App() {
           <Route index element={<MyWorkPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="dcim/overview" element={<DcimOverviewPage />} />
+          <Route path="dcim/catalogue" element={<DeviceCataloguePage />} />
+          <Route path="dcim/floor-plan" element={<FloorPlanPage />} />
+          <Route path="dcim/report" element={<InfrastructureReportPage />} />
 
           {/* Legacy redirects */}
           <Route path="raise-request" element={<Navigate to="/service-desk" replace />} />

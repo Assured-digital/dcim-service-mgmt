@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { useBreadcrumb } from "./Shell"
+import { useThemeMode } from "../lib/theme"
 import {
   Asset, AuditEvent, Cabinet, LinkedIssue, LinkedRisk, LinkedServiceRequest, LinkedTask,
   ASSET_LIFECYCLE_OPTIONS, HEADER_HEIGHT, getApiErrorMessage
@@ -127,14 +128,14 @@ function describeAssetAction(action: string): string {
 
 // ─── Small presentational helpers ─────────────────────────────────────────
 
-const labelSx = { fontSize: 12, color: "#64748b", width: 120, flexShrink: 0 } as const
-const valueSx = { fontSize: 12.5, color: "#0f172a", fontWeight: 500 } as const
-const sectionLabelSx = { fontSize: 10, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" } as const
+const labelSx = { fontSize: 12, color: "text.secondary", width: 120, flexShrink: 0 } as const
+const valueSx = { fontSize: 12.5, color: "text.primary", fontWeight: 500 } as const
+const sectionLabelSx = { fontSize: 10, fontWeight: 600, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" } as const
 
 function PropertyCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Box sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-      <Box sx={{ bgcolor: "#f8fafc", px: "16px", py: "10px", borderBottom: "1px solid #f1f5f9" }}>
+    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+      <Box sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
         <Typography sx={sectionLabelSx}>{title}</Typography>
       </Box>
       <Box>{children}</Box>
@@ -144,7 +145,7 @@ function PropertyCard({ title, children }: { title: string; children: React.Reac
 
 function PropertyRow({ label, children, last = false }: { label: string; children: React.ReactNode; last?: boolean }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", px: "16px", py: "11px", borderBottom: last ? "none" : "1px solid #f1f5f9", gap: "12px" }}>
+    <Box sx={{ display: "flex", alignItems: "center", px: "16px", py: "11px", borderBottom: last ? "none" : "1px solid", borderColor: "divider", gap: "12px" }}>
       <Typography sx={labelSx}>{label}</Typography>
       <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
     </Box>
@@ -179,6 +180,7 @@ export default function AssetDetailPage({
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { setBreadcrumbs } = useBreadcrumb()
+  const { mode: themeMode } = useThemeMode()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
   // Direct delete is the approver set; ENGINEER/SDA request deletion via the approval queue.
@@ -414,15 +416,15 @@ export default function AssetDetailPage({
   const outerSx: SxProps<Theme> = mode === "standalone"
     ? {
         mx: { xs: "-12px", md: "-24px" }, mt: { xs: "-12px", md: "-24px" }, mb: { xs: "-12px", md: "-24px" },
-        height: "calc(100vh - 56px)", display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "#f8fafc"
+        height: "calc(100vh - 56px)", display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "background.default"
       }
-    : { display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", bgcolor: "#f8fafc" }
+    : { display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", bgcolor: "background.default" }
 
   return (
     <Box sx={outerSx}>
 
       {onBackToRegister ? (
-        <Box sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #f1f5f9", px: "24px", py: "6px", flexShrink: 0 }}>
+        <Box sx={{ bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", py: "6px", flexShrink: 0 }}>
           <Stack direction="row" alignItems="center" spacing={0.5} onClick={onBackToRegister}
             sx={{ cursor: "pointer", width: "fit-content", color: "primary.main", "&:hover": { textDecoration: "underline" } }}>
             <ArrowBackIcon sx={{ fontSize: 14 }} />
@@ -432,12 +434,12 @@ export default function AssetDetailPage({
       ) : null}
 
       {/* ── Header ───────────────────────────────────────────────────── */}
-      <Box sx={{ height: HEADER_HEIGHT, bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
+      <Box sx={{ height: HEADER_HEIGHT, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
         <Stack direction="row" alignItems="baseline" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {asset.name}
           </Typography>
-          <Typography sx={{ fontSize: 12, color: "#94a3b8", flexShrink: 0 }}>
+          <Typography sx={{ fontSize: 12, color: "text.tertiary", flexShrink: 0 }}>
             {asset.assetType}
           </Typography>
         </Stack>
@@ -474,7 +476,7 @@ export default function AssetDetailPage({
       </Box>
 
       {/* ── Tab bar ──────────────────────────────────────────────────── */}
-      <Box sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", px: "24px", flexShrink: 0 }}>
+      <Box sx={{ bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", flexShrink: 0 }}>
         <Stack direction="row" spacing={0}>
           {[
             { key: "overview", label: "Overview" },
@@ -488,13 +490,13 @@ export default function AssetDetailPage({
               <Box key={t.key} onClick={() => setTab(t.key as TabKey)}
                 sx={{
                   px: "14px", py: "10px", cursor: "pointer", fontSize: 12.5, fontWeight: 500,
-                  color: active ? "primary.main" : "#64748b",
+                  color: active ? "primary.main" : "text.secondary",
                   borderBottom: "2px solid", borderBottomColor: active ? "primary.main" : "transparent",
                   display: "flex", alignItems: "center", gap: "6px", mb: "-1px"
                 }}>
                 {t.label}
                 {t.count != null ? (
-                  <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: active ? "#dbeafe" : "#f1f5f9", color: active ? "primary.main" : "#64748b" }}>
+                  <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: active ? (themeMode === "dark" ? "#16294a" : "#dbeafe") : (themeMode === "dark" ? "#1e293b" : "#f1f5f9"), color: active ? "primary.main" : "text.secondary" }}>
                     {t.count}
                   </Box>
                 ) : null}
@@ -750,14 +752,14 @@ const OverviewTab = React.memo(function OverviewTab({
       </Box>
 
       {/* Recent linked records strip */}
-      <Box sx={{ mt: "14px", bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-        <Stack direction="row" alignItems="center" sx={{ bgcolor: "#f8fafc", px: "16px", py: "10px", borderBottom: "1px solid #f1f5f9" }}>
+      <Box sx={{ mt: "14px", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+        <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
           <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Recent linked records</Typography>
           <Typography onClick={onViewAllLinked} sx={{ fontSize: 11.5, color: "primary.main", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>View all →</Typography>
         </Stack>
         {recentLinked.length === 0 ? (
           <Box sx={{ p: "20px", textAlign: "center" }}>
-            <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No linked records yet</Typography>
+            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>No linked records yet</Typography>
           </Box>
         ) : (
           <Box sx={{ display: "grid", gap: "10px", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, p: "12px" }}>
@@ -769,14 +771,14 @@ const OverviewTab = React.memo(function OverviewTab({
                   if (item.kind === "risk") return navigate(`/risks-issues/risks/${item.id}`)
                   if (item.kind === "issue") return navigate(`/risks-issues/issues/${item.id}`)
                 }}
-                sx={{ border: "1px solid #e2e8f0", borderRadius: "8px", p: "10px 12px", cursor: "pointer", "&:hover": { bgcolor: "#f8fafc", borderColor: "#cbd5e1" } }}>
+                sx={{ border: "1px solid", borderColor: "divider", borderRadius: "8px", p: "10px 12px", cursor: "pointer", "&:hover": { bgcolor: "action.hover", borderColor: "text.tertiary" } }}>
                 <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: "4px" }}>
-                  <Typography sx={{ fontSize: 11.5, fontFamily: "monospace", fontWeight: 700, color: "#475569" }}>{item.reference}</Typography>
+                  <Typography sx={{ fontSize: 11.5, fontFamily: "monospace", fontWeight: 700, color: "text.secondary" }}>{item.reference}</Typography>
                   <Box sx={{ ml: "auto", display: "inline-flex", flexShrink: 0 }}>
                     <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
                   </Box>
                 </Stack>
-                <Typography sx={{ fontSize: 12, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle}</Typography>
+                <Typography sx={{ fontSize: 12, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle}</Typography>
               </Box>
             ))}
           </Box>
@@ -789,30 +791,31 @@ const OverviewTab = React.memo(function OverviewTab({
 // ─── Connections tab ──────────────────────────────────────────────────────
 
 const ConnectionsTab = React.memo(function ConnectionsTab({ asset }: { asset: Asset }) {
+  const { mode } = useThemeMode()
   return (
     <Stack spacing={1.5} sx={{ maxWidth: 880 }}>
       <PropertyCard title="IP addresses">
         {asset.ipAddress ? (
           <Box sx={{ px: "16px", py: "11px", display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography sx={{ fontFamily: "monospace", fontSize: 12.5, color: "#0f172a", fontWeight: 500 }}>{asset.ipAddress}</Typography>
-            <Chip size="small" label="Primary" sx={{ bgcolor: "#dbeafe", color: "primary.main", fontSize: 9.5, height: 18, fontWeight: 600 }} />
+            <Typography sx={{ fontFamily: "monospace", fontSize: 12.5, color: "text.primary", fontWeight: 500 }}>{asset.ipAddress}</Typography>
+            <Chip size="small" label="Primary" sx={{ bgcolor: mode === "dark" ? "#16294a" : "#dbeafe", color: "primary.main", fontSize: 9.5, height: 18, fontWeight: 600 }} />
           </Box>
         ) : (
           <Box sx={{ px: "16px", py: "14px" }}>
-            <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No IP address recorded</Typography>
+            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>No IP address recorded</Typography>
           </Box>
         )}
       </PropertyCard>
 
       <PropertyCard title="Power connections">
-        <Box sx={{ m: "12px", py: "20px", border: "1.5px dashed #e2e8f0", borderRadius: "8px", textAlign: "center" }}>
-          <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No power connections recorded</Typography>
+        <Box sx={{ m: "12px", py: "20px", border: "1.5px dashed", borderColor: "divider", borderRadius: "8px", textAlign: "center" }}>
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>No power connections recorded</Typography>
         </Box>
       </PropertyCard>
 
       <PropertyCard title="Network interfaces">
-        <Box sx={{ m: "12px", py: "20px", border: "1.5px dashed #e2e8f0", borderRadius: "8px", textAlign: "center" }}>
-          <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>Network interface tracking coming soon</Typography>
+        <Box sx={{ m: "12px", py: "20px", border: "1.5px dashed", borderColor: "divider", borderRadius: "8px", textAlign: "center" }}>
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>Network interface tracking coming soon</Typography>
         </Box>
       </PropertyCard>
     </Stack>
@@ -848,8 +851,8 @@ function LinkedTab({
   return (
     <Box sx={{ display: "grid", gap: "12px", gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" } }}>
       {sections.map(section => (
-        <Box key={section.title} sx={{ bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-          <Stack direction="row" alignItems="center" sx={{ bgcolor: "#f8fafc", px: "16px", py: "10px", borderBottom: "1px solid #f1f5f9" }}>
+        <Box key={section.title} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
             <Typography sx={{ ...sectionLabelSx, flex: 1 }}>{section.title} ({section.items.length})</Typography>
             {canManage ? (
               <Button size="small" onClick={() => onCreate(section.kind)} sx={{ textTransform: "none", fontSize: 11.5, minWidth: 0, px: "8px", py: "2px" }}>+ Create</Button>
@@ -857,14 +860,14 @@ function LinkedTab({
           </Stack>
           {section.items.length === 0 ? (
             <Box sx={{ p: "14px 16px" }}>
-              <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No linked {section.title.toLowerCase()}</Typography>
+              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>No linked {section.title.toLowerCase()}</Typography>
             </Box>
           ) : section.items.map((item, idx) => (
             <Stack key={item.id} direction="row" alignItems="center" onClick={() => section.onRowClick(item.id)}
-              sx={{ p: "10px 16px", cursor: "pointer", borderBottom: idx < section.items.length - 1 ? "1px solid #f1f5f9" : "none", "&:hover": { bgcolor: "#f8fafc" }, gap: "10px" }}>
+              sx={{ p: "10px 16px", cursor: "pointer", borderBottom: idx < section.items.length - 1 ? "1px solid" : "none", borderColor: "divider", "&:hover": { bgcolor: "action.hover" }, gap: "10px" }}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#0f172a", fontFamily: "monospace" }}>{item.reference}</Typography>
-                <Typography sx={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle}</Typography>
+                <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.primary", fontFamily: "monospace" }}>{item.reference}</Typography>
+                <Typography sx={{ fontSize: 11, color: "text.secondary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle}</Typography>
               </Box>
               <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
             </Stack>
@@ -896,9 +899,9 @@ function MaintenanceTab({
           { label: "Next scheduled", value: formatDate(nextDue) },
           { label: "Total entries", value: String(logs.length) },
         ].map(s => (
-          <Box key={s.label} sx={{ bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", p: "14px 16px" }}>
+          <Box key={s.label} sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px" }}>
             <Typography sx={sectionLabelSx}>{s.label}</Typography>
-            <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#0f172a", mt: "4px" }}>{s.value}</Typography>
+            <Typography sx={{ fontSize: 16, fontWeight: 600, color: "text.primary", mt: "4px" }}>{s.value}</Typography>
           </Box>
         ))}
       </Box>
@@ -910,32 +913,32 @@ function MaintenanceTab({
       ) : null}
 
       {logs.length === 0 ? (
-        <Box sx={{ py: "32px", border: "1.5px dashed #e2e8f0", borderRadius: "10px", textAlign: "center", bgcolor: "#fff" }}>
-          <Typography sx={{ fontSize: 13, color: "#94a3b8" }}>No maintenance logs for this asset</Typography>
+        <Box sx={{ py: "32px", border: "1.5px dashed", borderColor: "divider", borderRadius: "10px", textAlign: "center", bgcolor: "background.paper" }}>
+          <Typography sx={{ fontSize: 13, color: "text.secondary" }}>No maintenance logs for this asset</Typography>
         </Box>
       ) : (
-        <Box sx={{ bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
           {logs.map((log, idx) => {
             const { day, year } = formatDayMon(log.performedAt)
             const color = maintenanceDotColor(log.workType)
             return (
-              <Stack key={log.id} direction="row" alignItems="stretch" sx={{ p: "16px", borderBottom: idx < logs.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+              <Stack key={log.id} direction="row" alignItems="stretch" sx={{ p: "16px", borderBottom: idx < logs.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
                 <Box sx={{ width: 70, flexShrink: 0 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{day}</Typography>
-                  <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{year}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.primary" }}>{day}</Typography>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>{year}</Typography>
                 </Box>
                 <Box sx={{ width: 20, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", mt: "4px" }}>
-                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color, border: "2px solid #fff", boxShadow: "0 0 0 2px #e2e8f0" }} />
-                  <Box sx={{ flex: 1, width: 2, bgcolor: "#f1f5f9", mt: "4px" }} />
+                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color, border: "2px solid", borderColor: "background.paper", boxShadow: t => `0 0 0 2px ${t.palette.divider}` }} />
+                  <Box sx={{ flex: 1, width: 2, bgcolor: "divider", mt: "4px" }} />
                 </Box>
                 <Box sx={{ flex: 1, pl: "12px" }}>
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "4px" }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#0f172a" }}>{workTypeLabel(log.workType, log.workTypeOther)}</Typography>
+                    <Typography sx={{ fontSize: 13, fontWeight: 500, color: "text.primary" }}>{workTypeLabel(log.workType, log.workTypeOther)}</Typography>
                     <Chip size="small" label={log.workType.replaceAll("_", " ").toLowerCase()}
                       sx={{ bgcolor: `${color}1f`, color: color, fontSize: 9.5, height: 18, fontWeight: 600 }} />
                   </Stack>
-                  {log.notes ? <Typography sx={{ fontSize: 12.5, color: "#334155", mb: "4px" }}>{log.notes}</Typography> : null}
-                  <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>
+                  {log.notes ? <Typography sx={{ fontSize: 12.5, color: "text.primary", mb: "4px" }}>{log.notes}</Typography> : null}
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>
                     Performed by {log.performedBy?.displayName ?? "—"}
                     {log.nextDueAt ? ` · Next due ${formatDate(log.nextDueAt)}` : ""}
                   </Typography>
@@ -955,13 +958,13 @@ function HistoryTab({ events }: { events: AuditEventWithActor[] }) {
   if (events.length === 0) {
     return (
       <Box sx={{ maxWidth: 880, py: "32px", textAlign: "center" }}>
-        <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No history available yet</Typography>
+        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>No history available yet</Typography>
       </Box>
     )
   }
 
   return (
-    <Box sx={{ maxWidth: 880, bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+    <Box sx={{ maxWidth: 880, bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
       {events.map((event, idx) => {
         const actor = event.actorDisplayName ?? "system"
         const changes: { field: string; from?: string; to?: string }[] =
@@ -971,37 +974,37 @@ function HistoryTab({ events }: { events: AuditEventWithActor[] }) {
         const isStatusChange = (event.action.toLowerCase().includes("status") && event.data?.from && event.data?.to)
 
         return (
-          <Box key={event.id} sx={{ p: "14px 16px", borderBottom: idx < events.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+          <Box key={event.id} sx={{ p: "14px 16px", borderBottom: idx < events.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
             <Stack direction="row" alignItems="flex-start" spacing={1.25}>
               <Box sx={{ width: 26, height: 26, borderRadius: "50%", bgcolor: avatarBg(actor), color: "#fff", fontSize: 10.5, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 {initialsFrom(actor)}
               </Box>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography sx={{ fontSize: 12.5, color: "#0f172a", flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 12.5, color: "text.primary", flex: 1, minWidth: 0 }}>
                     <Box component="span" sx={{ fontWeight: 600 }}>{actor}</Box>{" "}
-                    <Box component="span" sx={{ color: "#475569" }}>{describeAssetAction(event.action)}</Box>
+                    <Box component="span" sx={{ color: "text.secondary" }}>{describeAssetAction(event.action)}</Box>
                   </Typography>
-                  <Typography sx={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>{new Date(event.createdAt).toLocaleString()}</Typography>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary", flexShrink: 0 }}>{new Date(event.createdAt).toLocaleString()}</Typography>
                 </Stack>
 
                 {isStatusChange ? (
                   <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: "6px" }}>
                     <StatusPill value={event.data!.from} label={String(event.data!.from).toLowerCase().replaceAll("_", " ")} size="sm" />
-                    <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>→</Typography>
+                    <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>→</Typography>
                     <StatusPill value={event.data!.to} label={String(event.data!.to).toLowerCase().replaceAll("_", " ")} size="sm" />
                   </Stack>
                 ) : null}
 
                 {!isStatusChange && changes.length > 0 ? (
-                  <Box sx={{ mt: "8px", bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", p: "10px 12px" }}>
+                  <Box sx={{ mt: "8px", bgcolor: "background.default", border: "1px solid", borderColor: "divider", borderRadius: "8px", p: "10px 12px" }}>
                     {changes.map(c => (
                       <Stack key={c.field} direction="row" alignItems="baseline" spacing={0.75} sx={{ fontSize: 11.5, flexWrap: "wrap" }}>
-                        <Typography component="span" sx={{ fontSize: 11.5, fontWeight: 600, color: "#475569" }}>{c.field}:</Typography>
+                        <Typography component="span" sx={{ fontSize: 11.5, fontWeight: 600, color: "text.secondary" }}>{c.field}:</Typography>
                         {c.from != null ? (
                           <Typography component="span" sx={{ fontSize: 11.5, color: "#dc2626", textDecoration: "line-through" }}>{String(c.from)}</Typography>
                         ) : null}
-                        {c.from != null && c.to != null ? <Typography component="span" sx={{ fontSize: 11.5, color: "#94a3b8" }}>→</Typography> : null}
+                        {c.from != null && c.to != null ? <Typography component="span" sx={{ fontSize: 11.5, color: "text.tertiary" }}>→</Typography> : null}
                         {c.to != null ? (
                           <Typography component="span" sx={{ fontSize: 11.5, color: "#15803d" }}>{String(c.to)}</Typography>
                         ) : null}

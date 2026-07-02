@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator"
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from "class-validator"
 
 export class CreateSiteDto {
   @IsString()
@@ -33,6 +33,17 @@ export class UpdateSiteDto {
   @MinLength(2)
   @MaxLength(120)
   name?: string
+
+  // Contracted capacity (DCIM spec §5) — the client-report denominators.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  contractedKw?: number | null
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  contractedU?: number | null
 
   @IsOptional()
   @IsString()

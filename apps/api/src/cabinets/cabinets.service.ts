@@ -13,7 +13,7 @@ export class CabinetsService {
       where: { clientId, siteId, rackSide: null },
       data: { rackSide: "FRONT" }
     })
-    return this.prisma.cabinet.findMany({
+    const cabinets = await this.prisma.cabinet.findMany({
       where: {
         siteId,
         ...(roomId ? { roomId } : {})
@@ -28,10 +28,34 @@ export class CabinetsService {
             uPosition: true, uHeight: true, status: true,
             lifecycleState: true, manufacturer: true, modelNumber: true,
             serialNumber: true, ipAddress: true, powerDrawW: true,
-            rackSide: true
+            rackSide: true, isFullDepth: true, isZeroU: true,
+            budgetedDrawW: true, weightKg: true,
+            disposalStatus: true, physicallyRemoved: true,
+            deviceType: { select: { excludeFromUtilization: true } }
           }
-        }
+        },
+        // ALL reservations (incl. expired — the panel greys them); collision
+        // filtering to active-only happens server-side in the write paths.
+        reservations: { orderBy: { uStart: "asc" } }
       }
+    })
+
+    // usedU is COMPUTED on read (DCIM spec §2.2): unique occupied units across
+    // both faces, excluding zero-U kit and excludeFromUtilization types (blanking
+    // panels occupy slots for collision but don't count toward fill %). The
+    // stored Cabinet.usedU column is legacy and no longer written.
+    return cabinets.map((cabinet) => {
+      const occupied = new Set<number>()
+      for (const a of cabinet.assets) {
+        if (a.uPosition == null || a.isZeroU) continue
+        if (a.deviceType?.excludeFromUtilization) continue
+        // Retired-but-racked kit is DRAWN (greyed) but not COUNTED — capacity
+        // frees the moment an asset retires (DCIM_SCHEMA_SPEC §4.1).
+        if (a.lifecycleState === "RETIRED") continue
+        const h = Math.max(1, Math.ceil(a.uHeight ?? 1))
+        for (let u = a.uPosition; u < a.uPosition + h; u++) occupied.add(u)
+      }
+      return { ...cabinet, usedU: occupied.size }
     })
   }
 

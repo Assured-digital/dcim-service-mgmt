@@ -12,6 +12,7 @@ import { EditActionsButton } from "../components/EditActionsButton"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { useBreadcrumb } from "./Shell"
+import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import SiteHierarchyTree from "./SiteHierarchyTree"
 import CabinetDetailView from "./CabinetDetailView"
@@ -62,21 +63,21 @@ const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinet
   return (
     <Box sx={{ p: "24px", maxWidth: 960 }}>
       <Stack spacing="16px">
-        <Box sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-          <Box sx={{ px: "20px", py: "16px", borderBottom: "1px solid #f1f5f9" }}>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8", mb: "10px" }}>Site Details</Typography>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ px: "20px", py: "16px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.secondary", mb: "10px" }}>Site Details</Typography>
             {infoRows.map(row => (
-              <Box key={row.label} sx={{ display: "flex", alignItems: "baseline", py: "7px", borderBottom: "1px solid #f8fafc" }}>
-                <Typography sx={{ fontSize: 12, color: "#64748b", width: 120 }}>{row.label}</Typography>
-                <Typography sx={{ fontSize: 12.5, color: "#0f172a", fontWeight: 500 }}>{row.value}</Typography>
+              <Box key={row.label} sx={{ display: "flex", alignItems: "baseline", py: "7px", borderBottom: "1px solid", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 12, color: "text.secondary", width: 120 }}>{row.label}</Typography>
+                <Typography sx={{ fontSize: 12.5, color: "text.primary", fontWeight: 500 }}>{row.value}</Typography>
               </Box>
             ))}
           </Box>
           <Box sx={{ display: "grid", gridTemplateColumns: `repeat(${summaryCards.length}, 1fr)` }}>
             {summaryCards.map((s, i) => (
-              <Box key={s.label} sx={{ py: "14px", textAlign: "center", borderRight: i < summaryCards.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                <Typography sx={{ fontSize: 22, fontWeight: 600, color: "#0f172a", lineHeight: 1 }}>{s.value}</Typography>
-                <Typography sx={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", mt: "4px" }}>{s.label}</Typography>
+              <Box key={s.label} sx={{ py: "14px", textAlign: "center", borderRight: i < summaryCards.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 22, fontWeight: 600, color: "text.primary", lineHeight: 1 }}>{s.value}</Typography>
+                <Typography sx={{ fontSize: 10, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em", mt: "4px" }}>{s.label}</Typography>
               </Box>
             ))}
           </Box>
@@ -88,12 +89,14 @@ const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinet
 })
 
 const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelectCabinet }: { cabinets: Cabinet[]; onSelectCabinet: (id: string) => void }) {
+  const { mode } = useThemeMode()
+  const trackBg = mode === "dark" ? "#1e293b" : "#f1f5f9"
   if (cabinets.length === 0) {
     return (
       <Box sx={{ p: "20px 24px" }}>
-        <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed #e2e8f0", borderRadius: "10px" }}>
-          <StorageIcon sx={{ fontSize: 32, color: "#e2e8f0", mb: 1 }} />
-          <Typography sx={{ fontSize: 13, color: "#94a3b8" }}>No cabinets in this room</Typography>
+        <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed", borderColor: "divider", borderRadius: "10px" }}>
+          <StorageIcon sx={{ fontSize: 32, color: "text.tertiary", mb: 1 }} />
+          <Typography sx={{ fontSize: 13, color: "text.secondary" }}>No cabinets in this room</Typography>
         </Box>
       </Box>
     )
@@ -105,36 +108,59 @@ const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelect
           const fill = uFill(c.usedU, c.totalU)
           const totalPowerKw = c.assets.reduce((sum, a) => sum + (a.powerDrawW ?? 0), 0) / 1000
           const powerPct = c.powerKw && c.powerKw > 0 ? Math.min(100, Math.round((totalPowerKw / c.powerKw) * 100)) : 0
+          const totalWeightKg = c.assets.reduce((sum, a) => a.lifecycleState === "RETIRED" ? sum : sum + (a.weightKg ?? 0), 0)
+          const weightPct = c.maxWeightKg && c.maxWeightKg > 0 ? Math.min(100, Math.round((totalWeightKg / c.maxWeightKg) * 100)) : 0
+          const stranded = (fill >= 85 && powerPct <= 50) || (powerPct >= 85 && fill <= 50)
           return (
-            <Box key={c.id} onClick={() => onSelectCabinet(c.id)} sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", p: "16px 18px", cursor: "pointer", "&:hover": { borderColor: "primary.main", boxShadow: "0 2px 12px rgba(29,78,216,0.08)" } }}>
+            <Box key={c.id} onClick={() => onSelectCabinet(c.id)} sx={{ position: "relative", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "16px 18px", cursor: "pointer", "&:hover": { borderColor: "primary.main", boxShadow: "0 2px 12px rgba(29,78,216,0.08)" } }}>
+              {stranded ? (
+                <Typography sx={{
+                  position: "absolute", top: 10, right: 10, fontSize: 9, fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: "0.05em", px: "6px", py: "2px", borderRadius: "6px",
+                  bgcolor: mode === "dark" ? "#3a2c0f" : "#fef3c7", color: mode === "dark" ? "#fbbf24" : "#b45309"
+                }}>Stranded</Typography>
+              ) : null}
               <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "14px" }}>
-                <Box sx={{ width: 32, height: 32, borderRadius: "7px", bgcolor: "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: "7px", bgcolor: mode === "dark" ? "#16294a" : "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <StorageIcon sx={{ fontSize: 15, color: "primary.main" }} />
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{c.name}</Typography>
-                  <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{c._count.assets} assets</Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.primary" }}>{c.name}</Typography>
+                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>{c._count.assets} assets</Typography>
                 </Box>
               </Stack>
               {c.totalU ? (
                 <Box sx={{ mb: "6px" }}>
                   <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                    <Typography sx={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>U Space</Typography>
-                    <Typography sx={{ fontSize: 9, fontWeight: 600, color: "#64748b" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
+                    <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>U Space</Typography>
+                    <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
                   </Stack>
-                  <Box sx={{ height: 3, bgcolor: "#f1f5f9", borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${fill}%`, bgcolor: barColor(fill), borderRadius: 2 }} />
+                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${fill}%`, bgcolor: barColor(fill, mode), borderRadius: 2 }} />
                   </Box>
                 </Box>
               ) : null}
-              <Box>
+              <Box sx={{ mb: "6px" }}>
                 <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                  <Typography sx={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Power</Typography>
-                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: "#64748b" }}>{formatKw(totalPowerKw)} kW</Typography>
+                  <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>Power</Typography>
+                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>{formatKw(totalPowerKw)} kW</Typography>
                 </Stack>
                 {c.powerKw && c.powerKw > 0 ? (
-                  <Box sx={{ height: 3, bgcolor: "#f1f5f9", borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${powerPct}%`, bgcolor: barColor(powerPct), borderRadius: 2 }} />
+                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${powerPct}%`, bgcolor: barColor(powerPct, mode), borderRadius: 2 }} />
+                  </Box>
+                ) : null}
+              </Box>
+              <Box>
+                <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
+                  <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>Weight</Typography>
+                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>
+                    {c.maxWeightKg && c.maxWeightKg > 0 ? `${Math.round(totalWeightKg)}/${Math.round(c.maxWeightKg)} kg` : "—"}
+                  </Typography>
+                </Stack>
+                {c.maxWeightKg && c.maxWeightKg > 0 ? (
+                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${weightPct}%`, bgcolor: barColor(weightPct, mode), borderRadius: 2 }} />
                   </Box>
                 ) : null}
               </Box>
@@ -186,17 +212,17 @@ const OverviewPanel = React.memo(function OverviewPanel({ sites, allAssets }: { 
   return (
     <Box sx={{ p: "24px", maxWidth: 960 }}>
       <Stack spacing="16px">
-        <Box sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-          <Box sx={{ px: "20px", py: "16px", borderBottom: "1px solid #f1f5f9" }}>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8" }}>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ px: "20px", py: "16px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.secondary" }}>
               Infrastructure Overview
             </Typography>
           </Box>
           <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
             {cards.map((card, i) => (
-              <Box key={card.label} sx={{ py: "14px", textAlign: "center", borderRight: i < cards.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                <Typography sx={{ fontSize: 22, fontWeight: 600, color: "#0f172a", lineHeight: 1 }}>{card.value}</Typography>
-                <Typography sx={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", mt: "4px" }}>{card.label}</Typography>
+              <Box key={card.label} sx={{ py: "14px", textAlign: "center", borderRight: i < cards.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 22, fontWeight: 600, color: "text.primary", lineHeight: 1 }}>{card.value}</Typography>
+                <Typography sx={{ fontSize: 10, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em", mt: "4px" }}>{card.label}</Typography>
               </Box>
             ))}
           </Box>
@@ -229,6 +255,8 @@ export default function AssetHierarchyPage() {
   // ── Dialog state ──────────────────────────────────────────────────────
   const [activeDialog, setActiveDialog] = React.useState<DialogKey>(null)
   const [deleteTarget, setDeleteTarget] = React.useState<DeleteTarget | null>(null)
+  // A3: elevation click-empty-U-to-add prefill (spec §2.1) — cleared on close.
+  const [addAssetPrefill, setAddAssetPrefill] = React.useState<{ u: number; side: "FRONT" | "REAR" } | null>(null)
 
   const { notify } = useNotification()
 
@@ -548,8 +576,8 @@ export default function AssetHierarchyPage() {
             "&:hover": { bgcolor: selectedSiteId === null ? "rgba(29,78,216,0.08)" : "rgba(0,0,0,0.03)" },
           }}
         >
-          <GridViewOutlinedIcon sx={{ fontSize: 12.5, color: selectedSiteId === null ? "primary.main" : "#64748b" }} />
-          <Typography sx={{ fontSize: 12.5, fontWeight: selectedSiteId === null ? 600 : 500, color: selectedSiteId === null ? "primary.main" : "#0f172a" }}>
+          <GridViewOutlinedIcon sx={{ fontSize: 12.5, color: selectedSiteId === null ? "primary.main" : "text.secondary" }} />
+          <Typography sx={{ fontSize: 12.5, fontWeight: selectedSiteId === null ? 600 : 500, color: selectedSiteId === null ? "primary.main" : "text.primary" }}>
             Overview
           </Typography>
         </Box>
@@ -576,7 +604,7 @@ export default function AssetHierarchyPage() {
             borderBottom: "1px solid var(--color-border-primary)",
             px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2
           }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#0f172a", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.primary", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {headerEntityName}
             </Typography>
 
@@ -637,6 +665,7 @@ export default function AssetHierarchyPage() {
                 cabinet={selectedCabinet} room={selectedRoom}
                 selectedAssetId={selectedAssetId}
                 onSelectAsset={handleCabinetSelectAsset}
+                onAddAssetAt={(u, side) => { setAddAssetPrefill({ u, side }); setActiveDialog("addAsset") }}
                 canManage={canManage}
               />
             ) : null}
@@ -672,7 +701,9 @@ export default function AssetHierarchyPage() {
         <EditCabinetDialog cabinet={selectedCabinet} rooms={rooms} onClose={() => setActiveDialog(null)} onSave={handleUpdateCabinet} />
       )}
       {activeDialog === "addAsset" && (
-        <AddAssetDialog cabinets={cabinets} defaultCabinetId={selectedCabinetId ?? undefined} contextLabel={selectedCabinet?.name} onClose={() => setActiveDialog(null)} onSave={handleSaveAsset} />
+        <AddAssetDialog cabinets={cabinets} defaultCabinetId={selectedCabinetId ?? undefined} contextLabel={selectedCabinet?.name}
+          defaultUPosition={addAssetPrefill?.u} defaultRackSide={addAssetPrefill?.side}
+          onClose={() => { setActiveDialog(null); setAddAssetPrefill(null) }} onSave={handleSaveAsset} />
       )}
       {deleteTarget && (
         <DeleteConfirmDialog type={deleteTarget.type} label={deleteTarget.label} onClose={() => setDeleteTarget(null)} onConfirm={handleDeleteConfirmed} />

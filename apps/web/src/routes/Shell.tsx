@@ -37,6 +37,7 @@ import ViewListIcon from "@mui/icons-material/ViewList"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
+import DcimSubNav from "../components/DcimSubNav"
 import NotificationBell from "../components/NotificationBell"
 import { LoadingState } from "../components/PageState"
 import { shellTokens } from "../components/shared"
@@ -230,6 +231,15 @@ const HEADER_HEIGHT = 56
 const ICON_SIZE = 20
 const SCOPE_INDEPENDENT_PATHS = ["/my-work", "/overview", "/audit", "/clients", "/admin/users"]
 
+// DCIM = "app within the app" (DCIM_DESIGN_BRIEF §1). On any of these routes the
+// main sidebar auto-collapses to its icon rail and the DcimSubNav panel opens
+// beside it; leaving restores the prior sidebar state.
+const DCIM_ROUTE_PREFIXES = [
+  "/dcim", "/asset-hierarchy", "/asset-register", "/asset-management",
+  "/connections", "/maintenance", "/pending-deletions",
+]
+const DCIM_LANDING = "/dcim/overview"
+
 type NavItem = { label: string; path: string; icon: React.ReactNode; roles: string[] }
 type NavGroup = { kind: "group"; label: string; icon: React.ReactNode; matchPaths: string[]; roles: string[]; items: NavItem[] }
 type NavSectionEntry = NavItem | NavGroup
@@ -383,10 +393,14 @@ function ClientFlyout({ anchorEl, clients, selectedClientId, onSelect, onClose }
   )
 }
 
-// CollapsibleSection — same DOM always, CSS controls text/chevron visibility
-function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children, expanded }: {
+// CollapsibleSection — same DOM always, CSS controls text/chevron visibility.
+// `launcher` mode (DCIM): the row is a MODULE LAUNCHER, not an expandable group —
+// it navigates into its own nav world (the DcimSubNav) instead of expanding
+// inline or opening a rail flyout. So it renders no expand chevron and no inline
+// children, and a right-arrow hints "enters" rather than "expands" (brief §1).
+function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children, expanded, launcher = false }: {
   title: string; icon?: React.ReactNode; isOpen: boolean; hasActive: boolean
-  onToggle: (e: React.MouseEvent) => void; children: React.ReactNode; expanded: boolean
+  onToggle: (e: React.MouseEvent) => void; children: React.ReactNode; expanded: boolean; launcher?: boolean
 }) {
   return (
     <Box>
@@ -412,10 +426,11 @@ function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children
             display: "flex", alignItems: "center", justifyContent: "center",
             overflow: "hidden",
             width: expanded ? 16 : 0, height: 16, flexShrink: 0,
-            opacity: expanded ? 1 : 0,
+            ...(launcher ? { ml: "auto" } : {}),
+            opacity: expanded ? (launcher ? 0.7 : 1) : 0,
             transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.15s ease, transform 0.2s ease",
-            transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
-            color: isOpen ? "#475569" : "#334155",
+            transform: !launcher && isOpen ? "rotate(90deg)" : "rotate(0deg)",
+            color: launcher ? (hasActive ? "#7db4f5" : "#475569") : isOpen ? "#475569" : "#334155",
           }}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M3 1.5L7 5L3 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -423,7 +438,7 @@ function CollapsibleSection({ title, icon, isOpen, hasActive, onToggle, children
           </Box>
         </Box>
       </Tooltip>
-      <Collapse in={isOpen && expanded} timeout={220}>{children}</Collapse>
+      {launcher ? null : <Collapse in={isOpen && expanded} timeout={220}>{children}</Collapse>}
     </Box>
   )
 }
@@ -658,6 +673,25 @@ export default function Shell() {
   }, [loc.pathname])
 
   const sidebarWidth = sidebarExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED
+
+  // ── DCIM "app within the app" ──────────────────────────────────────────
+  // On DCIM routes: collapse the main rail + show the DcimSubNav panel; restore
+  // the pre-entry sidebar state on leave. A ref (not state) holds the prior
+  // expanded flag so the effect only fires on enter/leave transitions, leaving
+  // any manual expand/collapse the user makes WHILE inside DCIM untouched.
+  const isDcimRoute = !isMobile && DCIM_ROUTE_PREFIXES.some(p => loc.pathname.startsWith(p))
+  const preDcimExpandedRef = useRef<boolean | null>(null)
+  React.useEffect(() => {
+    if (isDcimRoute) {
+      if (preDcimExpandedRef.current === null) {
+        preDcimExpandedRef.current = sidebarExpanded
+        setSidebarExpanded(false)
+      }
+    } else if (preDcimExpandedRef.current !== null) {
+      setSidebarExpanded(preDcimExpandedRef.current)
+      preDcimExpandedRef.current = null
+    }
+  }, [isDcimRoute]) // eslint-disable-line
 
   function toggleSection(title: string) { setOpenSection(prev => prev === title ? null : title) }
 
@@ -940,10 +974,17 @@ export default function Shell() {
               const isOpen = openSection === section.title
               const hasActive = sectionHasActive(section)
 
+              // DCIM is a module launcher, not an expandable group: its sub-nav
+              // IS the submenu, so entering the module is the only action —
+              // whether the rail is collapsed or expanded — and it never opens
+              // the redundant rail flyout (brief §1).
+              const isDcimSection = section.title === "DCIM"
+
               return (
                 <CollapsibleSection key={section.title} title={section.title} icon={section.icon}
-                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded}
+                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded} launcher={isDcimSection}
                   onToggle={(e) => {
+                    if (isDcimSection) { navigateTo(DCIM_LANDING); return }
                     if (!navExpanded) {
                       const target = e.currentTarget as HTMLElement
                       const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
@@ -1037,6 +1078,9 @@ export default function Shell() {
       {flyout?.kind === "client" && !sidebarExpanded ? (
         <ClientFlyout anchorEl={flyout.anchor} clients={clientList} selectedClientId={selectedClientId} onSelect={id => { handleClientChange(id); setFlyout(null) }} onClose={() => setFlyout(null)} />
       ) : null}
+
+      {/* DCIM sub-nav — the "app within the app" panel (brief §1), beside the rail */}
+      {isDcimRoute ? <DcimSubNav pathname={loc.pathname} onNavigate={navigateTo} /> : null}
 
       {/* Right column: header + content */}
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
