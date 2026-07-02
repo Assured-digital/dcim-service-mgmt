@@ -241,7 +241,7 @@ export default function AssetHierarchyPage() {
   const params = useParams<{ siteId?: string; roomId?: string; cabinetId?: string; assetId?: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { setBreadcrumbs } = useBreadcrumb()
+  const { setBreadcrumbs, setPageFullBleed } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
@@ -262,15 +262,12 @@ export default function AssetHierarchyPage() {
 
   const { notify } = useNotification()
 
-  // ── Fix parent overflow (Shell content area) ─────────────────────────
-  const containerRef = React.useRef<HTMLDivElement>(null)
-  React.useLayoutEffect(() => {
-    const parent = containerRef.current?.parentElement
-    if (!parent) return
-    const prev = parent.style.overflow
-    parent.style.overflow = "hidden"
-    return () => { parent.style.overflow = prev }
-  }, [])
+  // ── Full-bleed: the Shell drops content padding + hides overflow, so this
+  //    navigator owns its own edge-to-edge layout and internal scrolling. ──
+  React.useEffect(() => {
+    setPageFullBleed(true)
+    return () => setPageFullBleed(false)
+  }, [setPageFullBleed])
 
   // ── Data queries ──────────────────────────────────────────────────────
   const { data: sites = [], isLoading: sitesLoading } = useQuery({
@@ -552,9 +549,8 @@ export default function AssetHierarchyPage() {
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <Box ref={containerRef} sx={{
-      mx: { xs: "-12px", md: "-24px" }, mt: { xs: "-12px", md: "-24px" }, mb: { xs: "-12px", md: "-24px" },
-      height: "calc(100vh - 56px)", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
+    <Box sx={{
+      height: "100%", width: "100%", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
     }}>
 
       {/* ── Left panel ──────────────────────────────────────────────────── */}

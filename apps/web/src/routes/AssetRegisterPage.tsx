@@ -37,12 +37,13 @@ function toggleSetValue<T>(set: Set<T>, value: T): Set<T> {
 export default function AssetRegisterPage() {
   const params = useParams<{ assetId?: string }>()
   const navigate = useNavigate()
-  const { setBreadcrumbs, setHideModuleLabel } = useBreadcrumb()
+  const { setBreadcrumbs, setHideModuleLabel, setPageFullBleed } = useBreadcrumb()
 
   React.useEffect(() => {
     setHideModuleLabel(true)
-    return () => setHideModuleLabel(false)
-  }, [setHideModuleLabel])
+    setPageFullBleed(true)
+    return () => { setHideModuleLabel(false); setPageFullBleed(false) }
+  }, [setHideModuleLabel, setPageFullBleed])
 
   // ── Filter state ──────────────────────────────────────────────────────
   const [filters, setFilters] = React.useState<FilterState>(() => buildDefaultFilters())
@@ -66,16 +67,6 @@ export default function AssetRegisterPage() {
       || ((b.uPosition ?? -1) - (a.uPosition ?? -1))
     )
   }, [allAssets, filters])
-
-  // ── Fix parent overflow ───────────────────────────────────────────────
-  const containerRef = React.useRef<HTMLDivElement>(null)
-  React.useLayoutEffect(() => {
-    const parent = containerRef.current?.parentElement
-    if (!parent) return
-    const prev = parent.style.overflow
-    parent.style.overflow = "hidden"
-    return () => { parent.style.overflow = prev }
-  }, [])
 
   // ── Breadcrumb ────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -130,9 +121,8 @@ export default function AssetRegisterPage() {
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <Box ref={containerRef} sx={{
-      mx: { xs: "-12px", md: "-24px" }, mt: { xs: "-12px", md: "-24px" }, mb: { xs: "-12px", md: "-24px" },
-      height: "calc(100vh - 56px)", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
+    <Box sx={{
+      height: "100%", width: "100%", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
     }}>
 
       {/* ── Left panel (hidden when an asset is embedded) ───────────── */}

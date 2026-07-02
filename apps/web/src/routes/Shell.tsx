@@ -1081,8 +1081,11 @@ export default function Shell() {
       {/* DCIM sub-nav — the "app within the app" panel (brief §1), beside the rail */}
       {isDcimRoute ? <DcimSubNav pathname={loc.pathname} onNavigate={navigateTo} /> : null}
 
-      {/* Right column: header + content */}
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Right column: header + content. minWidth:0 lets it shrink below its
+          content's intrinsic width — without it, a wide table/elevation (esp.
+          next to the fixed DCIM sub-nav) pushes the column past the viewport
+          and the page scrolls sideways. */}
+      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Top bar */}
         <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, bgcolor: shellTokens.top, borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", px: "16px", gap: "8px" }}>
