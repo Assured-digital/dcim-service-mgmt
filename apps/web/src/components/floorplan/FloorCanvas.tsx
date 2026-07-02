@@ -39,7 +39,7 @@ const OBJECT_GLYPH: Record<string, string> = { CRAC: "❄", UPS: "⚡", PDU: "�
 
 export function FloorCanvas({
   plan, lens, mode: editMode, selectedCabinetId, findSpaceMinU, placing,
-  onCabinetClick, onObjectClick, onCellClick,
+  onCabinetClick, onObjectClick, onAisleClick, onCellClick,
 }: {
   plan: FloorPlan
   lens: FloorLens
@@ -49,6 +49,7 @@ export function FloorCanvas({
   placing: boolean // an item is armed for placement — grid cells become click targets
   onCabinetClick: (id: string) => void
   onObjectClick: (id: string) => void
+  onAisleClick?: (id: string) => void
   onCellClick: (x: number, y: number) => void
 }) {
   const { mode } = useThemeMode()
@@ -92,8 +93,8 @@ export function FloorCanvas({
           <line key={`h${i}`} x1={0} y1={(i + 1) * CELL} x2={W} y2={(i + 1) * CELL} stroke={gridLine} strokeWidth={1} />
         ))}
 
-        {/* Aisle zones (behind cabinets) */}
-        {plan.aisleZones.map((z) => <AisleRect key={z.id} zone={z} mode={mode} />)}
+        {/* Aisle zones (behind cabinets; click-to-remove in edit mode) */}
+        {plan.aisleZones.map((z) => <AisleRect key={z.id} zone={z} mode={mode} onClick={editMode === "edit" && !placing && onAisleClick ? () => onAisleClick(z.id) : undefined} />)}
 
         {/* Floor objects */}
         {plan.floorObjects.map((o) => (
@@ -133,14 +134,14 @@ export function FloorCanvas({
   )
 }
 
-function AisleRect({ zone, mode }: { zone: AisleZoneT; mode: "light" | "dark" }) {
+function AisleRect({ zone, mode, onClick }: { zone: AisleZoneT; mode: "light" | "dark"; onClick?: () => void }) {
   const g = zone.geometry ?? {}
   if (g.x == null || g.y == null || g.w == null || g.h == null) return null
   const hot = zone.type === "HOT"
   const fill = hot ? (mode === "dark" ? "rgba(239,68,68,0.16)" : "rgba(239,68,68,0.10)") : (mode === "dark" ? "rgba(59,130,246,0.16)" : "rgba(59,130,246,0.10)")
   const stroke = hot ? "rgba(239,68,68,0.5)" : "rgba(59,130,246,0.5)"
   return (
-    <g>
+    <g onClick={onClick} style={onClick ? { cursor: "pointer" } : undefined}>
       <rect x={g.x * CELL} y={g.y * CELL} width={g.w * CELL} height={g.h * CELL} fill={fill} stroke={stroke} strokeWidth={1} strokeDasharray="5 3" rx={3} />
       {zone.label ? <text x={g.x * CELL + 5} y={g.y * CELL + 13} fontSize={9} fontWeight={600} fill={stroke}>{zone.label}</text> : null}
     </g>

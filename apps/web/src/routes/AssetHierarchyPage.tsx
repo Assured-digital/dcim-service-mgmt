@@ -19,6 +19,7 @@ import CabinetDetailView from "./CabinetDetailView"
 import AssetDetailPage from "./AssetDetailPage"
 import SitesMapCard, { SiteAssetCounts } from "../components/SitesMapCard"
 import SiteLocationCard from "../components/SiteLocationCard"
+import SiteLinkedRecords from "./SiteLinkedRecords"
 import {
   AddSiteDialog, EditSiteDialog, AddRoomDialog, EditRoomDialog,
   AddCabinetDialog, EditCabinetDialog, AddAssetDialog,
@@ -34,7 +35,7 @@ type DialogKey = "addSite" | "editSite" | "addRoom" | "editRoom" | "addCabinet" 
 
 // ─── Inlined detail views (small, memoized) ─────────────────────────────
 
-const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinets }: { site: Site; rooms: Room[]; cabinets: Cabinet[] }) {
+const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinets, canManage }: { site: Site; rooms: Room[]; cabinets: Cabinet[]; canManage: boolean }) {
   const stats = React.useMemo(() => {
     const totalAssets = cabinets.reduce((s, c) => s + c._count.assets, 0)
     const totalU = cabinets.reduce((s, c) => s + (c.totalU ?? 0), 0)
@@ -83,6 +84,7 @@ const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinet
           </Box>
         </Box>
         <SiteLocationCard site={site} />
+        <SiteLinkedRecords siteId={site.id} siteName={site.name} canManage={canManage} />
       </Stack>
     </Box>
   )
@@ -675,7 +677,7 @@ export default function AssetHierarchyPage() {
             ) : null}
 
             {selectedSiteId && !isLoading && !selectedRoomId && selectedSite ? (
-              <SiteDetailView site={selectedSite} rooms={rooms} cabinets={cabinets} />
+              <SiteDetailView site={selectedSite} rooms={rooms} cabinets={cabinets} canManage={canManage} />
             ) : null}
           </Box>
         )}

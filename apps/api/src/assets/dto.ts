@@ -117,6 +117,16 @@ export class CreateAssetDto {
 }
 
 export class UpdateAssetDto {
+  // Attach / change / clear the catalogue link on an existing asset. Attaching a
+  // type re-stamps the denormalised specs (spec §3.2); null unlinks (free-text).
+  @IsOptional()
+  @IsString()
+  deviceTypeId?: string | null
+
+  @IsOptional()
+  @IsNumber()
+  weightKg?: number | null
+
   @IsOptional()
   @IsString()
   assetTag?: string

@@ -494,6 +494,7 @@ export class AssetsService {
     assetType?: string
     siteId?: string | null
     cabinetId?: string | null
+    deviceTypeId?: string | null
     status?: string
     manufacturer?: string
     modelNumber?: string
@@ -504,6 +505,7 @@ export class AssetsService {
     isZeroU?: boolean
     powerDrawW?: number | null
     budgetedDrawW?: number | null
+    weightKg?: number | null
     ipAddress?: string
     lifecycleState?: AssetLifecycleState
     notes?: string
@@ -546,14 +548,35 @@ export class AssetsService {
       }
     }
 
-    // Resolve the TARGET placement (dto field wins, else current), then validate
-    // the slot inside the same transaction as the write (spec §2.2).
+    // Attaching a NEW device type re-stamps the denormalised specs (spec §3.2/§4.1):
+    // the catalogue populates blanks, dto values still win, and the existing values
+    // are the fallback. null unlinks (keeps the values as free-text). Fetched up
+    // front so the collision check below uses the (possibly new) isFullDepth.
+    const newTypeAttached =
+      dto.deviceTypeId !== undefined && dto.deviceTypeId != null && dto.deviceTypeId !== asset.deviceTypeId;
+    let dt: { isFullDepth: boolean | null; powerDrawW: number | null; weightKg: number | null; deratePct: number | null } | null = null;
+    if (newTypeAttached) {
+      dt = await this.prisma.deviceType.findUnique({
+        where: { id: dto.deviceTypeId! },
+        select: { isFullDepth: true, powerDrawW: true, weightKg: true, deratePct: true }
+      });
+      if (!dt) throw new BadRequestException("Device type not found.");
+    }
+
+    // Resolve the TARGET placement/specs (dto wins, else stamp from type, else keep).
     const targetUHeight = dto.uHeight !== undefined ? dto.uHeight : asset.uHeight;
     const targetUPosition = dto.uPosition !== undefined ? dto.uPosition : asset.uPosition;
-    const targetIsFullDepth = dto.isFullDepth !== undefined ? dto.isFullDepth : asset.isFullDepth;
+    const targetIsFullDepth = dto.isFullDepth !== undefined ? dto.isFullDepth : (dt ? dt.isFullDepth : asset.isFullDepth);
     const targetIsZeroU = dto.isZeroU !== undefined ? dto.isZeroU : asset.isZeroU;
     const targetRackSide =
       dto.rackSide === "REAR" ? "REAR" : dto.rackSide === "FRONT" ? "FRONT" : asset.rackSide ?? "FRONT";
+    const targetPowerDrawW = dto.powerDrawW !== undefined ? dto.powerDrawW : (dt ? dt.powerDrawW : asset.powerDrawW);
+    const targetWeightKg = dto.weightKg !== undefined ? dto.weightKg : (dt ? dt.weightKg : asset.weightKg);
+    const stampedBudget = dt && targetPowerDrawW != null
+      ? Math.round(targetPowerDrawW * (dt.deratePct ?? DCIM_DEFAULT_DERATE_PCT) / 100)
+      : undefined;
+    const targetBudgetedDrawW = dto.budgetedDrawW !== undefined ? dto.budgetedDrawW : (stampedBudget ?? asset.budgetedDrawW);
+    const targetDeviceTypeId = dto.deviceTypeId !== undefined ? dto.deviceTypeId : asset.deviceTypeId;
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (targetCabinetId && targetUPosition != null && !targetIsZeroU) {
@@ -578,6 +601,7 @@ export class AssetsService {
           assetType: dto.assetType ?? asset.assetType,
           siteId: targetSiteId ?? null,
           cabinetId: targetCabinetId ?? null,
+          deviceTypeId: targetDeviceTypeId,
           status: dto.status ?? asset.status,
           manufacturer: dto.manufacturer ?? asset.manufacturer,
           modelNumber: dto.modelNumber ?? asset.modelNumber,
@@ -586,8 +610,9 @@ export class AssetsService {
           uPosition: targetIsZeroU ? null : targetUPosition,
           isFullDepth: targetIsFullDepth,
           isZeroU: targetIsZeroU,
-          powerDrawW: dto.powerDrawW !== undefined ? dto.powerDrawW : asset.powerDrawW,
-          budgetedDrawW: dto.budgetedDrawW !== undefined ? dto.budgetedDrawW : asset.budgetedDrawW,
+          powerDrawW: targetPowerDrawW,
+          budgetedDrawW: targetBudgetedDrawW,
+          weightKg: targetWeightKg,
           ipAddress: dto.ipAddress ?? asset.ipAddress,
           lifecycleState: dto.lifecycleState ?? asset.lifecycleState,
           notes: dto.notes ?? asset.notes,
@@ -602,7 +627,7 @@ export class AssetsService {
       "assetTag", "name", "assetType", "manufacturer", "modelNumber", "serialNumber",
       "ipAddress", "notes", "location", "status", "lifecycleState",
       "siteId", "cabinetId", "uPosition", "uHeight", "rackSide", "powerDrawW",
-      "isFullDepth", "isZeroU", "budgetedDrawW"
+      "isFullDepth", "isZeroU", "budgetedDrawW", "weightKg", "deviceTypeId"
     ] as const;
 
     const changes: { field: string; from: any; to: any }[] = [];
