@@ -4,93 +4,25 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Box, Button, Drawer, Stack, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Tooltip, Typography
+  TableContainer, TableHead, TableRow, Typography
 } from "@mui/material"
 import StorageIcon from "@mui/icons-material/Storage"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
+import { useNotification } from "../components/NotificationProvider"
 import {
-  Asset, Cabinet, Room, RackTab, ElevationSide,
+  Cabinet, CabinetReservation, Room, RackTab, ElevationSide,
   AuditEvent, LinkedTask, LinkedServiceRequest, LinkedRisk, LinkedIssue,
-  assetBg, normalizeRackSide, formatKw, actionLabel, stripeBg
+  assetBg, normalizeRackSide, formatKw, actionLabel, getApiErrorMessage
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
-
-// ─── Rack elevation (inlined, memoized) ──────────────────────────────────
-
-const RACK_U_HEIGHT = 15
-
-const AssetSlot = React.memo(function AssetSlot({
-  asset, h, isSelected, onSelect
-}: {
-  asset: Asset; h: number; isSelected: boolean; onSelect: (id: string) => void
-}) {
-  return (
-    <Tooltip title={`${asset.name} · ${asset.assetType}${asset.manufacturer ? ` · ${asset.manufacturer}` : ""}`} placement="right" arrow>
-      <Box
-        onClick={() => onSelect(asset.id)}
-        sx={{
-          height: RACK_U_HEIGHT * h + Math.max(0, h - 1), display: "flex", alignItems: "stretch",
-          bgcolor: assetBg(asset.assetType),
-          border: isSelected ? "2px solid #2563eb" : "1px solid rgba(0,0,0,0.08)",
-          boxShadow: isSelected ? "0 0 0 1px #2563eb" : "none",
-          borderRadius: "2px", mb: "1px", cursor: "pointer", overflow: "hidden"
-        }}
-      >
-        <Box sx={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", px: "7px", overflow: "hidden" }}>
-          <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {asset.name}
-          </Typography>
-          {h > 1 && asset.modelNumber ? (
-            <Typography sx={{ fontSize: 9, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {asset.modelNumber}
-            </Typography>
-          ) : null}
-        </Box>
-        <Box sx={{ width: 5, flexShrink: 0, bgcolor: stripeBg(asset.lifecycleState) }} />
-      </Box>
-    </Tooltip>
-  )
-})
-
-const RackElevation = React.memo(function RackElevation({
-  assets, totalU, selectedAssetId, onSelectAsset
-}: {
-  assets: Asset[]; totalU: number; selectedAssetId: string | null; onSelectAsset: (id: string) => void
-}) {
-  const { uNumbers, slots } = React.useMemo(() => {
-    const slotMap: Record<number, Asset | null> = {}
-    for (let u = 1; u <= totalU; u++) slotMap[u] = null
-    assets.forEach(a => {
-      if (a.uPosition != null) {
-        for (let i = 0; i < (a.uHeight ?? 1); i++) slotMap[a.uPosition + i] = a
-      }
-    })
-    const rendered = new Set<string>()
-    const uNums: React.ReactElement[] = []
-    const slotEls: React.ReactElement[] = []
-    for (let u = totalU; u >= 1; u--) {
-      uNums.push(
-        <Box key={u} sx={{ height: RACK_U_HEIGHT, display: "flex", alignItems: "center", justifyContent: "flex-end", pr: "5px", fontSize: 9, fontFamily: "monospace", color: "#64748b", fontWeight: 600 }}>{u}</Box>
-      )
-      const asset = slotMap[u]
-      if (!asset) { slotEls.push(<Box key={u} sx={{ height: RACK_U_HEIGHT, borderBottom: "1px solid rgba(203,213,225,0.4)" }} />); continue }
-      if (rendered.has(asset.id)) continue
-      rendered.add(asset.id)
-      slotEls.push(<AssetSlot key={`${asset.id}-${u}`} asset={asset} h={asset.uHeight ?? 1} isSelected={selectedAssetId === asset.id} onSelect={onSelectAsset} />)
-    }
-    return { uNumbers: uNums, slots: slotEls }
-  }, [assets, totalU, selectedAssetId, onSelectAsset])
-
-  return (
-    <Box sx={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-      <Box sx={{ width: 26, flexShrink: 0, pt: "8px" }}>{uNumbers}</Box>
-      <Box sx={{ flex: 1, border: "2.5px solid #1e293b", borderRadius: "5px", bgcolor: "#f8fafc", p: "6px" }}>{slots}</Box>
-    </Box>
-  )
-})
+import { getSiteCapacity, kw, pctColor } from "../lib/capacity"
+import { useThemeMode } from "../lib/theme"
+import CabinetElevationV2 from "../components/elevation/CabinetElevationV2"
+import { ReservationDialog } from "../components/elevation/ReservationDialog"
 
 // ─── Cabinet detail view ─────────────────────────────────────────────────
+// (The elevation itself lives in components/elevation/ — CabinetElevationV2.)
 
 interface CabinetDetailViewProps {
   cabinet: Cabinet
@@ -98,18 +30,47 @@ interface CabinetDetailViewProps {
   selectedAssetId: string | null
   onSelectAsset: (id: string | null) => void
   canManage: boolean
+  // A3: click-empty-U-to-add — parent opens AddAssetDialog prefilled (spec §2.1).
+  onAddAssetAt?: (u: number, side: ElevationSide) => void
 }
 
 const CabinetDetailView = React.memo(function CabinetDetailView({
-  cabinet, room, selectedAssetId, onSelectAsset, canManage
+  cabinet, room, selectedAssetId, onSelectAsset, canManage, onAddAssetAt
 }: CabinetDetailViewProps) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const qc = useQueryClient()
+  const { mode } = useThemeMode()
+  const { notify } = useNotification()
   const [rackTab, setRackTab] = React.useState<RackTab>("dashboard")
-  const [elevationSide, setElevationSide] = React.useState<ElevationSide>("FRONT")
+  // "BOTH" renders front + rear side by side (the wide-pane default, spec §2.1).
+  const [elevationSide, setElevationSide] = React.useState<ElevationSide | "BOTH">("BOTH")
   const [assetDrawerMode, setAssetDrawerMode] = React.useState<"lite" | "full">("lite")
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
+  // A3 interactions: click-to-move + reservation create/edit (spec §2.1).
+  const [moveAssetId, setMoveAssetId] = React.useState<string | null>(null)
+  const [reservationDialog, setReservationDialog] = React.useState<"new" | CabinetReservation | null>(null)
+
+  const refreshCabinet = React.useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["site-cabinets", cabinet.siteId] })
+    qc.invalidateQueries({ queryKey: ["site-capacity", cabinet.siteId] })
+    qc.invalidateQueries({ queryKey: ["assets"] })
+  }, [qc, cabinet.siteId])
+
+  // Decommission workflow (DCIM_SCHEMA_SPEC §4.2): retire frees capacity but
+  // keeps the block drawn greyed; remove clears the position; dispose closes out.
+  const [decommissioning, setDecommissioning] = React.useState(false)
+  async function decommission(assetId: string, step: "RETIRE" | "REMOVE" | "DISPOSE") {
+    setDecommissioning(true)
+    try {
+      await api.post(`/assets/${assetId}/decommission`, { step })
+      notify.success(step === "RETIRE" ? "Asset retired — capacity freed" : step === "REMOVE" ? "Marked physically removed" : "Marked disposed")
+      refreshCabinet()
+      if (step === "REMOVE") onSelectAsset(null)
+    } catch (e: unknown) {
+      notify.error(getApiErrorMessage((e as any)?.response?.data ?? e, "Decommission step failed"))
+    } finally { setDecommissioning(false) }
+  }
 
   // Reset tab when cabinet changes
   React.useEffect(() => { setRackTab("dashboard") }, [cabinet.id])
@@ -118,7 +79,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
 
   const frontAssets = React.useMemo(() => cabinet.assets.filter(a => normalizeRackSide(a.rackSide) === "FRONT"), [cabinet.assets])
   const rearAssets = React.useMemo(() => cabinet.assets.filter(a => normalizeRackSide(a.rackSide) === "REAR"), [cabinet.assets])
-  const unrackedAssets = React.useMemo(() => cabinet.assets.filter(a => a.uPosition == null), [cabinet.assets])
+  const unrackedAssets = React.useMemo(() => cabinet.assets.filter(a => a.uPosition == null && !a.isZeroU), [cabinet.assets])
 
   const sortedAssets = React.useMemo(
     () => cabinet.assets.slice().sort((a, b) => (b.uPosition ?? 0) - (a.uPosition ?? 0)),
@@ -130,13 +91,13 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
     [cabinet.assets, selectedAssetId]
   )
 
-  const powerStats = React.useMemo(() => {
-    const totalPowerW = cabinet.assets.reduce((sum, a) => sum + (a.powerDrawW ?? 0), 0)
-    const totalPowerKw = totalPowerW / 1000
-    const capacityKw = cabinet.powerKw ?? null
-    const utilizationPct = capacityKw && capacityKw > 0 ? Math.min(100, Math.round((totalPowerKw / capacityKw) * 100)) : null
-    return { totalPowerKw, capacityKw, utilizationPct }
-  }, [cabinet.assets, cabinet.powerKw])
+  // Nameplate sum stays as a secondary figure; the primary capacity numbers come
+  // from the server engine (budgeted power, weight, contiguous free) via the site
+  // capacity endpoint — single source of truth (spec §4.4).
+  const nameplateKw = React.useMemo(
+    () => cabinet.assets.reduce((sum, a) => sum + (a.powerDrawW ?? 0), 0) / 1000,
+    [cabinet.assets]
+  )
 
   const lifecycleCounts = React.useMemo(() => {
     return cabinet.assets.reduce((acc, a) => {
@@ -147,6 +108,13 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
   }, [cabinet.assets])
 
   // ── Queries (only fire when relevant tab is active) ────────────────────
+
+  const { data: siteCapacity } = useQuery({
+    queryKey: ["site-capacity", cabinet.siteId],
+    queryFn: () => getSiteCapacity(cabinet.siteId),
+    enabled: rackTab === "dashboard",
+  })
+  const cabCap = siteCapacity?.cabinets.find(c => c.cabinetId === cabinet.id) ?? null
 
   const { data: cabinetHistory = [] } = useQuery({
     queryKey: ["audit-cabinet", cabinet.id],
@@ -209,7 +177,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
 
       {/* Tab bar */}
-      <Box sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #e2e8f0", px: "24px", flexShrink: 0 }}>
+      <Box sx={{ bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", flexShrink: 0 }}>
         <Stack direction="row" spacing={0}>
           {[
             { key: "dashboard", label: "Dashboard" },
@@ -219,9 +187,9 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
             { key: "linked", label: "Linked records" },
           ].map(t => (
             <Box key={t.key} onClick={() => setRackTab(t.key as RackTab)}
-              sx={{ px: "14px", py: "10px", cursor: "pointer", fontSize: 12.5, fontWeight: 500, color: rackTab === t.key ? "primary.main" : "#64748b", borderBottom: "2px solid", borderBottomColor: rackTab === t.key ? "primary.main" : "transparent", display: "flex", alignItems: "center", gap: "6px", mb: "-1px" }}>
+              sx={{ px: "14px", py: "10px", cursor: "pointer", fontSize: 12.5, fontWeight: 500, color: rackTab === t.key ? "primary.main" : "text.secondary", borderBottom: "2px solid", borderBottomColor: rackTab === t.key ? "primary.main" : "transparent", display: "flex", alignItems: "center", gap: "6px", mb: "-1px" }}>
               {t.label}
-              {t.count != null ? <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: rackTab === t.key ? "#dbeafe" : "#f1f5f9", color: rackTab === t.key ? "primary.main" : "#64748b" }}>{t.count}</Box> : null}
+              {t.count != null ? <Box sx={{ px: "6px", py: "1px", borderRadius: "4px", fontSize: 10, fontWeight: 600, bgcolor: rackTab === t.key ? (mode === "dark" ? "#16294a" : "#dbeafe") : (mode === "dark" ? "#1e293b" : "#f1f5f9"), color: rackTab === t.key ? "primary.main" : "text.secondary" }}>{t.count}</Box> : null}
             </Box>
           ))}
         </Stack>
@@ -232,30 +200,55 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
         <Box sx={{ flex: 1, overflowY: "auto", p: "20px 24px" }}>
           <Box sx={{ display: "grid", gap: "12px", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0,1fr))", xl: "repeat(5, minmax(0,1fr))" }, mb: "14px" }}>
             {[
-              { label: "Total asset draw", value: `${formatKw(powerStats.totalPowerKw)} kW` },
-              { label: "Cabinet capacity", value: powerStats.capacityKw != null ? `${formatKw(powerStats.capacityKw)} kW` : "—" },
-              { label: "Utilization", value: powerStats.utilizationPct != null ? `${powerStats.utilizationPct}%` : "—" },
-              { label: "Active assets", value: `${lifecycleCounts.ACTIVE}` },
-              { label: "Retired (decom)", value: `${lifecycleCounts.RETIRED}` },
+              {
+                label: "Budgeted power",
+                value: cabCap ? kw(cabCap.power.value) : `${formatKw(nameplateKw * 0.6)} kW`,
+                detail: cabCap?.power.capacity != null ? `of ${kw(cabCap.power.capacity)} · ${cabCap.power.pct}%` : `nameplate ${formatKw(nameplateKw)} kW`,
+                accent: cabCap ? pctColor(cabCap.power.pct, mode) : undefined,
+              },
+              {
+                label: "Space used",
+                value: cabCap ? `${cabCap.space.pct}%` : (cabinet.totalU ? `${Math.round(((cabinet.usedU ?? 0) / cabinet.totalU) * 100)}%` : "—"),
+                detail: cabCap ? `${cabCap.space.usedU} / ${cabCap.totalU} U` : undefined,
+                accent: cabCap ? pctColor(cabCap.space.pct, mode) : undefined,
+              },
+              {
+                label: "Largest free block",
+                value: cabCap ? `${cabCap.space.largestContiguousU}U` : "—",
+                detail: "contiguous",
+              },
+              {
+                label: "Weight",
+                value: cabCap && cabCap.weight.value > 0 ? `${Math.round(cabCap.weight.value)} kg` : (cabCap ? "—" : "—"),
+                detail: cabCap?.weight.capacity != null ? `of ${Math.round(cabCap.weight.capacity)} kg · ${cabCap.weight.pct}%` : "no limit set",
+                accent: cabCap ? pctColor(cabCap.weight.pct, mode) : undefined,
+              },
+              {
+                label: "Active assets",
+                value: `${lifecycleCounts.ACTIVE}`,
+                detail: `${lifecycleCounts.RETIRED} retired · ${cabCap?.activeReservations ?? 0} reserved`,
+              },
             ].map(card => (
-              <Box key={card.label} sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", p: "14px 16px" }}>
-                <Typography sx={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", mb: "6px" }}>{card.label}</Typography>
-                <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#0f172a" }}>{card.value}</Typography>
+              <Box key={card.label} sx={{ position: "relative", overflow: "hidden", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px" }}>
+                {card.accent ? <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: card.accent }} /> : null}
+                <Typography sx={{ fontSize: 10, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.06em", mb: "6px" }}>{card.label}</Typography>
+                <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{card.value}</Typography>
+                {card.detail ? <Typography sx={{ fontSize: 11, color: "text.secondary", mt: "2px" }}>{card.detail}</Typography> : null}
               </Box>
             ))}
           </Box>
-          <Box sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
             {[
               { label: "Cabinet type", value: cabinet.type || "—" },
               { label: "Total U", value: cabinet.totalU != null ? `${cabinet.totalU}U` : "—" },
-              { label: "Used U", value: cabinet.totalU != null ? `${cabinet.usedU ?? 0}U` : "—" },
+              { label: "Used U", value: cabCap ? `${cabCap.space.usedU}U` : (cabinet.totalU != null ? `${cabinet.usedU ?? 0}U` : "—") },
               { label: "Front assets", value: `${frontAssets.length}` },
               { label: "Rear assets", value: `${rearAssets.length}` },
               { label: "Unpositioned assets", value: `${unrackedAssets.length}` },
             ].map((row, idx, arr) => (
-              <Box key={row.label} sx={{ px: "16px", py: "10px", display: "flex", alignItems: "center", borderBottom: idx < arr.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                <Typography sx={{ fontSize: 12, color: "#64748b", width: 150 }}>{row.label}</Typography>
-                <Typography sx={{ fontSize: 12.5, color: "#0f172a", fontWeight: 600 }}>{row.value}</Typography>
+              <Box key={row.label} sx={{ px: "16px", py: "10px", display: "flex", alignItems: "center", borderBottom: idx < arr.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 12, color: "text.secondary", width: 150 }}>{row.label}</Typography>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{row.value}</Typography>
               </Box>
             ))}
           </Box>
@@ -265,51 +258,106 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
       {/* ── Elevation ─────────────────────────────────────────────────── */}
       {rackTab === "elevation" ? (
         <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
-          <Box sx={{ width: 720, maxWidth: "56vw", flexShrink: 0, overflowY: "auto", p: "24px 16px 24px 24px", bgcolor: "#f8fafc" }}>
-            <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-              <Button size="small" onClick={() => setElevationSide("FRONT")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "FRONT" ? "rgba(29,78,216,0.1)" : "transparent" }}>Front view ({frontAssets.length})</Button>
-              <Button size="small" onClick={() => setElevationSide("REAR")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "REAR" ? "rgba(29,78,216,0.1)" : "transparent" }}>Rear view ({rearAssets.length})</Button>
+          <Box sx={{ width: 720, maxWidth: "56vw", flexShrink: 0, overflowY: "auto", p: "24px 16px 24px 24px", bgcolor: "background.default" }}>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
+              <Button size="small" onClick={() => setElevationSide("BOTH")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "BOTH" ? "rgba(29,78,216,0.1)" : "transparent" }}>Side by side</Button>
+              <Button size="small" onClick={() => setElevationSide("FRONT")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "FRONT" ? "rgba(29,78,216,0.1)" : "transparent" }}>Front ({frontAssets.length})</Button>
+              <Button size="small" onClick={() => setElevationSide("REAR")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "REAR" ? "rgba(29,78,216,0.1)" : "transparent" }}>Rear ({rearAssets.length})</Button>
+              {canManage ? (
+                <Button size="small" onClick={() => setReservationDialog("new")} sx={{ ml: "auto !important", fontSize: 12, textTransform: "none" }}>
+                  Reserve space
+                </Button>
+              ) : null}
             </Stack>
             {cabinet.totalU ? (
-              <Box sx={{ maxWidth: 560 }}>
-                <RackElevation
-                  assets={elevationSide === "FRONT" ? frontAssets : rearAssets}
-                  totalU={cabinet.totalU ?? 42}
+              <Box sx={{ maxWidth: elevationSide === "BOTH" ? 680 : 560 }}>
+                <CabinetElevationV2
+                  cabinet={cabinet}
+                  sides={elevationSide}
                   selectedAssetId={selectedAssetId}
                   onSelectAsset={handleSelectElevationAsset}
+                  canManage={canManage}
+                  moveAssetId={moveAssetId}
+                  onEndMove={() => setMoveAssetId(null)}
+                  onAddAssetAt={onAddAssetAt}
+                  onEditReservation={(r) => setReservationDialog(r ?? "new")}
+                  onDataChanged={refreshCabinet}
                 />
               </Box>
             ) : (
-              <Box sx={{ py: 6, textAlign: "center" }}><Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No U-space data for this cabinet</Typography></Box>
+              <Box sx={{ py: 6, textAlign: "center" }}><Typography sx={{ fontSize: 12, color: "text.tertiary" }}>No U-space data for this cabinet</Typography></Box>
             )}
           </Box>
-          <Drawer anchor="right" open={!!selectedRackAsset} onClose={() => onSelectAsset(null)} PaperProps={{ sx: { width: 420, borderLeft: "1px solid #e2e8f0", p: 2, bgcolor: "#f8fafc" } }}>
+          <Drawer anchor="right" open={!!selectedRackAsset} onClose={() => onSelectAsset(null)} PaperProps={{ sx: { width: 420, borderLeft: "1px solid", borderColor: "divider", p: 2, bgcolor: "background.default" } }}>
             {selectedRackAsset ? (
               <Stack spacing={2}>
-                <Box sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-                  <Box sx={{ p: "16px 20px 14px", borderBottom: "1px solid #f1f5f9" }}>
+                <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+                  <Box sx={{ p: "16px 20px 14px", borderBottom: "1px solid", borderColor: "divider" }}>
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "8px" }}>
-                      <Box sx={{ px: "8px", py: "3px", borderRadius: "4px", bgcolor: assetBg(selectedRackAsset.assetType) }}><Typography sx={{ fontSize: 10.5, fontWeight: 600, color: "#334155" }}>{selectedRackAsset.assetType}</Typography></Box>
-                      <Typography sx={{ fontSize: 11, fontFamily: "monospace", color: "#94a3b8" }}>{selectedRackAsset.assetTag}</Typography>
+                      <Box sx={{ px: "8px", py: "3px", borderRadius: "4px", bgcolor: assetBg(selectedRackAsset.assetType, mode) }}><Typography sx={{ fontSize: 10.5, fontWeight: 600, color: mode === "dark" ? "#cbd5e1" : "#334155" }}>{selectedRackAsset.assetType}</Typography></Box>
+                      <Typography sx={{ fontSize: 11, fontFamily: "monospace", color: "text.tertiary" }}>{selectedRackAsset.assetTag}</Typography>
                       <Box sx={{ ml: "auto", display: "inline-flex" }}>
                         <StatusPill intent={entityStatusIntent(selectedRackAsset.lifecycleState)} label={selectedRackAsset.lifecycleState.toLowerCase()} size="sm" />
                       </Box>
                     </Stack>
-                    <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#0f172a" }}>{selectedRackAsset.name}</Typography>
+                    <Typography sx={{ fontSize: 16, fontWeight: 600 }}>{selectedRackAsset.name}</Typography>
                   </Box>
-                  <Box sx={{ px: "20px", py: "10px", bgcolor: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
-                    <Typography sx={{ fontSize: 11, color: "#475569" }}>{room ? `${room.name} ▸ ` : ""}{cabinet.name} ▸ {selectedRackAsset.uPosition != null ? `U${selectedRackAsset.uPosition}` : "Unpositioned"} {normalizeRackSide(selectedRackAsset.rackSide).toLowerCase()}</Typography>
+                  <Box sx={{ px: "20px", py: "10px", bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider" }}>
+                    <Typography sx={{ fontSize: 11, color: "text.secondary" }}>{room ? `${room.name} ▸ ` : ""}{cabinet.name} ▸ {selectedRackAsset.uPosition != null ? `U${selectedRackAsset.uPosition}` : "Unpositioned"} {normalizeRackSide(selectedRackAsset.rackSide).toLowerCase()}</Typography>
                   </Box>
                   <Box sx={{ p: "14px 20px 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 14px" }}>
                     {[["Manufacturer", selectedRackAsset.manufacturer ?? "—"], ["Model", selectedRackAsset.modelNumber ?? "—"], ["Serial", selectedRackAsset.serialNumber ?? "—"], ["IP", selectedRackAsset.ipAddress ?? "—"], ["U Height", selectedRackAsset.uHeight != null ? `${selectedRackAsset.uHeight}U` : "—"], ["Power", selectedRackAsset.powerDrawW != null ? `${selectedRackAsset.powerDrawW}W` : "—"]].map(([label, value]) => (
-                      <Box key={label}><Typography sx={{ fontSize: 10.5, color: "#94a3b8" }}>{label}</Typography><Typography sx={{ fontSize: 12, color: "#0f172a", fontWeight: 500 }}>{value}</Typography></Box>
+                      <Box key={label}><Typography sx={{ fontSize: 10.5, color: "text.tertiary" }}>{label}</Typography><Typography sx={{ fontSize: 12, fontWeight: 500 }}>{value}</Typography></Box>
                     ))}
                   </Box>
                 </Box>
-                {assetDrawerMode === "lite" ? <Button size="small" variant="outlined" onClick={handleOpenFullDetails} sx={{ alignSelf: "flex-start", textTransform: "none" }}>Open full details</Button> : null}
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  {assetDrawerMode === "lite" ? <Button size="small" variant="outlined" onClick={handleOpenFullDetails} sx={{ textTransform: "none" }}>Open full details</Button> : null}
+                  {canManage && !selectedRackAsset.isZeroU && selectedRackAsset.lifecycleState !== "RETIRED" ? (
+                    <Button size="small" variant="outlined" sx={{ textTransform: "none" }}
+                      onClick={() => { setMoveAssetId(selectedRackAsset.id); onSelectAsset(null) }}>
+                      Move in cabinet
+                    </Button>
+                  ) : null}
+                  {/* Decommission steps (spec §4.2) — contextual on the asset's state */}
+                  {canManage && selectedRackAsset.lifecycleState !== "RETIRED" ? (
+                    <Button size="small" variant="outlined" color="warning" disabled={decommissioning} sx={{ textTransform: "none" }}
+                      onClick={() => decommission(selectedRackAsset.id, "RETIRE")}>
+                      Retire
+                    </Button>
+                  ) : null}
+                  {canManage && selectedRackAsset.lifecycleState === "RETIRED" && !selectedRackAsset.physicallyRemoved ? (
+                    <Button size="small" variant="outlined" color="warning" disabled={decommissioning} sx={{ textTransform: "none" }}
+                      onClick={() => decommission(selectedRackAsset.id, "REMOVE")}>
+                      Mark removed from cabinet
+                    </Button>
+                  ) : null}
+                  {canManage && selectedRackAsset.lifecycleState === "RETIRED" && selectedRackAsset.disposalStatus !== "DISPOSED" ? (
+                    <Button size="small" variant="outlined" color="error" disabled={decommissioning} sx={{ textTransform: "none" }}
+                      onClick={() => decommission(selectedRackAsset.id, "DISPOSE")}>
+                      Mark disposed
+                    </Button>
+                  ) : null}
+                </Stack>
+                {selectedRackAsset.lifecycleState === "RETIRED" ? (
+                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+                    Retired — capacity freed{selectedRackAsset.physicallyRemoved ? ", removed from cabinet" : ", still racked (greyed in the elevation)"}{selectedRackAsset.disposalStatus === "DISPOSED" ? ", disposed" : selectedRackAsset.disposalStatus === "MARKED_FOR_DISPOSAL" ? ", awaiting disposal" : ""}.
+                  </Typography>
+                ) : null}
               </Stack>
             ) : null}
           </Drawer>
+          {reservationDialog ? (
+            <ReservationDialog
+              siteId={cabinet.siteId}
+              cabinetId={cabinet.id}
+              totalU={cabinet.totalU ?? 42}
+              startingUnit={cabinet.startingUnit ?? 1}
+              existing={reservationDialog === "new" ? null : reservationDialog}
+              onClose={() => setReservationDialog(null)}
+              onChanged={refreshCabinet}
+            />
+          ) : null}
         </Box>
       ) : null}
 
@@ -317,24 +365,24 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
       {rackTab === "assets" ? (
         <Box sx={{ flex: 1, overflowY: "auto", p: "16px 20px" }}>
           {cabinet.assets.length === 0 ? (
-            <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed #e2e8f0", borderRadius: "10px" }}>
-              <StorageIcon sx={{ fontSize: 32, color: "#e2e8f0", mb: 1 }} />
-              <Typography sx={{ fontSize: 13, color: "#94a3b8" }}>No assets in this cabinet</Typography>
+            <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed", borderColor: "divider", borderRadius: "10px" }}>
+              <StorageIcon sx={{ fontSize: 32, color: "text.tertiary", mb: 1 }} />
+              <Typography sx={{ fontSize: 13, color: "text.tertiary" }}>No assets in this cabinet</Typography>
             </Box>
           ) : (
-            <TableContainer sx={{ bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px" }}>
+            <TableContainer sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px" }}>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ "& th": { fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", bgcolor: "#f8fafc" } }}>
+                  <TableRow sx={{ "& th": { fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "text.tertiary", bgcolor: "background.default" } }}>
                     <TableCell>U</TableCell><TableCell>Asset</TableCell><TableCell align="right">Power</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {sortedAssets.map(a => (
                     <TableRow key={a.id} hover onClick={() => onSelectAsset(a.id)} sx={{ cursor: "pointer" }}>
-                      <TableCell sx={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "#64748b" }}>{a.uPosition != null ? `U${a.uPosition}` : "—"}</TableCell>
-                      <TableCell><Typography sx={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{a.name}</Typography><Typography sx={{ fontSize: 10, color: "#94a3b8" }}>{a.assetType} · {a.assetTag}</Typography></TableCell>
-                      <TableCell align="right" sx={{ fontFamily: "monospace", fontSize: 11, color: "#64748b" }}>{a.powerDrawW != null ? `${a.powerDrawW}W` : "—"}</TableCell>
+                      <TableCell sx={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "text.secondary" }}>{a.uPosition != null ? `U${a.uPosition}` : "—"}</TableCell>
+                      <TableCell><Typography sx={{ fontSize: 12, fontWeight: 600 }}>{a.name}</Typography><Typography sx={{ fontSize: 10, color: "text.tertiary" }}>{a.assetType} · {a.assetTag}</Typography></TableCell>
+                      <TableCell align="right" sx={{ fontFamily: "monospace", fontSize: 11, color: "text.secondary" }}>{a.powerDrawW != null ? `${a.powerDrawW}W` : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -347,13 +395,13 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
       {/* ── History ───────────────────────────────────────────────────── */}
       {rackTab === "history" ? (
         <Box sx={{ flex: 1, overflowY: "auto", p: "16px 20px" }}>
-          <Box sx={{ maxWidth: 880, bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ maxWidth: 880, bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
             {cabinetHistory.length === 0 ? (
-              <Box sx={{ py: 5, textAlign: "center" }}><Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No cabinet history available yet</Typography></Box>
+              <Box sx={{ py: 5, textAlign: "center" }}><Typography sx={{ fontSize: 12, color: "text.tertiary" }}>No cabinet history available yet</Typography></Box>
             ) : cabinetHistory.map((event, idx) => (
-              <Box key={event.id} sx={{ px: 2, py: 1.5, borderBottom: idx < cabinetHistory.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                <Typography sx={{ fontSize: 12, color: "#0f172a", fontWeight: 500 }}>{actionLabel(event.action, event.data)}</Typography>
-                <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{new Date(event.createdAt).toLocaleString()}</Typography>
+              <Box key={event.id} sx={{ px: 2, py: 1.5, borderBottom: idx < cabinetHistory.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 500 }}>{actionLabel(event.action, event.data)}</Typography>
+                <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>{new Date(event.createdAt).toLocaleString()}</Typography>
               </Box>
             ))}
           </Box>
@@ -370,17 +418,17 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
               { title: "Issues", items: linkedIssues, onClick: (id: string) => navigate(`/issues/${id}`), subtitle: (item: any) => item.severity },
               { title: "Tasks", items: linkedTasks, onClick: (id: string) => setQuickTaskId(id), subtitle: (item: any) => item.title },
             ].map(section => (
-              <Box key={section.title} sx={{ bgcolor: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-                <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid #f1f5f9", bgcolor: "#f8fafc" }}>
-                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.05em" }}>{section.title} ({section.items.length})</Typography>
+              <Box key={section.title} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+                <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.default" }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>{section.title} ({section.items.length})</Typography>
                 </Box>
                 {section.items.length === 0 ? (
-                  <Box sx={{ p: 2 }}><Typography sx={{ fontSize: 12, color: "#94a3b8" }}>No linked {section.title.toLowerCase()}</Typography></Box>
+                  <Box sx={{ p: 2 }}><Typography sx={{ fontSize: 12, color: "text.tertiary" }}>No linked {section.title.toLowerCase()}</Typography></Box>
                 ) : section.items.map((item: any, idx: number) => (
-                  <Stack key={item.id} direction="row" alignItems="center" onClick={() => section.onClick(item.id)} sx={{ p: 1.5, cursor: "pointer", borderBottom: idx < section.items.length - 1 ? "1px solid #f1f5f9" : "none", "&:hover": { bgcolor: "#f8fafc" } }}>
+                  <Stack key={item.id} direction="row" alignItems="center" onClick={() => section.onClick(item.id)} sx={{ p: 1.5, cursor: "pointer", borderBottom: idx < section.items.length - 1 ? "1px solid" : "none", borderColor: "divider", "&:hover": { bgcolor: "action.hover" } }}>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{item.reference}</Typography>
-                      <Typography sx={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.subtitle(item)}</Typography>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{item.reference}</Typography>
+                      <Typography sx={{ fontSize: 11, color: "text.secondary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.subtitle(item)}</Typography>
                     </Box>
                     <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
                   </Stack>

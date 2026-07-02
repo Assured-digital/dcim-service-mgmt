@@ -55,7 +55,7 @@ const connectionColumns: GridColDef<Connection>[] = [
     renderCell: (p: GridRenderCellParams<Connection>) => (
       <Stack sx={{ py: 0.5, lineHeight: 1.2 }}>
         <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>{p.row.fromAsset.assetTag}</Typography>
-        <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>{p.row.fromAsset.name}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>{p.row.fromAsset.name}</Typography>
       </Stack>
     ),
   },
@@ -65,7 +65,7 @@ const connectionColumns: GridColDef<Connection>[] = [
     renderCell: (p) => (
       <Stack sx={{ py: 0.5, lineHeight: 1.2 }}>
         <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>{p.row.toAsset.assetTag}</Typography>
-        <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>{p.row.toAsset.name}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>{p.row.toAsset.name}</Typography>
       </Stack>
     ),
   },
@@ -85,12 +85,12 @@ const connectionColumns: GridColDef<Connection>[] = [
   },
   {
     field: "label", headerName: "Label", width: 160,
-    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: p.value ? "#0f172a" : "#94a3b8" }}>{(p.value as string) ?? "—"}</Typography>,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: p.value ? "text.primary" : "text.tertiary" }}>{(p.value as string) ?? "—"}</Typography>,
   },
   {
     field: "updatedAt", headerName: "Updated", width: 120,
     valueGetter: (v) => v ? new Date(v as string) : null,
-    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>{p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}</Typography>,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>{p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}</Typography>,
   },
 ]
 
@@ -161,7 +161,8 @@ export default function ConnectionsPage() {
       <Card>
         <Box
           sx={{
-            borderBottom: "1px solid #e2e8f0",
+            borderBottom: "1px solid",
+            borderColor: "divider",
             px: 2,
             py: 1.25,
             display: "flex",

@@ -49,13 +49,13 @@ export function DeviceTypePicker({ onSelect, onClose }: {
               value={search}
               onChange={e => setSearch(e.target.value)}
               InputProps={{
-                startAdornment: <SearchIcon sx={{ fontSize: 16, color: "#94a3b8", mr: 1 }} />,
+                startAdornment: <SearchIcon sx={{ fontSize: 16, color: "text.tertiary", mr: 1 }} />,
               }}
             />
 
             <Box sx={{ mt: 1.5, maxHeight: 320, overflowY: "auto" }}>
               {results.length === 0 && !isFetching && (
-                <Typography variant="body2" sx={{ color: "#64748b", px: 0.5, py: 2 }}>
+                <Typography variant="body2" sx={{ color: "text.secondary", px: 0.5, py: 2 }}>
                   {debounced ? "No matching device types." : "No device types yet."}
                 </Typography>
               )}
@@ -69,13 +69,13 @@ export function DeviceTypePicker({ onSelect, onClose }: {
                       sx={{
                         px: 1.25, py: 1, borderRadius: 1.5, cursor: "pointer",
                         border: "1px solid",
-                        borderColor: selected ? "#1d4ed8" : "#e2e8f0",
+                        borderColor: selected ? "primary.main" : "divider",
                         bgcolor: selected ? "rgba(29,78,216,0.06)" : "transparent",
-                        "&:hover": { borderColor: selected ? "#1d4ed8" : "#cbd5e1" },
+                        "&:hover": { borderColor: selected ? "primary.main" : "text.tertiary" },
                       }}
                     >
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{dt.model}</Typography>
-                      <Typography variant="caption" sx={{ color: "#64748b" }}>
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
                         {dt.manufacturer.name}
                         {deviceTypeSpecLine(dt) ? ` · ${deviceTypeSpecLine(dt)}` : ""}
                       </Typography>
@@ -91,8 +91,8 @@ export function DeviceTypePicker({ onSelect, onClose }: {
             </Button>
 
             {pending && (
-              <Box sx={{ mt: 1.5, p: 1.25, borderRadius: 1.5, bgcolor: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                <Typography variant="caption" sx={{ color: "#64748b" }}>This will auto-fill</Typography>
+              <Box sx={{ mt: 1.5, p: 1.25, borderRadius: 1.5, bgcolor: "background.default", border: "1px solid", borderColor: "divider" }}>
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>This will auto-fill</Typography>
                 <Typography variant="body2" sx={{ mt: 0.25 }}>
                   {pending.manufacturer.name} {pending.model}
                   {pending.uHeight != null ? ` · ${formatU(pending.uHeight)}` : ""}
@@ -171,7 +171,7 @@ function CreateDeviceTypeForm({ onCancel, onCreated, onFindExisting }: {
     <>
       <DialogContent sx={{ pt: 1 }}>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <Typography variant="caption" sx={{ color: "#64748b" }}>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             For in-house or OT kit not in any library. Use "In-house" as the manufacturer where relevant.
           </Typography>
           <Stack direction="row" spacing={2}>
@@ -200,7 +200,7 @@ function CreateDeviceTypeForm({ onCancel, onCreated, onFindExisting }: {
           </Stack>
           {error && (
             <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)" }}>
-              <Typography variant="body2" sx={{ color: "#b91c1c" }}>{error}</Typography>
+              <Typography variant="body2" sx={{ color: "error.main" }}>{error}</Typography>
               {duplicate && (
                 <Button size="small" variant="text" onClick={() => onFindExisting(model.trim())} sx={{ textTransform: "none", mt: 0.5, px: 0 }}>
                   Select the existing type

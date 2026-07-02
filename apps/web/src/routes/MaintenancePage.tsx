@@ -61,7 +61,7 @@ const maintenanceColumns: GridColDef<MaintenanceRecord>[] = [
     renderCell: (p: GridRenderCellParams<MaintenanceRecord>) => (
       <Stack sx={{ py: 0.5, lineHeight: 1.2 }}>
         <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>{p.row.asset.assetTag}</Typography>
-        <Typography sx={{ fontSize: 11.5, color: "#64748b" }}>{p.row.asset.name}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>{p.row.asset.name}</Typography>
       </Stack>
     ),
   },
@@ -78,12 +78,12 @@ const maintenanceColumns: GridColDef<MaintenanceRecord>[] = [
   {
     field: "nextDueAt", headerName: "Next due", width: 120,
     valueGetter: (v) => v ? new Date(v as string) : null,
-    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: p.value ? "#0f172a" : "#94a3b8" }}>{p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}</Typography>,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: p.value ? "text.primary" : "text.tertiary" }}>{p.value ? (p.value as Date).toLocaleDateString("en-GB") : "—"}</Typography>,
   },
   {
     field: "performedBy", headerName: "By", width: 150,
     valueGetter: (_v, row) => row.performedBy?.displayName ?? "—",
-    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>{p.value as string}</Typography>,
+    renderCell: (p) => <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>{p.value as string}</Typography>,
   },
   {
     field: "site", headerName: "Site", width: 160,
@@ -160,7 +160,8 @@ export default function MaintenancePage() {
       <Card>
         <Box
           sx={{
-            borderBottom: "1px solid #e2e8f0",
+            borderBottom: "1px solid",
+            borderColor: "divider",
             px: 2,
             py: 1.25,
             display: "flex",

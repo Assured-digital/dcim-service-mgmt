@@ -136,7 +136,7 @@ function FilterGroup({ label, items, selected, onToggle }: {
   return (
     <Box sx={{ mb: "14px" }}>
       <Stack direction="row" alignItems="center" sx={{ px: "12px", mb: "4px" }}>
-        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8" }}>
+        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "text.secondary" }}>
           {label}
         </Typography>
         {activeCount > 0 ? (
@@ -153,7 +153,7 @@ function FilterGroup({ label, items, selected, onToggle }: {
             sx={{ px: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
             <Checkbox checked={isActive} size="small"
               sx={{ p: 0, mr: "8px", "& .MuiSvgIcon-root": { fontSize: 15 } }} />
-            <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "primary.main" : "#475569", fontWeight: isActive ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "primary.main" : "text.secondary", fontWeight: isActive ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {item.label}
             </Typography>
           </Stack>
@@ -162,7 +162,7 @@ function FilterGroup({ label, items, selected, onToggle }: {
       {hasMore ? (
         <Typography
           onClick={() => setShowAll(s => !s)}
-          sx={{ fontSize: 11, color: "#2563eb", cursor: "pointer", px: "12px", pt: "2px" }}>
+          sx={{ fontSize: 11, color: "primary.main", cursor: "pointer", px: "12px", pt: "2px" }}>
           {showAll ? "Show less" : `Show ${items.length - MAX_VISIBLE} more…`}
         </Typography>
       ) : null}
@@ -256,7 +256,7 @@ function LocationTree({
   return (
     <Box sx={{ mb: "14px" }}>
       <Stack direction="row" alignItems="center" sx={{ px: "12px", mb: "4px" }}>
-        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8" }}>
+        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "text.secondary" }}>
           Location
         </Typography>
         {selectedCount > 0 ? (
@@ -275,7 +275,7 @@ function LocationTree({
               sx={{ pl: "8px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
               <Box
                 onClick={e => { e.stopPropagation(); toggleSetLocal(expandedSites, setExpandedSites, site.id) }}
-                sx={{ width: 16, display: "flex", alignItems: "center", justifyContent: "center", mr: "2px", color: "#94a3b8" }}
+                sx={{ width: 16, display: "flex", alignItems: "center", justifyContent: "center", mr: "2px", color: "text.tertiary" }}
               >
                 {siteVisibleRooms.length > 0 ? (
                   siteOpen ? <KeyboardArrowDownIcon sx={{ fontSize: 14 }} /> : <KeyboardArrowRightIcon sx={{ fontSize: 14 }} />
@@ -290,7 +290,7 @@ function LocationTree({
                 />
                 <Typography sx={{
                   flex: 1, fontSize: 12,
-                  color: siteState !== "unchecked" ? "primary.main" : "#475569",
+                  color: siteState !== "unchecked" ? "primary.main" : "text.secondary",
                   fontWeight: siteState !== "unchecked" ? 500 : 400,
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                 }}>
@@ -308,7 +308,7 @@ function LocationTree({
                     sx={{ pl: "26px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
                     <Box
                       onClick={e => { e.stopPropagation(); toggleSetLocal(expandedRooms, setExpandedRooms, room.id) }}
-                      sx={{ width: 16, display: "flex", alignItems: "center", justifyContent: "center", mr: "2px", color: "#94a3b8" }}
+                      sx={{ width: 16, display: "flex", alignItems: "center", justifyContent: "center", mr: "2px", color: "text.tertiary" }}
                     >
                       {roomVisibleCabs.length > 0 ? (
                         roomOpen ? <KeyboardArrowDownIcon sx={{ fontSize: 14 }} /> : <KeyboardArrowRightIcon sx={{ fontSize: 14 }} />
@@ -323,7 +323,7 @@ function LocationTree({
                       />
                       <Typography sx={{
                         flex: 1, fontSize: 12,
-                        color: roomState !== "unchecked" ? "primary.main" : "#475569",
+                        color: roomState !== "unchecked" ? "primary.main" : "text.secondary",
                         fontWeight: roomState !== "unchecked" ? 500 : 400,
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                       }}>
@@ -344,7 +344,7 @@ function LocationTree({
                         />
                         <Typography sx={{
                           flex: 1, fontSize: 12,
-                          color: selected ? "primary.main" : "#475569",
+                          color: selected ? "primary.main" : "text.secondary",
                           fontWeight: selected ? 500 : 400,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                         }}>
@@ -449,14 +449,15 @@ const AssetFilterRail = React.memo(function AssetFilterRail({
       </Box>
 
       <Box sx={{
-        flexShrink: 0, borderTop: "1px solid #e2e8f0",
-        bgcolor: "#ffffff",
+        flexShrink: 0, borderTop: "1px solid",
+        borderColor: "divider",
+        bgcolor: "background.paper",
       }}>
         <Box sx={{ px: "12px", pt: "8px", pb: "4px" }}>
-          <Typography sx={{ fontSize: 11, color: "#64748b" }}>
-            <Box component="span" sx={{ color: "#0f172a", fontWeight: 500 }}>{filteredCount}</Box>
+          <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+            <Box component="span" sx={{ color: "text.primary", fontWeight: 500 }}>{filteredCount}</Box>
             {" of "}
-            <Box component="span" sx={{ color: "#0f172a", fontWeight: 500 }}>{totalCount}</Box>
+            <Box component="span" sx={{ color: "text.primary", fontWeight: 500 }}>{totalCount}</Box>
             {" assets"}
           </Typography>
         </Box>
@@ -464,7 +465,7 @@ const AssetFilterRail = React.memo(function AssetFilterRail({
           <Button
             fullWidth size="small" variant="outlined"
             disabled={count === 0} onClick={onClearAll}
-            sx={{ fontSize: 12, textTransform: "none", borderColor: "#e2e8f0", color: count === 0 ? "#cbd5e1" : "#475569" }}
+            sx={{ fontSize: 12, textTransform: "none", borderColor: "divider", color: count === 0 ? "text.tertiary" : "text.secondary" }}
           >
             {count === 0 ? "No filters active" : `Clear filters (${count})`}
           </Button>

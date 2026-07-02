@@ -67,9 +67,9 @@ export function AddSiteDialog({ onClose, onSave }: {
 // ─── Edit site ─────────────────────────────────────────────────────────────
 
 export function EditSiteDialog({ site, onClose, onSave }: {
-  site: { name: string; address: string | null; city: string | null; postcode: string | null; country: string; notes: string | null }
+  site: { name: string; address: string | null; city: string | null; postcode: string | null; country: string; notes: string | null; contractedKw?: number | null; contractedU?: number | null }
   onClose: () => void
-  onSave: (data: { name: string; address?: string; city?: string; postcode?: string; country?: string; notes?: string }) => Promise<void>
+  onSave: (data: { name: string; address?: string; city?: string; postcode?: string; country?: string; notes?: string; contractedKw?: number | null; contractedU?: number | null }) => Promise<void>
 }) {
   const [name, setName] = React.useState(site.name ?? "")
   const [address, setAddress] = React.useState(site.address ?? "")
@@ -77,12 +77,22 @@ export function EditSiteDialog({ site, onClose, onSave }: {
   const [postcode, setPostcode] = React.useState(site.postcode ?? "")
   const [country, setCountry] = React.useState(site.country ?? "UK")
   const [notes, setNotes] = React.useState(site.notes ?? "")
+  // Contracted capacity (DCIM spec §5) — commercial figures, the client-report denominators.
+  const [contractedKw, setContractedKw] = React.useState(site.contractedKw != null ? String(site.contractedKw) : "")
+  const [contractedU, setContractedU] = React.useState(site.contractedU != null ? String(site.contractedU) : "")
   const [saving, setSaving] = React.useState(false)
 
   async function handleSave() {
     if (!name.trim()) return
     setSaving(true)
-    try { await onSave({ name: name.trim(), address: address || undefined, city: city || undefined, postcode: postcode || undefined, country: country || undefined, notes: notes || undefined }); onClose() }
+    try {
+      await onSave({
+        name: name.trim(), address: address || undefined, city: city || undefined, postcode: postcode || undefined, country: country || undefined, notes: notes || undefined,
+        contractedKw: contractedKw.trim() === "" ? null : Number(contractedKw),
+        contractedU: contractedU.trim() === "" ? null : parseInt(contractedU, 10),
+      })
+      onClose()
+    }
     catch { }
     finally { setSaving(false) }
   }
@@ -96,6 +106,10 @@ export function EditSiteDialog({ site, onClose, onSave }: {
           <TextField label="Address" value={address} onChange={e => setAddress(e.target.value)} fullWidth />
           <Stack direction="row" spacing={2}><TextField label="City" value={city} onChange={e => setCity(e.target.value)} fullWidth /><TextField label="Postcode" value={postcode} onChange={e => setPostcode(e.target.value)} fullWidth /></Stack>
           <TextField label="Country" value={country} onChange={e => setCountry(e.target.value)} fullWidth />
+          <Stack direction="row" spacing={2}>
+            <TextField label="Contracted power (kW)" type="number" value={contractedKw} onChange={e => setContractedKw(e.target.value)} inputProps={{ min: 0, step: 0.5 }} fullWidth helperText="Client-report denominator" />
+            <TextField label="Contracted space (U)" type="number" value={contractedU} onChange={e => setContractedU(e.target.value)} inputProps={{ min: 0 }} fullWidth helperText="Blank = not contracted" />
+          </Stack>
           <TextField label="Notes" value={notes} onChange={e => setNotes(e.target.value)} multiline rows={2} fullWidth />
         </Stack>
       </DialogContent>
@@ -250,10 +264,13 @@ export function EditCabinetDialog({ cabinet, rooms, onClose, onSave }: {
 
 // ─── Add asset ─────────────────────────────────────────────────────────────
 
-export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClose, onSave }: {
+export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, defaultUPosition, defaultRackSide, onClose, onSave }: {
   cabinets: Cabinet[]
   defaultCabinetId?: string
   contextLabel?: string
+  // A3: prefilled by the elevation's click-empty-U-to-add (DCIM spec §2.1).
+  defaultUPosition?: number
+  defaultRackSide?: ElevationSide
   onClose: () => void
   onSave: (data: any) => Promise<void>
 }) {
@@ -264,10 +281,11 @@ export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClo
   const [model, setModel] = React.useState("")
   const [serial, setSerial] = React.useState("")
   const [ip, setIp] = React.useState("")
-  const [uPos, setUPos] = React.useState("")
+  const [uPos, setUPos] = React.useState(defaultUPosition != null ? String(defaultUPosition) : "")
   const [uHeight, setUHeight] = React.useState("")
   const [power, setPower] = React.useState("")
-  const [rackSide, setRackSide] = React.useState<ElevationSide>("FRONT")
+  const [budgeted, setBudgeted] = React.useState("")
+  const [rackSide, setRackSide] = React.useState<ElevationSide>(defaultRackSide ?? "FRONT")
   const [cabinetId, setCabinetId] = React.useState(defaultCabinetId ?? "")
   const [saving, setSaving] = React.useState(false)
   // Optional catalogue link. When a device type is picked we copy its specs onto
@@ -303,7 +321,11 @@ export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClo
         modelNumber: model || undefined, serialNumber: serial || undefined,
         ipAddress: ip || undefined, uPosition: uPos ? parseInt(uPos) : undefined,
         uHeight: uHeight ? parseInt(uHeight) : undefined,
-        powerDrawW: power ? parseFloat(power) : undefined, rackSide,
+        powerDrawW: power ? parseFloat(power) : undefined,
+        // Budgeted watts (spec §4.1): explicit override wins; otherwise the server
+        // stamps nameplate × derate (per-type or the 60% default) at placement.
+        budgetedDrawW: budgeted ? parseFloat(budgeted) : undefined,
+        rackSide,
       })
       onClose()
     } catch { }
@@ -334,6 +356,8 @@ export function AddAssetDialog({ cabinets, defaultCabinetId, contextLabel, onClo
           <Stack direction="row" spacing={2}><TextField label="Manufacturer" value={manufacturer} onChange={e => { setManufacturer(e.target.value); clearDeviceType() }} fullWidth /><TextField label="Model" value={model} onChange={e => { setModel(e.target.value); clearDeviceType() }} fullWidth /></Stack>
           <Stack direction="row" spacing={2}><TextField label="Serial number" value={serial} onChange={e => setSerial(e.target.value)} fullWidth /><TextField label="IP address" value={ip} onChange={e => setIp(e.target.value)} fullWidth /></Stack>
           <Stack direction="row" spacing={2}><TextField label="U position" type="number" value={uPos} onChange={e => setUPos(e.target.value)} fullWidth /><TextField label="U height" type="number" value={uHeight} onChange={e => setUHeight(e.target.value)} fullWidth /><TextField label="Power draw (W)" type="number" value={power} onChange={e => setPower(e.target.value)} fullWidth /></Stack>
+          <TextField label="Budgeted power (W)" type="number" value={budgeted} onChange={e => setBudgeted(e.target.value)} fullWidth
+            helperText={power ? `Blank = 60% of nameplate (${Math.round(parseFloat(power) * 0.6) || 0} W) — adjust if the real draw is known` : "Blank = 60% of nameplate — capacity maths runs on this figure"} />
           {deviceTypeId && uHeight && !Number.isInteger(parseFloat(uHeight)) && (
             <Typography variant="caption" sx={{ color: "#64748b" }}>
               Catalogue U-height is {formatU(parseFloat(uHeight))}; the asset stores whole U, so it is rounded on save.

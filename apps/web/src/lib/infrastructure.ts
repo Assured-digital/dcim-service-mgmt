@@ -1,4 +1,4 @@
-import { entityStatusIntent, semanticTokens } from "../components/shared/tokens/colors"
+import { entityStatusIntent, getActiveThemeMode, semanticToken, type ThemeMode } from "../components/shared/tokens/colors"
 
 // ─── Shared types ──────────────────────────────────────────────────────────
 
@@ -9,6 +9,15 @@ export type Asset = {
   assetType: string
   uPosition: number | null
   uHeight: number | null
+  // Placement semantics (DCIM spec §2) — optional: only the cabinets payload
+  // selects them today; other asset queries may omit them.
+  isFullDepth?: boolean | null
+  isZeroU?: boolean
+  budgetedDrawW?: number | null
+  weightKg?: number | null
+  // Decommission workflow (DCIM_SCHEMA_SPEC §4) — served on the cabinets payload.
+  disposalStatus?: string | null
+  physicallyRemoved?: boolean
   status: string
   lifecycleState: string
   rackSide: "FRONT" | "REAR" | null
@@ -34,17 +43,39 @@ export type PendingDeletion = Asset & {
   requestedBy: { id: string; displayName: string | null } | null
 }
 
+// Advisory U-range hold (DCIM spec §2) — served on the cabinets payload,
+// written via /sites/:siteId/cabinets/:cabinetId/reservations.
+export type CabinetReservation = {
+  id: string
+  cabinetId: string
+  uStart: number
+  uHeight: number
+  rackSide: "FRONT" | "REAR" | null
+  name: string
+  notes: string | null
+  expiresAt: string | null
+  createdAt: string
+}
+
+export function reservationExpired(r: CabinetReservation, now: Date = new Date()): boolean {
+  return r.expiresAt != null && new Date(r.expiresAt) <= now
+}
+
 export type Cabinet = {
   id: string
+  siteId: string
   name: string
   type: string
   roomId: string | null
   totalU: number | null
-  usedU: number | null
+  usedU: number | null // computed server-side (occupancy minus excluded types)
   powerKw: number | null
+  startingUnit?: number
+  maxWeightKg?: number | null
   notes: string | null
   _count: { assets: number }
   assets: Asset[]
+  reservations?: CabinetReservation[]
 }
 
 export type Room = { id: string; name: string; type: string; floor: string | null }
@@ -60,6 +91,8 @@ export type Site = {
   longitude: number | null
   geocodedAt: string | null
   notes: string | null
+  contractedKw?: number | null
+  contractedU?: number | null
   checks?: Check[]
 }
 export type AuditEvent = { id: string; action: string; createdAt: string; data?: { from?: string; to?: string; fields?: string[] } | null }
@@ -90,21 +123,44 @@ export const ASSET_TYPE_BG: Record<string, string> = {
   PDU: "#fef3c7", UPS: "#d1fae5", KVM: "#ede9fe", Firewall: "#fee2e2"
 }
 
+// Dark counterpart of ASSET_TYPE_BG — same identity hue re-scaled to a deep,
+// low-luminance fill (mirrors the *Dark groups in tokens/colors.ts).
+export const ASSET_TYPE_BG_DARK: Record<string, string> = {
+  Server: "#16294a", Switch: "#311823", Patch: "#1e293b",
+  PDU: "#3a2c0f", UPS: "#13351f", KVM: "#1e1b3a", Firewall: "#3a1a1a"
+}
+
+const assetTypeBgByMode: Record<ThemeMode, Record<string, string>> = {
+  light: ASSET_TYPE_BG,
+  dark: ASSET_TYPE_BG_DARK,
+}
+
 export const ASSET_LIFECYCLE_OPTIONS = ["ACTIVE", "PLANNED", "PROCUREMENT", "STAGING", "RETIRED"]
 
 // ─── Helper functions ──────────────────────────────────────────────────────
 
-export function assetBg(type: string) { return ASSET_TYPE_BG[type] ?? "#f1f5f9" }
+export function assetBg(type: string, mode: ThemeMode = getActiveThemeMode()) {
+  const map = assetTypeBgByMode[mode]
+  return map[type] ?? (mode === "dark" ? "#1e293b" : "#f1f5f9")
+}
+
+// Title/subtitle text on an assetBg fill (the elevation slot labels).
+export function assetSlotText(mode: ThemeMode = getActiveThemeMode()): { title: string; subtitle: string } {
+  return mode === "dark" ? { title: "#e2e8f0", subtitle: "#94a3b8" } : { title: "#0f172a", subtitle: "#64748b" }
+}
 
 // Saturated lifecycle colour for label-less glyphs (the rack-elevation stripe, the
 // register dot). Reads the SAME entityStatusIntent map the lifecycle pills use, on
 // the `solid` scale (the pastel fill washes out at a few px), so chip / stripe / dot
 // all agree: ACTIVE→green, STAGING→blue, PROCUREMENT→amber, PLANNED/RETIRED→slate.
-export function lifecycleGlyphColor(state: string) {
-  return semanticTokens[entityStatusIntent(state)].solid
+export function lifecycleGlyphColor(state: string, mode: ThemeMode = getActiveThemeMode()) {
+  return semanticToken(entityStatusIntent(state), mode).solid
 }
 
-export function barColor(pct: number) { return pct > 85 ? "#b91c1c" : pct > 65 ? "#b45309" : "#15803d" }
+export function barColor(pct: number, mode: ThemeMode = getActiveThemeMode()) {
+  if (mode === "dark") return pct > 85 ? "#ef4444" : pct > 65 ? "#f59e0b" : "#22c55e"
+  return pct > 85 ? "#b91c1c" : pct > 65 ? "#b45309" : "#15803d"
+}
 
 export function uFill(used: number | null, total: number | null) {
   if (!total) return 0
@@ -134,6 +190,6 @@ export function actionLabel(action: string, data?: { from?: string; to?: string;
   return action.replaceAll("_", " ").toLowerCase()
 }
 
-export function stripeBg(state: string) {
-  return lifecycleGlyphColor(state)
+export function stripeBg(state: string, mode: ThemeMode = getActiveThemeMode()) {
+  return lifecycleGlyphColor(state, mode)
 }

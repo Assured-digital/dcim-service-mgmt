@@ -177,7 +177,7 @@ export default function AssetRegisterPage() {
               }}
               sx={{ flex: 1, maxWidth: 420 }}
               InputProps={{
-                startAdornment: <SearchIcon sx={{ fontSize: 16, color: "#94a3b8", mr: 1 }} />,
+                startAdornment: <SearchIcon sx={{ fontSize: 16, color: "text.tertiary", mr: 1 }} />,
                 endAdornment: (
                   <Stack direction="row" alignItems="center" spacing={0.5} sx={{ ml: 1 }}>
                     {filters.search && searchInput === filters.search ? (
@@ -185,7 +185,7 @@ export default function AssetRegisterPage() {
                         size="small"
                         variant="text"
                         onClick={clearCommittedSearch}
-                        sx={{ fontSize: 11, textTransform: "none", minWidth: 0, px: 0.75, py: "2px", height: 24, color: "#64748b" }}
+                        sx={{ fontSize: 11, textTransform: "none", minWidth: 0, px: 0.75, py: "2px", height: 24, color: "text.secondary" }}
                       >
                         Clear
                       </Button>
@@ -202,7 +202,7 @@ export default function AssetRegisterPage() {
                     ) : null}
                   </Stack>
                 ),
-                sx: { fontSize: 12.5, bgcolor: "#f8fafc", height: 34 },
+                sx: { fontSize: 12.5, bgcolor: "background.default", height: 34 },
               }}
             />
           </Box>
