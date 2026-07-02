@@ -105,6 +105,16 @@ enum ConnectionStatus {
   RETIRED
 }
 
+// Airflow direction on a DeviceType (DCIM spec §1) — the NetBox vocabulary minus
+// the left/right variants nobody in the estate uses; additive to extend.
+enum DeviceAirflow {
+  FRONT_TO_REAR
+  REAR_TO_FRONT
+  SIDE_TO_REAR
+  PASSIVE
+  MIXED
+}
+
 // Notification kinds. Phase 2 emits MENTION only; the enum is the additive seam for
 // future kinds (ASSIGNED, STATUS_CHANGED, …) — adding a value is a one-line migration.
 enum NotificationType {
@@ -143,6 +153,9 @@ model Client {
   recordLinks       RecordLink[]
   attachments       Attachment[]
   slaPolicies       SlaPolicy[]
+  cabinetReservations CabinetReservation[]
+  regions           Region[]
+  importMappings    ImportMapping[]
 }
 
 model SlaPolicy {
@@ -171,6 +184,15 @@ model Site {
   longitude  Float?
   geocodedAt DateTime?
   notes      String?
+  // Contracted capacity (DCIM spec §5) — commercial figures set by staff; the
+  // denominators for the client-facing infrastructure report. Sites are
+  // single-client-owned, so per-site is the contract unit (no allocation entity).
+  contractedKw Float?
+  contractedU  Int?
+  // ── Latent (DCIM_SCHEMA_SPEC §5 / §7) ──
+  regionId   String?   // groups sites when the multi-site estate view is built
+  region     Region?   @relation(fields: [regionId], references: [id])
+  status     String?   // future "site under maintenance" states
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -182,6 +204,19 @@ model Site {
   workPackageSites WorkPackageSite[]
 }
 
+// Geography above Site (DCIM_SCHEMA_SPEC §5, LATENT — no phase-one UI). Exists so
+// a future region → sites roll-up needs no migration. Client-scoped.
+model Region {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  name      String   // "UK South", "EMEA"
+  createdAt DateTime @default(now())
+  sites     Site[]
+
+  @@index([clientId])
+}
+
 model Room {
   id        String   @id @default(uuid())
   siteId    String
@@ -190,10 +225,71 @@ model Room {
   type      String   @default("DATA_HALL")
   floor     String?
   notes     String?
+  // ── Floor-plan canvas (DCIM_SCHEMA_SPEC §2.2 / §2.3) ──
+  widthMm          Int?    // room dimensions — canvas scale for the architectural view
+  depthMm          Int?
+  gridCols         Int?    // optional snap-to-grid hints
+  gridRows         Int?
+  shellType        String? // "IMAGE" | "DRAWN" | null (no shell yet)
+  backgroundImageKey String? // object-storage key for an uploaded plan image (backdrop)
+  backgroundImageType String?
+  backgroundOpacity Float?  @default(0.4)
+  shellShape       Json?   // DRAWN: { type: "rect"|"L", points: [...] } — simple geometry, not CAD
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cabinets Cabinet[]
+  cabinets     Cabinet[]
+  aisleZones   AisleZone[]
+  floorObjects FloorObject[]
+}
+
+// Hot/cold aisle designation on the room canvas (DCIM_SCHEMA_SPEC §2.4). Scoped
+// indirectly via room.site.clientId — spoof-test per §8.
+model AisleZone {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  type      String   // "HOT" | "COLD"
+  geometry  Json     // area on the canvas: { x, y, w, h } (grid units) or points
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([roomId])
+}
+
+// Floor-level infrastructure placed on the plan — CRAC/UPS/PDU/column/door
+// (DCIM_SCHEMA_SPEC §2.5). optional assetId links it to a tracked Asset (a CRAC
+// can be both a floor object and a maintained asset). Scoped via room.site.clientId.
+model FloorObject {
+  id          String   @id @default(uuid())
+  roomId      String
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  objectType  String   // "CRAC" | "UPS" | "PDU" | "COLUMN" | "DOOR"
+  posX        Float
+  posY        Float
+  width       Float?   // canvas footprint (grid units); null = default per type
+  depth       Float?
+  orientation Int      @default(0)
+  label       String?
+  assetId     String?  // optional link to a tracked Asset
+  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([roomId])
+}
+
+// Stored CSV column mapping for repeatable bulk import (DCIM_SCHEMA_SPEC §2.7).
+// Client-scoped (direct). The import operation itself is idempotent app logic.
+model ImportMapping {
+  id         String   @id @default(uuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id])
+  name       String   // "Cardiff rack sheet"
+  targetType String   // "CABINET" | "ASSET"
+  columnMap  Json     // { "Rack Name": "cabinet.name", "Row": "cabinet.row", ... }
+  createdAt  DateTime @default(now())
+
+  @@index([clientId])
 }
 
 model CheckTemplate {
@@ -312,13 +408,54 @@ model Cabinet {
   name      String
   type      String   @default("RACK")
   totalU    Int?
+  // usedU is LEGACY — computed on read in CabinetsService since the DCIM
+  // foundations migration (excludes excludeFromUtilization types). Not written.
   usedU     Int?
-  powerKw   Float?
+  powerKw   Float? // feed capacity (kW) — the power denominator (DCIM spec §4.1)
+  // Bottom U number (default 1). Dormant until an estate needs non-1 numbering;
+  // all U maths must honour it (DCIM spec §1).
+  startingUnit Int    @default(1)
+  maxWeightKg  Float? // weight capacity denominator; null = weight bar renders "—"
+  // ── Spatial placement on the room floor plan (DCIM_SCHEMA_SPEC §2.1) ──
+  row           String? // human label / grouping, e.g. "R3"
+  positionInRow Int?    // slot within the row, 1-based → "R3-07"
+  orientation   Int     @default(0) // rotation degrees: 0 | 90 | 180 | 270
+  posX          Float?  // x on the room canvas (grid units); null = unplaced tray
+  posY          Float?  // y on the room canvas
+  // Cabinet lifecycle for the floor-plan Status lens. String (not enum) to match
+  // Asset.status; values resolve through entityStatusIntent (§8): ACTIVE | PLANNED
+  // | DECOMMISSIONING | RETIRED.
+  status        String  @default("ACTIVE")
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  assets Asset[]
+  assets       Asset[]
+  reservations CabinetReservation[]
+}
+
+// Advisory U-range hold on a cabinet (DCIM spec §2, agreed decision: advisory not
+// blocking). Expiry is enforced by READ-FILTER exclusion (expiresAt > now() OR null)
+// — no cron; expired rows stay listed (greyed) until deleted. clientId is a
+// denormalised tenancy guard, always = cabinet.site.clientId.
+model CabinetReservation {
+  id          String    @id @default(uuid())
+  cabinetId   String
+  cabinet     Cabinet   @relation(fields: [cabinetId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id])
+  uStart      Int
+  uHeight     Int       @default(1)
+  rackSide    String?   // "FRONT" | "REAR" | null = both faces
+  name        String    // mandatory — renders in the elevation block
+  notes       String?
+  expiresAt   DateTime? // app-side default now + 1 month; null = open-ended
+  createdById String?   // bare user id, mirrors AuditEvent.actorUserId
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([cabinetId])
+  @@index([clientId, expiresAt])
 }
 
 model Organization {
@@ -426,10 +563,25 @@ model DeviceType {
   slug           String       @unique // netbox slug
   uHeight        Float? // nameplate U height — Float supports 0.5U (half-U kit)
   isFullDepth    Boolean?     @default(true) // consumes both faces — drives the rear elevation view
-  powerDrawW     Float? // nameplate power [LATENT] — auto-fills Asset.powerDrawW on placement
+  powerDrawW     Float? // nameplate power — auto-fills Asset.powerDrawW on placement
   partNumber     String?
   isSeeded       Boolean      @default(false) // true = from NetBox seed, false = user-created (guards re-seed)
+  // ── DCIM foundations (spec §1/§3) ──
+  weightKg               Float?
+  airflow                DeviceAirflow?
+  category               String?  // aligns with Asset.assetType vocabulary ("Server", "Switch", …)
+  // Blanking panels / cable mgmt: occupy slots for collision but don't count
+  // toward fill % (the NetBox occupancy-vs-utilisation distinction).
+  excludeFromUtilization Boolean  @default(false)
+  deratePct              Int?     // per-type override of DCIM_DEFAULT_DERATE_PCT (60)
+  // Elevation images live in object storage DIRECTLY (StorageService), NOT the
+  // client-scoped Attachment model — DeviceType is global (spec §3.2).
+  frontImageKey          String?
+  frontImageType         String?
+  rearImageKey           String?
+  rearImageType          String?
   createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
 
   assets         Asset[]
 
@@ -459,7 +611,26 @@ model Asset {
   serialNumber        String?
   uHeight             Int?
   uPosition           Int?
-  powerDrawW          Float?
+  // Placement semantics (DCIM spec §2): isFullDepth denormalised from DeviceType
+  // at placement (null = full depth, conservative); isZeroU = side-mounted kit
+  // (PDU strips etc.) — counts power/weight, never U, uPosition stays null.
+  isFullDepth         Boolean?
+  isZeroU             Boolean             @default(false)
+  powerDrawW          Float? // nameplate watts
+  // Budgeted watts (spec §4.1) — ALL capacity maths runs on this, not nameplate.
+  // Stamped at placement (nameplate × derate); thereafter a plain editable field.
+  // Editing it does NOT clear deviceTypeId (operational data, not a spec copy).
+  budgetedDrawW       Float?
+  weightKg            Float? // denormalised from DeviceType.weightKg at placement
+  // ── Decommission workflow (DCIM_SCHEMA_SPEC §4.1, NOW) ──
+  // retired-but-racked interim state: lifecycleState=RETIRED frees capacity
+  // immediately (already honoured in the engine), physicallyRemoved=false keeps
+  // it drawn (greyed) in the elevation until pulled.
+  disposalStatus      String?             // null | "MARKED_FOR_DISPOSAL" | "DISPOSED"
+  physicallyRemoved   Boolean             @default(false)
+  // ── Monitoring seam (DCIM_SCHEMA_SPEC §6b, LATENT — never populated yet) ──
+  healthStatus        String?             // "OK"|"WARNING"|"CRITICAL"|"UNKNOWN"; null = not monitored
+  lastTelemetryAt     DateTime?
   ipAddress           String?
   warrantyExpiry      DateTime?
   lifecycleState      AssetLifecycleState @default(ACTIVE)
@@ -484,6 +655,8 @@ model Asset {
   maintenanceLogs     MaintenanceLog[]
   outgoingConnections Connection[]        @relation("ConnectionFromAsset")
   incomingConnections Connection[]        @relation("ConnectionToAsset")
+  ports               Port[]              // LATENT — port layer (§6)
+  floorObjects        FloorObject[]       // reverse of FloorObject.assetId
 }
 
 model MaintenanceLog {
@@ -516,12 +689,36 @@ model Connection {
   installedAt     DateTime?
   lastValidatedAt DateTime?
   createdById     String?
+  // Port-level endpoints (DCIM_SCHEMA_SPEC §6, LATENT). null = asset-level
+  // connection (today's behaviour); populated when cable-tracing is built.
+  fromPortId      String?
+  fromPort        Port?            @relation("ConnectionFromPort", fields: [fromPortId], references: [id], onDelete: SetNull)
+  toPortId        String?
+  toPort          Port?            @relation("ConnectionToPort", fields: [toPortId], references: [id], onDelete: SetNull)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
   @@index([clientId, status])
   @@index([fromAssetId])
   @@index([toAssetId])
+}
+
+// Port layer beneath Connection (DCIM_SCHEMA_SPEC §6, LATENT — no phase-one UI).
+// Defined per-Asset; populating it unlocks the cable-tracing screen with no
+// re-architecture. Port templates on DeviceType are a future addition.
+model Port {
+  id         String   @id @default(uuid())
+  assetId    String
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name       String   // "eth0", "PSU1", "port 24"
+  portType   String   // "NETWORK"|"POWER"|"CONSOLE"|"FIBRE"
+  position   Int?
+  createdAt  DateTime @default(now())
+
+  fromConnections Connection[] @relation("ConnectionFromPort")
+  toConnections   Connection[] @relation("ConnectionToPort")
+
+  @@index([assetId])
 }
 
 model Incident {
