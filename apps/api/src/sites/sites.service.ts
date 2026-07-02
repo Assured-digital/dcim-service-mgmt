@@ -102,6 +102,8 @@ export class SitesService {
     postcode?: string
     country?: string
     notes?: string
+    contractedKw?: number | null
+    contractedU?: number | null
   }) {
     this.assertClientScope(clientId)
     const site = await this.getForClient(clientId, id)

@@ -1,13 +1,75 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service";
-import { AssetLifecycleState, OwnerType, Role } from "@prisma/client";
+import { AssetLifecycleState, OwnerType, Prisma, Role } from "@prisma/client";
 import { isOrgSuperRole } from "../auth/role-scope";
 import { emitAudit } from "../audit-events/emit-audit";
 import { computeDisplayName, userDisplaySelect } from "../users/display";
+import { activeReservationWhere, findUSlotConflicts, uSlotOutOfBounds, UPlacement } from "../cabinets/u-slot.util";
+import { DCIM_DEFAULT_DERATE_PCT } from "../dcim/capacity.util";
 
 @Injectable()
 export class AssetsService {
   constructor(private prisma: PrismaService) {}
+
+  // Authoritative U-slot collision check (DCIM_DESIGN_SPEC.md §2.2). Runs inside
+  // the SAME transaction as the write (closes the check-then-write race). Asset
+  // overlap → hard 400 naming the blocker; active-reservation overlap → 409
+  // (advisory — retried with overrideReservationId to place anyway).
+  private async assertUSlotAvailable(
+    tx: Prisma.TransactionClient,
+    placement: UPlacement & { cabinetId: string },
+    opts: { excludeAssetId?: string; overrideReservationId?: string | null } = {}
+  ) {
+    const cabinet = await tx.cabinet.findUnique({
+      where: { id: placement.cabinetId },
+      select: { totalU: true, startingUnit: true }
+    });
+    if (!cabinet) throw new BadRequestException("Cabinet not found.");
+
+    const bounds = uSlotOutOfBounds(placement, cabinet);
+    if (bounds) throw new BadRequestException(bounds);
+
+    const occupants = await tx.asset.findMany({
+      where: {
+        cabinetId: placement.cabinetId,
+        uPosition: { not: null },
+        isZeroU: false,
+        ...(opts.excludeAssetId ? { id: { not: opts.excludeAssetId } } : {})
+      },
+      select: { id: true, name: true, uPosition: true, uHeight: true, rackSide: true, isFullDepth: true }
+    });
+    const assetConflicts = findUSlotConflicts(
+      placement,
+      occupants.map((a) => ({ ...a, uPosition: a.uPosition as number, label: a.name }))
+    );
+    if (assetConflicts.length > 0) {
+      const h = Math.max(1, Math.ceil(placement.uHeight ?? 1));
+      const range = h > 1 ? `U${placement.uPosition}–${placement.uPosition + h - 1}` : `U${placement.uPosition}`;
+      const side = (placement.rackSide ?? "FRONT").toLowerCase();
+      throw new BadRequestException(`${range} ${side} is occupied by ${assetConflicts[0].label}.`);
+    }
+
+    const reservations = await tx.cabinetReservation.findMany({
+      where: { cabinetId: placement.cabinetId, ...activeReservationWhere() },
+      select: { id: true, name: true, uStart: true, uHeight: true, rackSide: true, expiresAt: true }
+    });
+    const reservationConflicts = findUSlotConflicts(
+      placement,
+      // Reservations block their stated face (or both when rackSide is null),
+      // regardless of the incoming asset's depth — treat as full depth.
+      reservations.map((r) => ({
+        id: r.id, label: r.name, uPosition: r.uStart, uHeight: r.uHeight,
+        rackSide: r.rackSide, isFullDepth: true
+      }))
+    ).filter((c) => c.id !== opts.overrideReservationId);
+    if (reservationConflicts.length > 0) {
+      const blocker = reservations.find((r) => r.id === reservationConflicts[0].id)!;
+      throw new ConflictException({
+        message: `This range is reserved for "${blocker.name}".`,
+        reservation: { id: blocker.id, name: blocker.name, expiresAt: blocker.expiresAt }
+      });
+    }
+  }
 
   private async backfillRackSide(clientId: string) {
     await this.prisma.asset.updateMany({
@@ -90,30 +152,67 @@ export class AssetsService {
       throw new ForbiddenException("Only admins can create INTERNAL assets.");
     }
 
-    const asset = await this.prisma.asset.create({
-      data: {
-        assetTag: dto.assetTag,
-        name: dto.name,
-        assetType: dto.assetType,
-        ownerType: dto.ownerType,
-        clientId: dto.ownerType === OwnerType.CLIENT ? targetClientId : null,
-        siteId: dto.siteId ?? null,
-        cabinetId: dto.cabinetId ?? null,
-        deviceTypeId: dto.deviceTypeId ?? null,
-        status: dto.status ?? "ACTIVE",
-        manufacturer: dto.manufacturer ?? null,
-        modelNumber: dto.modelNumber ?? null,
-        serialNumber: dto.serialNumber ?? null,
-        uHeight: dto.uHeight ?? null,
-        uPosition: dto.uPosition ?? null,
-        powerDrawW: dto.powerDrawW ?? null,
-        ipAddress: dto.ipAddress ?? null,
-        warrantyExpiry: dto.warrantyExpiry ? new Date(dto.warrantyExpiry) : null,
-        lifecycleState: dto.lifecycleState ?? "ACTIVE",
-        notes: dto.notes ?? null,
-        location: dto.location ?? null,
-        rackSide: dto.rackSide === "REAR" ? "REAR" : "FRONT"
+    const asset = await this.prisma.$transaction(async (tx) => {
+      // Denormalise placement + capacity fields from the DeviceType (spec §2.2/§4.1):
+      // isFullDepth (null = full depth, conservative), weightKg, and the budgeted
+      // watts (nameplate × per-type or default derate). All stamped ONCE at
+      // placement; thereafter plain editable asset fields. Explicit dto values win.
+      let isFullDepth: boolean | null = dto.isFullDepth ?? null;
+      let dt: { isFullDepth: boolean | null; powerDrawW: number | null; weightKg: number | null; deratePct: number | null } | null = null;
+      if (dto.deviceTypeId) {
+        dt = await tx.deviceType.findUnique({
+          where: { id: dto.deviceTypeId },
+          select: { isFullDepth: true, powerDrawW: true, weightKg: true, deratePct: true }
+        });
       }
+      if (isFullDepth == null) isFullDepth = dt?.isFullDepth ?? null;
+
+      const nameplateW = dto.powerDrawW ?? dt?.powerDrawW ?? null;
+      const derate = dt?.deratePct ?? DCIM_DEFAULT_DERATE_PCT;
+      const budgetedDrawW = dto.budgetedDrawW ?? (nameplateW != null ? Math.round(nameplateW * derate / 100) : null);
+      const weightKg = dto.weightKg ?? dt?.weightKg ?? null;
+
+      const isZeroU = dto.isZeroU === true;
+      const rackSide = dto.rackSide === "REAR" ? "REAR" : "FRONT";
+      const uPosition = isZeroU ? null : dto.uPosition ?? null;
+
+      if (dto.cabinetId && uPosition != null) {
+        await this.assertUSlotAvailable(
+          tx,
+          { cabinetId: dto.cabinetId, uPosition, uHeight: dto.uHeight, rackSide, isFullDepth },
+          { overrideReservationId: dto.overrideReservationId ?? null }
+        );
+      }
+
+      return tx.asset.create({
+        data: {
+          assetTag: dto.assetTag,
+          name: dto.name,
+          assetType: dto.assetType,
+          ownerType: dto.ownerType,
+          clientId: dto.ownerType === OwnerType.CLIENT ? targetClientId : null,
+          siteId: dto.siteId ?? null,
+          cabinetId: dto.cabinetId ?? null,
+          deviceTypeId: dto.deviceTypeId ?? null,
+          status: dto.status ?? "ACTIVE",
+          manufacturer: dto.manufacturer ?? null,
+          modelNumber: dto.modelNumber ?? null,
+          serialNumber: dto.serialNumber ?? null,
+          uHeight: dto.uHeight ?? null,
+          uPosition,
+          isFullDepth,
+          isZeroU,
+          powerDrawW: nameplateW,
+          budgetedDrawW,
+          weightKg,
+          ipAddress: dto.ipAddress ?? null,
+          warrantyExpiry: dto.warrantyExpiry ? new Date(dto.warrantyExpiry) : null,
+          lifecycleState: dto.lifecycleState ?? "ACTIVE",
+          notes: dto.notes ?? null,
+          location: dto.location ?? null,
+          rackSide
+        }
+      });
     });
 
     await this.prisma.auditEvent.create({
@@ -324,6 +423,71 @@ export class AssetsService {
     return updated;
   }
 
+  // Decommission workflow (DCIM_SCHEMA_SPEC §4.2): retire → physically remove →
+  // dispose, each step audited. Capacity frees at RETIRE (the engine excludes
+  // RETIRED); the elevation draws retired-but-racked kit greyed until REMOVE
+  // clears its position. No hard-delete — history is preserved.
+  async decommission(
+    assetId: string,
+    step: "RETIRE" | "REMOVE" | "DISPOSE",
+    requesterClientId: string,
+    requesterRole: Role,
+    actorUserId: string
+  ) {
+    if (!requesterClientId) throw new ForbiddenException("Missing client scope");
+
+    const asset = await this.prisma.asset.findUnique({ where: { id: assetId } });
+    if (!asset) throw new BadRequestException("Asset not found.");
+    this.assertAssetInScope(asset, requesterClientId, requesterRole, "decommission");
+
+    let data: Record<string, any>;
+    let action: string;
+    let changes: { field: string; label: string; from: string; to: string }[];
+
+    if (step === "RETIRE") {
+      if (asset.lifecycleState === AssetLifecycleState.RETIRED) {
+        throw new BadRequestException("Asset is already retired.");
+      }
+      data = {
+        lifecycleState: AssetLifecycleState.RETIRED,
+        disposalStatus: asset.disposalStatus ?? "MARKED_FOR_DISPOSAL"
+      };
+      action = "DECOMMISSION_RETIRED";
+      changes = [{ field: "lifecycleState", label: "Lifecycle", from: asset.lifecycleState, to: "RETIRED" }];
+    } else if (step === "REMOVE") {
+      if (asset.lifecycleState !== AssetLifecycleState.RETIRED) {
+        throw new BadRequestException("Retire the asset before marking it physically removed.");
+      }
+      if (asset.physicallyRemoved) throw new BadRequestException("Asset is already marked removed.");
+      data = { physicallyRemoved: true, uPosition: null, rackSide: null };
+      action = "DECOMMISSION_REMOVED";
+      changes = [{ field: "physicallyRemoved", label: "Physically removed", from: "No", to: "Yes" }];
+    } else {
+      if (asset.lifecycleState !== AssetLifecycleState.RETIRED) {
+        throw new BadRequestException("Retire the asset before marking it disposed.");
+      }
+      if (asset.disposalStatus === "DISPOSED") throw new BadRequestException("Asset is already disposed.");
+      data = { disposalStatus: "DISPOSED" };
+      action = "DECOMMISSION_DISPOSED";
+      changes = [{ field: "disposalStatus", label: "Disposal", from: asset.disposalStatus ?? "—", to: "DISPOSED" }];
+    }
+
+    const updated = await this.prisma.asset.update({ where: { id: asset.id }, data });
+
+    await emitAudit(this.prisma, {
+      entityType: "Asset",
+      entityId: asset.id,
+      action,
+      actorUserId,
+      clientId: asset.clientId ?? requesterClientId,
+      reference: asset.assetTag,
+      title: asset.name,
+      changes
+    });
+
+    return updated;
+  }
+
   async updateForClient(assetId: string, dto: {
     assetTag?: string
     name?: string
@@ -336,12 +500,16 @@ export class AssetsService {
     serialNumber?: string
     uHeight?: number | null
     uPosition?: number | null
+    isFullDepth?: boolean | null
+    isZeroU?: boolean
     powerDrawW?: number | null
+    budgetedDrawW?: number | null
     ipAddress?: string
     lifecycleState?: AssetLifecycleState
     notes?: string
     location?: string
     rackSide?: "FRONT" | "REAR" | null
+    overrideReservationId?: string | null
   }, requesterClientId: string, requesterRole: Role, actorUserId: string) {
     if (!requesterClientId) throw new ForbiddenException("Missing client scope");
 
@@ -378,34 +546,63 @@ export class AssetsService {
       }
     }
 
-    const updated = await this.prisma.asset.update({
-      where: { id: assetId },
-      data: {
-        assetTag: dto.assetTag ?? asset.assetTag,
-        name: dto.name ?? asset.name,
-        assetType: dto.assetType ?? asset.assetType,
-        siteId: targetSiteId ?? null,
-        cabinetId: targetCabinetId ?? null,
-        status: dto.status ?? asset.status,
-        manufacturer: dto.manufacturer ?? asset.manufacturer,
-        modelNumber: dto.modelNumber ?? asset.modelNumber,
-        serialNumber: dto.serialNumber ?? asset.serialNumber,
-        uHeight: dto.uHeight !== undefined ? dto.uHeight : asset.uHeight,
-        uPosition: dto.uPosition !== undefined ? dto.uPosition : asset.uPosition,
-        powerDrawW: dto.powerDrawW !== undefined ? dto.powerDrawW : asset.powerDrawW,
-        ipAddress: dto.ipAddress ?? asset.ipAddress,
-        lifecycleState: dto.lifecycleState ?? asset.lifecycleState,
-        notes: dto.notes ?? asset.notes,
-        location: dto.location ?? asset.location,
-        rackSide: dto.rackSide === "REAR" ? "REAR" : dto.rackSide === "FRONT" ? "FRONT" : asset.rackSide ?? "FRONT"
+    // Resolve the TARGET placement (dto field wins, else current), then validate
+    // the slot inside the same transaction as the write (spec §2.2).
+    const targetUHeight = dto.uHeight !== undefined ? dto.uHeight : asset.uHeight;
+    const targetUPosition = dto.uPosition !== undefined ? dto.uPosition : asset.uPosition;
+    const targetIsFullDepth = dto.isFullDepth !== undefined ? dto.isFullDepth : asset.isFullDepth;
+    const targetIsZeroU = dto.isZeroU !== undefined ? dto.isZeroU : asset.isZeroU;
+    const targetRackSide =
+      dto.rackSide === "REAR" ? "REAR" : dto.rackSide === "FRONT" ? "FRONT" : asset.rackSide ?? "FRONT";
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (targetCabinetId && targetUPosition != null && !targetIsZeroU) {
+        await this.assertUSlotAvailable(
+          tx,
+          {
+            cabinetId: targetCabinetId,
+            uPosition: targetUPosition,
+            uHeight: targetUHeight,
+            rackSide: targetRackSide,
+            isFullDepth: targetIsFullDepth
+          },
+          { excludeAssetId: asset.id, overrideReservationId: dto.overrideReservationId ?? null }
+        );
       }
+
+      return tx.asset.update({
+        where: { id: assetId },
+        data: {
+          assetTag: dto.assetTag ?? asset.assetTag,
+          name: dto.name ?? asset.name,
+          assetType: dto.assetType ?? asset.assetType,
+          siteId: targetSiteId ?? null,
+          cabinetId: targetCabinetId ?? null,
+          status: dto.status ?? asset.status,
+          manufacturer: dto.manufacturer ?? asset.manufacturer,
+          modelNumber: dto.modelNumber ?? asset.modelNumber,
+          serialNumber: dto.serialNumber ?? asset.serialNumber,
+          uHeight: targetUHeight,
+          uPosition: targetIsZeroU ? null : targetUPosition,
+          isFullDepth: targetIsFullDepth,
+          isZeroU: targetIsZeroU,
+          powerDrawW: dto.powerDrawW !== undefined ? dto.powerDrawW : asset.powerDrawW,
+          budgetedDrawW: dto.budgetedDrawW !== undefined ? dto.budgetedDrawW : asset.budgetedDrawW,
+          ipAddress: dto.ipAddress ?? asset.ipAddress,
+          lifecycleState: dto.lifecycleState ?? asset.lifecycleState,
+          notes: dto.notes ?? asset.notes,
+          location: dto.location ?? asset.location,
+          rackSide: targetRackSide
+        }
+      });
     });
 
     // ── Classify the change and emit an audit event ───────────────────
     const trackedFields = [
       "assetTag", "name", "assetType", "manufacturer", "modelNumber", "serialNumber",
       "ipAddress", "notes", "location", "status", "lifecycleState",
-      "siteId", "cabinetId", "uPosition", "uHeight", "rackSide", "powerDrawW"
+      "siteId", "cabinetId", "uPosition", "uHeight", "rackSide", "powerDrawW",
+      "isFullDepth", "isZeroU", "budgetedDrawW"
     ] as const;
 
     const changes: { field: string; from: any; to: any }[] = [];

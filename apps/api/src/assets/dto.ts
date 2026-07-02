@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString } from "class-validator"
+import { IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString } from "class-validator"
 import { AssetLifecycleState, OwnerType } from "@prisma/client"
 
 export class CreateAssetDto {
@@ -60,6 +60,32 @@ export class CreateAssetDto {
   @IsOptional()
   @IsNumber()
   powerDrawW?: number
+
+  // Budgeted watts override (spec §4.1) — blank lets the server stamp
+  // nameplate × derate at placement.
+  @IsOptional()
+  @IsNumber()
+  budgetedDrawW?: number
+
+  @IsOptional()
+  @IsNumber()
+  weightKg?: number
+
+  // Placement semantics (DCIM spec §2.2). isFullDepth omitted → denormalised
+  // from the DeviceType server-side; isZeroU → side-mounted, uPosition ignored.
+  @IsOptional()
+  @IsBoolean()
+  isFullDepth?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  isZeroU?: boolean
+
+  // Advisory-reservation override (spec §2.2): retry the placement with the id
+  // from the 409 response's `reservation.id` to place anyway.
+  @IsOptional()
+  @IsString()
+  overrideReservationId?: string
 
   @IsOptional()
   @IsString()
@@ -140,6 +166,22 @@ export class UpdateAssetDto {
   powerDrawW?: number | null
 
   @IsOptional()
+  @IsNumber()
+  budgetedDrawW?: number | null
+
+  @IsOptional()
+  @IsBoolean()
+  isFullDepth?: boolean | null
+
+  @IsOptional()
+  @IsBoolean()
+  isZeroU?: boolean
+
+  @IsOptional()
+  @IsString()
+  overrideReservationId?: string
+
+  @IsOptional()
   @IsString()
   ipAddress?: string
 
@@ -158,6 +200,11 @@ export class UpdateAssetDto {
   @IsOptional()
   @IsString()
   rackSide?: "FRONT" | "REAR" | null
+}
+
+export class DecommissionAssetDto {
+  @IsIn(["RETIRE", "REMOVE", "DISPOSE"])
+  step!: "RETIRE" | "REMOVE" | "DISPOSE"
 }
 
 export class RequestAssetDeletionDto {
