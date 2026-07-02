@@ -33,6 +33,8 @@ export class PortsService {
         // Resolve the far end of any connection terminating on this port (one hop).
         fromConnections: { include: { toAsset: { select: { id: true, name: true, assetTag: true } }, toPort: { select: { id: true, name: true } } } },
         toConnections: { include: { fromAsset: { select: { id: true, name: true, assetTag: true } }, fromPort: { select: { id: true, name: true } } } },
+        // Pass-through peer (patch-panel front↔rear) for the panel's inline indicator.
+        throughPort: { select: { id: true, name: true } },
       },
     })
   }
@@ -71,8 +73,140 @@ export class PortsService {
     })
     if (!port) throw new NotFoundException("Port not found")
     // Connections onto the port SetNull automatically (schema) — the cable stays
-    // as an asset-level link, it just loses its port endpoint. Safe to delete.
+    // as an asset-level link, it just loses its port endpoint. The pass-through
+    // peer's pointer also SetNulls automatically (self-FK). Safe to delete.
     await this.prisma.port.delete({ where: { id: portId } })
     return { ok: true }
+  }
+
+  // Resolve a single port in the caller's client scope (via its asset), returning
+  // the scalars pass-through/trace need. Same indirect-scoping guard as ports.
+  private async loadScopedPort(portId: string, clientId: string) {
+    if (!clientId) throw new ForbiddenException("Missing client scope")
+    const port = await this.prisma.port.findFirst({
+      where: { id: portId, asset: { OR: [{ clientId }, { ownerType: "INTERNAL" }] } },
+      select: { id: true, assetId: true, name: true, portType: true, throughPortId: true },
+    })
+    if (!port) throw new NotFoundException("Port not found")
+    return port
+  }
+
+  // Pair two ports on the SAME asset as a patch-panel pass-through (front↔rear).
+  // Symmetric: both sides written in one tx. Re-pairing is idempotent — any
+  // existing pairing on either port (and its old peer) is cleared first so the
+  // @unique(throughPortId) constraint can't collide.
+  async setPassThrough(clientId: string, portId: string, peerPortId: string) {
+    if (portId === peerPortId) throw new BadRequestException("A port cannot pass through to itself")
+    const [a, b] = await Promise.all([
+      this.loadScopedPort(portId, clientId),
+      this.loadScopedPort(peerPortId, clientId),
+    ])
+    if (a.assetId !== b.assetId) throw new BadRequestException("Pass-through ports must be on the same asset")
+
+    // Old peers to release (skip if a/b are already each other's peer).
+    const oldPeers = [a, b]
+      .map((p) => p.throughPortId)
+      .filter((id): id is string => !!id && id !== a.id && id !== b.id)
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.port.updateMany({ where: { id: { in: [a.id, b.id, ...oldPeers] } }, data: { throughPortId: null } })
+      await tx.port.update({ where: { id: a.id }, data: { throughPortId: b.id } })
+      await tx.port.update({ where: { id: b.id }, data: { throughPortId: a.id } })
+    })
+    return { ok: true }
+  }
+
+  async clearPassThrough(clientId: string, portId: string) {
+    const port = await this.loadScopedPort(portId, clientId)
+    const ids = port.throughPortId ? [port.id, port.throughPortId] : [port.id]
+    await this.prisma.$transaction(async (tx) => {
+      await tx.port.updateMany({ where: { id: { in: ids } }, data: { throughPortId: null } })
+    })
+    return { ok: true }
+  }
+
+  // Multi-hop cable trace (DCIM_DESIGN_SPEC §6.1, Horizon 2). Each port has ≤1
+  // cable and ≤1 pass-through peer, so the path is linear: walk outward from the
+  // start port in BOTH directions, alternating CABLE hops (a Connection to a far
+  // port/asset) and PASS-THROUGH hops (internal front↔rear), until a terminal
+  // port, a dead end, or the hop cap. Only the START asset is scope-checked — a
+  // cable can only reach same-client assets (connections are clientId-scoped).
+  async trace(clientId: string, portId: string) {
+    const scoped = await this.loadScopedPort(portId, clientId)
+    const start = await this.loadPortForTrace(scoped.id)
+    if (!start) throw new NotFoundException("Port not found")
+
+    const visited = new Set<string>([start.id])
+    const right = await this.walk(start, "cable", visited)
+    const left = await this.walk(start, "through", visited)
+
+    return {
+      nodes: [...left.steps.map((s) => s.node).reverse(), this.nodeOf(start), ...right.steps.map((s) => s.node)],
+      segments: [...left.steps.map((s) => s.segment).reverse(), ...right.steps.map((s) => s.segment)],
+      truncated: left.truncated || right.truncated,
+    }
+  }
+
+  private static readonly TRACE_HOP_CAP = 32
+
+  private loadPortForTrace(portId: string) {
+    return this.prisma.port.findUnique({
+      where: { id: portId },
+      include: {
+        asset: { select: { id: true, name: true, assetTag: true } },
+        // Only the far portId (to continue) + far asset (for asset-level ends) are
+        // needed — each hop re-loads the far port fully, so no deep nesting here.
+        fromConnections: { select: { id: true, connectionType: true, cableLength: true, cableColour: true, status: true, label: true, toPortId: true, toAsset: { select: { id: true, name: true, assetTag: true } } } },
+        toConnections: { select: { id: true, connectionType: true, cableLength: true, cableColour: true, status: true, label: true, fromPortId: true, fromAsset: { select: { id: true, name: true, assetTag: true } } } },
+      },
+    })
+  }
+
+  private nodeOf(port: any) {
+    return { assetId: port.asset.id, assetName: port.asset.name, assetTag: port.asset.assetTag, portId: port.id, portName: port.name, portType: port.portType }
+  }
+  private assetNode(asset: any) {
+    return { assetId: asset.id, assetName: asset.name, assetTag: asset.assetTag, portId: null, portName: null, portType: null }
+  }
+
+  // The cable leaving a port (as either endpoint). Returns the far portId to
+  // continue through, OR a terminal asset-level node when the far end has no port.
+  private cableHop(port: any): { segment: any; farPortId?: string; farNode?: any } | null {
+    const fromC = port.fromConnections?.[0]
+    const toC = port.toConnections?.[0]
+    const conn = fromC ?? toC
+    if (!conn) return null
+    const segment = { type: "cable", connectionType: conn.connectionType, cableLength: conn.cableLength, cableColour: conn.cableColour, status: conn.status, label: conn.label }
+    if (fromC) return conn.toPortId ? { segment, farPortId: conn.toPortId } : { segment, farNode: this.assetNode(conn.toAsset) }
+    return conn.fromPortId ? { segment, farPortId: conn.fromPortId } : { segment, farNode: this.assetNode(conn.fromAsset) }
+  }
+
+  private throughHop(port: any): { segment: any; farPortId: string } | null {
+    return port.throughPortId ? { segment: { type: "through" }, farPortId: port.throughPortId } : null
+  }
+
+  // Walk one direction, alternating cable/through. `first` is the step taken from
+  // the start port (its cable, or its pass-through) — thereafter arriving via a
+  // cable forces a through next and vice-versa, so we never retread the same edge.
+  private async walk(startPort: any, first: "cable" | "through", visited: Set<string>) {
+    const steps: { segment: any; node: any }[] = []
+    let cur = startPort
+    let step = first
+    let truncated = false
+    while (true) {
+      const hop = step === "cable" ? this.cableHop(cur) : this.throughHop(cur)
+      if (!hop) break
+      if ("farNode" in hop && hop.farNode) { steps.push({ segment: hop.segment, node: hop.farNode }); break }
+      const farId = (hop as any).farPortId as string
+      if (visited.has(farId)) break
+      const far = await this.loadPortForTrace(farId)
+      if (!far) break
+      visited.add(far.id)
+      steps.push({ segment: hop.segment, node: this.nodeOf(far) })
+      if (steps.length >= PortsService.TRACE_HOP_CAP) { truncated = true; break }
+      cur = far
+      step = step === "cable" ? "through" : "cable"
+    }
+    return { steps, truncated }
   }
 }

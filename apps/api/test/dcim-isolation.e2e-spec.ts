@@ -184,3 +184,111 @@ describe("DCIM services — query scoping refuses another client's resource (404
     await expect(floorPlan.getFloorPlan("", R)).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+// Pass-through + multi-hop trace (Horizon 2). Stateful fixture: a client-A patch
+// panel PAN (front PF / rear PR) cabled between endpoints X (port x1) and Z (port
+// z1). A caller scoped to client B must not pair or trace any of it; client A can
+// pair front↔rear and trace end-to-end X → PAN → Z. Assets X/PAN/Z are separate
+// from AST so the earlier `listForAsset(A, AST) → []` fixture stays intact.
+describe("ports — pass-through & cable trace (Horizon 2)", () => {
+  const PAN = "asset-pan", AX = "asset-x", AZ = "asset-z";
+
+  function mockPortsPrisma() {
+    const assets = [
+      { id: PAN, clientId: A, ownerType: "CLIENT", name: "Panel", assetTag: "PAN" },
+      { id: AX, clientId: A, ownerType: "CLIENT", name: "Switch X", assetTag: "X" },
+      { id: AZ, clientId: A, ownerType: "CLIENT", name: "Server Z", assetTag: "Z" },
+    ];
+    // Pass-through starts UNPAIRED — setPassThrough writes it (exercises the write path).
+    const ports: any[] = [
+      { id: "pf", assetId: PAN, name: "front-1", portType: "NETWORK", position: 1, throughPortId: null },
+      { id: "pr", assetId: PAN, name: "rear-1", portType: "NETWORK", position: 1, throughPortId: null },
+      { id: "x1", assetId: AX, name: "Gi0/1", portType: "NETWORK", position: 1, throughPortId: null },
+      { id: "z1", assetId: AZ, name: "eth0", portType: "NETWORK", position: 1, throughPortId: null },
+    ];
+    const conns = [
+      { id: "c1", clientId: A, connectionType: "Cat6", cableLength: 2, cableColour: "blue", status: "ACTIVE", label: null, fromPortId: "x1", toPortId: "pf", fromAssetId: AX, toAssetId: PAN },
+      { id: "c2", clientId: A, connectionType: "Cat6", cableLength: 5, cableColour: "grey", status: "ACTIVE", label: null, fromPortId: "pr", toPortId: "z1", fromAssetId: PAN, toAssetId: AZ },
+    ];
+    const assetLite = (id: string) => { const a = assets.find((x) => x.id === id)!; return { id: a.id, name: a.name, assetTag: a.assetTag }; };
+    const scopeOk = (assetId: string, where: any) => {
+      if (!where.asset?.OR) return true;
+      const a = assets.find((x) => x.id === assetId)!;
+      return where.asset.OR.some((o: any) => (o.clientId !== undefined && a.clientId === o.clientId) || (o.ownerType !== undefined && a.ownerType === o.ownerType));
+    };
+    const self: any = {
+      port: {
+        findFirst: jest.fn(async ({ where }: any) => {
+          const p = ports.find((x) => x.id === where.id);
+          if (!p || !scopeOk(p.assetId, where)) return null;
+          return { id: p.id, assetId: p.assetId, name: p.name, portType: p.portType, throughPortId: p.throughPortId };
+        }),
+        findUnique: jest.fn(async ({ where, include }: any) => {
+          const p = ports.find((x) => x.id === where.id);
+          if (!p) return null;
+          const out: any = { ...p };
+          if (include?.asset) out.asset = assetLite(p.assetId);
+          if (include?.fromConnections) out.fromConnections = conns.filter((c) => c.fromPortId === p.id).map((c) => ({ id: c.id, connectionType: c.connectionType, cableLength: c.cableLength, cableColour: c.cableColour, status: c.status, label: c.label, toPortId: c.toPortId, toAsset: assetLite(c.toAssetId) }));
+          if (include?.toConnections) out.toConnections = conns.filter((c) => c.toPortId === p.id).map((c) => ({ id: c.id, connectionType: c.connectionType, cableLength: c.cableLength, cableColour: c.cableColour, status: c.status, label: c.label, fromPortId: c.fromPortId, fromAsset: assetLite(c.fromAssetId) }));
+          return out;
+        }),
+        updateMany: jest.fn(async ({ where, data }: any) => {
+          const ids: string[] = where.id.in;
+          for (const p of ports) if (ids.includes(p.id)) Object.assign(p, data);
+          return { count: ids.length };
+        }),
+        update: jest.fn(async ({ where, data }: any) => {
+          const p = ports.find((x) => x.id === where.id)!;
+          Object.assign(p, data);
+          return p;
+        }),
+      },
+      $transaction: (arg: any) => (typeof arg === "function" ? arg(self) : Promise.all(arg)),
+    };
+    return { self, ports };
+  }
+
+  it("setPassThrough refuses a foreign client's ports (404, no write)", async () => {
+    const { self, ports } = mockPortsPrisma();
+    const svc = new PortsService(self);
+    await expect(svc.setPassThrough(B, "pf", "pr")).rejects.toBeInstanceOf(NotFoundException);
+    expect(ports.find((p) => p.id === "pf").throughPortId).toBeNull();
+  });
+
+  it("trace refuses a foreign client's port (404)", async () => {
+    const { self } = mockPortsPrisma();
+    const svc = new PortsService(self);
+    await expect(svc.trace(B, "x1")).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("owner pairs front↔rear symmetrically", async () => {
+    const { self, ports } = mockPortsPrisma();
+    const svc = new PortsService(self);
+    await expect(svc.setPassThrough(A, "pf", "pr")).resolves.toEqual({ ok: true });
+    expect(ports.find((p) => p.id === "pf").throughPortId).toBe("pr");
+    expect(ports.find((p) => p.id === "pr").throughPortId).toBe("pf");
+  });
+
+  it("owner traces end-to-end across the panel (X → panel → Z)", async () => {
+    const { self } = mockPortsPrisma();
+    const svc = new PortsService(self);
+    await svc.setPassThrough(A, "pf", "pr");
+    const trace = await svc.trace(A, "x1");
+    // Node order: start X/x1 → panel front → (through) panel rear → Z/z1.
+    expect(trace.nodes.map((n: any) => `${n.assetTag}:${n.portName}`)).toEqual([
+      "X:Gi0/1", "PAN:front-1", "PAN:rear-1", "Z:eth0",
+    ]);
+    // Segments between them: cable, pass-through, cable.
+    expect(trace.segments.map((s: any) => s.type)).toEqual(["cable", "through", "cable"]);
+    expect(trace.segments[0]).toMatchObject({ connectionType: "Cat6", cableLength: 2, cableColour: "blue" });
+    expect(trace.truncated).toBe(false);
+  });
+
+  it("trace from the far end (Z) yields the reverse path", async () => {
+    const { self } = mockPortsPrisma();
+    const svc = new PortsService(self);
+    await svc.setPassThrough(A, "pf", "pr");
+    const trace = await svc.trace(A, "z1");
+    expect(trace.nodes.map((n: any) => n.assetTag)).toEqual(["Z", "PAN", "PAN", "X"]);
+  });
+});
