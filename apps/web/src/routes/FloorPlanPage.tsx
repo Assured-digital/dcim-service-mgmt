@@ -143,9 +143,11 @@ export default function FloorPlanPage() {
         </Box>
       ) : null}
 
-      <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      {/* Stack canvas over rail on narrow screens (the fixed rail would otherwise
+          squash the canvas); side-by-side from md up. */}
+      <Box sx={{ flex: 1, display: "flex", flexDirection: { xs: "column", md: "row" }, overflow: "hidden", minHeight: 0 }}>
         {/* Canvas */}
-        <Box sx={{ flex: 1, overflow: "auto", bgcolor: "background.default" }}>
+        <Box sx={{ flex: 1, overflow: "auto", bgcolor: "background.default", minHeight: { xs: 280, md: 0 } }}>
           {plan ? (
             <FloorCanvas plan={plan} lens={lens} mode={edit ? "edit" : "view"} selectedCabinetId={selectedCabinetId}
               findSpaceMinU={findSpaceU} placing={!!placing || !!aisleDraw}
@@ -158,8 +160,8 @@ export default function FloorPlanPage() {
           )}
         </Box>
 
-        {/* Right rail: edit palette / cabinet panel */}
-        <Box sx={{ width: 260, flexShrink: 0, borderLeft: "1px solid", borderColor: "divider", bgcolor: railBg, overflowY: "auto", p: 1.75 }}>
+        {/* Right rail: edit palette / cabinet panel (full-width below on narrow) */}
+        <Box sx={{ width: { xs: "100%", md: 260 }, flexShrink: 0, borderLeft: { xs: "none", md: "1px solid" }, borderTop: { xs: "1px solid", md: "none" }, borderColor: "divider", bgcolor: railBg, overflowY: "auto", p: 1.75 }}>
           {edit ? (
             <Stack spacing={1.5}>
               <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "text.secondary" }}>Unplaced cabinets</Typography>

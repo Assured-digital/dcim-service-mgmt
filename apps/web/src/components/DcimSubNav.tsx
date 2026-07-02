@@ -23,11 +23,15 @@ import { shellTokens } from "./shared"
 
 export const DCIM_SUBNAV_WIDTH = 214
 
-type SubNavItem = { label: string; path: string; icon: React.ReactNode; match?: string[] }
+export type DcimDestination = { label: string; path: string; icon: React.ReactNode; match?: string[] }
+type SubNavItem = DcimDestination
 
 const ICON = 18
 
-const PRIMARY: SubNavItem[] = [
+// The canonical DCIM destinations — the SINGLE source of truth shared by the
+// desktop sub-nav (here) and the mobile drawer's inline DCIM section (Shell), so
+// the two never drift.
+export const DCIM_DESTINATIONS: DcimDestination[] = [
   { label: "Overview", path: "/dcim/overview", icon: <DashboardIcon sx={{ fontSize: ICON }} /> },
   { label: "Floor plan", path: "/dcim/floor-plan", icon: <MapOutlinedIcon sx={{ fontSize: ICON }} /> },
   { label: "Sites & cabinets", path: "/asset-hierarchy", icon: <AccountTreeIcon sx={{ fontSize: ICON }} /> },
@@ -38,6 +42,7 @@ const PRIMARY: SubNavItem[] = [
   { label: "Report", path: "/dcim/report", icon: <SummarizeOutlinedIcon sx={{ fontSize: ICON }} /> },
   { label: "Pending deletions", path: "/pending-deletions", icon: <DeleteSweepIcon sx={{ fontSize: ICON }} /> },
 ]
+const PRIMARY = DCIM_DESTINATIONS
 
 // Visibly-deferred — the future surface (brief §1 / §6b). Non-clickable until built.
 const DEFERRED: { label: string; icon: React.ReactNode; note: string }[] = [

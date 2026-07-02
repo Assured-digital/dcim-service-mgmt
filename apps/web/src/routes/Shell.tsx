@@ -37,7 +37,7 @@ import ViewListIcon from "@mui/icons-material/ViewList"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
-import DcimSubNav from "../components/DcimSubNav"
+import DcimSubNav, { DCIM_DESTINATIONS } from "../components/DcimSubNav"
 import NotificationBell from "../components/NotificationBell"
 import { LoadingState } from "../components/PageState"
 import { shellTokens } from "../components/shared"
@@ -273,16 +273,12 @@ const clientSections: NavSection[] = [
     // DCIM is gated to ORG-super roles only — the module is unfinished, so it's hidden
     // from non-admin roles in nav. Routes stay reachable by direct URL (deliberate: not
     // route-guarded — DCIM isn't sensitive, just not ready for general use yet).
-    title: "DCIM", icon: <DnsIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Overview", path: "/dcim/overview", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
-      { kind: "group", label: "Assets", icon: <LocationOnIcon sx={{ fontSize: ICON_SIZE }} />, matchPaths: ["/asset-hierarchy", "/asset-register", "/asset-management"], roles: [...ORG_SUPER_ROLES], items: [
-        { label: "Hierarchy", path: "/asset-hierarchy", icon: <AccountTreeIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
-        { label: "Register",  path: "/asset-register",  icon: <ViewListIcon sx={{ fontSize: ICON_SIZE }} />,    roles: [...ORG_SUPER_ROLES] },
-      ]},
-      { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
-      { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
-      { label: "Pending Deletions", path: "/pending-deletions", icon: <DeleteSweepIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES] },
-    ]
+    // Items derived from the shared DCIM_DESTINATIONS (single source of truth with
+    // the desktop DcimSubNav). On desktop the DCIM section is a launcher and these
+    // aren't rendered inline (the sub-nav is used); on mobile the section expands
+    // inline in the drawer so every DCIM page is reachable there too.
+    title: "DCIM", icon: <DnsIcon sx={{ fontSize: ICON_SIZE }} />,
+    items: DCIM_DESTINATIONS.map(d => ({ label: d.label, path: d.path, icon: d.icon, roles: [...ORG_SUPER_ROLES] })),
   },
   {
     title: "Operations", icon: <EngineeringIcon sx={{ fontSize: ICON_SIZE }} />, items: [
@@ -978,13 +974,16 @@ export default function Shell() {
               // IS the submenu, so entering the module is the only action —
               // whether the rail is collapsed or expanded — and it never opens
               // the redundant rail flyout (brief §1).
-              const isDcimSection = section.title === "DCIM"
+              // Launcher (enter-the-module → sub-nav) is a DESKTOP behaviour. On
+              // mobile there is no sub-nav, so DCIM expands inline in the drawer
+              // like any other section — otherwise its pages are unreachable.
+              const isDcimLauncher = section.title === "DCIM" && !isMobile
 
               return (
                 <CollapsibleSection key={section.title} title={section.title} icon={section.icon}
-                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded} launcher={isDcimSection}
+                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded} launcher={isDcimLauncher}
                   onToggle={(e) => {
-                    if (isDcimSection) { navigateTo(DCIM_LANDING); return }
+                    if (isDcimLauncher) { navigateTo(DCIM_LANDING); return }
                     if (!navExpanded) {
                       const target = e.currentTarget as HTMLElement
                       const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
