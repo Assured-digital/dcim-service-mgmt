@@ -18,6 +18,7 @@ import SiteHierarchyTree from "./SiteHierarchyTree"
 import CabinetDetailView from "./CabinetDetailView"
 import AssetDetailPage from "./AssetDetailPage"
 import SitesMapCard, { SiteAssetCounts } from "../components/SitesMapCard"
+import CapacityRing from "../components/shared/CapacityRing"
 import SiteLocationCard from "../components/SiteLocationCard"
 import SiteLinkedRecords from "./SiteLinkedRecords"
 import {
@@ -122,47 +123,52 @@ const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelect
                   bgcolor: mode === "dark" ? "#3a2c0f" : "#fef3c7", color: mode === "dark" ? "#fbbf24" : "#b45309"
                 }}>Stranded</Typography>
               ) : null}
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "14px" }}>
-                <Box sx={{ width: 32, height: 32, borderRadius: "7px", bgcolor: mode === "dark" ? "#16294a" : "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: "12px" }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: "8px", bgcolor: mode === "dark" ? "#16294a" : "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <StorageIcon sx={{ fontSize: 15, color: "primary.main" }} />
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.primary" }}>{c.name}</Typography>
-                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>{c._count.assets} assets</Typography>
+                  <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</Typography>
+                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+                    {c.totalU ? `${c.totalU}U · ` : ""}{c._count.assets} asset{c._count.assets === 1 ? "" : "s"}
+                  </Typography>
                 </Box>
+                {c.totalU ? <CapacityRing pct={fill} /> : null}
               </Stack>
               {c.totalU ? (
-                <Box sx={{ mb: "6px" }}>
-                  <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                    <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>U Space</Typography>
-                    <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
+                <Box sx={{ mb: "10px" }}>
+                  <Stack direction="row" justifyContent="space-between" sx={{ mb: "4px" }}>
+                    <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>Space</Typography>
+                    <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
                   </Stack>
-                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${fill}%`, bgcolor: barColor(fill, mode), borderRadius: 2 }} />
+                  <Box sx={{ height: 6, bgcolor: trackBg, borderRadius: "4px", overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${fill}%`, bgcolor: barColor(fill, mode), borderRadius: "4px" }} />
                   </Box>
                 </Box>
               ) : null}
-              <Box sx={{ mb: "6px" }}>
-                <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                  <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>Power</Typography>
-                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>{formatKw(totalPowerKw)} kW</Typography>
+              <Box sx={{ mb: "10px" }}>
+                <Stack direction="row" justifyContent="space-between" sx={{ mb: "4px" }}>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>Power</Typography>
+                  <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
+                    {formatKw(totalPowerKw)}{c.powerKw && c.powerKw > 0 ? ` / ${formatKw(c.powerKw)}` : ""} kW
+                  </Typography>
                 </Stack>
                 {c.powerKw && c.powerKw > 0 ? (
-                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${powerPct}%`, bgcolor: barColor(powerPct, mode), borderRadius: 2 }} />
+                  <Box sx={{ height: 6, bgcolor: trackBg, borderRadius: "4px", overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${powerPct}%`, bgcolor: barColor(powerPct, mode), borderRadius: "4px" }} />
                   </Box>
                 ) : null}
               </Box>
               <Box>
-                <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                  <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>Weight</Typography>
-                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>
+                <Stack direction="row" justifyContent="space-between" sx={{ mb: "4px" }}>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>Weight</Typography>
+                  <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
                     {c.maxWeightKg && c.maxWeightKg > 0 ? `${Math.round(totalWeightKg)}/${Math.round(c.maxWeightKg)} kg` : "—"}
                   </Typography>
                 </Stack>
                 {c.maxWeightKg && c.maxWeightKg > 0 ? (
-                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${weightPct}%`, bgcolor: barColor(weightPct, mode), borderRadius: 2 }} />
+                  <Box sx={{ height: 6, bgcolor: trackBg, borderRadius: "4px", overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${weightPct}%`, bgcolor: barColor(weightPct, mode), borderRadius: "4px" }} />
                   </Box>
                 ) : null}
               </Box>
@@ -214,20 +220,13 @@ const OverviewPanel = React.memo(function OverviewPanel({ sites, allAssets }: { 
   return (
     <Box sx={{ p: "24px", maxWidth: 960 }}>
       <Stack spacing="16px">
-        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
-          <Box sx={{ px: "20px", py: "16px", borderBottom: "1px solid", borderColor: "divider" }}>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.secondary" }}>
-              Infrastructure Overview
-            </Typography>
-          </Box>
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
-            {cards.map((card, i) => (
-              <Box key={card.label} sx={{ py: "14px", textAlign: "center", borderRight: i < cards.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
-                <Typography sx={{ fontSize: 22, fontWeight: 600, color: "text.primary", lineHeight: 1 }}>{card.value}</Typography>
-                <Typography sx={{ fontSize: 10, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em", mt: "4px" }}>{card.label}</Typography>
-              </Box>
-            ))}
-          </Box>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)" }, gap: "12px" }}>
+          {cards.map(card => (
+            <Box key={card.label} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px" }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 700, color: "text.tertiary", textTransform: "uppercase", letterSpacing: "0.08em", mb: "8px" }}>{card.label}</Typography>
+              <Typography sx={{ fontSize: 24, fontWeight: 750, lineHeight: 1.05, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>{card.value}</Typography>
+            </Box>
+          ))}
         </Box>
         <SitesMapCard sites={sites} siteAssetCounts={siteAssetCounts} />
       </Stack>

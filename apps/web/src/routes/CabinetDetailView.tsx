@@ -13,10 +13,10 @@ import { useNotification } from "../components/NotificationProvider"
 import {
   Cabinet, CabinetReservation, Room, RackTab, ElevationSide,
   AuditEvent, LinkedTask, LinkedServiceRequest, LinkedRisk, LinkedIssue,
-  assetBg, normalizeRackSide, formatKw, actionLabel, getApiErrorMessage
+  assetBg, barColor, normalizeRackSide, formatKw, actionLabel, getApiErrorMessage
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
-import { getSiteCapacity, kw, pctColor } from "../lib/capacity"
+import { getSiteCapacity, kw } from "../lib/capacity"
 import { useThemeMode } from "../lib/theme"
 import CabinetElevationV2 from "../components/elevation/CabinetElevationV2"
 import { ReservationDialog } from "../components/elevation/ReservationDialog"
@@ -204,13 +204,13 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 label: "Budgeted power",
                 value: cabCap ? kw(cabCap.power.value) : `${formatKw(nameplateKw * 0.6)} kW`,
                 detail: cabCap?.power.capacity != null ? `of ${kw(cabCap.power.capacity)} · ${cabCap.power.pct}%` : `nameplate ${formatKw(nameplateKw)} kW`,
-                accent: cabCap ? pctColor(cabCap.power.pct, mode) : undefined,
+                pct: cabCap?.power.capacity != null ? cabCap.power.pct : undefined,
               },
               {
                 label: "Space used",
                 value: cabCap ? `${cabCap.space.pct}%` : (cabinet.totalU ? `${Math.round(((cabinet.usedU ?? 0) / cabinet.totalU) * 100)}%` : "—"),
                 detail: cabCap ? `${cabCap.space.usedU} / ${cabCap.totalU} U` : undefined,
-                accent: cabCap ? pctColor(cabCap.space.pct, mode) : undefined,
+                pct: cabCap?.space.pct,
               },
               {
                 label: "Largest free block",
@@ -221,7 +221,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 label: "Weight",
                 value: cabCap && cabCap.weight.value > 0 ? `${Math.round(cabCap.weight.value)} kg` : (cabCap ? "—" : "—"),
                 detail: cabCap?.weight.capacity != null ? `of ${Math.round(cabCap.weight.capacity)} kg · ${cabCap.weight.pct}%` : "no limit set",
-                accent: cabCap ? pctColor(cabCap.weight.pct, mode) : undefined,
+                pct: cabCap?.weight.capacity != null ? cabCap.weight.pct : undefined,
               },
               {
                 label: "Active assets",
@@ -229,11 +229,17 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 detail: `${lifecycleCounts.RETIRED} retired · ${cabCap?.activeReservations ?? 0} reserved`,
               },
             ].map(card => (
-              <Box key={card.label} sx={{ position: "relative", overflow: "hidden", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px" }}>
-                {card.accent ? <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: card.accent }} /> : null}
-                <Typography sx={{ fontSize: 10, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.06em", mb: "6px" }}>{card.label}</Typography>
-                <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{card.value}</Typography>
-                {card.detail ? <Typography sx={{ fontSize: 11, color: "text.secondary", mt: "2px" }}>{card.detail}</Typography> : null}
+              <Box key={card.label} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px", display: "flex", flexDirection: "column" }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, color: "text.tertiary", textTransform: "uppercase", letterSpacing: "0.08em", mb: "8px" }}>{card.label}</Typography>
+                <Typography sx={{ fontSize: 24, fontWeight: 750, lineHeight: 1.05, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>{card.value}</Typography>
+                {card.detail ? <Typography sx={{ fontSize: 11, color: "text.secondary", mt: "4px", fontVariantNumeric: "tabular-nums" }}>{card.detail}</Typography> : null}
+                {card.pct != null ? (
+                  <Box sx={{ mt: "auto", pt: "10px" }}>
+                    <Box sx={{ height: 6, borderRadius: "4px", bgcolor: mode === "dark" ? "rgba(148,163,184,.16)" : "rgba(100,116,139,.14)", overflow: "hidden" }}>
+                      <Box sx={{ height: "100%", width: `${Math.min(100, card.pct)}%`, borderRadius: "4px", bgcolor: barColor(card.pct, mode) }} />
+                    </Box>
+                  </Box>
+                ) : null}
               </Box>
             ))}
           </Box>
