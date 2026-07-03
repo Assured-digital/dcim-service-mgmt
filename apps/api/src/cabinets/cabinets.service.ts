@@ -32,6 +32,7 @@ export class CabinetsService {
             rackSide: true, isFullDepth: true, isZeroU: true,
             budgetedDrawW: true, weightKg: true,
             disposalStatus: true, physicallyRemoved: true,
+            pendingOp: true, pendingWorkOrderType: true, pendingWorkOrderId: true,
             deviceType: { select: { excludeFromUtilization: true } }
           }
         },

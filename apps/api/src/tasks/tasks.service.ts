@@ -7,6 +7,7 @@ import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
+import { applyCompletedWorkOrder } from "../work-orders/apply-pending";
 import { emitNotification } from "../notifications/emit-notification";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 
@@ -220,6 +221,11 @@ export class TasksService {
       sourceType: "Task",
       sourceId: task.id
     });
+
+    // MAC↔ITSM fusion: a completed install task activates the asset it staged.
+    if (status === "DONE") {
+      await applyCompletedWorkOrder(this.prisma, { workOrderType: "task", workOrderId: task.id, actorUserId, clientId });
+    }
 
     return updated;
   }

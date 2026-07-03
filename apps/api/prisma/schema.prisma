@@ -651,6 +651,13 @@ model Asset {
   deletionRequestedById String?           // bare user id (no FK), mirrors AuditEvent.actorUserId
   deletionRequestedAt   DateTime?
   deletionReason        String?
+  // MAC↔ITSM work-order fusion (Horizon 2). A pending physical operation is
+  // staged here and APPLIED AUTOMATICALLY when its linked Task/Change completes
+  // (the completion hook reverse-looks-up the asset by pendingWorkOrderId). One
+  // pending op per asset at a time. Elevation reads these to draw shadow state.
+  pendingOp             String?           // null = none | "INSTALL" | "DECOMMISSION"
+  pendingWorkOrderType  String?           // "task" | "change"
+  pendingWorkOrderId    String?           // id of the linked Task/Change
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   installDate         DateTime?

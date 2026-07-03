@@ -7,10 +7,16 @@ import { computeDisplayName, userDisplaySelect } from "../users/display";
 import { activeReservationWhere, findUSlotConflicts, uSlotOutOfBounds, UPlacement } from "../cabinets/u-slot.util";
 import { DCIM_DEFAULT_DERATE_PCT } from "../dcim/capacity.util";
 import { resolveAttachments } from "../attachments/resolve-attachments";
+import { TasksService } from "../tasks/tasks.service";
+import { ChangesService } from "../changes/changes.service";
 
 @Injectable()
 export class AssetsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private tasks: TasksService,
+    private changes: ChangesService,
+  ) {}
 
   // Authoritative U-slot collision check (DCIM_DESIGN_SPEC.md §2.2). Runs inside
   // the SAME transaction as the write (closes the check-then-write race). Asset
@@ -491,6 +497,73 @@ export class AssetsService {
     });
 
     return updated;
+  }
+
+  // MAC↔ITSM fusion (Horizon 2): raise a work order (Task or Change) against an
+  // asset and STAGE the pending op on it. When that work order completes, the
+  // status-update hook applies the op automatically (see work-orders/apply-
+  // pending.ts). One pending op per asset. INSTALL targets a PLANNED asset
+  // (→ ACTIVE on done); DECOMMISSION targets a live asset (→ RETIRED on done).
+  async raiseWorkOrder(
+    assetId: string,
+    requesterClientId: string,
+    requesterRole: Role,
+    actorUserId: string,
+    dto: {
+      op: "INSTALL" | "DECOMMISSION"
+      workOrderType: "task" | "change"
+      title?: string; description?: string; priority?: string
+      changeType?: string; scheduledStart?: string; scheduledEnd?: string; assigneeId?: string
+    }
+  ) {
+    if (!requesterClientId) throw new ForbiddenException("Missing client scope");
+    const asset = await this.prisma.asset.findUnique({ where: { id: assetId } });
+    if (!asset) throw new BadRequestException("Asset not found.");
+    this.assertAssetInScope(asset, requesterClientId, requesterRole, "raise a work order for");
+
+    if (asset.pendingOp) throw new BadRequestException("This asset already has a pending work order.");
+    if (dto.op === "INSTALL" && asset.lifecycleState !== AssetLifecycleState.PLANNED) {
+      throw new BadRequestException("Install work orders apply to planned assets only.");
+    }
+    if (dto.op === "DECOMMISSION" && asset.lifecycleState === AssetLifecycleState.RETIRED) {
+      throw new BadRequestException("Asset is already retired.");
+    }
+
+    const clientId = asset.clientId ?? requesterClientId;
+    const where = `${asset.name} (${asset.assetTag})`;
+    const title = dto.title?.trim() ||
+      (dto.op === "INSTALL" ? `Install ${where}` : `Decommission ${where}`);
+    const description = dto.description?.trim() ||
+      (dto.op === "INSTALL"
+        ? `Physically install and commission ${where}. Mark this work order done once it is racked and live — the asset then activates automatically.`
+        : `Decommission ${where}. Completing this change retires the asset and frees its capacity.`);
+
+    const workOrder = dto.workOrderType === "task"
+      ? await this.tasks.createForClient(clientId, actorUserId, {
+          title, description, priority: dto.priority, assigneeId: dto.assigneeId,
+          linkedEntityType: "Asset", linkedEntityId: asset.id,
+        })
+      : await this.changes.createForClient(clientId, actorUserId, {
+          title, description, changeType: dto.changeType, priority: dto.priority,
+          scheduledStart: dto.scheduledStart, scheduledEnd: dto.scheduledEnd, assigneeId: dto.assigneeId,
+          linkedEntityType: "Asset", linkedEntityId: asset.id,
+        });
+
+    const updated = await this.prisma.asset.update({
+      where: { id: asset.id },
+      data: { pendingOp: dto.op, pendingWorkOrderType: dto.workOrderType, pendingWorkOrderId: workOrder.id },
+    });
+
+    await emitAudit(this.prisma, {
+      entityType: "Asset", entityId: asset.id, action: "WORK_ORDER_RAISED",
+      actorUserId, clientId, reference: asset.assetTag, title: asset.name,
+      comment: `${dto.op === "INSTALL" ? "Install" : "Decommission"} ${dto.workOrderType} raised: ${workOrder.reference}`,
+    });
+
+    return {
+      asset: updated,
+      workOrder: { id: workOrder.id, reference: workOrder.reference, type: dto.workOrderType },
+    };
   }
 
   async updateForClient(assetId: string, dto: {

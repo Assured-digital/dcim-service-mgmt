@@ -197,6 +197,28 @@ describe("DCIM services — query scoping refuses another client's resource (404
     await expect(notes.create(A, "user-a", "asset", AST, "legit note")).resolves.toMatchObject({ body: "legit note" });
   });
 
+  it("work-order fusion: a completed install activates ONLY the same-client waiting asset", async () => {
+    const { applyCompletedWorkOrder } = await import("../src/work-orders/apply-pending");
+    // Fixture asset staged with a pending INSTALL work order (task WO-1).
+    const staged = { id: AST, clientId: A, assetTag: "AST-1", name: "Asset One", lifecycleState: "PLANNED", disposalStatus: null, pendingOp: "INSTALL", pendingWorkOrderType: "task", pendingWorkOrderId: "WO-1" };
+    const updates: any[] = [];
+    const p: any = {
+      asset: {
+        findFirst: jest.fn(async ({ where }: any) =>
+          where.pendingWorkOrderId === "WO-1" && where.pendingWorkOrderType === "task" && where.clientId === A ? staged : null),
+        update: jest.fn(async ({ data }: any) => { updates.push(data); return { ...staged, ...data } }),
+      },
+      auditEvent: { create: jest.fn(async () => ({})) },
+    };
+    // Foreign client completing the same WO id resolves NO waiting asset → no write.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-1", actorUserId: "u", clientId: B });
+    expect(updates).toHaveLength(0);
+    // Owner completes it → asset activates, pending marker cleared.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-1", actorUserId: "u", clientId: A });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ lifecycleState: "ACTIVE", pendingOp: null, pendingWorkOrderId: null });
+  });
+
   it("ports: listForAsset refuses a foreign client's asset (404)", async () => {
     const ports = new PortsService(prisma);
     await expect(ports.listForAsset(B, AST)).rejects.toBeInstanceOf(NotFoundException);
