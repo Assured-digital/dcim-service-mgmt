@@ -42,13 +42,18 @@ export const ElevationAssetSlot = React.memo(function ElevationAssetSlot({
   // Retired-but-racked interim state (DCIM_SCHEMA_SPEC §4.1): drawn greyed —
   // still physically in the rack — but excluded from capacity maths server-side.
   const retired = asset.lifecycleState === "RETIRED"
+  // A pending MAC work order (install/decommission) draws a dashed amber outline
+  // "shadow" until the linked Task/Change completes and applies the op.
+  const pending = !!(asset as { pendingOp?: string | null }).pendingOp
   // Type identity (redesign mock): tinted fill + left accent stripe + icon
   // square, alias-matched so raw values ("SWITCH", "ROUTER") get real colours.
   // The RIGHT stripe stays lifecycle — two encodings, two edges.
   const accent = assetTypeAccent(asset.assetType, mode)
 
+  const pendingBorder = mode === "dark" ? "#f59e0b" : "#d97706"
+
   return (
-    <Tooltip title={`${asset.name} · ${asset.assetType}${asset.manufacturer ? ` · ${asset.manufacturer}` : ""}${retired ? " · retired — awaiting removal" : ""}`} placement="right" arrow>
+    <Tooltip title={`${asset.name} · ${asset.assetType}${asset.manufacturer ? ` · ${asset.manufacturer}` : ""}${retired ? " · retired — awaiting removal" : pending ? " · pending work order" : ""}`} placement="right" arrow>
       <Box
         onClick={() => onSelect(asset.id)}
         sx={{
@@ -57,10 +62,10 @@ export const ElevationAssetSlot = React.memo(function ElevationAssetSlot({
           filter: retired ? "grayscale(0.8)" : "none",
           bgcolor: accent.bg,
           borderLeft: `3px solid ${accent.fg}`,
-          border: isSelected ? "2px solid #2563eb" : undefined,
-          borderTop: isSelected ? undefined : `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-          borderRight: isSelected ? undefined : `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-          borderBottom: isSelected ? undefined : `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+          border: isSelected ? "2px solid #2563eb" : pending ? `1.5px dashed ${pendingBorder}` : undefined,
+          borderTop: isSelected || pending ? undefined : `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+          borderRight: isSelected || pending ? undefined : `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+          borderBottom: isSelected || pending ? undefined : `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
           boxShadow: isSelected ? "0 0 0 1px #2563eb" : "none",
           borderRadius: "3px", mb: "1px", cursor: "pointer", overflow: "hidden",
           "&:hover": { filter: retired ? "grayscale(0.8) brightness(1.1)" : "brightness(1.08)" }

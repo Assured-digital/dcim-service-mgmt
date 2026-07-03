@@ -39,6 +39,11 @@ export type Asset = {
   // Documents on the asset (Hyperview pattern) — resolver-spread onto the
   // single-asset read only (list responses omit it).
   attachments?: import("./attachments").AttachmentSummary[]
+  // MAC↔ITSM work-order fusion (Horizon 2): a staged op awaiting its linked
+  // Task/Change. null = none. Present on the single-asset read + elevation feed.
+  pendingOp?: "INSTALL" | "DECOMMISSION" | null
+  pendingWorkOrderType?: "task" | "change" | null
+  pendingWorkOrderId?: string | null
 }
 
 // Approver queue row (GET /assets/deletion-requests): an Asset plus the resolved requester.

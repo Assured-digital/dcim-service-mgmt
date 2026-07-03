@@ -154,11 +154,13 @@ export default function PlaceEquipmentPage() {
           ...(draft.budgetW.trim() && !Number.isNaN(Number(draft.budgetW)) ? { budgetedDrawW: Number(draft.budgetW) } : {}),
         })
         if (draft.raiseTask) {
-          await api.post("/tasks", {
+          // MAC↔ITSM fusion: raise the install work order — completing it flips
+          // the asset PLANNED→ACTIVE automatically (no manual status change).
+          await api.post(`/assets/${res.data.id}/work-order`, {
+            op: "INSTALL", workOrderType: "task",
             title: `Install ${draft.name.trim()} in ${selected.name} @ U${placeU}`,
-            description: `Planned placement via capacity search — ${selected.siteName}${selected.roomName ? ` / ${selected.roomName}` : ""}, ${selected.name}, U${placeU}–${placeU + uSizeNum - 1}. Set the asset ACTIVE once installed.`,
-            linkedEntityType: "Asset", linkedEntityId: res.data.id,
-          }).catch(() => notify.error("Asset placed, but the install task could not be created"))
+            description: `Planned placement via capacity search — ${selected.siteName}${selected.roomName ? ` / ${selected.roomName}` : ""}, ${selected.name}, U${placeU}–${placeU + uSizeNum - 1}. Marking this task done activates the asset.`,
+          }).catch(() => notify.error("Asset placed, but the install work order could not be created"))
         }
         notify.success(`${draft.name.trim()} placed (planned) at U${placeU}`)
         qc.invalidateQueries({ queryKey: ["assets"] })
