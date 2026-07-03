@@ -6,6 +6,7 @@ export type ClientView = {
   id: string
   name: string
   status: string
+  lifecycleStage: string // PROSPECT | ONBOARDING | ACTIVE | FORMER (CRM_DESIGN.md §2)
   organizationId: string | null
   createdAt: string
   updatedAt: string
@@ -15,12 +16,14 @@ export type ClientView = {
 export type CreateClientInput = {
   name: string
   status: string
+  lifecycleStage?: string
 }
 
 // Matches the existing /clients PATCH payload.
 export type UpdateClientInput = {
   name?: string
   status?: string
+  lifecycleStage?: string
 }
 
 // ── Calls ─────────────────────────────────────────────────────────────────

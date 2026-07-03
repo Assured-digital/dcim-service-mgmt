@@ -130,6 +130,11 @@ model Client {
   organization   Organization? @relation(fields: [organizationId], references: [id])
   name           String
   status         String        @default("ACTIVE")
+  // CRM lifecycle (CRM_DESIGN.md §2): PROSPECT | ONBOARDING | ACTIVE | FORMER.
+  // Never auto-downgraded; transitions are deliberate staff edits (or the WON prompt).
+  lifecycleStage String        @default("ACTIVE")
+  // CRM_DESIGN.md §8 — folder within the org SharePoint site (dormant until phase 7a)
+  sharePointFolderPath String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -159,6 +164,32 @@ model Client {
   cabinetReservations CabinetReservation[]
   regions           Region[]
   importMappings    ImportMapping[]
+  contacts          Contact[]
+}
+
+// CRM (CRM_DESIGN.md §4) — a person AT the client (no login, not a User).
+model Contact {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  firstName String
+  lastName  String
+  jobTitle  String?
+  email     String?  // match key for email sync (phase 7b)
+  phone     String?
+  mobile    String?
+  siteId    String?  // optional: primarily based at this site
+  site      Site?    @relation(fields: [siteId], references: [id])
+  category  String   @default("GENERAL") // DECISION_MAKER | TECHNICAL | BILLING | OPERATIONS | ACCESS | GENERAL
+  isPrimary Boolean  @default(false)     // the main account contact for this client
+  userId    String?  // optional link to a portal User (display-only)
+  notes     String?
+  status    String   @default("ACTIVE")  // ACTIVE | INACTIVE (soft delete)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, status])
+  @@index([email]) // cross-client lookup for email-sync matching (phase 7b)
 }
 
 model SlaPolicy {
@@ -205,6 +236,7 @@ model Site {
   checks           Check[]           @relation("SiteChecks")
   checkTemplates   CheckTemplate[]   @relation("SiteCheckTemplates")
   workPackageSites WorkPackageSite[]
+  contacts         Contact[]
 }
 
 // Geography above Site (DCIM_SCHEMA_SPEC §5, LATENT — no phase-one UI). Exists so

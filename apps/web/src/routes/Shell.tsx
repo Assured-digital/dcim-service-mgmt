@@ -30,6 +30,8 @@ import EngineeringIcon from "@mui/icons-material/Engineering"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import BusinessIcon from "@mui/icons-material/Business"
 import DnsIcon from "@mui/icons-material/Dns"
+import HandshakeIcon from "@mui/icons-material/Handshake"
+import ContactsIcon from "@mui/icons-material/Contacts"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
@@ -270,6 +272,12 @@ const clientSections: NavSection[] = [
     ]
   },
   {
+    // CRM (CRM_DESIGN.md §7) — AD-staff only, never CLIENT_VIEWER.
+    title: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+      { label: "Contacts", path: "/crm/contacts", icon: <ContactsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
+    ]
+  },
+  {
     // DCIM is gated to ORG-super roles only — the module is unfinished, so it's hidden
     // from non-admin roles in nav. Routes stay reachable by direct URL (deliberate: not
     // route-guarded — DCIM isn't sensitive, just not ready for general use yet).
@@ -352,7 +360,7 @@ function SectionFlyout({ title, items, anchorEl, onClose, onNavigate, pathname }
 }
 
 function ClientFlyout({ anchorEl, clients, selectedClientId, onSelect, onClose }: {
-  anchorEl: HTMLElement; clients: { id: string; name: string }[]
+  anchorEl: HTMLElement; clients: { id: string; name: string; lifecycleStage?: string }[]
   selectedClientId: string; onSelect: (id: string) => void; onClose: () => void
 }) {
   const rect = anchorEl.getBoundingClientRect()
@@ -379,7 +387,9 @@ function ClientFlyout({ anchorEl, clients, selectedClientId, onSelect, onClose }
               "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" }
             }}>
               <BusinessIcon sx={{ fontSize: ICON_SIZE, color: isSelected ? "#7db4f5" : "#475569" }} />
-              <Typography sx={{ fontSize: 13.5, fontWeight: isSelected ? 500 : 400, flex: 1 }}>{c.name}</Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: isSelected ? 500 : 400, flex: 1 }}>
+                {c.name}{c.lifecycleStage === "PROSPECT" ? " · prospect" : c.lifecycleStage === "ONBOARDING" ? " · onboarding" : ""}
+              </Typography>
               {isSelected ? <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#22c55e", flexShrink: 0 }} /> : null}
             </Box>
           )
@@ -711,14 +721,20 @@ export default function Shell() {
   // Org-super: all org clients. Client-scoped: only the caller's assignments.
   const clients = useQuery({
     queryKey: ["clients"], enabled: isOrgSuper,
-    queryFn: async () => (await api.get<Array<{ id: string; name: string }>>("/clients")).data
+    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string }>>("/clients")).data
   })
   const myClients = useQuery({
     queryKey: ["clients-mine"], enabled: !isOrgSuper,
-    queryFn: async () => (await api.get<Array<{ id: string; name: string }>>("/clients/mine")).data
+    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string }>>("/clients/mine")).data
   })
-  // The list that populates the selector + flyout for this user.
-  const clientList = isOrgSuper ? (clients.data ?? []) : (myClients.data ?? [])
+  // The list that populates the selector + flyout for this user. Live clients
+  // first, prospects grouped after them, FORMER hidden (CRM_DESIGN.md §2).
+  const rawClientList = isOrgSuper ? (clients.data ?? []) : (myClients.data ?? [])
+  const clientList = React.useMemo(() => {
+    const visible = rawClientList.filter(c => c.lifecycleStage !== "FORMER")
+    const rank = (c: { lifecycleStage?: string }) => (c.lifecycleStage === "PROSPECT" ? 1 : 0)
+    return [...visible].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  }, [rawClientList])
 
   // The JWT (and thus getCurrentUser) carries no name — only email. Fetch the profile so the
   // account menu can show the person's actual name (knownAs verbatim, see personName) rather
@@ -943,7 +959,11 @@ export default function Shell() {
             <Select size="small" value={selectedClientId} onChange={e => handleClientChange(e.target.value)} displayEmpty IconComponent={KeyboardArrowDownIcon}
               sx={{ width: "100%", fontSize: 13, color: selectedClientId ? "#e2e8f0" : "#64748b", bgcolor: "rgba(255,255,255,0.04)", borderRadius: "6px", border: selectedClientId ? "1px solid rgba(255,255,255,0.1)" : "1px dashed rgba(255,255,255,0.08)", "& .MuiOutlinedInput-notchedOutline": { border: "none" }, "& .MuiSvgIcon-root": { color: "#64748b", fontSize: 16 }, "& .MuiSelect-select": { py: "7px", px: "10px" }, "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
               <MenuItem value="" sx={{ fontSize: 13, color: "#94a3b8" }}>— Select client —</MenuItem>
-              {clientList.map(c => <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>{c.name}</MenuItem>)}
+              {clientList.map(c => (
+                <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>
+                  {c.name}{c.lifecycleStage === "PROSPECT" ? " · prospect" : c.lifecycleStage === "ONBOARDING" ? " · onboarding" : ""}
+                </MenuItem>
+              ))}
             </Select>
           </Box>
           <SbDivider />

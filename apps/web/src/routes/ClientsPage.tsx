@@ -69,6 +69,16 @@ export default function ClientsPage() {
         )
       },
       {
+        field: "lifecycleStage",
+        headerName: "Stage",
+        width: 130,
+        renderCell: (p) => (
+          <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)", textTransform: "capitalize" }}>
+            {((p.value as string) ?? "ACTIVE").toLowerCase()}
+          </Typography>
+        )
+      },
+      {
         field: "updatedAt",
         headerName: "Updated",
         width: 130,
