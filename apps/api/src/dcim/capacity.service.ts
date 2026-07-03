@@ -1,6 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
+import { ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { CapacityAsset, computeCabinetCapacity, computePlaceableBlocks, effectiveBudgetW } from "./capacity.util"
+import { SensorReadingsService, LatestByAsset } from "../sensor-readings/sensor-readings.service"
+import { Health, temperatureHealth, humidityHealth, powerHealth, worstHealth } from "../sensor-readings/health"
 
 // Capacity read model (DCIM_DESIGN_SPEC.md §4.3). Loads the hierarchy, maps rows to
 // the pure engine, and shapes per-cabinet / per-site / overview responses. All
@@ -31,9 +33,42 @@ const toCapAsset = (a: AssetRow): CapacityAsset => ({
 const pct = (value: number, capacity: number | null) =>
   capacity && capacity > 0 ? Math.round((value / capacity) * 100) : null
 
+// Per-cabinet environmental roll-up (Horizon 3) — worst-case inlet temperature
+// and humidity across the cabinet's assets, with an ASHRAE-derived health.
+export type CabinetEnvironment = {
+  temperatureC: number | null
+  humidityPct: number | null
+  health: Health              // worst of power + temp + humidity; UNKNOWN if unmonitored
+  readAt: string | null
+}
+
 @Injectable()
 export class CapacityService {
-  constructor(private prisma: PrismaService) {}
+  // @Optional so the isolation e2e can still `new CapacityService(prisma)`;
+  // when absent, capacity simply carries no measured/environment data.
+  constructor(private prisma: PrismaService, @Optional() private readings?: SensorReadingsService) {}
+
+  // Fold the latest measured power reading onto each capacity asset, and derive
+  // per-cabinet environment from temp/humidity readings. No readings service (or
+  // no data) → measuredW stays null and environment is UNKNOWN.
+  private cabinetEnvironment(assetIds: string[], latest: LatestByAsset, measuredKw: number | null, capacityKw: number | null): CabinetEnvironment {
+    const temps: { v: number; at: string }[] = []
+    const hums: { v: number; at: string }[] = []
+    for (const id of assetIds) {
+      const m = latest.get(id)
+      if (m?.temperatureC) temps.push({ v: m.temperatureC.value, at: m.temperatureC.readAt })
+      if (m?.humidityPct) hums.push({ v: m.humidityPct.value, at: m.humidityPct.readAt })
+    }
+    const temperatureC = temps.length ? Math.max(...temps.map((t) => t.v)) : null
+    const humidityPct = hums.length ? Math.max(...hums.map((h) => h.v)) : null
+    const readAt = [...temps, ...hums].map((r) => r.at).sort().at(-1) ?? null
+    const health = worstHealth([
+      measuredKw != null ? powerHealth(measuredKw, capacityKw) : "UNKNOWN",
+      temperatureC != null ? temperatureHealth(temperatureC) : "UNKNOWN",
+      humidityPct != null ? humidityHealth(humidityPct) : "UNKNOWN",
+    ])
+    return { temperatureC, humidityPct, health, readAt }
+  }
 
   async getSiteCapacity(clientId: string, siteId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
@@ -49,14 +84,23 @@ export class CapacityService {
       },
     })
 
+    // Latest measured readings across every asset in the site (Horizon 3).
+    const allAssetIds = cabinets.flatMap((c) => c.assets.map((a) => a.id))
+    const latest = (await this.readings?.latestForAssets(clientId, allAssetIds)) ?? (new Map() as LatestByAsset)
+
     const now = new Date()
     const rows = cabinets.map((c) => {
-      const cap = computeCabinetCapacity(c, c.assets.map(toCapAsset))
+      const capAssets = c.assets.map((a) => ({ ...toCapAsset(a), measuredW: latest.get(a.id)?.powerW?.value ?? null }))
+      const cap = computeCabinetCapacity(c, capAssets)
       const activeReservations = c.reservations.filter((r) => !r.expiresAt || r.expiresAt > now).length
       const activeAssets = c.assets.filter((a) => a.lifecycleState !== "RETIRED").length
+      const environment = this.cabinetEnvironment(
+        c.assets.filter((a) => a.lifecycleState !== "RETIRED").map((a) => a.id),
+        latest, cap.power.measured ?? null, c.powerKw
+      )
       return {
         cabinetId: c.id, name: c.name, roomId: c.roomId, totalU: c.totalU ?? 0,
-        activeAssets, activeReservations, ...cap,
+        activeAssets, activeReservations, environment, ...cap,
       }
     })
 
@@ -66,6 +110,9 @@ export class CapacityService {
     const capacityKw = cabinets.reduce((s, c) => s + (c.powerKw ?? 0), 0) || null
     const weightKg = rows.reduce((s, r) => s + r.weight.value, 0)
     const maxWeightKg = cabinets.reduce((s, c) => s + (c.maxWeightKg ?? 0), 0) || null
+    // Site measured total — null unless at least one cabinet has a reading.
+    const measuredRows = rows.filter((r) => r.power.measured != null)
+    const measuredKw = measuredRows.length ? measuredRows.reduce((s, r) => s + (r.power.measured ?? 0), 0) : null
 
     return {
       siteId: site.id, name: site.name,
@@ -73,9 +120,10 @@ export class CapacityService {
         cabinets: rows.length,
         activeAssets: rows.reduce((s, r) => s + r.activeAssets, 0),
         space: { usedU, totalU, pct: totalU > 0 ? Math.round((usedU / totalU) * 100) : 0 },
-        power: { value: budgetedKw, capacity: capacityKw, pct: pct(budgetedKw, capacityKw) },
+        power: { value: budgetedKw, capacity: capacityKw, pct: pct(budgetedKw, capacityKw), measured: measuredKw, measuredPct: measuredKw != null ? pct(measuredKw, capacityKw) : null },
         weight: { value: weightKg, capacity: maxWeightKg, pct: pct(weightKg, maxWeightKg) },
         strandedCabinets: rows.filter((r) => r.stranded).length,
+        monitoredCabinets: measuredRows.length,
       },
       cabinets: rows,
     }

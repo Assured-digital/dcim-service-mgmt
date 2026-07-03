@@ -25,13 +25,15 @@ export type CapacityAsset = {
   budgetedDrawW: number | null
   weightKg: number | null
   excludeFromUtilization: boolean // resolved from the asset's DeviceType (or false)
+  measuredW?: number | null       // latest measured power reading (Horizon 3), else null
 }
 
 export type SpaceCapacity = { usedU: number; freeU: number; totalU: number; pct: number; largestContiguousU: number; freeBlocks: { start: number; size: number }[] }
-export type MeteredCapacity = { value: number; capacity: number | null; pct: number | null }
+// `measured` (kW) is the THIRD number (Horizon 3) — null when no readings exist.
+export type MeteredCapacity = { value: number; capacity: number | null; pct: number | null; measured?: number | null; measuredPct?: number | null }
 export type CabinetCapacity = {
   space: SpaceCapacity
-  power: MeteredCapacity      // budgeted kW vs feed kW
+  power: MeteredCapacity      // budgeted kW vs feed kW (+ measured when available)
   weight: MeteredCapacity     // kg vs max kg
   stranded: "power" | "space" | null
 }
@@ -140,6 +142,15 @@ export function computeCabinetCapacity(
   const weightKg = counted.reduce((s, a) => s + (a.weightKg ?? 0), 0)
   const power = metered(budgetedKw, cabinet.powerKw)
   const weight = metered(weightKg, cabinet.maxWeightKg)
+
+  // Measured power (Horizon 3): sum the latest per-asset readings. null when no
+  // asset in the cabinet has a reading — absence of data, not zero draw.
+  const withReading = counted.filter((a) => a.measuredW != null)
+  if (withReading.length > 0) {
+    const measuredKw = withReading.reduce((s, a) => s + (a.measuredW ?? 0), 0) / 1000
+    power.measured = measuredKw
+    power.measuredPct = cabinet.powerKw && cabinet.powerKw > 0 ? Math.round((measuredKw / cabinet.powerKw) * 100) : null
+  }
 
   // Stranded = dimensional imbalance (no telemetry yet): full on one axis, empty
   // on the other. "Power stranded" = space you can't use (no power headroom) is

@@ -101,6 +101,10 @@ function mockPrisma(): any {
       findMany: jest.fn(async () => []),
       create: jest.fn(async ({ data }: any) => ({ ...data, id: "note-1", createdAt: new Date(), author: null })),
     },
+    sensorReading: {
+      create: jest.fn(async ({ data }: any) => ({ ...data, id: "reading-1", createdAt: new Date() })),
+      findMany: jest.fn(async () => []),
+    },
     port: { findMany: jest.fn(async () => []) },
     // Downstream reads on the owner-success paths — empty is enough (the gate is
     // what these tests exercise; these just keep the happy path from crashing).
@@ -217,6 +221,13 @@ describe("DCIM services — query scoping refuses another client's resource (404
     await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-1", actorUserId: "u", clientId: A });
     expect(updates).toHaveLength(1);
     expect(updates[0]).toMatchObject({ lifecycleState: "ACTIVE", pendingOp: null, pendingWorkOrderId: null });
+  });
+
+  it("sensor readings: record refuses a foreign client's asset (404); owner records fine", async () => {
+    const { SensorReadingsService } = await import("../src/sensor-readings/sensor-readings.service");
+    const svc = new SensorReadingsService(prisma);
+    await expect(svc.record(B, "user-b", AST, { metric: "powerW", value: 500 })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.record(A, "user-a", AST, { metric: "powerW", value: 500 })).resolves.toMatchObject({ metric: "powerW", value: 500 });
   });
 
   it("ports: listForAsset refuses a foreign client's asset (404)", async () => {

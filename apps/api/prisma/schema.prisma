@@ -153,6 +153,7 @@ model Client {
   recordLinks       RecordLink[]
   attachments       Attachment[]
   workNotes         WorkNote[]
+  sensorReadings    SensorReading[]
   slaPolicies       SlaPolicy[]
   cabinetReservations CabinetReservation[]
   regions           Region[]
@@ -666,6 +667,29 @@ model Asset {
   incomingConnections Connection[]        @relation("ConnectionToAsset")
   ports               Port[]              // LATENT — port layer (§6)
   floorObjects        FloorObject[]       // reverse of FloorObject.assetId
+  sensorReadings      SensorReading[]     // measured power / environmental (Horizon 3)
+}
+
+// Measured telemetry (DCIM_SCHEMA_SPEC §6b, Horizon 3). The manual/CSV field-
+// reading phase — a time-series of point readings per asset. clientId is
+// denormalised for the tenant chokepoint on the hot roll-up queries (mirrors
+// Connection); the write validates the asset is in scope first. The "third
+// number" (measured) that turns estimated stranded capacity into real.
+model SensorReading {
+  id           String   @id @default(uuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id])
+  assetId      String
+  asset        Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  metric       String   // "powerW" | "temperatureC" | "humidityPct"
+  value        Float
+  readAt       DateTime
+  source       String   @default("manual") // "manual" | "csv"
+  recordedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([clientId, assetId, metric, readAt])
+  @@index([assetId, metric, readAt])
 }
 
 model MaintenanceLog {
