@@ -79,6 +79,45 @@ export function computeSpace(totalU: number, startingUnit: number, assets: Capac
   }
 }
 
+// Placement blocks for find-space (Place-or-Reserve). Deliberately DIFFERENT
+// occupancy rules from computeSpace: capacity maths counts ACCOUNTING occupancy
+// (retired kit excluded — it frees capacity), but a placement suggestion needs
+// PHYSICAL occupancy — retired-but-racked kit still fills the slot until
+// physically removed — plus active (non-expired) reservations, which advisory-
+// block placement and must not be suggested to someone else.
+export function computePlaceableBlocks(
+  totalU: number,
+  startingUnit: number,
+  assets: CapacityAsset[],
+  reservations: { uStart: number; uHeight: number | null; expiresAt: Date | null }[],
+  now: Date = new Date()
+): { start: number; size: number }[] {
+  const occupied = new Set<number>()
+  for (const a of assets) {
+    if (a.uPosition == null || a.isZeroU) continue
+    const h = spanH(a.uHeight)
+    for (let u = a.uPosition; u < a.uPosition + h; u++) occupied.add(u)
+  }
+  for (const r of reservations) {
+    if (r.expiresAt && r.expiresAt <= now) continue
+    const h = Math.max(1, r.uHeight ?? 1)
+    for (let u = r.uStart; u < r.uStart + h; u++) occupied.add(u)
+  }
+  const topU = startingUnit + totalU - 1
+  const blocks: { start: number; size: number }[] = []
+  let runStart = -1
+  for (let u = startingUnit; u <= topU; u++) {
+    const free = !occupied.has(u)
+    if (free && runStart < 0) runStart = u
+    if ((!free || u === topU) && runStart >= 0) {
+      const end = free ? u : u - 1
+      blocks.push({ start: runStart, size: end - runStart + 1 })
+      runStart = -1
+    }
+  }
+  return blocks
+}
+
 function metered(value: number, capacity: number | null): MeteredCapacity {
   const pct = capacity && capacity > 0 ? Math.round((value / capacity) * 100) : null
   return { value, capacity, pct }

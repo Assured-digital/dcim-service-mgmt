@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
-import { CapacityAsset, computeCabinetCapacity, effectiveBudgetW } from "./capacity.util"
+import { CapacityAsset, computeCabinetCapacity, computePlaceableBlocks, effectiveBudgetW } from "./capacity.util"
 
 // Capacity read model (DCIM_DESIGN_SPEC.md §4.3). Loads the hierarchy, maps rows to
 // the pure engine, and shapes per-cabinet / per-site / overview responses. All
@@ -79,6 +79,70 @@ export class CapacityService {
       },
       cabinets: rows,
     }
+  }
+
+  // Place-or-Reserve capacity search (DCIM_DESIGN_SPEC §6.1 Horizon 2): given
+  // constraints, rank the client's cabinets BEST-FIT — the tightest placeable
+  // block that satisfies everything wins (least waste → least fragmentation),
+  // ties broken by post-placement power headroom. Placeable blocks use PHYSICAL
+  // occupancy + active reservations (computePlaceableBlocks), not the accounting
+  // freeBlocks. Power/weight are hard filters only when the cabinet declares a
+  // capacity; unknown capacity ranks lower and is flagged (fits.power = null).
+  async findSpace(clientId: string, dto: { uSize: number; budgetW?: number | null; weightKg?: number | null; siteId?: string | null }) {
+    if (!clientId) throw new ForbiddenException("Missing client scope")
+    if (dto.siteId) {
+      const site = await this.prisma.site.findFirst({ where: { id: dto.siteId, clientId }, select: { id: true } })
+      if (!site) throw new NotFoundException("Site not found")
+    }
+
+    const cabinets = await this.prisma.cabinet.findMany({
+      where: { site: { clientId }, ...(dto.siteId ? { siteId: dto.siteId } : {}), totalU: { not: null } },
+      include: {
+        assets: { select: ASSET_SELECT },
+        reservations: { select: { uStart: true, uHeight: true, expiresAt: true } },
+        room: { select: { id: true, name: true } },
+        site: { select: { id: true, name: true } },
+      },
+    })
+
+    const now = new Date()
+    const candidates = cabinets.flatMap((c) => {
+      const capAssets = c.assets.map(toCapAsset)
+      const blocks = computePlaceableBlocks(c.totalU ?? 0, c.startingUnit ?? 1, capAssets, c.reservations, now)
+      const fitting = blocks.filter((b) => b.size >= dto.uSize)
+      if (fitting.length === 0) return []
+      // Best fit: the tightest block that still takes the kit.
+      const bestBlock = fitting.reduce((m, b) => (b.size < m.size ? b : m))
+
+      const cap = computeCabinetCapacity(c, capAssets)
+      const capacityW = c.powerKw != null ? c.powerKw * 1000 : null
+      const headroomW = capacityW != null ? capacityW - cap.power.value * 1000 : null
+      const fitsPower = dto.budgetW ? (headroomW == null ? null : headroomW >= dto.budgetW) : true
+      const weightHeadroomKg = c.maxWeightKg != null ? c.maxWeightKg - cap.weight.value : null
+      const fitsWeight = dto.weightKg ? (weightHeadroomKg == null ? null : weightHeadroomKg >= dto.weightKg) : true
+      if (fitsPower === false || fitsWeight === false) return []
+
+      return [{
+        cabinetId: c.id, name: c.name,
+        siteId: c.site.id, siteName: c.site.name,
+        roomId: c.room?.id ?? null, roomName: c.room?.name ?? null,
+        totalU: c.totalU ?? 0,
+        bestBlock, waste: bestBlock.size - dto.uSize,
+        freeU: blocks.reduce((s, b) => s + b.size, 0),
+        power: { budgetedKw: cap.power.value, capacityKw: c.powerKw, headroomW, pct: cap.power.pct },
+        weight: { valueKg: cap.weight.value, capacityKg: c.maxWeightKg, headroomKg: weightHeadroomKg },
+        fits: { space: true, power: fitsPower, weight: fitsWeight },
+      }]
+    })
+
+    candidates.sort((a, b) =>
+      a.waste - b.waste
+      // Known headroom beats unknown; more headroom beats less.
+      || (b.power.headroomW ?? -1) - (a.power.headroomW ?? -1)
+      || a.name.localeCompare(b.name)
+    )
+
+    return { scanned: cabinets.length, matched: candidates.length, candidates: candidates.slice(0, 20) }
   }
 
   async getOverview(clientId: string) {

@@ -48,6 +48,27 @@ export async function getSiteCapacity(siteId: string): Promise<SiteCapacity> {
   return (await api.get<SiteCapacity>(`/sites/${siteId}/capacity`)).data
 }
 
+// ── Place-or-Reserve capacity search (Horizon 2) ─────────────────────────────
+export type FindSpaceQuery = { uSize: number; budgetW?: number; weightKg?: number; siteId?: string }
+export type FindSpaceCandidate = {
+  cabinetId: string; name: string
+  siteId: string; siteName: string
+  roomId: string | null; roomName: string | null
+  totalU: number
+  bestBlock: { start: number; size: number }
+  waste: number
+  freeU: number
+  power: { budgetedKw: number; capacityKw: number | null; headroomW: number | null; pct: number | null }
+  weight: { valueKg: number; capacityKg: number | null; headroomKg: number | null }
+  // null = the cabinet declares no capacity for that axis (unknown, flagged in UI)
+  fits: { space: true; power: boolean | null; weight: boolean | null }
+}
+export type FindSpaceResult = { scanned: number; matched: number; candidates: FindSpaceCandidate[] }
+
+export async function findSpace(query: FindSpaceQuery): Promise<FindSpaceResult> {
+  return (await api.post<FindSpaceResult>("/capacity/find-space", query)).data
+}
+
 // RYG bar colour for a percentage, matching the server's 65/85 stranded thresholds.
 // null pct (no capacity denominator) → neutral grey.
 export function pctColor(pct: number | null, mode: ThemeMode): string {

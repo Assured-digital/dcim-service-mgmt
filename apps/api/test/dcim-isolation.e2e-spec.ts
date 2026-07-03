@@ -173,6 +173,12 @@ describe("DCIM services — query scoping refuses another client's resource (404
     await expect(report.getModel(B, S)).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it("find-space: refuses a foreign client's site scope (404)", async () => {
+    await expect(capacity.findSpace(B, { uSize: 4, siteId: S })).rejects.toBeInstanceOf(NotFoundException);
+    // Control: the owner's search runs (empty fixture estate → no candidates).
+    await expect(capacity.findSpace(A, { uSize: 4, siteId: S })).resolves.toMatchObject({ scanned: 0, matched: 0 });
+  });
+
   it("ports: listForAsset refuses a foreign client's asset (404)", async () => {
     const ports = new PortsService(prisma);
     await expect(ports.listForAsset(B, AST)).rejects.toBeInstanceOf(NotFoundException);

@@ -608,6 +608,9 @@ export default function AssetHierarchyPage() {
 
             {canManage ? (
               <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+                <ToolbarButton onClick={() => navigate(`/dcim/place${selectedSiteId ? `?siteId=${selectedSiteId}` : ""}`)}>
+                  Place equipment
+                </ToolbarButton>
                 {selectedCabinet ? (
                   <EditActionsButton
                     onEdit={() => setActiveDialog("editCabinet")}

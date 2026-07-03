@@ -1,6 +1,7 @@
-import { Controller, Get, Headers, Param, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
+import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator"
 import { JwtAuthGuard } from "../auth/jwt.guard"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
@@ -12,6 +13,13 @@ const READ_ROLES = [
   Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER,
   Role.SERVICE_DESK_ANALYST, Role.ENGINEER, Role.CLIENT_VIEWER,
 ] as const
+
+class FindSpaceDto {
+  @IsInt() @Min(1) @Max(60) uSize!: number
+  @IsOptional() @IsNumber() @Min(0) budgetW?: number
+  @IsOptional() @IsNumber() @Min(0) weightKg?: number
+  @IsOptional() @IsString() siteId?: string
+}
 
 // Read-only capacity surfaces (spec §4.3). Scope resolves through the standard
 // chokepoint; the site endpoint additionally validates site→client in the service.
@@ -36,5 +44,15 @@ export class CapacityController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.capacity.getSiteCapacity(clientId, siteId)
+  }
+
+  // Capacity search for Place-or-Reserve. POST for the constraint body; still a
+  // pure read (no writes) — the write happens via reservations/assets afterwards.
+  @Post("capacity/find-space")
+  @Roles(...READ_ROLES)
+  async findSpace(@Req() req: any, @Body() dto: FindSpaceDto, @Headers("x-client-id") requestedClientId?: string) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.capacity.findSpace(clientId, dto)
   }
 }

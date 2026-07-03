@@ -10,6 +10,7 @@ import { api } from "../lib/api"
 import { CapacityOverview, Metered, getCapacityOverview, kw, pctColor } from "../lib/capacity"
 import { Asset, Site } from "../lib/infrastructure"
 import SitesMapCard, { SiteAssetCounts } from "../components/SitesMapCard"
+import { ToolbarButton } from "../components/shared/ListToolbar"
 
 // DCIM capacity dashboard (DCIM_DESIGN_SPEC.md §4.4). Replaces the old count-cards
 // overview: KPI row → per-site RYG capacity strips → top cabinets by budgeted
@@ -60,9 +61,12 @@ export default function DcimOverviewPage() {
 
   return (
     <Stack spacing={2.5}>
-      <Typography variant="body2" color="text.secondary">
-        Space, power and weight across the estate — budgeted power (nameplate derated), calm-by-exception.
-      </Typography>
+      <Stack direction="row" alignItems="center" spacing={2}>
+        <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+          Space, power and weight across the estate — budgeted power (nameplate derated), calm-by-exception.
+        </Typography>
+        <ToolbarButton variant="primary" onClick={() => nav("/dcim/place")}>Place equipment</ToolbarButton>
+      </Stack>
 
       {/* KPI row */}
       <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5, minmax(0,1fr))" } }}>
