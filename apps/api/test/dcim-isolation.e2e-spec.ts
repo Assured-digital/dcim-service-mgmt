@@ -87,8 +87,19 @@ function mockPrisma(): any {
         )
         return orMatch ? row : null
       }),
-      findMany: jest.fn(async () => []),
+      // queryRecords ("asset" case) shape: strict clientId + id-in filter — the
+      // existence/tenant check work-notes and attachments route through.
+      findMany: jest.fn(async ({ where }: any) => {
+        if (where?.clientId !== A) return []
+        if (where.id?.in && !where.id.in.includes(AST)) return []
+        if (!where.id) return []
+        return [{ id: AST, assetTag: "AST-1", name: "Asset One", lifecycleState: "ACTIVE" }]
+      }),
       groupBy: jest.fn(async () => []),
+    },
+    workNote: {
+      findMany: jest.fn(async () => []),
+      create: jest.fn(async ({ data }: any) => ({ ...data, id: "note-1", createdAt: new Date(), author: null })),
     },
     port: { findMany: jest.fn(async () => []) },
     // Downstream reads on the owner-success paths — empty is enough (the gate is
@@ -177,6 +188,13 @@ describe("DCIM services — query scoping refuses another client's resource (404
     await expect(capacity.findSpace(B, { uSize: 4, siteId: S })).rejects.toBeInstanceOf(NotFoundException);
     // Control: the owner's search runs (empty fixture estate → no candidates).
     await expect(capacity.findSpace(A, { uSize: 4, siteId: S })).resolves.toMatchObject({ scanned: 0, matched: 0 });
+  });
+
+  it("work-notes: create refuses a foreign client's entity (404); owner writes fine", async () => {
+    const { WorkNotesService } = await import("../src/work-notes/work-notes.service");
+    const notes = new WorkNotesService(prisma);
+    await expect(notes.create(B, "user-b", "asset", AST, "spoofed note")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(notes.create(A, "user-a", "asset", AST, "legit note")).resolves.toMatchObject({ body: "legit note" });
   });
 
   it("ports: listForAsset refuses a foreign client's asset (404)", async () => {

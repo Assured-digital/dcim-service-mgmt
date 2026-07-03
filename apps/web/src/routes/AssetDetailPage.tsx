@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { AttachmentsContent } from "../components/AttachmentsContent"
+import { WorkNotesPanel } from "../components/shared/WorkNotesPanel"
 import { useBreadcrumb } from "./Shell"
 import { useThemeMode } from "../lib/theme"
 import {
@@ -819,13 +820,23 @@ const OverviewTab = React.memo(function OverviewTab({
         )}
       </Box>
 
-      {/* Documents (Hyperview pattern) — datasheets, install photos, evidence. */}
-      <Box sx={{ mt: "14px", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
-        <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
-          <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Documents</Typography>
-        </Stack>
-        <Box sx={{ p: "12px 16px" }}>
-          <AssetDocuments asset={asset} />
+      {/* Documents + Work notes (Hyperview pattern) — side by side on desktop. */}
+      <Box sx={{ mt: "14px", display: "grid", gap: "14px", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Documents</Typography>
+          </Stack>
+          <Box sx={{ p: "12px 16px" }}>
+            <AssetDocuments asset={asset} />
+          </Box>
+        </Box>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Work notes</Typography>
+          </Stack>
+          <Box sx={{ p: "12px 16px" }}>
+            <WorkNotesPanel entityType="asset" entityId={asset.id} />
+          </Box>
         </Box>
       </Box>
     </Box>

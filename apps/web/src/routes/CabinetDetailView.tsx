@@ -10,6 +10,7 @@ import StorageIcon from "@mui/icons-material/Storage"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import { AttachmentsContent } from "../components/AttachmentsContent"
+import { WorkNotesPanel } from "../components/shared/WorkNotesPanel"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import { useNotification } from "../components/NotificationProvider"
 import {
@@ -261,18 +262,28 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
             ))}
           </Box>
 
-          {/* Documents (Hyperview pattern) — rack build sheets, install photos. */}
-          <Box sx={{ mt: "14px", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
-            <Box sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Documents</Typography>
+          {/* Documents + Work notes (Hyperview pattern) — side by side. */}
+          <Box sx={{ mt: "14px", display: "grid", gap: "14px", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+            <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+              <Box sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Documents</Typography>
+              </Box>
+              <Box sx={{ p: "12px 16px" }}>
+                <AttachmentsContent
+                  attachments={cabinet.attachments ?? []}
+                  recordType="cabinet"
+                  recordId={cabinet.id}
+                  onChanged={refreshCabinet}
+                />
+              </Box>
             </Box>
-            <Box sx={{ p: "12px 16px" }}>
-              <AttachmentsContent
-                attachments={cabinet.attachments ?? []}
-                recordType="cabinet"
-                recordId={cabinet.id}
-                onChanged={refreshCabinet}
-              />
+            <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+              <Box sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Work notes</Typography>
+              </Box>
+              <Box sx={{ p: "12px 16px" }}>
+                <WorkNotesPanel entityType="cabinet" entityId={cabinet.id} />
+              </Box>
             </Box>
           </Box>
         </Box>

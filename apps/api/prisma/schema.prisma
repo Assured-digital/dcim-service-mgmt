@@ -152,6 +152,7 @@ model Client {
   userAssignments   UserClientAssignment[]
   recordLinks       RecordLink[]
   attachments       Attachment[]
+  workNotes         WorkNote[]
   slaPolicies       SlaPolicy[]
   cabinetReservations CabinetReservation[]
   regions           Region[]
@@ -494,6 +495,7 @@ model User {
   assignedChanges         ChangeRequest[]        @relation("AssignedChange")
   changeApprovals         ChangeApproval[]       @relation("ChangeApprovals")
   comments                Comment[]              @relation("UserComments")
+  workNotes               WorkNote[]             @relation("UserWorkNotes")
   assignedChecks          Check[]                @relation("AssignedCheck")
   reviewingChecks         Check[]                @relation("CheckReviewer")
   performedMaintenance    MaintenanceLog[]       @relation("PerformedMaintenance")
@@ -979,6 +981,24 @@ model Attachment {
   createdAt    DateTime @default(now())
 
   @@index([clientId, recordType, recordId])
+}
+
+// Timestamped work notes on the DCIM estate entities (asset / cabinet / site) —
+// the Hyperview "Work Notes" pattern, field-ops friendly. Same polymorphic
+// clientId-scoped pointer shape as Attachment; tenant integrity enforced in app
+// code (entity validated in-scope on write, clientId on every read).
+model WorkNote {
+  id         String   @id @default(uuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id])
+  entityType String // asset | cabinet | site
+  entityId   String
+  authorId   String?
+  author     User?    @relation("UserWorkNotes", fields: [authorId], references: [id])
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([clientId, entityType, entityId])
 }
 
 model Comment {

@@ -21,6 +21,7 @@ import { FloorCanvas } from "../components/floorplan/FloorCanvas"
 import { FloorLens, getFloorPlan } from "../lib/floorPlan"
 import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import { AttachmentsContent } from "../components/AttachmentsContent"
+import { WorkNotesPanel } from "../components/shared/WorkNotesPanel"
 import SiteLocationCard from "../components/SiteLocationCard"
 import SiteLinkedRecords from "./SiteLinkedRecords"
 import {
@@ -88,13 +89,21 @@ const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinet
         </Box>
         <SiteLocationCard site={site} />
         <SiteLinkedRecords siteId={site.id} siteName={site.name} canManage={canManage} />
-        {/* Documents (Hyperview pattern) — site plans, contracts, access guides. */}
+        {/* Documents + Work notes (Hyperview pattern). */}
         <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
           <Box sx={{ px: "20px", py: "14px", borderBottom: "1px solid", borderColor: "divider" }}>
             <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Documents</Typography>
           </Box>
           <Box sx={{ p: "12px 20px" }}>
             <SiteDocuments site={site} />
+          </Box>
+        </Box>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ px: "20px", py: "14px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Work notes</Typography>
+          </Box>
+          <Box sx={{ p: "12px 20px" }}>
+            <WorkNotesPanel entityType="site" entityId={site.id} />
           </Box>
         </Box>
       </Stack>
