@@ -6,7 +6,7 @@ import { useThemeMode } from "../../lib/theme"
 import { semanticToken } from "../shared/tokens/colors"
 import {
   Cabinet, CabinetReservation, ElevationSide,
-  assetSlotText, getApiErrorMessage
+  assetSlotText, assetTypeAccent, getApiErrorMessage
 } from "../../lib/infrastructure"
 import { ElevationEntry, computeMoveTargets, useElevationModel } from "./useElevationModel"
 import { ElevationAssetSlot } from "./ElevationAssetSlot"
@@ -209,6 +209,7 @@ export const CabinetElevationV2 = React.memo(function CabinetElevationV2({
           />
         ))}
       </Stack>
+      <ElevationLegend cabinet={cabinet} />
       <ZeroUTray
         zeroUAssets={model.zeroUAssets}
         unplacedAssets={model.unplacedAssets}
@@ -218,5 +219,39 @@ export const CabinetElevationV2 = React.memo(function CabinetElevationV2({
     </Box>
   )
 })
+
+// Compact key under the rack (redesign mock): the type identities present in
+// THIS cabinet, plus the reservation block. Lifecycle is the right-edge stripe
+// on each block, so it isn't repeated here.
+function ElevationLegend({ cabinet }: { cabinet: Cabinet }) {
+  const { mode } = useThemeMode()
+  const text = assetSlotText(mode)
+  const types = React.useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const a of cabinet.assets) {
+      if (a.uPosition == null) continue
+      const key = a.assetType
+      if (!seen.has(key)) seen.set(key, assetTypeAccent(key, mode).fg)
+    }
+    return Array.from(seen.entries())
+  }, [cabinet.assets, mode])
+  if (types.length === 0) return null
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", gap: "8px 14px", mt: "12px", pt: "10px", borderTop: "1px solid", borderColor: "divider" }}>
+      {types.map(([label, colour]) => (
+        <Box key={label} sx={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+          <Box sx={{ width: 9, height: 9, borderRadius: "3px", bgcolor: colour }} />
+          <Typography sx={{ fontSize: 10.5, color: text.subtitle }}>{label}</Typography>
+        </Box>
+      ))}
+      {(cabinet.reservations ?? []).length > 0 ? (
+        <Box sx={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+          <Box sx={{ width: 9, height: 9, borderRadius: "3px", border: "1.5px dashed", borderColor: mode === "dark" ? "#60a5fa" : "#2563eb" }} />
+          <Typography sx={{ fontSize: 10.5, color: text.subtitle }}>Reserved</Typography>
+        </Box>
+      ) : null}
+    </Box>
+  )
+}
 
 export default CabinetElevationV2
