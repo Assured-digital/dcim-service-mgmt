@@ -12,6 +12,7 @@ import { EditActionsButton } from "../components/EditActionsButton"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { StatusPill, entityStatusIntent } from "../components/shared"
+import { AttachmentsContent } from "../components/AttachmentsContent"
 import { useBreadcrumb } from "./Shell"
 import { useThemeMode } from "../lib/theme"
 import {
@@ -817,9 +818,33 @@ const OverviewTab = React.memo(function OverviewTab({
           </Box>
         )}
       </Box>
+
+      {/* Documents (Hyperview pattern) — datasheets, install photos, evidence. */}
+      <Box sx={{ mt: "14px", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+        <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+          <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Documents</Typography>
+        </Stack>
+        <Box sx={{ p: "12px 16px" }}>
+          <AssetDocuments asset={asset} />
+        </Box>
+      </Box>
     </Box>
   )
 })
+
+// Documents card body — the shared attachments panel over the asset's resolved
+// attachments; changes refetch the asset detail (the resolver re-runs there).
+function AssetDocuments({ asset }: { asset: Asset }) {
+  const qc = useQueryClient()
+  return (
+    <AttachmentsContent
+      attachments={asset.attachments ?? []}
+      recordType="asset"
+      recordId={asset.id}
+      onChanged={() => qc.invalidateQueries({ queryKey: ["asset-detail", asset.id] })}
+    />
+  )
+}
 
 // ─── Connections tab ──────────────────────────────────────────────────────
 

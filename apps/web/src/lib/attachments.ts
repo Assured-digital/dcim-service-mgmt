@@ -17,9 +17,11 @@ export interface AttachmentSummary {
 
 // The record an attachment hangs off — the six work-item link types PLUS `maintenance`,
 // `check` and `check-item` (a line-item on a check, carrying per-item field-evidence
-// photos), which are attachable but NOT linkable (decoupled from the link union).
+// photos), PLUS the DCIM estate entities (`asset`/`cabinet`/`site` — datasheets,
+// install photos, room documents). All the extras are attachable but NOT linkable
+// (decoupled from the link union).
 // Mirrors the backend `ATTACHMENT_RECORD_TYPES` contract (the on-the-wire `recordType`).
-export type AttachmentRecordType = LinkRecordType | "maintenance" | "check" | "check-item"
+export type AttachmentRecordType = LinkRecordType | "maintenance" | "check" | "check-item" | "asset" | "cabinet" | "site"
 
 export function isImageType(contentType: string): boolean {
   return contentType.startsWith("image/")

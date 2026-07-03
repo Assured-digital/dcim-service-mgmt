@@ -36,6 +36,9 @@ export type Asset = {
   deletionReason: string | null
   site?: { id: string; name: string } | null
   cabinet?: { id: string; name: string; roomId: string | null; room?: { id: string; name: string } | null } | null
+  // Documents on the asset (Hyperview pattern) — resolver-spread onto the
+  // single-asset read only (list responses omit it).
+  attachments?: import("./attachments").AttachmentSummary[]
 }
 
 // Approver queue row (GET /assets/deletion-requests): an Asset plus the resolved requester.
@@ -76,6 +79,7 @@ export type Cabinet = {
   _count: { assets: number }
   assets: Asset[]
   reservations?: CabinetReservation[]
+  attachments?: import("./attachments").AttachmentSummary[]
 }
 
 export type Room = { id: string; name: string; type: string; floor: string | null }
@@ -94,6 +98,7 @@ export type Site = {
   contractedKw?: number | null
   contractedU?: number | null
   checks?: Check[]
+  attachments?: import("./attachments").AttachmentSummary[]
 }
 export type AuditEvent = { id: string; action: string; createdAt: string; data?: { from?: string; to?: string; fields?: string[] } | null }
 export type LinkedTask = { id: string; reference: string; title: string; status: string; priority: string }

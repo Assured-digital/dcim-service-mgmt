@@ -17,16 +17,20 @@ export function isLinkRecordType(value: unknown): value is LinkRecordType {
   return typeof value === "string" && (LINK_RECORD_TYPES as readonly string[]).includes(value);
 }
 
-// Attachments accept the six link types PLUS Maintenance, Check and Check-item. This
-// list is deliberately SEPARATE from LINK_RECORD_TYPES: extending it makes those
-// records attachable WITHOUT making them linkable (record-links still validates
-// against the six). The record resolver below understands all nine. `check-item` is a
-// line-item on a Check — attachable (per-item field-evidence photos) but never linkable.
+// Attachments accept the six link types PLUS Maintenance, Check and Check-item,
+// PLUS the DCIM estate entities (asset / cabinet / site — the Hyperview
+// "Documents" pattern: datasheets, install photos, room plans). This list is
+// deliberately SEPARATE from LINK_RECORD_TYPES: extending it makes those records
+// attachable WITHOUT making them linkable (record-links still validates against
+// the six). The record resolver below understands every entry.
 export const ATTACHMENT_RECORD_TYPES = [
   ...LINK_RECORD_TYPES,
   "maintenance",
   "check",
-  "check-item"
+  "check-item",
+  "asset",
+  "cabinet",
+  "site"
 ] as const;
 
 export type AttachmentRecordType = (typeof ATTACHMENT_RECORD_TYPES)[number];
@@ -168,6 +172,40 @@ async function queryRecords(
         take
       });
       return rows.map((r) => ({ type, id: r.id, reference: "", title: r.label, status: "" }));
+    }
+    // ── DCIM estate entities — attachable, never linkable (the picker/search
+    // never reaches these cases; they serve as existence/tenant checks and the
+    // audit-grid summary). Scoping mirrors the services that own each type.
+    case "asset": {
+      // Strict clientId match: a concrete clientId excludes null-client
+      // (INTERNAL) assets — internal shared kit is not client-attachable.
+      const rows = await prisma.asset.findMany({
+        where: { clientId, ...idWhere },
+        select: { id: true, assetTag: true, name: true, lifecycleState: true },
+        orderBy,
+        take
+      });
+      return rows.map((r) => ({ type, id: r.id, reference: r.assetTag, title: r.name, status: r.lifecycleState }));
+    }
+    case "cabinet": {
+      // Cabinet has no clientId — scoped THROUGH its site (site.clientId),
+      // the same indirect chain the cabinets service uses.
+      const rows = await prisma.cabinet.findMany({
+        where: { site: { clientId }, ...idWhere },
+        select: { id: true, name: true },
+        orderBy,
+        take
+      });
+      return rows.map((r) => ({ type, id: r.id, reference: "", title: r.name, status: "" }));
+    }
+    case "site": {
+      const rows = await prisma.site.findMany({
+        where: { clientId, ...idWhere },
+        select: { id: true, name: true },
+        orderBy,
+        take
+      });
+      return rows.map((r) => ({ type, id: r.id, reference: "", title: r.name, status: "" }));
     }
   }
 }

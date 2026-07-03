@@ -6,6 +6,7 @@ import { emitAudit } from "../audit-events/emit-audit";
 import { computeDisplayName, userDisplaySelect } from "../users/display";
 import { activeReservationWhere, findUSlotConflicts, uSlotOutOfBounds, UPlacement } from "../cabinets/u-slot.util";
 import { DCIM_DEFAULT_DERATE_PCT } from "../dcim/capacity.util";
+import { resolveAttachments } from "../attachments/resolve-attachments";
 
 @Injectable()
 export class AssetsService {
@@ -129,7 +130,11 @@ export class AssetsService {
       }
     }
 
-    return asset;
+    // Documents on the asset (Hyperview pattern) — resolver-spread like every
+    // other attachable read. Concrete clientId in the resolver means INTERNAL
+    // (null-client) assets simply resolve to none.
+    const attachments = await resolveAttachments(this.prisma, clientId, "asset", asset.id);
+    return { ...asset, attachments };
   }
 
   async create(dto: any, requesterClientId: string, requesterRole: Role, actorUserId: string) {

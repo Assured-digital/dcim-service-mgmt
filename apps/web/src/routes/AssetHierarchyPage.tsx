@@ -20,6 +20,7 @@ import CapacityRing from "../components/shared/CapacityRing"
 import { FloorCanvas } from "../components/floorplan/FloorCanvas"
 import { FloorLens, getFloorPlan } from "../lib/floorPlan"
 import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
+import { AttachmentsContent } from "../components/AttachmentsContent"
 import SiteLocationCard from "../components/SiteLocationCard"
 import SiteLinkedRecords from "./SiteLinkedRecords"
 import {
@@ -87,10 +88,32 @@ const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinet
         </Box>
         <SiteLocationCard site={site} />
         <SiteLinkedRecords siteId={site.id} siteName={site.name} canManage={canManage} />
+        {/* Documents (Hyperview pattern) — site plans, contracts, access guides. */}
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ px: "20px", py: "14px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Documents</Typography>
+          </Box>
+          <Box sx={{ p: "12px 20px" }}>
+            <SiteDocuments site={site} />
+          </Box>
+        </Box>
       </Stack>
     </Box>
   )
 })
+
+// Documents card body — changes refetch the site detail (the resolver re-runs).
+function SiteDocuments({ site }: { site: Site }) {
+  const qc = useQueryClient()
+  return (
+    <AttachmentsContent
+      attachments={site.attachments ?? []}
+      recordType="site"
+      recordId={site.id}
+      onChanged={() => qc.invalidateQueries({ queryKey: ["site-detail", site.id] })}
+    />
+  )
+}
 
 const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelectCabinet }: { cabinets: Cabinet[]; onSelectCabinet: (id: string) => void }) {
   const { mode } = useThemeMode()
@@ -711,7 +734,7 @@ export default function AssetHierarchyPage() {
                         </Box>
                       ) : null}
                       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                        <SiteDetailView site={selectedSite} rooms={rooms} cabinets={cabinets} canManage={canManage} />
+                        <SiteDetailView site={site ?? selectedSite} rooms={rooms} cabinets={cabinets} canManage={canManage} />
                       </Box>
                     </Box>
                   )

@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service"
 import { GeocodingService } from "./geocoding.service"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
+import { resolveAttachments } from "../attachments/resolve-attachments"
 
 @Injectable()
 export class SitesService {
@@ -40,8 +41,11 @@ export class SitesService {
       }
     })
     if (!site) throw new NotFoundException("Site not found")
+    // Documents on the site (Hyperview pattern) — resolver-spread, same as assets.
+    const attachments = await resolveAttachments(this.prisma, clientId, "site", site.id)
     return {
       ...site,
+      attachments,
       checks: site.checks.map((c) => ({ ...c, assignee: toUserDisplay(c.assignee) }))
     }
   }
