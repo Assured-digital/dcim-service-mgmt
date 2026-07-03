@@ -21,6 +21,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
 import { StatusPill, entityStatusIntent } from "../components/shared"
+import { ListToolbar, ToolbarButton } from "../components/shared/ListToolbar"
 
 type Connection = {
   id: string
@@ -159,18 +160,7 @@ export default function ConnectionsPage() {
   return (
     <Box>
       <Card>
-        <Box
-          sx={{
-            borderBottom: "1px solid",
-            borderColor: "divider",
-            px: 2,
-            py: 1.25,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 1.5
-          }}
-        >
+        <ListToolbar>
           <TextField
             select
             size="small"
@@ -186,12 +176,13 @@ export default function ConnectionsPage() {
               </MenuItem>
             ))}
           </TextField>
+          <Box sx={{ flex: 1 }} />
           {canManage ? (
-            <Button size="small" variant="contained" startIcon={<HubIcon sx={{ fontSize: 16 }} />} onClick={() => setOpen(true)}>
+            <ToolbarButton variant="primary" startIcon={<HubIcon sx={{ fontSize: "15px !important" }} />} onClick={() => setOpen(true)}>
               New connection
-            </Button>
+            </ToolbarButton>
           ) : null}
-        </Box>
+        </ListToolbar>
 
         {connections.isLoading ? <Box sx={{ p: 2 }}><LoadingState /></Box> : null}
         {connections.isError ? <Box sx={{ p: 2 }}><ErrorState title="Failed to load connections" /></Box> : null}

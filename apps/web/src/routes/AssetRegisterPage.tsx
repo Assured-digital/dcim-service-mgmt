@@ -2,14 +2,12 @@ import React from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
-import {
-  Box, Button, Checkbox, InputAdornment, Menu, MenuItem, TextField, Typography
-} from "@mui/material"
-import SearchIcon from "@mui/icons-material/Search"
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
+import { Box, Button } from "@mui/material"
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined"
 import { useBreadcrumb } from "./Shell"
 import { useThemeMode } from "../lib/theme"
+import { ListToolbar, SearchField, ToolbarButton } from "../components/shared/ListToolbar"
+import { ChipOption, FilterChip } from "../components/shared/FilterChip"
 import AssetRegister from "./AssetRegister"
 import AssetDetailPage from "./AssetDetailPage"
 import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructure"
@@ -26,58 +24,6 @@ const LIFECYCLE_LABEL: Record<string, string> = {
   ACTIVE: "Active", STAGING: "Staging", PLANNED: "Planned", PROCUREMENT: "Procurement", RETIRED: "Retired",
 }
 
-type ChipOption = { key: string; label: string; count: number; glyph?: { color: string; shape: "square" | "dot" } }
-
-// One filter facet: a chip-style button opening a multi-select menu. Stays open
-// across toggles so several options can be picked in one visit.
-function FilterChip({ label, options, selected, onToggle, onClear }: {
-  label: string
-  options: ChipOption[]
-  selected: Set<string>
-  onToggle: (key: string) => void
-  onClear: () => void
-}) {
-  const [anchor, setAnchor] = React.useState<HTMLElement | null>(null)
-  const active = options.reduce((n, o) => n + (selected.has(o.key) ? 1 : 0), 0)
-  if (options.length === 0 && active === 0) return null
-  return (
-    <>
-      <Button size="small" onClick={e => setAnchor(e.currentTarget)}
-        endIcon={<KeyboardArrowDownIcon sx={{ fontSize: "14px !important", ml: "-3px" }} />}
-        sx={{
-          textTransform: "none", fontSize: 12, fontWeight: active ? 700 : 500, px: "10px", py: "2px",
-          borderRadius: "16px", border: "1px solid", minWidth: 0,
-          borderColor: active ? "rgba(29,78,216,0.4)" : "divider",
-          bgcolor: active ? "rgba(29,78,216,0.1)" : "transparent",
-          color: active ? "primary.main" : "text.secondary",
-        }}>
-        {label}{active ? ` · ${active}` : ""}
-      </Button>
-      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}
-        slotProps={{ paper: { sx: { minWidth: 210, maxHeight: 380 } } }}>
-        {options.map(o => (
-          <MenuItem key={o.key} dense onClick={() => onToggle(o.key)} sx={{ py: "3px" }}>
-            <Checkbox checked={selected.has(o.key)} size="small" sx={{ p: 0, mr: "8px", "& .MuiSvgIcon-root": { fontSize: 15 } }} />
-            {o.glyph ? (
-              <Box sx={{
-                width: o.glyph.shape === "square" ? 9 : 8, height: o.glyph.shape === "square" ? 9 : 8,
-                borderRadius: o.glyph.shape === "square" ? "3px" : "50%", bgcolor: o.glyph.color, mr: "7px", flexShrink: 0,
-              }} />
-            ) : null}
-            <Typography sx={{ flex: 1, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</Typography>
-            <Typography sx={{ fontSize: 10.5, color: "text.tertiary", ml: "10px", fontVariantNumeric: "tabular-nums" }}>{o.count}</Typography>
-          </MenuItem>
-        ))}
-        {active > 0 ? (
-          <MenuItem dense onClick={() => { onClear(); setAnchor(null) }} sx={{ py: "4px", borderTop: "1px solid", borderColor: "divider", mt: "4px" }}>
-            <Typography sx={{ fontSize: 12, color: "primary.main", fontWeight: 600 }}>Clear {label.toLowerCase()}</Typography>
-          </MenuItem>
-        ) : null}
-      </Menu>
-    </>
-  )
-}
-
 export default function AssetRegisterPage() {
   const params = useParams<{ assetId?: string }>()
   const navigate = useNavigate()
@@ -92,13 +38,12 @@ export default function AssetRegisterPage() {
 
   React.useEffect(() => { setBreadcrumbs([{ label: "Asset Register" }]) }, [setBreadcrumbs])
 
-  // ── Filter state (search is instant — debounced, no commit step) ───────
+  // ── Filter state (search is instant — SearchField debounces) ───────────
   const [filters, setFilters] = React.useState<FilterState>(() => ({ ...emptyFilters(), lifecycles: new Set(["ACTIVE"]) }))
   const [searchInput, setSearchInput] = React.useState("")
-  React.useEffect(() => {
-    const t = setTimeout(() => setFilters(prev => prev.search === searchInput.trim() ? prev : { ...prev, search: searchInput.trim() }), 250)
-    return () => clearTimeout(t)
-  }, [searchInput])
+  const commitSearch = React.useCallback((q: string) => {
+    setFilters(prev => (prev.search === q ? prev : { ...prev, search: q }))
+  }, [])
 
   const { data: allAssets = [] } = useQuery({
     queryKey: ["assets"],
@@ -216,21 +161,10 @@ export default function AssetRegisterPage() {
       ) : (
         <>
           {/* ── Toolbar: search + filter chips + export ─────────────────── */}
-          <Box sx={{
-            px: "16px", py: "9px", bgcolor: "var(--color-background-primary)",
-            borderBottom: "1px solid var(--color-border-primary)",
-            display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", flexShrink: 0
-          }}>
-            <TextField
-              size="small"
+          <ListToolbar>
+            <SearchField
               placeholder="Search assets — tag, serial, IP, model…"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              sx={{ width: 300 }}
-              InputProps={{
-                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: "text.tertiary" }} /></InputAdornment>,
-                sx: { fontSize: 12.5, bgcolor: "background.default", height: 32 },
-              }}
+              value={searchInput} onValueChange={setSearchInput} onSearch={commitSearch}
             />
             <FilterChip label="Site" options={siteOptions} selected={filters.siteIds} onToggle={toggleIn("siteIds")} onClear={clearKey("siteIds")} />
             <FilterChip label="Type" options={typeOptions} selected={filters.types} onToggle={toggleIn("types")} onClear={clearKey("types")} />
@@ -244,12 +178,11 @@ export default function AssetRegisterPage() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1 }} />
-            <Button size="small" onClick={() => exportAssetsCsv(filteredRows)} disabled={filteredRows.length === 0}
-              startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: "15px !important" }} />}
-              sx={{ textTransform: "none", fontSize: 12, fontWeight: 600, border: "1px solid", borderColor: "divider", borderRadius: "7px", px: "10px", py: "2px", color: "text.secondary" }}>
+            <ToolbarButton onClick={() => exportAssetsCsv(filteredRows)} disabled={filteredRows.length === 0}
+              startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: "15px !important" }} />}>
               Export {filteredRows.length}{activeCount > 0 ? " (filtered)" : ""}
-            </Button>
-          </Box>
+            </ToolbarButton>
+          </ListToolbar>
 
           {/* ── Table ───────────────────────────────────────────────────── */}
           <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", bgcolor: "background.paper" }}>

@@ -19,6 +19,7 @@ import AssetDetailPage from "./AssetDetailPage"
 import CapacityRing from "../components/shared/CapacityRing"
 import { FloorCanvas } from "../components/floorplan/FloorCanvas"
 import { FloorLens, getFloorPlan } from "../lib/floorPlan"
+import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import SiteLocationCard from "../components/SiteLocationCard"
 import SiteLinkedRecords from "./SiteLinkedRecords"
 import {
@@ -201,41 +202,31 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
   const placedCount = plan?.cabinets.length ?? 0
   const effectiveView = view ?? (placedCount > 0 ? "plan" : "grid")
 
-  const toggleSx = (on: boolean) => ({
-    fontSize: 12, textTransform: "none", px: "12px", py: "2px", minWidth: 0,
-    bgcolor: on ? "rgba(29,78,216,0.12)" : "transparent",
-    color: on ? "primary.main" : "text.secondary", fontWeight: on ? 700 : 500,
-  })
-
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <Box sx={{ px: "24px", py: "10px", display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
-        <Stack direction="row" spacing={0.5}>
-          <Button size="small" onClick={() => setView("plan")} sx={toggleSx(effectiveView === "plan")}>Plan</Button>
-          <Button size="small" onClick={() => setView("grid")} sx={toggleSx(effectiveView === "grid")}>Grid</Button>
-        </Stack>
+      <ListToolbar sx={{ bgcolor: "transparent" }}>
+        <SegmentedToggle
+          options={[{ value: "plan", label: "Plan" }, { value: "grid", label: "Grid" }]}
+          value={effectiveView} onChange={v => setView(v)}
+        />
         {effectiveView === "plan" ? (
           <>
-            <Stack direction="row" spacing={0.5} sx={{ ml: 1 }}>
-              {(["space", "power", "status"] as FloorLens[]).map(l => (
-                <Button key={l} size="small" onClick={() => setLens(l)} sx={toggleSx(lens === l)}>
-                  {l === "space" ? "Space" : l === "power" ? "Power" : "Status"}
-                </Button>
-              ))}
-            </Stack>
-            <Button size="small" onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}
-              sx={{ ...toggleSx(findSpaceU != null), ml: 1 }}>
+            <SegmentedToggle
+              options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }]}
+              value={lens} onChange={v => setLens(v)} sx={{ ml: 1 }}
+            />
+            <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} sx={{ ml: 1 }}
+              onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}>
               Find ≥10U free
-            </Button>
+            </ToolbarButton>
           </>
         ) : null}
         {canManage ? (
-          <Button size="small" onClick={() => navigate(`/dcim/floor-plan?siteId=${siteId}&roomId=${roomId}`)}
-            sx={{ ml: "auto", fontSize: 12, textTransform: "none", border: "1px solid", borderColor: "divider", borderRadius: "7px", px: "10px", py: "2px", color: "text.secondary" }}>
+          <ToolbarButton sx={{ ml: "auto" }} onClick={() => navigate(`/dcim/floor-plan?siteId=${siteId}&roomId=${roomId}`)}>
             Edit layout
-          </Button>
+          </ToolbarButton>
         ) : null}
-      </Box>
+      </ListToolbar>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {effectiveView === "grid" ? (
           <RoomCabinetGrid cabinets={cabinets} onSelectCabinet={onSelectCabinet} />

@@ -2,8 +2,9 @@ import React from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Box, Button, Chip, MenuItem, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography
+  Box, Button, Chip, MenuItem, Stack, TextField, Typography
 } from "@mui/material"
+import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import { api } from "../lib/api"
 import { useBreadcrumb } from "./Shell"
 import { useNotification } from "../components/NotificationProvider"
@@ -113,7 +114,7 @@ export default function FloorPlanPage() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Controls */}
-      <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.paper", display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", flexShrink: 0 }}>
+      <ListToolbar>
         <TextField select size="small" label="Site" value={siteId ?? ""} onChange={e => { setSiteId(e.target.value); setSelectedCabinetId(null) }} sx={{ minWidth: 170 }}>
           {sites.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
         </TextField>
@@ -121,12 +122,11 @@ export default function FloorPlanPage() {
           {rooms.map(r => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
           {!rooms.length ? <MenuItem value="">No rooms</MenuItem> : null}
         </TextField>
-        <ToggleButtonGroup size="small" exclusive value={lens} onChange={(_, v) => v && setLens(v)}>
-          <ToggleButton value="space" sx={{ textTransform: "none", px: 1.5 }}>Space</ToggleButton>
-          <ToggleButton value="power" sx={{ textTransform: "none", px: 1.5 }}>Power</ToggleButton>
-          <ToggleButton value="status" sx={{ textTransform: "none", px: 1.5 }}>Status</ToggleButton>
-        </ToggleButtonGroup>
-        <Button size="small" variant={findSpaceU != null ? "contained" : "outlined"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)} sx={{ textTransform: "none" }}>Find space</Button>
+        <SegmentedToggle
+          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }]}
+          value={lens} onChange={v => setLens(v)}
+        />
+        <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)}>Find space</ToolbarButton>
         {findSpaceU != null ? (
           <TextField size="small" type="number" label="≥ U free" value={findSpaceU}
             onChange={e => setFindSpaceU(Math.max(1, parseInt(e.target.value, 10) || 1))}
@@ -134,8 +134,8 @@ export default function FloorPlanPage() {
         ) : null}
         <Box sx={{ flex: 1 }} />
         <LensLegend lens={lens} mode={mode} />
-        {canEdit ? <Button size="small" variant={edit ? "contained" : "outlined"} onClick={() => { setEdit(e => !e); setPlacing(null) }} sx={{ textTransform: "none" }}>{edit ? "Done" : "Edit layout"}</Button> : null}
-      </Box>
+        {canEdit ? <ToolbarButton variant={edit ? "primary" : "default"} onClick={() => { setEdit(e => !e); setPlacing(null) }}>{edit ? "Done" : "Edit layout"}</ToolbarButton> : null}
+      </ListToolbar>
 
       {placing ? (
         <Box sx={{ px: 2, py: 0.75, bgcolor: mode === "dark" ? "#172033" : "#eff6ff", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", gap: 1 }}>

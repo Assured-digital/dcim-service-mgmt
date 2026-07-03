@@ -8,6 +8,7 @@ import {
 } from "@mui/material"
 import StorageIcon from "@mui/icons-material/Storage"
 import { StatusPill, entityStatusIntent } from "../components/shared"
+import { SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import { useNotification } from "../components/NotificationProvider"
 import {
@@ -266,13 +267,18 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
         <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
           <Box sx={{ width: 720, maxWidth: "56vw", flexShrink: 0, overflowY: "auto", p: "24px 16px 24px 24px", bgcolor: "background.default" }}>
             <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-              <Button size="small" onClick={() => setElevationSide("BOTH")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "BOTH" ? "rgba(29,78,216,0.1)" : "transparent" }}>Side by side</Button>
-              <Button size="small" onClick={() => setElevationSide("FRONT")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "FRONT" ? "rgba(29,78,216,0.1)" : "transparent" }}>Front ({frontAssets.length})</Button>
-              <Button size="small" onClick={() => setElevationSide("REAR")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "REAR" ? "rgba(29,78,216,0.1)" : "transparent" }}>Rear ({rearAssets.length})</Button>
+              <SegmentedToggle
+                options={[
+                  { value: "BOTH", label: "Side by side" },
+                  { value: "FRONT", label: `Front (${frontAssets.length})` },
+                  { value: "REAR", label: `Rear (${rearAssets.length})` },
+                ]}
+                value={elevationSide} onChange={v => setElevationSide(v)}
+              />
               {canManage ? (
-                <Button size="small" onClick={() => setReservationDialog("new")} sx={{ ml: "auto !important", fontSize: 12, textTransform: "none" }}>
+                <ToolbarButton sx={{ ml: "auto !important" }} onClick={() => setReservationDialog("new")}>
                   Reserve space
-                </Button>
+                </ToolbarButton>
               ) : null}
             </Stack>
             {cabinet.totalU ? (

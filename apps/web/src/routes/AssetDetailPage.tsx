@@ -2,7 +2,7 @@ import React from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Box, Button, Chip, MenuItem,
+  Box, Button, Chip, IconButton, MenuItem,
   Stack, TextField, Typography
 } from "@mui/material"
 import type { SxProps, Theme } from "@mui/material"
@@ -425,19 +425,15 @@ export default function AssetDetailPage({
   return (
     <Box sx={outerSx}>
 
-      {onBackToRegister ? (
-        <Box sx={{ bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", py: "6px", flexShrink: 0 }}>
-          <Stack direction="row" alignItems="center" spacing={0.5} onClick={onBackToRegister}
-            sx={{ cursor: "pointer", width: "fit-content", color: "primary.main", "&:hover": { textDecoration: "underline" } }}>
-            <ArrowBackIcon sx={{ fontSize: 14 }} />
-            <Typography sx={{ fontSize: 12, fontWeight: 500 }}>Back to register</Typography>
-          </Stack>
-        </Box>
-      ) : null}
-
       {/* ── Header ───────────────────────────────────────────────────── */}
-      <Box sx={{ height: HEADER_HEIGHT, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
-        <Stack direction="row" alignItems="baseline" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ height: HEADER_HEIGHT, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: onBackToRegister ? "16px" : "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+          {onBackToRegister ? (
+            <IconButton size="small" onClick={onBackToRegister} aria-label="Back to register"
+              sx={{ color: "text.secondary", mr: "2px", "&:hover": { color: "text.primary", bgcolor: "action.hover" } }}>
+              <ArrowBackIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          ) : null}
           <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {asset.name}
           </Typography>
