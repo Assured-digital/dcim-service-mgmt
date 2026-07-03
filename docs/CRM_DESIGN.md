@@ -119,10 +119,14 @@ regression (e.g. ACTIVE → FORMER) is always a deliberate manual act.
 11. **Attachments extend the existing union; record-links do not (yet).** `quote` (and later
     `opportunity`) join `ATTACHMENT_RECORD_TYPES`. `LINK_RECORD_TYPES` stays the six work-items
     in v1.
-12. **AD-staff-only, two write tiers.** All CRM endpoints exclude `CLIENT_VIEWER`. Commercial
-    writes (opportunities, quotes, renewal fields, lifecycle transitions) = ORG_SUPER +
-    `SERVICE_MANAGER`; relationship writes (contacts, activities) = all AD-staff; reads = all
-    AD-staff (open question §11.2 on hiding values from ENGINEER).
+12. **AD-staff-only, two write tiers, values hidden from field roles.** All CRM endpoints
+    exclude `CLIENT_VIEWER`. Commercial writes (opportunities, quotes, renewal fields,
+    lifecycle transitions) = ORG_SUPER + `SERVICE_MANAGER`; relationship writes (contacts,
+    activities) = all AD-staff; reads = all AD-staff, BUT commercial figures (`value`,
+    `probability`, weighted totals, line-item prices, WP `value`/`commercialNotes`) are
+    **omitted from responses for ENGINEER and SERVICE_DESK_ANALYST** via role-conditional
+    projection in the service layer (decided 2026-07-03). Field roles still see that deals and
+    quotes exist — titles, stages, statuses, contacts.
 
 ## 4. Data model
 
@@ -496,19 +500,17 @@ threads docked to records; multi-client contacts if per-client duplication prove
 
 ## 11. Open questions (decide before the relevant phase)
 
-1. **Contact categories** — `DECISION_MAKER | TECHNICAL | BILLING | OPERATIONS | ACCESS |
-   GENERAL` the right starter set? (Free-text rejected: unfilterable.) *(Phase 1)*
-2. **Should ENGINEER see opportunity/quote values?** Current design: yes (read = all AD-staff).
-   If commercial figures are sensitive, restrict commercial reads to ORG_SUPER +
-   SERVICE_MANAGER. *(Phases 3–4)*
-3. **Opportunity stage names** — `DISCOVERY / QUALIFIED / PROPOSAL / NEGOTIATION` match how AD
-   actually sells? Rename freely before phase 3; migrating stage names later is annoying.
-4. **Renewal window** — how far out should the renewals panel look / prompt a RENEWAL
+RESOLVED 2026-07-03: contact categories confirmed as designed; commercial values hidden from
+ENGINEER + SERVICE_DESK_ANALYST (decision 12); stage names confirmed
+(`DISCOVERY/QUALIFIED/PROPOSAL/NEGOTIATION`).
+
+Still open:
+1. **Renewal window** — how far out should the renewals panel look / prompt a RENEWAL
    opportunity? (Draft: 90 days; `noticePeriodDays` overrides where set.) *(Phase 6)*
-5. **Org-wide pipeline view** — all-clients board for ORG_SUPER + SERVICE_MANAGER (the
+2. **Org-wide pipeline view** — all-clients board for ORG_SUPER + SERVICE_MANAGER (the
    `/admin/users`-style org-wide-read pattern). Wanted at phase 3, or a later increment?
-6. **Entra app registration ownership** — who creates it and grants admin consent in the AD
+3. **Entra app registration ownership** — who creates it and grants admin consent in the AD
    M365 tenant (needed before phase 7; delegated scopes for SharePoint + `Mail.Read`
    application permission + Exchange application access policy for the shared mailbox).
-7. **Shared mailbox address** — e.g. `crm@assureddigital.co.uk`; needs creating in M365 before
+4. **Shared mailbox address** — e.g. `crm@assureddigital.co.uk`; needs creating in M365 before
    phase 7b.
