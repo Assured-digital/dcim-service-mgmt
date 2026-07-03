@@ -218,12 +218,14 @@ const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelect
 // cabinet's detail/elevation — with the card grid as a toggle and the automatic
 // fallback for rooms with nothing placed. Editing stays on the full floor-plan
 // editor ("Edit layout" deep-links there); this embed is read-only.
-const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets, onSelectCabinet, canManage, roomOptions, onRoomChange, trailing }: {
+const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets, onSelectCabinet, canManage, roomOptions, onRoomChange, onShowDetails, trailing }: {
   siteId: string; roomId: string; cabinets: Cabinet[]; onSelectCabinet: (id: string) => void; canManage: boolean
   // Site-level embed: a room switcher at the front of the toolbar (the
-  // floor-plan-forward site view) + extra trailing controls (e.g. Details).
+  // floor-plan-forward site view), a Details option merged INTO the view toggle
+  // (one control, not two), + extra trailing controls.
   roomOptions?: { id: string; name: string }[]
   onRoomChange?: (roomId: string) => void
+  onShowDetails?: () => void
   trailing?: React.ReactNode
 }) {
   const navigate = useNavigate()
@@ -248,8 +250,13 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
           </TextField>
         ) : null}
         <SegmentedToggle
-          options={[{ value: "plan", label: "Plan" }, { value: "grid", label: "Grid" }]}
-          value={effectiveView} onChange={v => setView(v)}
+          options={[
+            { value: "plan", label: "Plan" },
+            { value: "grid", label: "Grid" },
+            ...(onShowDetails ? [{ value: "details" as const, label: "Details" }] : []),
+          ]}
+          value={effectiveView}
+          onChange={v => (v === "details" ? onShowDetails?.() : setView(v as "plan" | "grid"))}
         />
         {effectiveView === "plan" ? (
           <>
@@ -736,9 +743,11 @@ export default function AssetHierarchyPage() {
                     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
                       {featuredRoomId ? (
                         <Box sx={{ px: "24px", pt: "12px", flexShrink: 0 }}>
+                          {/* Same three-way control as the plan toolbar — one
+                              toggle owns the whole site view, no second pair. */}
                           <SegmentedToggle
-                            options={[{ value: "plan", label: "Floor plan" }, { value: "details", label: "Details" }]}
-                            value={siteView} onChange={v => setSiteView(v)}
+                            options={[{ value: "plan", label: "Plan" }, { value: "grid", label: "Grid" }, { value: "details", label: "Details" }]}
+                            value="details" onChange={v => { if (v !== "details") setSiteView("plan") }}
                           />
                         </Box>
                       ) : null}
@@ -756,12 +765,7 @@ export default function AssetHierarchyPage() {
                     canManage={canManage}
                     roomOptions={rooms.map(r => ({ id: r.id, name: r.name }))}
                     onRoomChange={setSiteRoomId}
-                    trailing={
-                      <SegmentedToggle
-                        options={[{ value: "plan", label: "Floor plan" }, { value: "details", label: "Details" }]}
-                        value={siteView} onChange={v => setSiteView(v)}
-                      />
-                    }
+                    onShowDetails={() => setSiteView("details")}
                   />
                 )
               })()
