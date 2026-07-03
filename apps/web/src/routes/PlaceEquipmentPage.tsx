@@ -95,13 +95,16 @@ export default function PlaceEquipmentPage() {
     })
   }
 
+  // NetBox-style collection: the device type is the source of truth — picking
+  // one AUTOFILLS name, type and every spec (all stay editable). The user's
+  // real job is just identity: name and tag.
   function applyDeviceType(dt: DeviceType | null) {
     if (!dt) { set("deviceType", null); return }
     setDraft(d => ({
       ...d,
       deviceType: dt,
-      name: d.name || `${dt.manufacturer.name} ${dt.model}`,
-      assetType: d.assetType || (dt.category ?? ""),
+      name: `${dt.manufacturer.name} ${dt.model}`,
+      assetType: dt.category ?? d.assetType,
       uSize: dt.uHeight != null ? String(Math.max(1, Math.ceil(dt.uHeight))) : d.uSize,
       // Search against the BUDGETED draw (same derate the capacity engine applies).
       budgetW: dt.powerDrawW != null ? String(Math.round(dt.powerDrawW * DEFAULT_DERATE)) : d.budgetW,
@@ -210,26 +213,66 @@ export default function PlaceEquipmentPage() {
         </Box>
       </Box>
 
-      {/* ── Right: rack preview + inline confirm ────────────────────────── */}
-      <Box sx={{ flex: 1, minWidth: 0, overflowY: "auto", p: "16px 20px" }}>
+      {/* ── Right: rack preview, then a sticky confirm footer ───────────── */}
+      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: "16px 20px" }}>
+          {selected && placeU != null && !editing ? (
+            <PlacementPreview
+              draft={draft} candidate={selected} uSize={uSizeNum} placeU={placeU}
+              onProposeU={proposeU}
+            />
+          ) : (
+            <Typography sx={{ fontSize: 12.5, color: "text.secondary", p: 2 }}>
+              {editing && result ? "Details reopened — re-run Find space to refresh the candidates." :
+                result ? "Select a candidate to preview the placement." : ""}
+            </Typography>
+          )}
+        </Box>
+
         {selected && placeU != null && !editing ? (
-          <PlacementPreview
-            draft={draft} candidate={selected} uSize={uSizeNum} placeU={placeU}
-            canManage={canManage} saving={saving}
-            onProposeU={proposeU} onRaiseTask={(v) => set("raiseTask", v)} onConfirm={confirm}
-          />
-        ) : (
-          <Typography sx={{ fontSize: 12.5, color: "text.secondary", p: 2 }}>
-            {editing && result ? "Details reopened — re-run Find space to refresh the candidates." :
-              result ? "Select a candidate to preview the placement." : ""}
-          </Typography>
-        )}
+          <Box sx={{
+            flexShrink: 0, borderTop: "1px solid", borderColor: "divider", bgcolor: "background.paper",
+            px: "20px", py: "12px", display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap",
+          }}>
+            <Box sx={{ flex: 1, minWidth: 240 }}>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 700 }}>
+                {draft.mode === "place" ? (draft.name || "Asset") : `Reserve — ${draft.reserveFor}`}
+                <Box component="span" sx={{ color: "text.tertiary", fontWeight: 500, mx: "8px" }}>→</Box>
+                {selected.name} · U{placeU}–{placeU + uSizeNum - 1}
+              </Typography>
+              <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
+                {selected.siteName}{selected.roomName ? ` / ${selected.roomName}` : ""}
+                {draft.mode === "place" ? " · created as Planned until installed" : draft.expiresAt ? ` · expires ${draft.expiresAt}` : " · no expiry"}
+              </Typography>
+            </Box>
+            {draft.mode === "place" ? (
+              <FormControlLabel
+                control={<Checkbox size="small" checked={draft.raiseTask} onChange={e => set("raiseTask", e.target.checked)} />}
+                label={<Typography sx={{ fontSize: 12 }}>Raise install task</Typography>}
+                sx={{ mr: 0 }}
+              />
+            ) : null}
+            {canManage ? (
+              <ToolbarButton variant="primary" onClick={confirm} disabled={saving} sx={{ px: "18px", py: "7px", fontSize: 12.5 }}>
+                {saving ? "Saving…" : draft.mode === "place" ? "Confirm placement" : "Confirm reservation"}
+              </ToolbarButton>
+            ) : null}
+          </Box>
+        ) : null}
       </Box>
     </Box>
   )
 }
 
 // ── Step 1: the details form ─────────────────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography sx={{ fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", color: "text.tertiary" }}>
+      {children}
+    </Typography>
+  )
+}
+
 function DetailsForm({ draft, set, sites, searching, onPickDeviceType, onSearch }: {
   draft: Draft
   set: <K extends keyof Draft>(key: K, value: Draft[K]) => void
@@ -239,8 +282,9 @@ function DetailsForm({ draft, set, sites, searching, onPickDeviceType, onSearch 
   onSearch: () => void
 }) {
   const [pickerOpen, setPickerOpen] = React.useState(false)
+  const dt = draft.deviceType
   return (
-    <Stack spacing={1.5}>
+    <Stack spacing={1.75}>
       <SegmentedToggle
         options={[{ value: "place", label: "Place an asset" }, { value: "reserve", label: "Reserve space" }]}
         value={draft.mode} onChange={v => set("mode", v)}
@@ -248,45 +292,98 @@ function DetailsForm({ draft, set, sites, searching, onPickDeviceType, onSearch 
 
       {draft.mode === "place" ? (
         <>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <ToolbarButton onClick={() => setPickerOpen(true)} sx={{ flex: 1, justifyContent: "flex-start" }}>
-              {draft.deviceType ? `${draft.deviceType.manufacturer.name} ${draft.deviceType.model}` : "From catalogue…"}
-            </ToolbarButton>
-            {draft.deviceType ? (
-              <Button size="small" onClick={() => onPickDeviceType(null)} sx={{ textTransform: "none", fontSize: 11.5, minWidth: 0, px: "6px", color: "text.secondary" }}>✕</Button>
+          {/* Device type leads (NetBox model): picking it fills everything below. */}
+          <Stack spacing={0.75}>
+            <SectionLabel>Device type</SectionLabel>
+            {dt ? (
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: "8px", p: "9px 11px", bgcolor: "background.default", display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {dt.manufacturer.name} {dt.model}
+                  </Typography>
+                  <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
+                    {dt.uHeight != null ? `${dt.uHeight}U` : "?U"}
+                    {dt.powerDrawW != null ? ` · ${dt.powerDrawW} W nameplate` : ""}
+                    {dt.weightKg != null ? ` · ${dt.weightKg} kg` : ""}
+                  </Typography>
+                </Box>
+                <Button size="small" onClick={() => setPickerOpen(true)} sx={{ textTransform: "none", fontSize: 11, minWidth: 0, px: "6px", color: "primary.main" }}>Change</Button>
+                <Button size="small" onClick={() => onPickDeviceType(null)} sx={{ textTransform: "none", fontSize: 11, minWidth: 0, px: "4px", color: "text.secondary" }}>✕</Button>
+              </Box>
+            ) : (
+              <ToolbarButton onClick={() => setPickerOpen(true)} sx={{ justifyContent: "center", py: "7px" }}>
+                Choose from catalogue…
+              </ToolbarButton>
+            )}
+            {!dt ? (
+              <Typography sx={{ fontSize: 10.5, color: "text.tertiary" }}>
+                Picking a type fills the specs below — or enter them by hand.
+              </Typography>
             ) : null}
           </Stack>
-          <TextField size="small" label="Asset tag" value={draft.assetTag} onChange={e => set("assetTag", e.target.value)} />
-          <TextField size="small" label="Name" value={draft.name} onChange={e => set("name", e.target.value)} />
-          <TextField size="small" label="Type" placeholder="e.g. SERVER" value={draft.assetType} onChange={e => set("assetType", e.target.value)} />
+
+          {/* Identity — the user's actual job. */}
+          <Stack spacing={1}>
+            <SectionLabel>Identity</SectionLabel>
+            <TextField size="small" label="Name" value={draft.name} onChange={e => set("name", e.target.value)}
+              helperText={dt ? "Autofilled from the type — rename to suit (e.g. add -01)" : undefined} />
+            <TextField size="small" label="Asset tag / ID" value={draft.assetTag} onChange={e => set("assetTag", e.target.value)} />
+            <TextField size="small" label="Type" placeholder="e.g. SERVER" value={draft.assetType} onChange={e => set("assetType", e.target.value)}
+              helperText={dt ? "Autofilled from the type's category" : undefined} />
+          </Stack>
+
+          {/* Specs — catalogue-known, editable. */}
+          <Stack spacing={1}>
+            <Stack direction="row" alignItems="baseline" spacing={1}>
+              <SectionLabel>Specifications</SectionLabel>
+              {dt ? <Typography sx={{ fontSize: 10, color: "text.tertiary" }}>from catalogue — editable</Typography> : null}
+            </Stack>
+            <Stack direction="row" spacing={1}>
+              <TextField size="small" label="U size" type="number" value={draft.uSize} onChange={e => set("uSize", e.target.value)}
+                inputProps={{ min: 1, max: 60 }} sx={{ width: 84 }} />
+              <TextField size="small" label="Power (W)" type="number" value={draft.budgetW} onChange={e => set("budgetW", e.target.value)}
+                inputProps={{ min: 0 }} sx={{ flex: 1 }} helperText={dt?.powerDrawW != null ? "budgeted (60% of nameplate)" : undefined} />
+              <TextField size="small" label="Weight (kg)" type="number" value={draft.weightKg} onChange={e => set("weightKg", e.target.value)}
+                inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+            </Stack>
+          </Stack>
         </>
       ) : (
         <>
-          <TextField size="small" label="Reserved for" placeholder="e.g. Project Helix — new SAN" value={draft.reserveFor} onChange={e => set("reserveFor", e.target.value)} />
-          <TextField size="small" label="Expires" type="date" value={draft.expiresAt} onChange={e => set("expiresAt", e.target.value)}
-            InputLabelProps={{ shrink: true }} helperText="Blank = no expiry" />
+          <Stack spacing={1}>
+            <SectionLabel>Reservation</SectionLabel>
+            <TextField size="small" label="Reserved for" placeholder="e.g. Project Helix — new SAN" value={draft.reserveFor} onChange={e => set("reserveFor", e.target.value)} />
+            <TextField size="small" label="Expires" type="date" value={draft.expiresAt} onChange={e => set("expiresAt", e.target.value)}
+              InputLabelProps={{ shrink: true }} helperText="Blank = no expiry" />
+          </Stack>
+          <Stack spacing={1}>
+            <SectionLabel>Space needed</SectionLabel>
+            <Stack direction="row" spacing={1}>
+              <TextField size="small" label="U size" type="number" value={draft.uSize} onChange={e => set("uSize", e.target.value)}
+                inputProps={{ min: 1, max: 60 }} sx={{ width: 84 }} />
+              <TextField size="small" label="Power (W)" type="number" value={draft.budgetW} onChange={e => set("budgetW", e.target.value)}
+                inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+              <TextField size="small" label="Weight (kg)" type="number" value={draft.weightKg} onChange={e => set("weightKg", e.target.value)}
+                inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+            </Stack>
+          </Stack>
         </>
       )}
 
-      <Stack direction="row" spacing={1}>
-        <TextField size="small" label="U size" type="number" value={draft.uSize} onChange={e => set("uSize", e.target.value)}
-          inputProps={{ min: 1, max: 60 }} sx={{ width: 84 }} />
-        <TextField size="small" label="Power (W)" type="number" value={draft.budgetW} onChange={e => set("budgetW", e.target.value)}
-          inputProps={{ min: 0 }} sx={{ flex: 1 }} />
-        <TextField size="small" label="Weight (kg)" type="number" value={draft.weightKg} onChange={e => set("weightKg", e.target.value)}
-          inputProps={{ min: 0 }} sx={{ flex: 1 }} />
+      <Stack spacing={1}>
+        <SectionLabel>Search scope</SectionLabel>
+        <TextField select size="small" label="Site" value={draft.siteId} onChange={e => set("siteId", e.target.value)}>
+          <MenuItem value="">All sites</MenuItem>
+          {sites.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+        </TextField>
       </Stack>
-      <TextField select size="small" label="Site" value={draft.siteId} onChange={e => set("siteId", e.target.value)}>
-        <MenuItem value="">All sites</MenuItem>
-        {sites.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
-      </TextField>
 
       <ToolbarButton variant="primary" onClick={onSearch} disabled={searching}
         startIcon={<SearchIcon sx={{ fontSize: "15px !important" }} />} sx={{ justifyContent: "center", py: "6px" }}>
         {searching ? "Searching…" : "Find space"}
       </ToolbarButton>
 
-      {pickerOpen ? <DeviceTypePicker onSelect={dt => { onPickDeviceType(dt); setPickerOpen(false) }} onClose={() => setPickerOpen(false)} /> : null}
+      {pickerOpen ? <DeviceTypePicker onSelect={dt2 => { onPickDeviceType(dt2); setPickerOpen(false) }} onClose={() => setPickerOpen(false)} /> : null}
     </Stack>
   )
 }
@@ -374,11 +471,10 @@ function CandidateRow({ c, rank, uSize, mode, selected, onSelect }: {
   )
 }
 
-// ── Step 2/3: rack preview + position picker + inline confirm ────────────────
-function PlacementPreview({ draft, candidate, uSize, placeU, canManage, saving, onProposeU, onRaiseTask, onConfirm }: {
+// ── Step 2: rack preview + position picker (confirm lives in the footer) ─────
+function PlacementPreview({ draft, candidate, uSize, placeU, onProposeU }: {
   draft: Draft; candidate: FindSpaceCandidate; uSize: number; placeU: number
-  canManage: boolean; saving: boolean
-  onProposeU: (u: number) => void; onRaiseTask: (v: boolean) => void; onConfirm: () => void
+  onProposeU: (u: number) => void
 }) {
   const isPlace = draft.mode === "place"
   const { data: cabinets = [], isLoading } = useQuery({
@@ -402,31 +498,12 @@ function PlacementPreview({ draft, candidate, uSize, placeU, canManage, saving, 
 
   return (
     <Box>
-      {/* Inline confirm bar — everything already known, one click to commit. */}
-      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "12px 16px", mb: "14px", bgcolor: "background.paper", display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
-        <Box sx={{ flex: 1, minWidth: 220 }}>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 700 }}>
-            {isPlace ? `Place ${draft.name || "asset"}` : `Reserve for ${draft.reserveFor}`}
-            {"  →  "}{candidate.name} · U{placeU}–{placeU + uSize - 1}
-          </Typography>
-          <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
-            {candidate.siteName}{candidate.roomName ? ` / ${candidate.roomName}` : ""}
-            {isPlace ? " · created as Planned — a shadow in the rack until installed" : ""}
-          </Typography>
-        </Box>
-        {isPlace ? (
-          <FormControlLabel
-            control={<Checkbox size="small" checked={draft.raiseTask} onChange={e => onRaiseTask(e.target.checked)} />}
-            label={<Typography sx={{ fontSize: 12 }}>Raise install task</Typography>}
-            sx={{ mr: 0 }}
-          />
-        ) : null}
-        {canManage ? (
-          <ToolbarButton variant="primary" onClick={onConfirm} disabled={saving} sx={{ px: "16px", py: "6px" }}>
-            {saving ? "Saving…" : isPlace ? "Place asset" : "Reserve range"}
-          </ToolbarButton>
-        ) : null}
-      </Box>
+      <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: "10px" }}>
+        <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{candidate.name}</Typography>
+        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+          {candidate.siteName}{candidate.roomName ? ` · ${candidate.roomName}` : ""}
+        </Typography>
+      </Stack>
 
       {/* Position picker: exact U, per-block quick-picks, or click the rack. */}
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "12px", flexWrap: "wrap" }}>
