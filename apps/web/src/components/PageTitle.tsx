@@ -15,7 +15,7 @@ const TITLE_MAP: { prefix: string; title: string }[] = [
   { prefix: "/incidents", title: "Incidents" },
   { prefix: "/changes", title: "Changes" },
   { prefix: "/tasks", title: "Tasks" },
-  { prefix: "/asset-hierarchy", title: "Asset Hierarchy" },
+  { prefix: "/asset-hierarchy", title: "Estate" },
   { prefix: "/asset-register", title: "Asset Register" },
   { prefix: "/maintenance", title: "Maintenance" },
   { prefix: "/connections", title: "Connections" },
