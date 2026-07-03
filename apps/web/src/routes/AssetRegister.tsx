@@ -6,7 +6,7 @@ import {
   GridToolbarColumnsButton, GridToolbarExport
 } from "@mui/x-data-grid"
 import { useThemeMode } from "../lib/theme"
-import { Asset, lifecycleGlyphColor } from "../lib/infrastructure"
+import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructure"
 
 export interface AssetRegisterProps {
   filteredRows: Asset[]
@@ -14,33 +14,6 @@ export interface AssetRegisterProps {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-const TYPE_CHIP_STYLES: Record<string, { bg: string; fg: string }> = {
-  "Server": { bg: "#E6F1FB", fg: "#0C447C" },
-  "Network Device": { bg: "#EEEDFE", fg: "#3C3489" },
-  "Network Storage": { bg: "#E1F5EE", fg: "#085041" },
-  "Rack PDU": { bg: "#FAEEDA", fg: "#633806" },
-  "Patch Panel": { bg: "#F1EFE8", fg: "#444441" },
-  "KVM Switch": { bg: "#FBEAF0", fg: "#72243E" },
-  "Blade Enclosure": { bg: "#FAECE7", fg: "#4A1B0C" },
-  "In Row Cooling": { bg: "#E1F5EE", fg: "#085041" },
-}
-// Dark counterparts — same identity hue re-scaled to a deep, low-luminance
-// fill with a light foreground (mirrors ASSET_TYPE_BG_DARK in infrastructure.ts).
-const TYPE_CHIP_STYLES_DARK: Record<string, { bg: string; fg: string }> = {
-  "Server": { bg: "#16294a", fg: "#93c5fd" },
-  "Network Device": { bg: "#1e1b3a", fg: "#c4b5fd" },
-  "Network Storage": { bg: "#13351f", fg: "#6ee7b7" },
-  "Rack PDU": { bg: "#3a2c0f", fg: "#fcd34d" },
-  "Patch Panel": { bg: "#1e293b", fg: "#cbd5e1" },
-  "KVM Switch": { bg: "#311823", fg: "#f9a8d4" },
-  "Blade Enclosure": { bg: "#3a1a1a", fg: "#fca5a5" },
-  "In Row Cooling": { bg: "#13351f", fg: "#6ee7b7" },
-}
-const typeStyleFor = (type: string, mode: "light" | "dark") =>
-  mode === "dark"
-    ? (TYPE_CHIP_STYLES_DARK[type] ?? { bg: "#1e293b", fg: "#cbd5e1" })
-    : (TYPE_CHIP_STYLES[type] ?? { bg: "#F1EFE8", fg: "#444441" })
 
 const LIFECYCLE_LABEL: Record<string, string> = {
   ACTIVE: "Active", STAGING: "Staging", PLANNED: "Planned", PROCUREMENT: "Procurement", RETIRED: "Retired",
@@ -67,14 +40,20 @@ function formatLocation(a: Asset): string {
 
 // ─── Grid toolbar ─────────────────────────────────────────────────────────
 
+const TOOLBAR_BTN_SX = {
+  fontSize: 11.5, fontWeight: 600, textTransform: "none", px: 1.25, py: "3px",
+  border: "1px solid", borderColor: "divider", borderRadius: "7px", color: "text.secondary",
+  "&:hover": { borderColor: "primary.main", bgcolor: "transparent", color: "text.primary" },
+} as const
+
 function GridInnerToolbar() {
   return (
-    <GridToolbarContainer sx={{ px: 1, py: 0.5, gap: 1, borderBottom: "1px solid", borderColor: "divider" }}>
-      <GridToolbarColumnsButton slotProps={{ button: { sx: { fontSize: 12 } } }} />
+    <GridToolbarContainer sx={{ px: 1.5, py: 0.75, gap: 1, borderBottom: "1px solid", borderColor: "divider" }}>
+      <GridToolbarColumnsButton slotProps={{ button: { sx: TOOLBAR_BTN_SX } }} />
       <GridToolbarExport
         csvOptions={{ fileName: `assets-register-${new Date().toISOString().split("T")[0]}`, utf8WithBom: true }}
         printOptions={{ disableToolbarButton: true }}
-        slotProps={{ button: { sx: { fontSize: 12 } } }}
+        slotProps={{ button: { sx: TOOLBAR_BTN_SX } }}
       />
     </GridToolbarContainer>
   )
@@ -85,6 +64,13 @@ function GridInnerToolbar() {
 const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetClick }: AssetRegisterProps) {
   const { mode } = useThemeMode()
 
+  // Power mini-bars are scaled against the heaviest draw in the current view —
+  // a relative comparison aid, not an absolute capacity claim.
+  const maxPowerW = React.useMemo(
+    () => filteredRows.reduce((m, a) => Math.max(m, a.powerDrawW ?? 0), 0),
+    [filteredRows]
+  )
+
   const columns: GridColDef<Asset>[] = React.useMemo(() => [
     {
       field: "assetTag", headerName: "Tag", width: 110,
@@ -92,12 +78,15 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
         <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: "text.secondary" }}>{p.value as string}</Typography>
       ),
     },
-    { field: "name", headerName: "Name", flex: 1, minWidth: 160 },
+    {
+      field: "name", headerName: "Name", flex: 1, minWidth: 160,
+      renderCell: (p) => <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{p.value as string}</Typography>,
+    },
     {
       field: "assetType", headerName: "Type", width: 130,
       renderCell: (p) => {
-        const s = typeStyleFor(p.value as string, mode)
-        return <Box sx={{ display: "inline-block", fontSize: 11, fontWeight: 500, px: "8px", py: "2px", borderRadius: "4px", bgcolor: s.bg, color: s.fg }}>{p.value as string}</Box>
+        const s = assetTypeAccent(p.value as string, mode)
+        return <Box sx={{ display: "inline-block", fontSize: 11, fontWeight: 600, px: "8px", py: "2px", borderRadius: "6px", bgcolor: s.bg, color: s.fg, whiteSpace: "nowrap" }}>{p.value as string}</Box>
       },
     },
     {
@@ -114,8 +103,20 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
       renderCell: (p) => <Typography sx={{ fontFamily: "monospace", fontSize: 12 }}>{p.value != null ? `U${String(p.value).padStart(2, "0")}` : "—"}</Typography>,
     },
     {
-      field: "powerDrawW", headerName: "Power", width: 90, align: "right", headerAlign: "right",
-      renderCell: (p) => <Typography sx={{ fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>{p.value != null ? `${Math.round(p.value as number)} W` : "—"}</Typography>,
+      field: "powerDrawW", headerName: "Power", width: 120, align: "right", headerAlign: "right",
+      renderCell: (p) => {
+        const w = p.value as number | null
+        if (w == null || w <= 0) return <Typography sx={{ fontSize: 12.5, color: "text.tertiary" }}>—</Typography>
+        const pct = maxPowerW > 0 ? Math.max(6, (w / maxPowerW) * 100) : 0
+        return (
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ width: "100%", justifyContent: "flex-end" }}>
+            <Box sx={{ width: 46, height: 5, borderRadius: "3px", bgcolor: mode === "dark" ? "rgba(148,163,184,.16)" : "rgba(100,116,139,.15)", overflow: "hidden", flexShrink: 0 }}>
+              <Box sx={{ width: `${pct}%`, height: "100%", borderRadius: "3px", bgcolor: mode === "dark" ? "#f59e0b" : "#d97706" }} />
+            </Box>
+            <Typography sx={{ fontSize: 12, fontVariantNumeric: "tabular-nums", color: "text.secondary", whiteSpace: "nowrap" }}>{Math.round(w)} W</Typography>
+          </Stack>
+        )
+      },
     },
     {
       field: "lifecycleState", headerName: "Lifecycle", width: 120,
@@ -151,7 +152,7 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
       valueGetter: () => "",
       renderCell: () => <Typography sx={{ fontSize: 12.5, color: "text.tertiary" }}>—</Typography>,
     },
-  ], [mode])
+  ], [mode, maxPowerW])
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -170,12 +171,14 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
           onRowClick={onAssetClick ? (params) => onAssetClick(params.row as Asset) : undefined}
           slots={{ toolbar: GridInnerToolbar }}
           sx={{
-            border: "none", height: "100%",
-            "& .MuiDataGrid-cell": { borderColor: "divider", cursor: onAssetClick ? "pointer" : "default" },
-            "& .MuiDataGrid-columnHeaders": { bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", fontSize: 12 },
-            "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 500 },
+            border: "none", height: "100%", fontSize: 12.5,
+            "& .MuiDataGrid-cell": { borderColor: "divider", cursor: onAssetClick ? "pointer" : "default", display: "flex", alignItems: "center" },
+            "& .MuiDataGrid-columnHeaders": { bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider" },
+            "& .MuiDataGrid-columnHeaderTitle": {
+              fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "text.secondary",
+            },
             "& .MuiDataGrid-footerContainer": { borderTop: "1px solid", borderColor: "divider" },
-            "& .MuiDataGrid-row:hover": { bgcolor: "action.hover" },
+            "& .MuiDataGrid-row:hover": { bgcolor: mode === "dark" ? "rgba(59,130,246,.07)" : "rgba(29,78,216,.05)" },
           }}
         />
       </Box>

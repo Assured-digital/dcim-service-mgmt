@@ -2,7 +2,8 @@ import React from "react"
 import { Box, Button, Checkbox, Stack, Typography } from "@mui/material"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight"
-import { Asset } from "../lib/infrastructure"
+import { useThemeMode } from "../lib/theme"
+import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructure"
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -120,9 +121,15 @@ function applyFiltersExcluding(assets: Asset[], filters: FilterState, excludeKey
 
 const MAX_VISIBLE = 5
 
+// An option's identity glyph: a square swatch (type identity) or a round dot
+// (state severity), coloured by the caller. Purely decorative — the checkbox
+// carries the interaction.
+export type OptionGlyph = { color: string; shape: "square" | "dot" }
+type FilterItem = { key: string; label: string; count?: number; glyph?: OptionGlyph }
+
 function FilterGroup({ label, items, selected, onToggle }: {
   label: string
-  items: { key: string; label: string }[]
+  items: FilterItem[]
   selected: Set<string>
   onToggle: (key: string) => void
 }) {
@@ -136,7 +143,7 @@ function FilterGroup({ label, items, selected, onToggle }: {
   return (
     <Box sx={{ mb: "14px" }}>
       <Stack direction="row" alignItems="center" sx={{ px: "12px", mb: "4px" }}>
-        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "text.secondary" }}>
+        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "text.secondary" }}>
           {label}
         </Typography>
         {activeCount > 0 ? (
@@ -150,12 +157,25 @@ function FilterGroup({ label, items, selected, onToggle }: {
         return (
           <Stack key={item.key} direction="row" alignItems="center"
             onClick={() => onToggle(item.key)}
-            sx={{ px: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
+            sx={{ px: "12px", py: "3px", cursor: "pointer", borderRadius: "5px", "&:hover": { bgcolor: "action.hover" } }}>
             <Checkbox checked={isActive} size="small"
               sx={{ p: 0, mr: "8px", "& .MuiSvgIcon-root": { fontSize: 15 } }} />
+            {item.glyph ? (
+              <Box sx={{
+                width: item.glyph.shape === "square" ? 9 : 8,
+                height: item.glyph.shape === "square" ? 9 : 8,
+                borderRadius: item.glyph.shape === "square" ? "3px" : "50%",
+                bgcolor: item.glyph.color, mr: "7px", flexShrink: 0,
+              }} />
+            ) : null}
             <Typography sx={{ flex: 1, fontSize: 12, color: isActive ? "primary.main" : "text.secondary", fontWeight: isActive ? 500 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {item.label}
             </Typography>
+            {item.count != null ? (
+              <Typography sx={{ fontSize: 10.5, color: "text.tertiary", ml: "6px", fontVariantNumeric: "tabular-nums" }}>
+                {item.count}
+              </Typography>
+            ) : null}
           </Stack>
         )
       })}
@@ -256,7 +276,7 @@ function LocationTree({
   return (
     <Box sx={{ mb: "14px" }}>
       <Stack direction="row" alignItems="center" sx={{ px: "12px", mb: "4px" }}>
-        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", color: "text.secondary" }}>
+        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "text.secondary" }}>
           Location
         </Typography>
         {selectedCount > 0 ? (
@@ -272,7 +292,7 @@ function LocationTree({
         return (
           <Box key={site.id}>
             <Stack direction="row" alignItems="center"
-              sx={{ pl: "8px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
+              sx={{ pl: "8px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}>
               <Box
                 onClick={e => { e.stopPropagation(); toggleSetLocal(expandedSites, setExpandedSites, site.id) }}
                 sx={{ width: 16, display: "flex", alignItems: "center", justifyContent: "center", mr: "2px", color: "text.tertiary" }}
@@ -305,7 +325,7 @@ function LocationTree({
               return (
                 <Box key={room.id}>
                   <Stack direction="row" alignItems="center"
-                    sx={{ pl: "26px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
+                    sx={{ pl: "26px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}>
                     <Box
                       onClick={e => { e.stopPropagation(); toggleSetLocal(expandedRooms, setExpandedRooms, room.id) }}
                       sx={{ width: 16, display: "flex", alignItems: "center", justifyContent: "center", mr: "2px", color: "text.tertiary" }}
@@ -336,7 +356,7 @@ function LocationTree({
                     return (
                       <Stack key={cab.id} direction="row" alignItems="center"
                         onClick={() => onToggleCabinet(cab.id)}
-                        sx={{ pl: "48px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "rgba(0,0,0,0.02)" } }}>
+                        sx={{ pl: "48px", pr: "12px", py: "3px", cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}>
                         <Checkbox
                           checked={selected}
                           size="small"
@@ -370,32 +390,43 @@ const AssetFilterRail = React.memo(function AssetFilterRail({
   onToggleSite, onToggleRoom, onToggleCabinet,
   onToggleType, onToggleLifecycle, onToggleManufacturer, onToggleWarranty, onClearAll,
 }: AssetFilterRailProps) {
+  const { mode } = useThemeMode()
 
   // Full site→room→cabinet tree (name-stable) derived from all assets.
   const locationTree = React.useMemo(() => buildLocationTree(assets), [assets])
 
-  // Contextual option sets: each group uses every OTHER active filter.
+  // Contextual option sets: each group uses every OTHER active filter, and
+  // carries a per-option count from that same subset.
   const typeOptions = React.useMemo(() => {
     const sub = applyFiltersExcluding(assets, filters, ["types"])
-    const set = new Set<string>()
-    for (const a of sub) set.add(a.assetType)
-    return Array.from(set).sort().map(key => ({ key, label: key }))
-  }, [assets, filters])
+    const counts = new Map<string, number>()
+    for (const a of sub) counts.set(a.assetType, (counts.get(a.assetType) ?? 0) + 1)
+    return Array.from(counts.keys()).sort().map(key => ({
+      key, label: key, count: counts.get(key),
+      glyph: { color: assetTypeAccent(key, mode).fg, shape: "square" as const },
+    }))
+  }, [assets, filters, mode])
 
   const lifecycleOptions = React.useMemo(() => {
     const sub = applyFiltersExcluding(assets, filters, ["lifecycles"])
-    const set = new Set<string>()
-    for (const a of sub) set.add(a.lifecycleState)
+    const counts = new Map<string, number>()
+    for (const a of sub) counts.set(a.lifecycleState, (counts.get(a.lifecycleState) ?? 0) + 1)
     return ["ACTIVE", "STAGING", "PLANNED", "PROCUREMENT", "RETIRED"]
-      .filter(lc => set.has(lc))
-      .map(lc => ({ key: lc, label: LIFECYCLE_LABEL[lc] ?? lc }))
-  }, [assets, filters])
+      .filter(lc => counts.has(lc))
+      .map(lc => ({
+        key: lc, label: LIFECYCLE_LABEL[lc] ?? lc, count: counts.get(lc),
+        glyph: { color: lifecycleGlyphColor(lc, mode), shape: "dot" as const },
+      }))
+  }, [assets, filters, mode])
 
   const manufacturerOptions = React.useMemo(() => {
     const sub = applyFiltersExcluding(assets, filters, ["manufacturers"])
-    const set = new Set<string>()
-    for (const a of sub) set.add(a.manufacturer ?? UNKNOWN_MANUFACTURER)
-    return Array.from(set).sort().map(key => ({ key, label: key }))
+    const counts = new Map<string, number>()
+    for (const a of sub) {
+      const m = a.manufacturer ?? UNKNOWN_MANUFACTURER
+      counts.set(m, (counts.get(m) ?? 0) + 1)
+    }
+    return Array.from(counts.keys()).sort().map(key => ({ key, label: key, count: counts.get(key) }))
   }, [assets, filters])
 
   const warrantyOptions = React.useMemo(() => {
@@ -407,12 +438,16 @@ const AssetFilterRail = React.memo(function AssetFilterRail({
       else if (s === "soon") soon++
       else if (s === "ok") healthy++
     }
+    // Severity dots share the RAG scale used across the module (barColor ramp).
+    const sev = mode === "dark"
+      ? { expired: "#ef4444", soon: "#f59e0b", healthy: "#22c55e" }
+      : { expired: "#b91c1c", soon: "#b45309", healthy: "#15803d" }
     return [
-      { key: "expired", label: "Expired", count: expired },
-      { key: "soon", label: "Expiring ≤30d", count: soon },
-      { key: "healthy", label: "Healthy", count: healthy },
-    ].filter(w => w.count > 0).map(({ key, label }) => ({ key, label }))
-  }, [assets, filters])
+      { key: "expired", label: "Expired", count: expired, glyph: { color: sev.expired, shape: "dot" as const } },
+      { key: "soon", label: "Expiring ≤30d", count: soon, glyph: { color: sev.soon, shape: "dot" as const } },
+      { key: "healthy", label: "Healthy", count: healthy, glyph: { color: sev.healthy, shape: "dot" as const } },
+    ].filter(w => w.count > 0)
+  }, [assets, filters, mode])
 
   // Visible location ids for the tree — computed by excluding that dimension.
   const locationVisible = React.useMemo(() => {
@@ -433,7 +468,18 @@ const AssetFilterRail = React.memo(function AssetFilterRail({
 
   return (
     <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <Box sx={{ flex: 1, overflowY: "auto", py: "8px" }}>
+      <Stack direction="row" alignItems="center" sx={{ px: "12px", pt: "12px", pb: "6px", flexShrink: 0 }}>
+        <Typography sx={{ flex: 1, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", color: "text.tertiary" }}>
+          Filters
+        </Typography>
+        {count > 0 ? (
+          <Button size="small" onClick={onClearAll}
+            sx={{ fontSize: 10.5, fontWeight: 600, textTransform: "none", minWidth: 0, px: "8px", py: "1px", color: "text.secondary", border: "1px solid", borderColor: "divider", borderRadius: "6px" }}>
+            Clear · {count}
+          </Button>
+        ) : null}
+      </Stack>
+      <Box sx={{ flex: 1, overflowY: "auto", py: "4px" }}>
         <LocationTree
           tree={locationTree}
           visible={locationVisible}
@@ -452,24 +498,14 @@ const AssetFilterRail = React.memo(function AssetFilterRail({
         flexShrink: 0, borderTop: "1px solid",
         borderColor: "divider",
         bgcolor: "background.paper",
+        px: "12px", py: "8px",
       }}>
-        <Box sx={{ px: "12px", pt: "8px", pb: "4px" }}>
-          <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 500 }}>{filteredCount}</Box>
-            {" of "}
-            <Box component="span" sx={{ color: "text.primary", fontWeight: 500 }}>{totalCount}</Box>
-            {" assets"}
-          </Typography>
-        </Box>
-        <Box sx={{ px: "12px", pb: "8px" }}>
-          <Button
-            fullWidth size="small" variant="outlined"
-            disabled={count === 0} onClick={onClearAll}
-            sx={{ fontSize: 12, textTransform: "none", borderColor: "divider", color: count === 0 ? "text.tertiary" : "text.secondary" }}
-          >
-            {count === 0 ? "No filters active" : `Clear filters (${count})`}
-          </Button>
-        </Box>
+        <Typography sx={{ fontSize: 11, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
+          <Box component="span" sx={{ color: "text.primary", fontWeight: 600 }}>{filteredCount}</Box>
+          {" of "}
+          <Box component="span" sx={{ color: "text.primary", fontWeight: 600 }}>{totalCount}</Box>
+          {" assets"}
+        </Typography>
       </Box>
     </Box>
   )
