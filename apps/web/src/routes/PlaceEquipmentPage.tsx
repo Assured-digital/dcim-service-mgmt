@@ -47,15 +47,36 @@ export default function PlaceEquipmentPage() {
   const [deviceType, setDeviceType] = React.useState<DeviceType | null>(null)
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selected, setSelected] = React.useState<FindSpaceCandidate | null>(null)
+  // Chosen start U within the selected candidate; null = the best-fit default.
+  const [proposedU, setProposedU] = React.useState<number | null>(null)
   const [action, setAction] = React.useState<"place" | "reserve" | null>(null)
 
   const { data: sites = [] } = useQuery({ queryKey: ["sites"], queryFn: async () => (await api.get<Site[]>("/sites")).data })
 
   const search = useMutation({
     mutationFn: findSpace,
-    onSuccess: (res) => setSelected(res.candidates[0] ?? null),
+    onSuccess: (res) => { setSelected(res.candidates[0] ?? null); setProposedU(null) },
     onError: (e: unknown) => notify.error(getApiErrorMessage((e as any)?.response?.data ?? e, "Search failed")),
   })
+
+  const uSizeNum = Math.max(1, parseInt(uSize, 10) || 1)
+  // The effective placement position: user-chosen, else the best-fit default.
+  const placeU = selected ? (proposedU ?? selected.bestBlock.start) : null
+
+  // A start U is valid when [u, u+uSize) sits inside one placeable block; a
+  // click anywhere in a big-enough block snaps so the kit still fits.
+  const snapToBlocks = React.useCallback((u: number): number | null => {
+    if (!selected) return null
+    const block = selected.blocks.find(b => u >= b.start && u <= b.start + b.size - 1)
+    if (!block || block.size < uSizeNum) return null
+    return Math.min(u, block.start + block.size - uSizeNum)
+  }, [selected, uSizeNum])
+
+  const proposeU = React.useCallback((u: number) => {
+    const snapped = snapToBlocks(u)
+    if (snapped == null) { notify.error(`No room for ${uSizeNum}U at U${u}`); return }
+    setProposedU(snapped)
+  }, [snapToBlocks, uSizeNum, notify])
 
   function runSearch() {
     const u = Math.max(1, parseInt(uSize, 10) || 1)
@@ -74,7 +95,6 @@ export default function PlaceEquipmentPage() {
     setPickerOpen(false)
   }
 
-  const uSizeNum = Math.max(1, parseInt(uSize, 10) || 1)
   const result = search.data
 
   return (
@@ -123,15 +143,17 @@ export default function PlaceEquipmentPage() {
           ) : (
             result.candidates.map((c, i) => (
               <CandidateRow key={c.cabinetId} c={c} rank={i + 1} uSize={uSizeNum} mode={mode}
-                selected={selected?.cabinetId === c.cabinetId} onSelect={() => setSelected(c)} />
+                selected={selected?.cabinetId === c.cabinetId}
+                onSelect={() => { setSelected(c); setProposedU(null) }} />
             ))
           )}
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0, overflowY: "auto", p: "16px 20px" }}>
-          {selected ? (
+          {selected && placeU != null ? (
             <PlacementPreview
               candidate={selected} uSize={uSizeNum} canManage={canManage}
+              placeU={placeU} onProposeU={proposeU}
               onReserve={() => setAction("reserve")} onPlace={() => setAction("place")}
             />
           ) : (
@@ -143,13 +165,13 @@ export default function PlaceEquipmentPage() {
       </Box>
 
       {pickerOpen ? <DeviceTypePicker onSelect={applyDeviceType} onClose={() => setPickerOpen(false)} /> : null}
-      {action === "reserve" && selected ? (
-        <ReserveDialog candidate={selected} uSize={uSizeNum}
+      {action === "reserve" && selected && placeU != null ? (
+        <ReserveDialog candidate={selected} uSize={uSizeNum} placeU={placeU}
           onClose={() => setAction(null)}
           onDone={() => { setAction(null); qc.invalidateQueries({ queryKey: ["site-cabinets"] }); runSearch(); notify.success("Range reserved") }} />
       ) : null}
-      {action === "place" && selected ? (
-        <PlaceDialog candidate={selected} uSize={uSizeNum} deviceType={deviceType} budgetW={budgetW}
+      {action === "place" && selected && placeU != null ? (
+        <PlaceDialog candidate={selected} uSize={uSizeNum} placeU={placeU} deviceType={deviceType} budgetW={budgetW}
           onClose={() => setAction(null)}
           onDone={(assetId) => { setAction(null); qc.invalidateQueries({ queryKey: ["assets"] }); qc.invalidateQueries({ queryKey: ["site-cabinets"] }); navigate(`/asset-register/assets/${assetId}`) }} />
       ) : null}
@@ -201,9 +223,9 @@ function CandidateRow({ c, rank, uSize, mode, selected, onSelect }: {
 }
 
 // ── Elevation preview with the proposed block injected as a reservation ─────
-function PlacementPreview({ candidate, uSize, canManage, onReserve, onPlace }: {
-  candidate: FindSpaceCandidate; uSize: number; canManage: boolean
-  onReserve: () => void; onPlace: () => void
+function PlacementPreview({ candidate, uSize, placeU, canManage, onProposeU, onReserve, onPlace }: {
+  candidate: FindSpaceCandidate; uSize: number; placeU: number; canManage: boolean
+  onProposeU: (u: number) => void; onReserve: () => void; onPlace: () => void
 }) {
   const { data: cabinets = [], isLoading } = useQuery({
     queryKey: ["site-cabinets", candidate.siteId],
@@ -217,18 +239,18 @@ function PlacementPreview({ candidate, uSize, canManage, onReserve, onPlace }: {
     if (!cabinet) return null
     const proposal: CabinetReservation = {
       id: "__proposal", cabinetId: cabinet.id,
-      uStart: candidate.bestBlock.start, uHeight: uSize, rackSide: null,
+      uStart: placeU, uHeight: uSize, rackSide: null,
       name: "Proposed placement", notes: null, expiresAt: null, createdAt: new Date().toISOString(),
     }
     return { ...cabinet, reservations: [...(cabinet.reservations ?? []), proposal] }
-  }, [cabinet, candidate.bestBlock.start, uSize])
+  }, [cabinet, placeU, uSize])
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "12px", flexWrap: "wrap" }}>
+      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "10px", flexWrap: "wrap" }}>
         <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{candidate.name}</Typography>
         <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-          proposed U{candidate.bestBlock.start}–{candidate.bestBlock.start + uSize - 1} ({uSize}U)
+          placing at U{placeU}–{placeU + uSize - 1} ({uSize}U)
         </Typography>
         <Box sx={{ flex: 1 }} />
         {canManage ? (
@@ -238,6 +260,28 @@ function PlacementPreview({ candidate, uSize, canManage, onReserve, onPlace }: {
           </>
         ) : null}
       </Stack>
+
+      {/* Position picker: exact U, per-block quick-picks, or click the rack. */}
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "12px", flexWrap: "wrap" }}>
+        <TextField size="small" label="Place at U" type="number" value={placeU}
+          onChange={e => { const v = parseInt(e.target.value, 10); if (!Number.isNaN(v)) onProposeU(v) }}
+          inputProps={{ min: 1, max: candidate.totalU }} sx={{ width: 100 }} />
+        {candidate.blocks.map(b => {
+          const active = placeU >= b.start && placeU + uSize - 1 <= b.start + b.size - 1
+          return (
+            <Chip key={b.start} size="small" onClick={() => onProposeU(b.start)}
+              label={`U${b.start}–${b.start + b.size - 1}`}
+              sx={{
+                height: 20, fontSize: 10.5, fontFamily: "monospace", fontWeight: 600, cursor: "pointer",
+                bgcolor: active ? "rgba(29,78,216,0.12)" : "transparent",
+                color: active ? "primary.main" : "text.secondary",
+                border: "1px solid", borderColor: active ? "rgba(29,78,216,0.4)" : "divider",
+              }} />
+          )
+        })}
+        <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>or click a free slot in the rack</Typography>
+      </Stack>
+
       {isLoading ? (
         <Typography sx={{ fontSize: 12, color: "text.secondary" }}>Loading elevation…</Typography>
       ) : previewCabinet ? (
@@ -245,7 +289,8 @@ function PlacementPreview({ candidate, uSize, canManage, onReserve, onPlace }: {
           <CabinetElevationV2
             cabinet={previewCabinet} sides="FRONT"
             selectedAssetId={null} onSelectAsset={() => {}}
-            canManage={false}
+            canManage
+            onAddAssetAt={(u) => onProposeU(u)}
           />
         </Box>
       ) : (
@@ -256,8 +301,8 @@ function PlacementPreview({ candidate, uSize, canManage, onReserve, onPlace }: {
 }
 
 // ── Reserve the proposed range ───────────────────────────────────────────────
-function ReserveDialog({ candidate, uSize, onClose, onDone }: {
-  candidate: FindSpaceCandidate; uSize: number; onClose: () => void; onDone: () => void
+function ReserveDialog({ candidate, uSize, placeU, onClose, onDone }: {
+  candidate: FindSpaceCandidate; uSize: number; placeU: number; onClose: () => void; onDone: () => void
 }) {
   const { notify } = useNotification()
   const [name, setName] = React.useState("")
@@ -269,7 +314,7 @@ function ReserveDialog({ candidate, uSize, onClose, onDone }: {
     setSaving(true)
     try {
       await api.post(`/sites/${candidate.siteId}/cabinets/${candidate.cabinetId}/reservations`, {
-        uStart: candidate.bestBlock.start, uHeight: uSize,
+        uStart: placeU, uHeight: uSize,
         name: name.trim(),
         expiresAt: expiresAt || undefined,
       })
@@ -280,7 +325,7 @@ function ReserveDialog({ candidate, uSize, onClose, onDone }: {
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>Reserve U{candidate.bestBlock.start}–{candidate.bestBlock.start + uSize - 1} in {candidate.name}</DialogTitle>
+      <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>Reserve U{placeU}–{placeU + uSize - 1} in {candidate.name}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <TextField autoFocus size="small" label="Reserved for" placeholder="e.g. Project Helix — new SAN" value={name} onChange={e => setName(e.target.value)} />
@@ -297,8 +342,8 @@ function ReserveDialog({ candidate, uSize, onClose, onDone }: {
 }
 
 // ── Place a PLANNED asset at the proposed block ──────────────────────────────
-function PlaceDialog({ candidate, uSize, deviceType, budgetW, onClose, onDone }: {
-  candidate: FindSpaceCandidate; uSize: number; deviceType: DeviceType | null; budgetW: string
+function PlaceDialog({ candidate, uSize, placeU, deviceType, budgetW, onClose, onDone }: {
+  candidate: FindSpaceCandidate; uSize: number; placeU: number; deviceType: DeviceType | null; budgetW: string
   onClose: () => void; onDone: (assetId: string) => void
 }) {
   const { notify } = useNotification()
@@ -316,7 +361,7 @@ function PlaceDialog({ candidate, uSize, deviceType, budgetW, onClose, onDone }:
         assetTag: assetTag.trim(), name: name.trim(), assetType: assetType.trim(),
         ownerType: "CLIENT",
         siteId: candidate.siteId, cabinetId: candidate.cabinetId,
-        uPosition: candidate.bestBlock.start, uHeight: uSize, rackSide: "FRONT",
+        uPosition: placeU, uHeight: uSize, rackSide: "FRONT",
         lifecycleState: "PLANNED",
         ...(deviceType ? {
           deviceTypeId: deviceType.id,
@@ -329,12 +374,12 @@ function PlaceDialog({ candidate, uSize, deviceType, budgetW, onClose, onDone }:
         // MAC↔ITSM stitch: the install work order rides the generic parent-
         // context pointer, so it shows on the asset's Linked records tab.
         await api.post("/tasks", {
-          title: `Install ${name.trim()} in ${candidate.name} @ U${candidate.bestBlock.start}`,
-          description: `Planned placement via capacity search — ${candidate.siteName}${candidate.roomName ? ` / ${candidate.roomName}` : ""}, ${candidate.name}, U${candidate.bestBlock.start}–${candidate.bestBlock.start + uSize - 1}. Set the asset ACTIVE once installed.`,
+          title: `Install ${name.trim()} in ${candidate.name} @ U${placeU}`,
+          description: `Planned placement via capacity search — ${candidate.siteName}${candidate.roomName ? ` / ${candidate.roomName}` : ""}, ${candidate.name}, U${placeU}–${placeU + uSize - 1}. Set the asset ACTIVE once installed.`,
           linkedEntityType: "Asset", linkedEntityId: res.data.id,
         }).catch(() => notify.error("Asset placed, but the install task could not be created"))
       }
-      notify.success(`Planned asset placed at U${candidate.bestBlock.start}`)
+      notify.success(`Planned asset placed at U${placeU}`)
       onDone(res.data.id)
     } catch (e: unknown) { notify.error(getApiErrorMessage((e as any)?.response?.data ?? e, "Failed to place asset")) }
     finally { setSaving(false) }
@@ -342,7 +387,7 @@ function PlaceDialog({ candidate, uSize, deviceType, budgetW, onClose, onDone }:
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>Place planned asset — {candidate.name} @ U{candidate.bestBlock.start}</DialogTitle>
+      <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>Place planned asset — {candidate.name} @ U{placeU}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <TextField autoFocus size="small" label="Asset tag" value={assetTag} onChange={e => setAssetTag(e.target.value)} />

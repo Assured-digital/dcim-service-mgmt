@@ -57,6 +57,8 @@ export type FindSpaceCandidate = {
   totalU: number
   bestBlock: { start: number; size: number }
   waste: number
+  // Every placeable block the kit fits in — the position picker's options.
+  blocks: { start: number; size: number }[]
   freeU: number
   power: { budgetedKw: number; capacityKw: number | null; headroomW: number | null; pct: number | null }
   weight: { valueKg: number; capacityKg: number | null; headroomKg: number | null }

@@ -128,6 +128,9 @@ export class CapacityService {
         roomId: c.room?.id ?? null, roomName: c.room?.name ?? null,
         totalU: c.totalU ?? 0,
         bestBlock, waste: bestBlock.size - dto.uSize,
+        // Every block the kit fits in — the UI lets the engineer pick a
+        // different position than the best-fit default.
+        blocks: fitting,
         freeU: blocks.reduce((s, b) => s + b.size, 0),
         power: { budgetedKw: cap.power.value, capacityKw: c.powerKw, headroomW, pct: cap.power.pct },
         weight: { valueKg: cap.weight.value, capacityKg: c.maxWeightKg, headroomKg: weightHeadroomKg },
