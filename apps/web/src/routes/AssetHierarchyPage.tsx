@@ -19,6 +19,8 @@ import CabinetDetailView from "./CabinetDetailView"
 import AssetDetailPage from "./AssetDetailPage"
 import SitesMapCard, { SiteAssetCounts } from "../components/SitesMapCard"
 import CapacityRing from "../components/shared/CapacityRing"
+import { FloorCanvas } from "../components/floorplan/FloorCanvas"
+import { FloorLens, getFloorPlan } from "../lib/floorPlan"
 import SiteLocationCard from "../components/SiteLocationCard"
 import SiteLinkedRecords from "./SiteLinkedRecords"
 import {
@@ -175,6 +177,88 @@ const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelect
             </Box>
           )
         })}
+      </Box>
+    </Box>
+  )
+})
+
+// Room-level view of the spatial spine (redesign mock, screen 3): the room's
+// floor plan LEADS — lens-coloured cabinets, find-space, click-through to the
+// cabinet's detail/elevation — with the card grid as a toggle and the automatic
+// fallback for rooms with nothing placed. Editing stays on the full floor-plan
+// editor ("Edit layout" deep-links there); this embed is read-only.
+const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets, onSelectCabinet, canManage }: {
+  siteId: string; roomId: string; cabinets: Cabinet[]; onSelectCabinet: (id: string) => void; canManage: boolean
+}) {
+  const navigate = useNavigate()
+  const [view, setView] = React.useState<"plan" | "grid" | null>(null) // null = auto
+  const [lens, setLens] = React.useState<FloorLens>("space")
+  const [findSpaceU, setFindSpaceU] = React.useState<number | null>(null)
+
+  const { data: plan, isLoading } = useQuery({
+    queryKey: ["floor-plan", roomId],
+    queryFn: () => getFloorPlan(roomId),
+  })
+
+  const placedCount = plan?.cabinets.length ?? 0
+  const effectiveView = view ?? (placedCount > 0 ? "plan" : "grid")
+
+  const toggleSx = (on: boolean) => ({
+    fontSize: 12, textTransform: "none", px: "12px", py: "2px", minWidth: 0,
+    bgcolor: on ? "rgba(29,78,216,0.12)" : "transparent",
+    color: on ? "primary.main" : "text.secondary", fontWeight: on ? 700 : 500,
+  })
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <Box sx={{ px: "24px", py: "10px", display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
+        <Stack direction="row" spacing={0.5}>
+          <Button size="small" onClick={() => setView("plan")} sx={toggleSx(effectiveView === "plan")}>Plan</Button>
+          <Button size="small" onClick={() => setView("grid")} sx={toggleSx(effectiveView === "grid")}>Grid</Button>
+        </Stack>
+        {effectiveView === "plan" ? (
+          <>
+            <Stack direction="row" spacing={0.5} sx={{ ml: 1 }}>
+              {(["space", "power", "status"] as FloorLens[]).map(l => (
+                <Button key={l} size="small" onClick={() => setLens(l)} sx={toggleSx(lens === l)}>
+                  {l === "space" ? "Space" : l === "power" ? "Power" : "Status"}
+                </Button>
+              ))}
+            </Stack>
+            <Button size="small" onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}
+              sx={{ ...toggleSx(findSpaceU != null), ml: 1 }}>
+              Find ≥10U free
+            </Button>
+          </>
+        ) : null}
+        {canManage ? (
+          <Button size="small" onClick={() => navigate(`/dcim/floor-plan?siteId=${siteId}&roomId=${roomId}`)}
+            sx={{ ml: "auto", fontSize: 12, textTransform: "none", border: "1px solid", borderColor: "divider", borderRadius: "7px", px: "10px", py: "2px", color: "text.secondary" }}>
+            Edit layout
+          </Button>
+        ) : null}
+      </Box>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        {effectiveView === "grid" ? (
+          <RoomCabinetGrid cabinets={cabinets} onSelectCabinet={onSelectCabinet} />
+        ) : isLoading ? (
+          <Box sx={{ p: 3 }}><LoadingState /></Box>
+        ) : plan && placedCount > 0 ? (
+          <FloorCanvas
+            plan={plan} lens={lens} mode="view"
+            selectedCabinetId={null} findSpaceMinU={findSpaceU} placing={false}
+            onCabinetClick={onSelectCabinet}
+            onObjectClick={() => {}} onCellClick={() => {}}
+          />
+        ) : (
+          <Box sx={{ p: "20px 24px" }}>
+            <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed", borderColor: "divider", borderRadius: "10px" }}>
+              <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+                No cabinets placed on this room's floor plan yet{canManage ? " — use Edit layout to position them." : "."}
+              </Typography>
+            </Box>
+          </Box>
+        )}
       </Box>
     </Box>
   )
@@ -668,7 +752,11 @@ export default function AssetHierarchyPage() {
             ) : null}
 
             {selectedSiteId && !isLoading && !selectedCabinet && selectedRoomId ? (
-              <RoomCabinetGrid cabinets={visibleCabinets} onSelectCabinet={handleSelectCabinetFromGrid} />
+              <RoomPlanView
+                siteId={selectedSiteId} roomId={selectedRoomId}
+                cabinets={visibleCabinets} onSelectCabinet={handleSelectCabinetFromGrid}
+                canManage={canManage}
+              />
             ) : null}
 
             {selectedSiteId && !isLoading && !selectedRoomId && selectedSite ? (

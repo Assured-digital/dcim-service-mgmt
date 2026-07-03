@@ -1,5 +1,5 @@
 import React from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Box, Button, Chip, MenuItem, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography
@@ -35,8 +35,11 @@ export default function FloorPlanPage() {
   const { setBreadcrumbs, setHideModuleLabel, setPageFullBleed } = useBreadcrumb()
   const canEdit = hasAnyRole([ROLES.ORG_OWNER, ROLES.ORG_ADMIN, ROLES.ADMIN, ROLES.SERVICE_MANAGER, ROLES.ENGINEER])
 
-  const [siteId, setSiteId] = React.useState<string | null>(null)
-  const [roomId, setRoomId] = React.useState<string | null>(null)
+  // Deep-link from Sites & cabinets ("Edit layout" on a room's plan view):
+  // ?siteId=…&roomId=… pre-selects that room instead of the first-site default.
+  const [searchParams] = useSearchParams()
+  const [siteId, setSiteId] = React.useState<string | null>(() => searchParams.get("siteId"))
+  const [roomId, setRoomId] = React.useState<string | null>(() => searchParams.get("roomId"))
   const [lens, setLens] = React.useState<FloorLens>("space")
   const [edit, setEdit] = React.useState(false)
   const [selectedCabinetId, setSelectedCabinetId] = React.useState<string | null>(null)
@@ -59,7 +62,10 @@ export default function FloorPlanPage() {
     queryKey: ["site-rooms", siteId], enabled: !!siteId,
     queryFn: async () => (await api.get<Room[]>(`/sites/${siteId}/rooms`)).data,
   })
-  React.useEffect(() => { setRoomId(rooms.length ? rooms[0].id : null) }, [rooms])
+  // Default to the site's first room, but never clobber a valid deep-linked room.
+  React.useEffect(() => {
+    setRoomId(prev => (prev && rooms.some(r => r.id === prev) ? prev : rooms.length ? rooms[0].id : null))
+  }, [rooms])
 
   const { data: plan } = useQuery({ queryKey: ["floor-plan", roomId], enabled: !!roomId, queryFn: () => getFloorPlan(roomId!) })
   const refresh = () => qc.invalidateQueries({ queryKey: ["floor-plan", roomId] })
