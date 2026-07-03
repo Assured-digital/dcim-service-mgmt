@@ -7,7 +7,6 @@ import {
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import StorageIcon from "@mui/icons-material/Storage"
-import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined"
 import { EditActionsButton } from "../components/EditActionsButton"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -17,7 +16,6 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import SiteHierarchyTree from "./SiteHierarchyTree"
 import CabinetDetailView from "./CabinetDetailView"
 import AssetDetailPage from "./AssetDetailPage"
-import SitesMapCard, { SiteAssetCounts } from "../components/SitesMapCard"
 import CapacityRing from "../components/shared/CapacityRing"
 import { FloorCanvas } from "../components/floorplan/FloorCanvas"
 import { FloorLens, getFloorPlan } from "../lib/floorPlan"
@@ -264,60 +262,6 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
   )
 })
 
-const OverviewPanel = React.memo(function OverviewPanel({ sites, allAssets }: { sites: Site[]; allAssets: Asset[] }) {
-  const stats = React.useMemo(() => ({
-    totalSites: sites.length,
-    totalAssets: allAssets.length,
-    activeAssets: allAssets.filter(a => a.lifecycleState === "ACTIVE").length,
-    totalCabinets: new Set(allAssets.map(a => a.cabinetId).filter(Boolean)).size,
-  }), [sites, allAssets])
-
-  const siteAssetCounts = React.useMemo<SiteAssetCounts>(() => {
-    const byCabinet = new Map<string, Set<string>>()
-    const byAsset = new Map<string, number>()
-    for (const asset of allAssets) {
-      if (!asset.siteId) continue
-      byAsset.set(asset.siteId, (byAsset.get(asset.siteId) ?? 0) + 1)
-      if (asset.cabinetId) {
-        const cabs = byCabinet.get(asset.siteId) ?? new Set<string>()
-        cabs.add(asset.cabinetId)
-        byCabinet.set(asset.siteId, cabs)
-      }
-    }
-    const out: SiteAssetCounts = {}
-    for (const site of sites) {
-      out[site.id] = {
-        cabinets: byCabinet.get(site.id)?.size ?? 0,
-        assets: byAsset.get(site.id) ?? 0,
-      }
-    }
-    return out
-  }, [sites, allAssets])
-
-  const cards: { label: string; value: string | number }[] = [
-    { label: "Sites", value: stats.totalSites },
-    { label: "Cabinets", value: stats.totalCabinets },
-    { label: "Assets", value: stats.totalAssets },
-    { label: "Active", value: stats.activeAssets },
-  ]
-
-  return (
-    <Box sx={{ p: "24px", maxWidth: 960 }}>
-      <Stack spacing="16px">
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)" }, gap: "12px" }}>
-          {cards.map(card => (
-            <Box key={card.label} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px" }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 700, color: "text.tertiary", textTransform: "uppercase", letterSpacing: "0.08em", mb: "8px" }}>{card.label}</Typography>
-              <Typography sx={{ fontSize: 24, fontWeight: 750, lineHeight: 1.05, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>{card.value}</Typography>
-            </Box>
-          ))}
-        </Box>
-        <SitesMapCard sites={sites} siteAssetCounts={siteAssetCounts} />
-      </Stack>
-    </Box>
-  )
-})
-
 // ─── Main page ──────────────────────────────────────────────────────────
 
 export default function AssetHierarchyPage() {
@@ -357,6 +301,12 @@ export default function AssetHierarchyPage() {
     queryKey: ["sites"],
     queryFn: async () => (await api.get<Site[]>("/sites")).data
   })
+
+  // No estate-level overview here any more (the DCIM Overview page owns that
+  // job) — a bare /asset-hierarchy lands straight on the first site.
+  React.useEffect(() => {
+    if (!params.siteId && sites.length) navigate(`/asset-hierarchy/${sites[0].id}`, { replace: true })
+  }, [params.siteId, sites, navigate])
   const { data: site } = useQuery({
     queryKey: ["site-detail", selectedSiteId],
     queryFn: async () => (await api.get<Site>(`/sites/${selectedSiteId}`)).data,
@@ -625,7 +575,7 @@ export default function AssetHierarchyPage() {
   const headerEntityName = selectedCabinet ? selectedCabinet.name
     : selectedRoom ? selectedRoom.name
     : selectedSite ? selectedSite.name
-    : "Overview"
+    : "Sites & cabinets"
 
   const assetEmbedded = !!params.assetId
 
@@ -638,30 +588,6 @@ export default function AssetHierarchyPage() {
 
       {/* ── Left panel ──────────────────────────────────────────────────── */}
       <Box sx={{ width: 260, minWidth: 260, bgcolor: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-primary)", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-        <Box
-          onClick={() => {
-            setSelectedSiteId(null)
-            setSelectedRoomId(null)
-            setSelectedCabinetId(null)
-            setSelectedAssetId(null)
-            setOpenRoomId(null)
-            setOpenCabinetId(null)
-            navigate("/asset-hierarchy")
-          }}
-          sx={{
-            height: HEADER_HEIGHT, px: "10px", cursor: "pointer", flexShrink: 0,
-            borderBottom: "1px solid var(--color-border-primary)",
-            bgcolor: selectedSiteId === null ? "rgba(29,78,216,0.08)" : "transparent",
-            borderLeft: "2px solid", borderLeftColor: selectedSiteId === null ? "primary.main" : "transparent",
-            display: "flex", alignItems: "center", gap: "7px",
-            "&:hover": { bgcolor: selectedSiteId === null ? "rgba(29,78,216,0.08)" : "rgba(0,0,0,0.03)" },
-          }}
-        >
-          <GridViewOutlinedIcon sx={{ fontSize: 12.5, color: selectedSiteId === null ? "primary.main" : "text.secondary" }} />
-          <Typography sx={{ fontSize: 12.5, fontWeight: selectedSiteId === null ? 600 : 500, color: selectedSiteId === null ? "primary.main" : "text.primary" }}>
-            Overview
-          </Typography>
-        </Box>
         <SiteHierarchyTree
           sites={sites} rooms={rooms} cabinets={cabinets}
           selectedSiteId={selectedSiteId} selectedRoomId={selectedRoomId}
@@ -735,11 +661,7 @@ export default function AssetHierarchyPage() {
           </Box>
         ) : (
           <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-            {!selectedSiteId && !isLoading ? (
-              <OverviewPanel sites={sites} allAssets={allAssets} />
-            ) : null}
-
-            {selectedSiteId && isLoading ? <Box sx={{ p: 3 }}><LoadingState /></Box> : null}
+            {isLoading || !selectedSiteId ? <Box sx={{ p: 3 }}><LoadingState /></Box> : null}
 
             {selectedSiteId && !isLoading && selectedCabinet ? (
               <CabinetDetailView
