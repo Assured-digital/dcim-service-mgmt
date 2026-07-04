@@ -686,6 +686,10 @@ model Connection {
   status          ConnectionStatus @default(ACTIVE)
   label           String?
   notes           String?
+  // Cable descriptors (DCIM_DESIGN_SPEC §6.1, Horizon 2). connectionType stays the
+  // cable/media type (Cat6, 10GBASE-SR, C13); these add the physical run detail.
+  cableLength     Float?           // metres
+  cableColour     String?
   installedAt     DateTime?
   lastValidatedAt DateTime?
   createdById     String?
@@ -717,6 +721,15 @@ model Port {
 
   fromConnections Connection[] @relation("ConnectionFromPort")
   toConnections   Connection[] @relation("ConnectionToPort")
+
+  // Pass-through peer on the SAME asset (patch-panel front↔rear). Symmetric &
+  // one-to-one — the service writes both sides; @unique guarantees a port is the
+  // pass-through target of at most one other. null = terminal port. A multi-hop
+  // cable trace (DCIM_DESIGN_SPEC §6.1, Horizon 2) continues THROUGH a port whose
+  // throughPortId is set and stops at a terminal one.
+  throughPortId String? @unique
+  throughPort   Port?   @relation("PortPassThrough", fields: [throughPortId], references: [id], onDelete: SetNull)
+  throughOf     Port?   @relation("PortPassThrough")
 
   @@index([assetId])
 }

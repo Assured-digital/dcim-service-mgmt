@@ -1,5 +1,5 @@
 import { ConnectionStatus } from "@prisma/client"
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from "class-validator"
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min, IsUUID } from "class-validator"
 
 export class ListConnectionsQueryDto {
   @IsOptional()
@@ -38,6 +38,17 @@ export class CreateConnectionDto {
 
   @IsString()
   connectionType!: string
+
+  // Physical cable-run detail (Horizon 2). connectionType is the media type.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cableLength?: number | null
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  cableColour?: string | null
 
   @IsOptional()
   @IsEnum(ConnectionStatus)
@@ -80,6 +91,16 @@ export class UpdateConnectionDto {
   @IsOptional()
   @IsString()
   connectionType?: string
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cableLength?: number | null
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  cableColour?: string | null
 
   @IsOptional()
   @IsEnum(ConnectionStatus)

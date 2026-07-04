@@ -24,6 +24,10 @@ class CreatePortDto {
   @IsOptional() @IsInt() @Min(1) @Max(96) count?: number
 }
 
+class SetPassThroughDto {
+  @IsString() @MinLength(1) peerPortId!: string
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("ports")
 @ApiBearerAuth()
@@ -51,5 +55,24 @@ export class PortsController {
   @Roles(...WRITE_ROLES)
   async remove(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") cid?: string) {
     return this.ports.remove(await this.scope(req, cid), id)
+  }
+
+  // Pass-through pairing (patch-panel front↔rear) + end-to-end cable trace.
+  @Post("ports/:id/through")
+  @Roles(...WRITE_ROLES)
+  async setThrough(@Req() req: any, @Param("id") id: string, @Body() dto: SetPassThroughDto, @Headers("x-client-id") cid?: string) {
+    return this.ports.setPassThrough(await this.scope(req, cid), id, dto.peerPortId)
+  }
+
+  @Delete("ports/:id/through")
+  @Roles(...WRITE_ROLES)
+  async clearThrough(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") cid?: string) {
+    return this.ports.clearPassThrough(await this.scope(req, cid), id)
+  }
+
+  @Get("ports/:id/trace")
+  @Roles(...READ_ROLES)
+  async trace(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") cid?: string) {
+    return this.ports.trace(await this.scope(req, cid), id)
   }
 }
