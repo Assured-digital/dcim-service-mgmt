@@ -156,13 +156,17 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
     onSelectAsset(id); setAssetDrawerMode("lite")
   }, [onSelectAsset])
 
+  const openAssetFull = React.useCallback((asset: { id: string; siteId: string | null }) => {
+    const siteId = asset.siteId ?? cabinet.siteId
+    if (!siteId) return
+    const viewParam = searchParams.get("view")
+    const suffix = viewParam ? `?view=${viewParam}` : ""
+    navigate(`/asset-hierarchy/${siteId}/assets/${asset.id}${suffix}`)
+  }, [navigate, searchParams, cabinet.siteId])
+
   const handleOpenFullDetails = React.useCallback(() => {
-    if (selectedRackAsset?.siteId) {
-      const viewParam = searchParams.get("view")
-      const suffix = viewParam ? `?view=${viewParam}` : ""
-      navigate(`/asset-hierarchy/${selectedRackAsset.siteId}/assets/${selectedRackAsset.id}${suffix}`)
-    }
-  }, [navigate, searchParams, selectedRackAsset])
+    if (selectedRackAsset) openAssetFull(selectedRackAsset)
+  }, [openAssetFull, selectedRackAsset])
 
   async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
     await api.put(`/tasks/${taskId}`, patch)
@@ -439,7 +443,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 </TableHead>
                 <TableBody>
                   {sortedAssets.map(a => (
-                    <TableRow key={a.id} hover onClick={() => onSelectAsset(a.id)} sx={{ cursor: "pointer" }}>
+                    <TableRow key={a.id} hover onClick={() => openAssetFull(a)} sx={{ cursor: "pointer" }}>
                       <TableCell sx={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "text.secondary" }}>{a.uPosition != null ? `U${a.uPosition}` : "—"}</TableCell>
                       <TableCell><Typography sx={{ fontSize: 12, fontWeight: 600 }}>{a.name}</Typography><Typography sx={{ fontSize: 10, color: "text.tertiary" }}>{a.assetType} · {a.assetTag}</Typography></TableCell>
                       <TableCell align="right" sx={{ fontFamily: "monospace", fontSize: 11, color: "text.secondary" }}>{a.powerDrawW != null ? `${a.powerDrawW}W` : "—"}</TableCell>
