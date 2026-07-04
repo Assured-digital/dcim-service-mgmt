@@ -229,6 +229,37 @@ describe("DCIM services — query scoping refuses another client's resource (404
     expect(updates[0]).toMatchObject({ lifecycleState: "ACTIVE", pendingOp: null, pendingWorkOrderId: null });
   });
 
+  it("work-order fusion (MOVE): a completed move relocates ONLY the same-client waiting asset", async () => {
+    const { applyCompletedWorkOrder } = await import("../src/work-orders/apply-pending");
+    const staged = {
+      id: AST, clientId: A, assetTag: "AST-1", name: "Asset One", lifecycleState: "ACTIVE",
+      siteId: "site-old", cabinetId: "cab-old", uPosition: 35, uHeight: 1, isFullDepth: true, disposalStatus: null,
+      pendingOp: "MOVE", pendingWorkOrderType: "task", pendingWorkOrderId: "WO-M",
+      pendingTargetCabinetId: "cab-new", pendingTargetUPosition: 10, pendingTargetRackSide: "FRONT",
+    };
+    const updates: any[] = [];
+    const p: any = {
+      asset: {
+        findFirst: jest.fn(async ({ where }: any) =>
+          where.pendingWorkOrderId === "WO-M" && where.clientId === A ? staged : null),
+        findMany: jest.fn(async () => []),               // target slot empty → no conflict
+        update: jest.fn(async ({ data }: any) => { updates.push(data); return { ...staged, ...data } }),
+      },
+      cabinet: { findUnique: jest.fn(async () => ({ siteId: "site-new", name: "CAB-NEW" })) },
+      auditEvent: { create: jest.fn(async () => ({})) },
+    };
+    // Foreign client resolves NO waiting asset → no write.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-M", actorUserId: "u", clientId: B });
+    expect(updates).toHaveLength(0);
+    // Owner completes it → asset relocates to the target, pending + target cleared.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-M", actorUserId: "u", clientId: A });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({
+      cabinetId: "cab-new", siteId: "site-new", uPosition: 10, rackSide: "FRONT",
+      pendingOp: null, pendingTargetCabinetId: null, pendingTargetUPosition: null,
+    });
+  });
+
   it("custom fields: list is clientId-scoped (only the owner's fields resolve)", async () => {
     const { AssetCustomFieldsService } = await import("../src/asset-custom-fields/asset-custom-fields.service");
     const svc = new AssetCustomFieldsService(prisma);

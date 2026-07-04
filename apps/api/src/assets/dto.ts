@@ -225,8 +225,8 @@ export class DecommissionAssetDto {
 }
 
 export class RaiseWorkOrderDto {
-  @IsIn(["INSTALL", "DECOMMISSION"])
-  op!: "INSTALL" | "DECOMMISSION"
+  @IsIn(["INSTALL", "DECOMMISSION", "MOVE"])
+  op!: "INSTALL" | "DECOMMISSION" | "MOVE"
 
   @IsIn(["task", "change"])
   workOrderType!: "task" | "change"
@@ -251,6 +251,17 @@ export class RaiseWorkOrderDto {
 
   @IsOptional() @IsString()
   assigneeId?: string
+
+  // MOVE target (op = "MOVE" only): the destination the asset relocates to when
+  // the work order completes. targetRackSide defaults FRONT.
+  @IsOptional() @IsString()
+  targetCabinetId?: string
+
+  @IsOptional() @IsInt()
+  targetUPosition?: number
+
+  @IsOptional() @IsIn(["FRONT", "REAR"])
+  targetRackSide?: "FRONT" | "REAR"
 }
 
 export class RequestAssetDeletionDto {

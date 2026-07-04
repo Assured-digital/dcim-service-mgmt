@@ -33,6 +33,7 @@ export class CabinetsService {
             budgetedDrawW: true, weightKg: true,
             disposalStatus: true, physicallyRemoved: true,
             pendingOp: true, pendingWorkOrderType: true, pendingWorkOrderId: true,
+            pendingTargetCabinetId: true, pendingTargetUPosition: true, pendingTargetRackSide: true,
             deviceType: { select: { excludeFromUtilization: true } }
           }
         },
@@ -41,6 +42,27 @@ export class CabinetsService {
         reservations: { orderBy: { uStart: "asc" } }
       }
     })
+
+    // Dual-position shadow (MAC Phase 2): assets whose pending MOVE targets a
+    // cabinet in this view show as an "incoming" ghost there while still racked
+    // at their current position. pendingTargetCabinetId is a bare scalar (no FK
+    // relation), so filter against the ids already fetched for this site/room.
+    const cabinetIds = cabinets.map((c) => c.id)
+    const incomingAssets = cabinetIds.length === 0 ? [] : await this.prisma.asset.findMany({
+      where: { clientId, pendingOp: "MOVE", pendingTargetCabinetId: { in: cabinetIds } },
+      select: {
+        id: true, name: true, assetTag: true, assetType: true, uHeight: true,
+        manufacturer: true, modelNumber: true, isFullDepth: true,
+        pendingTargetCabinetId: true, pendingTargetUPosition: true, pendingTargetRackSide: true,
+        cabinet: { select: { id: true, name: true } },
+      },
+    })
+    const incomingByCabinet = new Map<string, typeof incomingAssets>()
+    for (const a of incomingAssets) {
+      const key = a.pendingTargetCabinetId!
+      const list = incomingByCabinet.get(key) ?? []
+      list.push(a); incomingByCabinet.set(key, list)
+    }
 
     // Documents per cabinet (Hyperview pattern) — batched (one query for the
     // whole site) to avoid an N+1 of per-cabinet resolver calls.
@@ -63,7 +85,14 @@ export class CabinetsService {
         const h = Math.max(1, Math.ceil(a.uHeight ?? 1))
         for (let u = a.uPosition; u < a.uPosition + h; u++) occupied.add(u)
       }
-      return { ...cabinet, usedU: occupied.size, attachments: attachmentsByCabinet.get(cabinet.id) ?? [] }
+      const incoming = (incomingByCabinet.get(cabinet.id) ?? []).map((a) => ({
+        id: a.id, name: a.name, assetTag: a.assetTag, assetType: a.assetType,
+        uHeight: a.uHeight, manufacturer: a.manufacturer, modelNumber: a.modelNumber,
+        isFullDepth: a.isFullDepth,
+        uPosition: a.pendingTargetUPosition, rackSide: a.pendingTargetRackSide,
+        fromCabinet: a.cabinet ? { id: a.cabinet.id, name: a.cabinet.name } : null,
+      }))
+      return { ...cabinet, usedU: occupied.size, attachments: attachmentsByCabinet.get(cabinet.id) ?? [], incoming }
     })
   }
 
