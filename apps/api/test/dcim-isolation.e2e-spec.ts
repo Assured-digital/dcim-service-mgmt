@@ -103,7 +103,11 @@ function mockPrisma(): any {
     },
     sensorReading: {
       create: jest.fn(async ({ data }: any) => ({ ...data, id: "reading-1", createdAt: new Date() })),
-      findMany: jest.fn(async () => []),
+      // Client A has one CRITICAL temperature reading on AST; anyone else sees none.
+      findMany: jest.fn(async ({ where }: any) =>
+        where?.clientId === A
+          ? [{ assetId: AST, metric: "temperatureC", value: 35, readAt: new Date("2026-07-04T00:00:00Z") }]
+          : []),
     },
     assetCustomField: {
       findMany: jest.fn(async ({ where }: any) => (where?.clientId === A ? [{ id: "f-1", clientId: A, key: "owner", label: "Owner", type: "text", options: [], order: 1 }] : [])),
@@ -258,6 +262,15 @@ describe("DCIM services — query scoping refuses another client's resource (404
       cabinetId: "cab-new", siteId: "site-new", uPosition: 10, rackSide: "FRONT",
       pendingOp: null, pendingTargetCabinetId: null, pendingTargetUPosition: null,
     });
+  });
+
+  it("derived health: resolver is clientId-scoped (foreign client sees UNKNOWN, owner sees the reading)", async () => {
+    const { resolveHealthForAssets } = await import("../src/sensor-readings/resolve-health");
+    const assets = [{ id: AST, budgetedDrawW: null }];
+    const foreign = await resolveHealthForAssets(prisma, B, assets);
+    expect(foreign.get(AST)).toMatchObject({ health: "UNKNOWN", temperatureC: null });
+    const owner = await resolveHealthForAssets(prisma, A, assets);
+    expect(owner.get(AST)).toMatchObject({ health: "CRITICAL", temperatureC: 35 });
   });
 
   it("custom fields: list is clientId-scoped (only the owner's fields resolve)", async () => {

@@ -1,4 +1,4 @@
-import { Asset } from "../lib/infrastructure"
+import { Asset, HealthLevel } from "../lib/infrastructure"
 import { AssetCustomField } from "../lib/customFields"
 
 // Filter model for the Asset register (the UI is top filter chips + instant
@@ -14,6 +14,7 @@ export type FilterState = {
   lifecycles: Set<string>
   manufacturers: Set<string>
   warranty: Set<WarrantyKey>
+  health: Set<HealthLevel>
   search: string
 }
 
@@ -24,8 +25,14 @@ export function emptyFilters(): FilterState {
     lifecycles: new Set(),
     manufacturers: new Set(),
     warranty: new Set(),
+    health: new Set(),
     search: "",
   }
+}
+
+// The asset's derived health, defaulting to UNKNOWN when the read didn't resolve it.
+export function assetHealth(a: Asset): HealthLevel {
+  return a.health?.health ?? "UNKNOWN"
 }
 
 export type FilterKey = keyof FilterState
@@ -34,13 +41,13 @@ export type FilterKey = keyof FilterState
 // saved views (localStorage).
 export type FilterSnapshot = {
   siteIds: string[]; types: string[]; lifecycles: string[]
-  manufacturers: string[]; warranty: WarrantyKey[]; search: string
+  manufacturers: string[]; warranty: WarrantyKey[]; health?: HealthLevel[]; search: string
 }
 
 export function serializeFilters(f: FilterState): FilterSnapshot {
   return {
     siteIds: [...f.siteIds], types: [...f.types], lifecycles: [...f.lifecycles],
-    manufacturers: [...f.manufacturers], warranty: [...f.warranty], search: f.search,
+    manufacturers: [...f.manufacturers], warranty: [...f.warranty], health: [...f.health], search: f.search,
   }
 }
 
@@ -48,7 +55,7 @@ export function deserializeFilters(s: FilterSnapshot): FilterState {
   return {
     siteIds: new Set(s.siteIds ?? []), types: new Set(s.types ?? []),
     lifecycles: new Set(s.lifecycles ?? []), manufacturers: new Set(s.manufacturers ?? []),
-    warranty: new Set(s.warranty ?? []), search: s.search ?? "",
+    warranty: new Set(s.warranty ?? []), health: new Set(s.health ?? []), search: s.search ?? "",
   }
 }
 
@@ -65,7 +72,7 @@ export function warrantyStatus(expiry: string | null): "expired" | "soon" | "ok"
 }
 
 export function activeFilterCount(f: FilterState): number {
-  return f.siteIds.size + f.types.size + f.lifecycles.size + f.manufacturers.size + f.warranty.size + (f.search ? 1 : 0)
+  return f.siteIds.size + f.types.size + f.lifecycles.size + f.manufacturers.size + f.warranty.size + f.health.size + (f.search ? 1 : 0)
 }
 
 export function applyFilters(assets: Asset[], filters: FilterState): Asset[] {
@@ -74,6 +81,7 @@ export function applyFilters(assets: Asset[], filters: FilterState): Asset[] {
     if (filters.types.size > 0 && !filters.types.has(a.assetType)) return false
     if (filters.lifecycles.size > 0 && !filters.lifecycles.has(a.lifecycleState)) return false
     if (filters.manufacturers.size > 0 && !filters.manufacturers.has(a.manufacturer ?? UNKNOWN_MANUFACTURER)) return false
+    if (filters.health.size > 0 && !filters.health.has(assetHealth(a))) return false
     if (filters.warranty.size > 0) {
       const s = warrantyStatus(a.warrantyExpiry)
       const mapped: WarrantyKey | null = s === "expired" ? "expired" : s === "soon" ? "soon" : s === "ok" ? "healthy" : null
@@ -112,6 +120,7 @@ export function exportAssetsCsv(rows: Asset[], customFields: AssetCustomField[] 
     ["Power (W)", a => a.powerDrawW], ["Lifecycle", a => a.lifecycleState],
     ["Warranty expiry", a => a.warrantyExpiry?.split("T")[0]],
     ["Installed", a => a.installDate?.split("T")[0]],
+    ["Health", a => assetHealth(a)],
     // Custom fields append as trailing columns (values live in Asset.customValues).
     ...customFields.map(f => [f.label, (a: Asset) => {
       const v = (a.customValues ?? {})[f.key]

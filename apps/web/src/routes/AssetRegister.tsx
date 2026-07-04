@@ -4,7 +4,8 @@ import {
 } from "@mui/material"
 import { useThemeMode } from "../lib/theme"
 import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructure"
-import { warrantyStatus } from "./assetRegisterFilters"
+import { healthColor, HEALTH_LABEL } from "../lib/readings"
+import { assetHealth, warrantyStatus } from "./assetRegisterFilters"
 
 export interface AssetRegisterProps {
   filteredRows: Asset[]
@@ -39,7 +40,7 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
   const selectable = !!selectedIds && !!onToggleRow && !!onToggleAll
   const allIds = React.useMemo(() => filteredRows.map(a => a.id), [filteredRows])
   const selectedCount = selectable ? allIds.filter(id => selectedIds!.has(id)).length : 0
-  const colCount = selectable ? 9 : 8
+  const colCount = (selectable ? 9 : 8) + 1 // + Health
 
   // Power mini-bars are scaled against the heaviest draw in the current view —
   // a relative comparison aid, not an absolute capacity claim.
@@ -71,6 +72,7 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
               <TableCell sx={HEAD_SX} align="right">U</TableCell>
               <TableCell sx={HEAD_SX} align="right">Power</TableCell>
               <TableCell sx={HEAD_SX}>Lifecycle</TableCell>
+              <TableCell sx={HEAD_SX}>Health</TableCell>
               <TableCell sx={HEAD_SX}>Warranty</TableCell>
               <TableCell sx={HEAD_SX}>Serial</TableCell>
             </TableRow>
@@ -129,6 +131,17 @@ const AssetRegister = React.memo(function AssetRegister({ filteredRows, onAssetC
                       <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: lifecycleGlyphColor(a.lifecycleState, mode), flexShrink: 0 }} />
                       <Typography sx={{ fontSize: 12 }}>{LIFECYCLE_LABEL[a.lifecycleState] ?? a.lifecycleState}</Typography>
                     </Stack>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const h = assetHealth(a)
+                      return (
+                        <Stack direction="row" alignItems="center" spacing={0.75}>
+                          <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: healthColor(h, mode), flexShrink: 0 }} />
+                          <Typography sx={{ fontSize: 12, color: h === "UNKNOWN" ? "text.tertiary" : "text.primary" }}>{HEALTH_LABEL[h]}</Typography>
+                        </Stack>
+                      )
+                    })()}
                   </TableCell>
                   <TableCell>
                     <Typography sx={{ fontSize: 12, color: warrantyColor, fontWeight: ws === "expired" || ws === "soon" ? 600 : 400, whiteSpace: "nowrap" }}>

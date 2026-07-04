@@ -7,6 +7,7 @@ import { computeDisplayName, userDisplaySelect } from "../users/display";
 import { activeReservationWhere, findUSlotConflicts, uSlotOutOfBounds, UPlacement } from "../cabinets/u-slot.util";
 import { DCIM_DEFAULT_DERATE_PCT } from "../dcim/capacity.util";
 import { resolveAttachments } from "../attachments/resolve-attachments";
+import { resolveHealthForAssets } from "../sensor-readings/resolve-health";
 import { TasksService } from "../tasks/tasks.service";
 import { ChangesService } from "../changes/changes.service";
 
@@ -94,27 +95,17 @@ export class AssetsService {
       site: true,
     } as const;
 
-    if (!isOrgSuperRole(role)) {
-      return this.prisma.asset.findMany({
-        where: {
-          ownerType: OwnerType.CLIENT,
-          clientId
-        },
-        include: assetInclude,
-        orderBy: { updatedAt: "desc" }
-      });
-    }
-
-    return this.prisma.asset.findMany({
-      where: {
-        OR: [
-          { ownerType: OwnerType.INTERNAL },
-          { ownerType: OwnerType.CLIENT, clientId }
-        ]
-      },
-      include: assetInclude,
-      orderBy: { updatedAt: "desc" }
+    const where = isOrgSuperRole(role)
+      ? { OR: [{ ownerType: OwnerType.INTERNAL }, { ownerType: OwnerType.CLIENT, clientId }] }
+      : { ownerType: OwnerType.CLIENT, clientId };
+    const assets = await this.prisma.asset.findMany({
+      where, include: assetInclude, orderBy: { updatedAt: "desc" }
     });
+
+    // Derived health (Horizon 3) — resolver-spread, never stored (§6b). One
+    // batched readings query for the whole list; unmonitored assets → UNKNOWN.
+    const healthByAsset = await resolveHealthForAssets(this.prisma, clientId, assets);
+    return assets.map((a) => ({ ...a, health: healthByAsset.get(a.id) ?? null }));
   }
 
   async getByIdForClient(assetId: string, clientId: string, role: Role) {
@@ -140,7 +131,8 @@ export class AssetsService {
     // other attachable read. Concrete clientId in the resolver means INTERNAL
     // (null-client) assets simply resolve to none.
     const attachments = await resolveAttachments(this.prisma, clientId, "asset", asset.id);
-    return { ...asset, attachments };
+    const healthByAsset = await resolveHealthForAssets(this.prisma, clientId, [asset]);
+    return { ...asset, attachments, health: healthByAsset.get(asset.id) ?? null };
   }
 
   async create(dto: any, requesterClientId: string, requesterRole: Role, actorUserId: string) {

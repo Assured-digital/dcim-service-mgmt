@@ -50,6 +50,18 @@ export type Asset = {
   pendingTargetRackSide?: "FRONT" | "REAR" | null
   // User-defined custom properties (register power-features) — { fieldKey: value }.
   customValues?: Record<string, unknown> | null
+  // Derived health (Horizon 3) — resolver-spread on asset reads, NEVER stored
+  // (§6b). null = the read didn't resolve it; `.health` UNKNOWN = not monitored.
+  health?: AssetHealth | null
+}
+
+export type HealthLevel = "OK" | "WARNING" | "CRITICAL" | "UNKNOWN"
+export type AssetHealth = {
+  health: HealthLevel
+  temperatureC: number | null
+  humidityPct: number | null
+  powerW: number | null
+  readAt: string | null
 }
 
 // Approver queue row (GET /assets/deletion-requests): an Asset plus the resolved requester.

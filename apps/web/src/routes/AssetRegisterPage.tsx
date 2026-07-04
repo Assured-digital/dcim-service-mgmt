@@ -10,7 +10,8 @@ import { ListToolbar, SearchField, ToolbarButton } from "../components/shared/Li
 import { ChipOption, FilterChip } from "../components/shared/FilterChip"
 import AssetRegister from "./AssetRegister"
 import AssetDetailPage from "./AssetDetailPage"
-import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructure"
+import { Asset, assetTypeAccent, lifecycleGlyphColor, HealthLevel } from "../lib/infrastructure"
+import { healthColor, HEALTH_LABEL } from "../lib/readings"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { listCustomFields } from "../lib/customFields"
 import { ManageCustomFieldsDialog } from "./customFieldsUi"
@@ -18,7 +19,7 @@ import { AssetBulkBar } from "./AssetBulkBar"
 import { AssetSavedViews } from "./AssetSavedViews"
 import {
   FilterState, WarrantyKey, activeFilterCount, applyFilters, applyFiltersExcluding,
-  emptyFilters, exportAssetsCsv, UNKNOWN_MANUFACTURER, warrantyStatus,
+  assetHealth, emptyFilters, exportAssetsCsv, UNKNOWN_MANUFACTURER, warrantyStatus,
 } from "./assetRegisterFilters"
 
 // Asset register — the flat, non-spatial escape hatch (DCIM_DESIGN_BRIEF §4.5):
@@ -150,6 +151,15 @@ export default function AssetRegisterPage() {
     ].filter(w => w.count > 0)
   }, [allAssets, filters, mode])
 
+  const healthOptions = React.useMemo<ChipOption[]>(() => {
+    const sub = applyFiltersExcluding(allAssets, filters, "health")
+    const counts = new Map<HealthLevel, number>()
+    for (const a of sub) { const h = assetHealth(a); counts.set(h, (counts.get(h) ?? 0) + 1) }
+    return (["CRITICAL", "WARNING", "OK", "UNKNOWN"] as HealthLevel[])
+      .filter(h => counts.has(h))
+      .map(h => ({ key: h, label: HEALTH_LABEL[h], count: counts.get(h)!, glyph: { color: healthColor(h, mode), shape: "dot" as const } }))
+  }, [allAssets, filters, mode])
+
   // ── Callbacks ───────────────────────────────────────────────────────────
   const toggleIn = (key: Exclude<keyof FilterState, "search">) => (value: string) =>
     setFilters(prev => {
@@ -195,6 +205,7 @@ export default function AssetRegisterPage() {
             <FilterChip label="Site" options={siteOptions} selected={filters.siteIds} onToggle={toggleIn("siteIds")} onClear={clearKey("siteIds")} />
             <FilterChip label="Type" options={typeOptions} selected={filters.types} onToggle={toggleIn("types")} onClear={clearKey("types")} />
             <FilterChip label="Lifecycle" options={lifecycleOptions} selected={filters.lifecycles} onToggle={toggleIn("lifecycles")} onClear={clearKey("lifecycles")} />
+            <FilterChip label="Health" options={healthOptions} selected={filters.health as unknown as Set<string>} onToggle={(k) => toggleIn("health")(k as HealthLevel)} onClear={clearKey("health")} />
             <FilterChip label="Manufacturer" options={manufacturerOptions} selected={filters.manufacturers} onToggle={toggleIn("manufacturers")} onClear={clearKey("manufacturers")} />
             <FilterChip label="Warranty" options={warrantyOptions} selected={filters.warranty as unknown as Set<string>} onToggle={(k) => toggleIn("warranty")(k as WarrantyKey)} onClear={clearKey("warranty")} />
             {activeCount > 0 ? (
