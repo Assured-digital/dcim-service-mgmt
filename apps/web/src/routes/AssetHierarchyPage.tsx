@@ -244,10 +244,16 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
   const [findSpaceU, setFindSpaceU] = React.useState<number | null>(null)
   const [dim, setDim] = React.useState<"2d" | "3d">(() => (localStorage.getItem("dcms_estate_plan_dim") === "3d" ? "3d" : "2d"))
   const changeDim = React.useCallback((d: "2d" | "3d") => { setDim(d); localStorage.setItem("dcms_estate_plan_dim", d) }, [])
+  // Live mode polls the plan so telemetry-driven lenses (health/thermal/power)
+  // stay current on a NOC wall without a manual refresh.
+  const [live, setLive] = React.useState(false)
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ["floor-plan", roomId],
     queryFn: () => getFloorPlan(roomId),
+    refetchInterval: live ? 15000 : false,
+    // Live mode is a wall-display feature — keep polling even when the tab isn't focused.
+    refetchIntervalInBackground: true,
   })
 
   const placedCount = plan?.cabinets.length ?? 0
@@ -287,6 +293,13 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
                 Find ≥10U free
               </ToolbarButton>
             ) : null}
+            <ToolbarButton variant={live ? "primary" : "default"} sx={{ ml: 1 }} onClick={() => setLive(v => !v)}>
+              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: live ? "#22c55e" : "text.disabled",
+                  ...(live ? { animation: "fp-pulse 1.4s ease-in-out infinite", "@keyframes fp-pulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } } } : {}) }} />
+                Live
+              </Box>
+            </ToolbarButton>
           </>
         ) : null}
         <Box sx={{ ml: "auto", display: "flex", gap: "8px", alignItems: "center" }}>

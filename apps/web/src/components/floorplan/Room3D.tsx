@@ -8,6 +8,8 @@ import { entityStatusIntent, semanticToken } from "../shared/tokens/colors"
 import { healthColor } from "../../lib/readings"
 import { FloorCabinet, FloorLens, FloorPlan } from "../../lib/floorPlan"
 import { buildThermalDataUrl, tempCss } from "./thermal"
+import { exportCanvasPng, safeName } from "./exportPlan"
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined"
 
 // 3D room view (floor plan Phase C). Plain three.js — an orbitable data-centre
 // hall: the room floor + true-footprint cabinet volumes at their real height,
@@ -58,7 +60,7 @@ export function Room3D({ plan, lens, selectedCabinetId, onCabinetClick }: {
   React.useEffect(() => {
     const mount = mountRef.current
     if (!mount) return
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     mount.appendChild(renderer.domElement)
     renderer.domElement.style.display = "block"
@@ -241,6 +243,14 @@ export function Room3D({ plan, lens, selectedCabinetId, onCabinetClick }: {
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", bgcolor: isDark ? "#0b1220" : "#eef2f7" }}>
       <div ref={mountRef} style={{ width: "100%", height: "100%" }} />
+      <Box component="button" aria-label="Export view as PNG"
+        onClick={() => { const t = three.current; if (t) exportCanvasPng(t.renderer.domElement, safeName([plan.room.name, "3d", lens], "png")) }}
+        sx={{ position: "absolute", top: 12, right: 12, height: 30, px: "10px", display: "flex", alignItems: "center", gap: "5px",
+          appearance: "none", border: "1px solid", borderColor: "divider", borderRadius: "9px", cursor: "pointer",
+          bgcolor: isDark ? "rgba(13,21,38,0.86)" : "rgba(255,255,255,0.92)", color: "text.secondary", fontSize: 12, fontWeight: 600,
+          backdropFilter: "blur(6px)", "&:hover": { color: "text.primary" } }}>
+        <FileDownloadOutlinedIcon sx={{ fontSize: 15 }} /> PNG
+      </Box>
       <Box sx={{ position: "absolute", left: 14, bottom: 14, px: "10px", py: "6px", borderRadius: "8px",
         bgcolor: isDark ? "rgba(13,21,38,0.8)" : "rgba(255,255,255,0.9)", border: "1px solid", borderColor: "divider" }}>
         <Typography sx={{ fontSize: 10.5, color: "text.tertiary" }}>Drag to orbit · scroll to zoom · click a cabinet</Typography>

@@ -1,5 +1,6 @@
 import React from "react"
 import { Box, Typography } from "@mui/material"
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined"
 import { api } from "../../lib/api"
 import { useThemeMode } from "../../lib/theme"
 import { pctColor } from "../../lib/capacity"
@@ -7,6 +8,7 @@ import { entityStatusIntent, semanticToken } from "../shared/tokens/colors"
 import { FloorCabinet, FloorLens, FloorObjectT, AisleZoneT, FloorPlan } from "../../lib/floorPlan"
 import { healthColor, HEALTH_LABEL } from "../../lib/readings"
 import { buildThermalDataUrl, tempCss } from "./thermal"
+import { exportSvgPng, safeName } from "./exportPlan"
 
 // Auth-fetched plan-image backdrop (the endpoint needs the bearer token, so a
 // raw <image href> can't be used — same posture as attachments).
@@ -234,6 +236,16 @@ export function FloorCanvas({
           })}
         </g>
       </svg>
+
+      {/* Export */}
+      <Box component="button" aria-label="Export plan as PNG"
+        onClick={() => { const s = svgRef.current; if (s) exportSvgPng(s, safeName([plan.room.name, lens], "png"), isDark ? "#0b1220" : "#eef2f7").catch(() => {}) }}
+        sx={{ position: "absolute", top: 12, right: 58, height: 30, px: "10px", display: "flex", alignItems: "center", gap: "5px",
+          appearance: "none", border: "1px solid", borderColor: "divider", borderRadius: "9px", cursor: "pointer",
+          bgcolor: isDark ? "rgba(13,21,38,0.86)" : "rgba(255,255,255,0.92)", color: "text.secondary", fontSize: 12, fontWeight: 600,
+          backdropFilter: "blur(6px)", "&:hover": { color: "text.primary" } }}>
+        <FileDownloadOutlinedIcon sx={{ fontSize: 15 }} /> PNG
+      </Box>
 
       {/* Zoom controls */}
       <Box sx={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column",
