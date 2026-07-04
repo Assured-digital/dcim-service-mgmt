@@ -124,7 +124,7 @@ export default function FloorPlanPage() {
           {!rooms.length ? <MenuItem value="">No rooms</MenuItem> : null}
         </TextField>
         <SegmentedToggle
-          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }]}
+          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }, { value: "thermal", label: "Thermal" }]}
           value={lens} onChange={v => setLens(v)}
         />
         <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)}>Find space</ToolbarButton>

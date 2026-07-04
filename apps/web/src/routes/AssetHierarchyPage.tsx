@@ -271,7 +271,7 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
         {effectiveView === "plan" ? (
           <>
             <SegmentedToggle
-              options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }]}
+              options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }, { value: "thermal", label: "Thermal" }]}
               value={lens} onChange={v => setLens(v)} sx={{ ml: 1 }}
             />
             <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} sx={{ ml: 1 }}

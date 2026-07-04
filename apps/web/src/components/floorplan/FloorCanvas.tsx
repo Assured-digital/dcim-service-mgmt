@@ -6,6 +6,7 @@ import { pctColor } from "../../lib/capacity"
 import { entityStatusIntent, semanticToken } from "../shared/tokens/colors"
 import { FloorCabinet, FloorLens, FloorObjectT, AisleZoneT, FloorPlan } from "../../lib/floorPlan"
 import { healthColor, HEALTH_LABEL } from "../../lib/readings"
+import { buildThermalDataUrl, tempCss } from "./thermal"
 
 // Auth-fetched plan-image backdrop (the endpoint needs the bearer token, so a
 // raw <image href> can't be used — same posture as attachments).
@@ -39,6 +40,9 @@ function cabinetFill(c: FloorCabinet, lens: FloorLens, mode: "light" | "dark"): 
   if (c.status === "PLANNED") return mode === "dark" ? "#243247" : "#cbd5e1"
   if (lens === "status") return semanticToken(entityStatusIntent(c.status), mode).solid
   if (lens === "health") return healthColor(c.environment?.health ?? "UNKNOWN", mode)
+  // Thermal: cabinets are anchors in the interpolated field, coloured by their
+  // own inlet temperature (neutral when unmonitored).
+  if (lens === "thermal") return c.environment?.temperatureC != null ? tempCss(c.environment.temperatureC) : (mode === "dark" ? "#334155" : "#94a3b8")
   if (lens === "power" && c.power.measuredPct != null) return pctColor(c.power.measuredPct, mode)
   const pct = lens === "power" ? c.power.pct : c.space.pct
   return pctColor(pct, mode)
@@ -73,6 +77,11 @@ export function FloorCanvas({
   const cellMm = plan.room.widthMm && cols ? plan.room.widthMm / cols : DEFAULT_CELL_MM
   const pxPerMm = BASE / cellMm
   const backgroundUrl = useBackgroundImage(plan.room.id, plan.room.hasBackgroundImage)
+  // Thermal heatmap — recomputed only when the readings or grid change.
+  const thermalUrl = React.useMemo(
+    () => (lens === "thermal" ? buildThermalDataUrl(plan.cabinets, cols, rows) : null),
+    [lens, plan.cabinets, cols, rows]
+  )
 
   const gridLine = isDark ? "rgba(148,163,184,0.10)" : "rgba(148,163,184,0.22)"
   const shellStroke = isDark ? "#334155" : "#cbd5e1"
@@ -98,8 +107,8 @@ export function FloorCanvas({
     if (!node) return
     const ro = new ResizeObserver(entries => {
       const r = entries[0].contentRect
-      setSize({ w: r.width, h: r.height })
-      if (fittedRef.current !== plan.room.id) { fit(r.width, r.height); fittedRef.current = plan.room.id }
+      setSize(prev => (Math.abs(prev.w - r.width) < 0.5 && Math.abs(prev.h - r.height) < 0.5 ? prev : { w: r.width, h: r.height }))
+      if (fittedRef.current !== plan.room.id && r.width > 0) { fit(r.width, r.height); fittedRef.current = plan.room.id }
     })
     ro.observe(node)
     return () => ro.disconnect()
@@ -168,6 +177,10 @@ export function FloorCanvas({
           {backgroundUrl ? (
             <image href={backgroundUrl} x={0} y={0} width={W} height={H}
               preserveAspectRatio="xMidYMid meet" opacity={plan.room.backgroundOpacity ?? 0.4} />
+          ) : null}
+          {/* Thermal heatmap (interpolated inlet field) — behind everything */}
+          {thermalUrl ? (
+            <image href={thermalUrl} x={0} y={0} width={W} height={H} preserveAspectRatio="none" style={{ imageRendering: "auto" }} />
           ) : null}
           {/* Metre grid */}
           {Array.from({ length: cols - 1 }, (_, i) => (
@@ -274,6 +287,19 @@ function FloorLegend({ lens, cabinets, mode, isDark }: { lens: FloorLens; cabine
     borderRadius: "11px", backdropFilter: "blur(6px)" } as const
   const h4 = { fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "text.tertiary", mb: 1 } as const
 
+  if (lens === "thermal") {
+    return (
+      <Box sx={card}>
+        <Typography sx={h4}>Inlet temperature</Typography>
+        <Box sx={{ height: 9, borderRadius: "5px", mb: "6px",
+          background: "linear-gradient(90deg,#1e3a8a,#2563eb 22%,#22c55e 42%,#22c55e 58%,#eab308 72%,#f97316 86%,#ef4444)" }} />
+        <Box sx={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: 10, color: "text.secondary" }}>
+          <span>12°</span><span>18</span><span>27</span><span>34°C</span>
+        </Box>
+        <Typography sx={{ fontSize: 9.5, color: "text.tertiary", mt: "5px" }}>ASHRAE recommended 18–27 °C</Typography>
+      </Box>
+    )
+  }
   if (lens === "space" || lens === "power") {
     return (
       <Box sx={card}>
@@ -370,10 +396,20 @@ function AisleRect({ zone, mode, onClick }: { zone: AisleZoneT; mode: "light" | 
   const hot = zone.type === "HOT"
   const fill = hot ? (mode === "dark" ? "rgba(239,90,80,0.14)" : "rgba(239,68,68,0.10)") : (mode === "dark" ? "rgba(56,120,230,0.14)" : "rgba(59,130,246,0.10)")
   const stroke = hot ? "rgba(240,120,110,0.5)" : "rgba(96,150,240,0.5)"
+  const x = g.x * BASE, y = g.y * BASE, w = g.w * BASE, h = g.h * BASE
+  // Airflow chevrons: cold-aisle supply rises INTO the racks (point up); hot-aisle
+  // exhaust is carried up and out (point up too, in warm tint) — the containment cue.
+  const cy = y + h / 2, step = BASE * 1.3
+  const chevrons: number[] = []
+  for (let cx = x + step * 0.6; cx < x + w - 8; cx += step) chevrons.push(cx)
   return (
     <g data-hit={onClick ? "" : undefined} onClick={onClick} style={onClick ? { cursor: "pointer" } : undefined}>
-      <rect x={g.x * BASE} y={g.y * BASE} width={g.w * BASE} height={g.h * BASE} fill={fill} stroke={stroke} strokeWidth={1.5} strokeDasharray="7 5" rx={4} />
-      {zone.label ? <text x={g.x * BASE + 6} y={g.y * BASE + 15} fontSize={10} fontWeight={700} letterSpacing="0.1em" fill={stroke}>{zone.label}</text> : null}
+      <rect x={x} y={y} width={w} height={h} fill={fill} stroke={stroke} strokeWidth={1.5} strokeDasharray="7 5" rx={4} />
+      {chevrons.map((cx, i) => (
+        <path key={i} d={`M ${cx - 6} ${cy + 4} L ${cx} ${cy - 4} L ${cx + 6} ${cy + 4}`}
+          fill="none" stroke={stroke} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" opacity={0.75} />
+      ))}
+      {zone.label ? <text x={x + 6} y={y + 15} fontSize={10} fontWeight={700} letterSpacing="0.1em" fill={stroke}>{zone.label}</text> : null}
     </g>
   )
 }

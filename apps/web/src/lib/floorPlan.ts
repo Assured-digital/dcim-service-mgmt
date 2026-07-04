@@ -39,7 +39,7 @@ export type FloorPlan = {
   aisleZones: AisleZoneT[]
 }
 
-export type FloorLens = "space" | "power" | "status" | "health"
+export type FloorLens = "space" | "power" | "status" | "health" | "thermal"
 
 export async function getFloorPlan(roomId: string): Promise<FloorPlan> {
   return (await api.get<FloorPlan>(`/rooms/${roomId}/floor-plan`)).data
