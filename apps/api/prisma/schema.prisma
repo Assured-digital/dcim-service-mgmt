@@ -154,6 +154,7 @@ model Client {
   attachments       Attachment[]
   workNotes         WorkNote[]
   sensorReadings    SensorReading[]
+  assetCustomFields AssetCustomField[]
   slaPolicies       SlaPolicy[]
   cabinetReservations CabinetReservation[]
   regions           Region[]
@@ -659,6 +660,10 @@ model Asset {
   pendingOp             String?           // null = none | "INSTALL" | "DECOMMISSION"
   pendingWorkOrderType  String?           // "task" | "change"
   pendingWorkOrderId    String?           // id of the linked Task/Change
+  // User-defined custom properties (register power-features). A flat map of
+  // { fieldKey: value }; the field schema lives in AssetCustomField per client.
+  // Values travel with the asset (no join table) — the Hyperview pattern.
+  customValues          Json?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   installDate         DateTime?
@@ -668,6 +673,23 @@ model Asset {
   ports               Port[]              // LATENT — port layer (§6)
   floorObjects        FloorObject[]       // reverse of FloorObject.assetId
   sensorReadings      SensorReading[]     // measured power / environmental (Horizon 3)
+}
+
+// User-defined asset field schema (register power-features). Per client; drives
+// the "Additional properties" card + the register. Values live on Asset.customValues.
+model AssetCustomField {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  key       String   // stable identifier used as the customValues map key
+  label     String
+  type      String   // "text" | "number" | "select" | "date"
+  options   String[] // choices for type=select (empty otherwise)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, key])
+  @@index([clientId])
 }
 
 // Measured telemetry (DCIM_SCHEMA_SPEC §6b, Horizon 3). The manual/CSV field-

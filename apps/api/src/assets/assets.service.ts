@@ -590,6 +590,7 @@ export class AssetsService {
     location?: string
     rackSide?: "FRONT" | "REAR" | null
     overrideReservationId?: string | null
+    customValues?: Record<string, unknown>
   }, requesterClientId: string, requesterRole: Role, actorUserId: string) {
     if (!requesterClientId) throw new ForbiddenException("Missing client scope");
 
@@ -695,7 +696,12 @@ export class AssetsService {
           lifecycleState: dto.lifecycleState ?? asset.lifecycleState,
           notes: dto.notes ?? asset.notes,
           location: dto.location ?? asset.location,
-          rackSide: targetRackSide
+          rackSide: targetRackSide,
+          // Merge custom property values (partial patch), preserving unrelated
+          // keys; explicit null on a key clears just that field.
+          customValues: dto.customValues !== undefined
+            ? ({ ...(asset.customValues as Record<string, unknown> ?? {}), ...dto.customValues } as Prisma.InputJsonValue)
+            : undefined,
         }
       });
     });

@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString } from "class-validator"
+import { IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString } from "class-validator"
 import { AssetLifecycleState, OwnerType } from "@prisma/client"
 
 export class CreateAssetDto {
@@ -117,6 +117,13 @@ export class CreateAssetDto {
 }
 
 export class UpdateAssetDto {
+  // User-defined custom properties (register power-features) — a { key: value }
+  // map merged into Asset.customValues. Unknown keys are allowed (the field
+  // schema is validated in the UI, not enforced here).
+  @IsOptional()
+  @IsObject()
+  customValues?: Record<string, unknown>
+
   // Attach / change / clear the catalogue link on an existing asset. Attaching a
   // type re-stamps the denormalised specs (spec §3.2); null unlinks (free-text).
   @IsOptional()

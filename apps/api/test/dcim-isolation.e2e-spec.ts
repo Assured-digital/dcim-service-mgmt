@@ -105,6 +105,12 @@ function mockPrisma(): any {
       create: jest.fn(async ({ data }: any) => ({ ...data, id: "reading-1", createdAt: new Date() })),
       findMany: jest.fn(async () => []),
     },
+    assetCustomField: {
+      findMany: jest.fn(async ({ where }: any) => (where?.clientId === A ? [{ id: "f-1", clientId: A, key: "owner", label: "Owner", type: "text", options: [], order: 1 }] : [])),
+      findUnique: jest.fn(async () => null),
+      aggregate: jest.fn(async () => ({ _max: { order: 0 } })),
+      create: jest.fn(async ({ data }: any) => ({ ...data, id: "f-1", createdAt: new Date() })),
+    },
     port: { findMany: jest.fn(async () => []) },
     // Downstream reads on the owner-success paths — empty is enough (the gate is
     // what these tests exercise; these just keep the happy path from crashing).
@@ -221,6 +227,13 @@ describe("DCIM services — query scoping refuses another client's resource (404
     await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-1", actorUserId: "u", clientId: A });
     expect(updates).toHaveLength(1);
     expect(updates[0]).toMatchObject({ lifecycleState: "ACTIVE", pendingOp: null, pendingWorkOrderId: null });
+  });
+
+  it("custom fields: list is clientId-scoped (only the owner's fields resolve)", async () => {
+    const { AssetCustomFieldsService } = await import("../src/asset-custom-fields/asset-custom-fields.service");
+    const svc = new AssetCustomFieldsService(prisma);
+    await expect(svc.list(B)).resolves.toEqual([]);
+    await expect(svc.list(A)).resolves.toEqual([expect.objectContaining({ key: "owner", clientId: A })]);
   });
 
   it("sensor readings: record refuses a foreign client's asset (404); owner records fine", async () => {
