@@ -1,8 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { StorageService } from "../storage/storage.service"
 import { sniffContentType, MAX_ATTACHMENT_BYTES } from "../attachments/content-policy"
 import { CapacityAsset, computeCabinetCapacity } from "./capacity.util"
+import { SensorReadingsService } from "../sensor-readings/sensor-readings.service"
+import { LatestByAsset, deriveCabinetEnvironment } from "../sensor-readings/health"
 
 // Floor-plan read/write model (DCIM_DESIGN_BRIEF §6, DCIM_SCHEMA_SPEC §2). The
 // architectural room view: cabinets at posX/posY with rotation + a capacity lens,
@@ -10,6 +12,7 @@ import { CapacityAsset, computeCabinetCapacity } from "./capacity.util"
 // All scoped through room→site→client / cabinet→site→client; spoof-tested per §8.
 
 const ASSET_SELECT = {
+  id: true,
   uPosition: true, uHeight: true, isZeroU: true, isFullDepth: true, lifecycleState: true,
   powerDrawW: true, budgetedDrawW: true, weightKg: true,
   deviceType: { select: { excludeFromUtilization: true } },
@@ -25,7 +28,7 @@ const IMG_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg
 
 @Injectable()
 export class FloorPlanService {
-  constructor(private prisma: PrismaService, private storage: StorageService) {}
+  constructor(private prisma: PrismaService, private storage: StorageService, @Optional() private readings?: SensorReadingsService) {}
 
   private async assertRoom(clientId: string, roomId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
@@ -54,13 +57,22 @@ export class FloorPlanService {
       this.prisma.aisleZone.findMany({ where: { roomId }, orderBy: { createdAt: "asc" } }),
     ])
 
+    // Latest readings across the room's assets → measured power + Health lens.
+    const allAssetIds = cabinets.flatMap((c) => c.assets.map((a) => a.id))
+    const latest = (await this.readings?.latestForAssets(clientId, allAssetIds)) ?? (new Map() as LatestByAsset)
+
     const shaped = cabinets.map((c) => {
-      const cap = computeCabinetCapacity(c, c.assets.map(toCapAsset))
+      const capAssets = c.assets.map((a) => ({ ...toCapAsset(a), measuredW: latest.get(a.id)?.powerW?.value ?? null }))
+      const cap = computeCabinetCapacity(c, capAssets)
+      const environment = deriveCabinetEnvironment(
+        c.assets.filter((a) => a.lifecycleState !== "RETIRED").map((a) => a.id),
+        latest, cap.power.measured ?? null, c.powerKw
+      )
       return {
         id: c.id, name: c.name, posX: c.posX, posY: c.posY, orientation: c.orientation,
         status: c.status, row: c.row, positionInRow: c.positionInRow, totalU: c.totalU ?? 0,
         space: { usedU: cap.space.usedU, totalU: cap.space.totalU, pct: cap.space.pct, largestContiguousU: cap.space.largestContiguousU },
-        power: cap.power, weight: cap.weight, stranded: cap.stranded,
+        power: cap.power, weight: cap.weight, stranded: cap.stranded, environment,
         activeAssets: c.assets.filter((a) => a.lifecycleState !== "RETIRED").length,
       }
     })

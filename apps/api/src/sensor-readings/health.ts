@@ -43,3 +43,39 @@ export function worstHealth(healths: Health[]): Health {
   if (known.length === 0) return "UNKNOWN"
   return known.reduce((w, h) => (RANK[h] > RANK[w] ? h : w), "OK" as Health)
 }
+
+// Latest-reading roll-up shapes (produced by SensorReadingsService.latestForAssets)
+// — declared here so the pure rollup below has no dependency on the service.
+export type LatestReading = { value: number; readAt: string }
+export type LatestByAsset = Map<string, Partial<Record<SensorMetric, LatestReading>>>
+
+export type CabinetEnvironment = {
+  temperatureC: number | null
+  humidityPct: number | null
+  health: Health              // worst of power + temp + humidity; UNKNOWN if unmonitored
+  readAt: string | null
+}
+
+// Per-cabinet environmental roll-up (Horizon 3): worst-case inlet temp + humidity
+// across the cabinet's assets, with an ASHRAE-and-power-derived health. Shared by
+// the capacity read model and the floor-plan Health lens.
+export function deriveCabinetEnvironment(
+  assetIds: string[], latest: LatestByAsset, measuredKw: number | null, capacityKw: number | null
+): CabinetEnvironment {
+  const temps: { v: number; at: string }[] = []
+  const hums: { v: number; at: string }[] = []
+  for (const id of assetIds) {
+    const m = latest.get(id)
+    if (m?.temperatureC) temps.push({ v: m.temperatureC.value, at: m.temperatureC.readAt })
+    if (m?.humidityPct) hums.push({ v: m.humidityPct.value, at: m.humidityPct.readAt })
+  }
+  const temperatureC = temps.length ? Math.max(...temps.map((t) => t.v)) : null
+  const humidityPct = hums.length ? Math.max(...hums.map((h) => h.v)) : null
+  const readAt = [...temps, ...hums].map((r) => r.at).sort().at(-1) ?? null
+  const health = worstHealth([
+    measuredKw != null ? powerHealth(measuredKw, capacityKw) : "UNKNOWN",
+    temperatureC != null ? temperatureHealth(temperatureC) : "UNKNOWN",
+    humidityPct != null ? humidityHealth(humidityPct) : "UNKNOWN",
+  ])
+  return { temperatureC, humidityPct, health, readAt }
+}

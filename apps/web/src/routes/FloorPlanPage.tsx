@@ -12,6 +12,7 @@ import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ROLES } from "../lib/rbac"
 import { getApiErrorMessage } from "../lib/infrastructure"
 import { kw, pctColor } from "../lib/capacity"
+import { healthColor } from "../lib/readings"
 import {
   FloorCabinet, FloorLens, createAisleZone, createFloorObject, deleteAisleZone, deleteFloorObject,
   getFloorPlan, placeCabinet,
@@ -123,7 +124,7 @@ export default function FloorPlanPage() {
           {!rooms.length ? <MenuItem value="">No rooms</MenuItem> : null}
         </TextField>
         <SegmentedToggle
-          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }]}
+          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }]}
           value={lens} onChange={v => setLens(v)}
         />
         <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)}>Find space</ToolbarButton>
@@ -268,6 +269,8 @@ function CabinetPanel({ c, mode, onOpen, onClose }: { c: FloorCabinet; mode: "li
 function LensLegend({ lens, mode }: { lens: FloorLens; mode: "light" | "dark" }) {
   const items = lens === "status"
     ? [["Active", "#15803d"], ["Planned", "#475569"], ["Decommissioning", "#b45309"], ["Retired", "#475569"]]
+    : lens === "health"
+    ? [["OK", healthColor("OK", mode)], ["Warning", healthColor("WARNING", mode)], ["Critical", healthColor("CRITICAL", mode)], ["Not monitored", healthColor("UNKNOWN", mode)]]
     : [["<65%", pctColor(50, mode)], ["65–85%", pctColor(75, mode)], [">85%", pctColor(95, mode)]]
   return (
     <Stack direction="row" spacing={1} alignItems="center">

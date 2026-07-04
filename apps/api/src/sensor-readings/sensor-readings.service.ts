@@ -1,13 +1,12 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
-import { SENSOR_METRICS, SensorMetric, isSensorMetric } from "./health"
+import { SENSOR_METRICS, LatestByAsset, isSensorMetric } from "./health"
 
 // Measured telemetry (Horizon 3) — manual/CSV field readings per asset. Tenant
 // chokepoint: reads filter by the validated clientId; writes first prove the
 // asset is in scope (INTERNAL visible to org-super, mirroring PortsService) and
 // stamp that clientId onto the reading.
-export type LatestReading = { value: number; readAt: string }
-export type LatestByAsset = Map<string, Partial<Record<SensorMetric, LatestReading>>>
+export type { LatestByAsset } from "./health"
 
 @Injectable()
 export class SensorReadingsService {
