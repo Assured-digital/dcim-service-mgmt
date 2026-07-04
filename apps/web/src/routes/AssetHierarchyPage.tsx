@@ -286,7 +286,7 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
           ) : null}
         </Box>
       </ListToolbar>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: effectiveView === "plan" ? "hidden" : "auto" }}>
         {effectiveView === "details" ? (
           detailsContent
         ) : effectiveView === "grid" ? (

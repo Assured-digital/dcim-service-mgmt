@@ -154,7 +154,7 @@ export default function FloorPlanPage() {
           squash the canvas); side-by-side from md up. */}
       <Box sx={{ flex: 1, display: "flex", flexDirection: { xs: "column", md: "row" }, overflow: "hidden", minHeight: 0 }}>
         {/* Canvas */}
-        <Box sx={{ flex: 1, overflow: "auto", bgcolor: "background.default", minHeight: { xs: 280, md: 0 } }}>
+        <Box sx={{ flex: 1, overflow: "hidden", bgcolor: "background.default", minHeight: { xs: 360, md: 0 } }}>
           {plan ? (
             <FloorCanvas plan={plan} lens={lens} mode={edit ? "edit" : "view"} selectedCabinetId={selectedCabinetId}
               findSpaceMinU={findSpaceU} placing={!!placing || !!aisleDraw}

@@ -425,6 +425,10 @@ model Cabinet {
   orientation   Int     @default(0) // rotation degrees: 0 | 90 | 180 | 270
   posX          Float?  // x on the room canvas (grid units); null = unplaced tray
   posY          Float?  // y on the room canvas
+  // Physical footprint (mm) for the true-scale floor plan (Phase A). null → the
+  // canvas assumes a standard 600 × 1070 mm cabinet.
+  widthMm       Int?
+  depthMm       Int?
   // Cabinet lifecycle for the floor-plan Status lens. String (not enum) to match
   // Asset.status; values resolve through entityStatusIntent (§8): ACTIVE | PLANNED
   // | DECOMMISSIONING | RETIRED.
