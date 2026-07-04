@@ -30,6 +30,28 @@ export function emptyFilters(): FilterState {
 
 export type FilterKey = keyof FilterState
 
+// Plain, JSON-safe shape for persisting a FilterState (Sets → arrays) — used by
+// saved views (localStorage).
+export type FilterSnapshot = {
+  siteIds: string[]; types: string[]; lifecycles: string[]
+  manufacturers: string[]; warranty: WarrantyKey[]; search: string
+}
+
+export function serializeFilters(f: FilterState): FilterSnapshot {
+  return {
+    siteIds: [...f.siteIds], types: [...f.types], lifecycles: [...f.lifecycles],
+    manufacturers: [...f.manufacturers], warranty: [...f.warranty], search: f.search,
+  }
+}
+
+export function deserializeFilters(s: FilterSnapshot): FilterState {
+  return {
+    siteIds: new Set(s.siteIds ?? []), types: new Set(s.types ?? []),
+    lifecycles: new Set(s.lifecycles ?? []), manufacturers: new Set(s.manufacturers ?? []),
+    warranty: new Set(s.warranty ?? []), search: s.search ?? "",
+  }
+}
+
 export const UNKNOWN_MANUFACTURER = "Unknown"
 
 export function warrantyStatus(expiry: string | null): "expired" | "soon" | "ok" | "none" {

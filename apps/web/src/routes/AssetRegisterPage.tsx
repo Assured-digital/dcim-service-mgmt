@@ -15,6 +15,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { listCustomFields } from "../lib/customFields"
 import { ManageCustomFieldsDialog } from "./customFieldsUi"
 import { AssetBulkBar } from "./AssetBulkBar"
+import { AssetSavedViews } from "./AssetSavedViews"
 import {
   FilterState, WarrantyKey, activeFilterCount, applyFilters, applyFiltersExcluding,
   emptyFilters, exportAssetsCsv, UNKNOWN_MANUFACTURER, warrantyStatus,
@@ -159,6 +160,7 @@ export default function AssetRegisterPage() {
   const clearKey = (key: Exclude<keyof FilterState, "search">) => () =>
     setFilters(prev => ({ ...prev, [key]: new Set() }))
   const clearAll = React.useCallback(() => { setFilters(emptyFilters()); setSearchInput("") }, [])
+  const applyView = React.useCallback((next: FilterState) => { setFilters(next); setSearchInput(next.search) }, [])
 
   const handleAssetClick = React.useCallback((asset: Asset) => {
     navigate(`/asset-register/assets/${asset.id}`)
@@ -189,6 +191,7 @@ export default function AssetRegisterPage() {
               placeholder="Search assets — tag, serial, IP, model…"
               value={searchInput} onValueChange={setSearchInput} onSearch={commitSearch}
             />
+            <AssetSavedViews filters={filters} onApply={applyView} />
             <FilterChip label="Site" options={siteOptions} selected={filters.siteIds} onToggle={toggleIn("siteIds")} onClear={clearKey("siteIds")} />
             <FilterChip label="Type" options={typeOptions} selected={filters.types} onToggle={toggleIn("types")} onClear={clearKey("types")} />
             <FilterChip label="Lifecycle" options={lifecycleOptions} selected={filters.lifecycles} onToggle={toggleIn("lifecycles")} onClear={clearKey("lifecycles")} />
