@@ -14,6 +14,7 @@ import { useNotification } from "../components/NotificationProvider"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { AttachmentsContent } from "../components/AttachmentsContent"
 import { WorkNotesPanel } from "../components/shared/WorkNotesPanel"
+import { CustomPropertiesCard } from "./customFieldsUi"
 import { useBreadcrumb } from "./Shell"
 import { useThemeMode } from "../lib/theme"
 import {
@@ -545,6 +546,7 @@ export default function AssetDetailPage({
             onViewAllLinked={() => setTab("linked")}
             onOpenTask={id => setQuickTaskId(id)}
             navigate={navigate}
+            canManage={canManage}
           />
         ) : null}
 
@@ -654,7 +656,7 @@ export default function AssetDetailPage({
 // ─── Overview tab ─────────────────────────────────────────────────────────
 
 const OverviewTab = React.memo(function OverviewTab({
-  asset, editMode, editDraft, onPatchDraft, cabinets, recentLinked, onViewAllLinked, onOpenTask, navigate
+  asset, editMode, editDraft, onPatchDraft, cabinets, recentLinked, onViewAllLinked, onOpenTask, navigate, canManage
 }: {
   asset: Asset
   editMode: boolean
@@ -665,6 +667,7 @@ const OverviewTab = React.memo(function OverviewTab({
   onViewAllLinked: () => void
   onOpenTask: (id: string) => void
   navigate: (path: string) => void
+  canManage: boolean
 }) {
   const warrantyCol = warrantyColor(asset.warrantyExpiry)
   const draft = editDraft ?? {}
@@ -870,6 +873,16 @@ const OverviewTab = React.memo(function OverviewTab({
           <Box sx={{ p: "12px 16px" }}>
             <WorkNotesPanel entityType="asset" entityId={asset.id} />
           </Box>
+        </Box>
+      </Box>
+
+      {/* Additional properties — client-defined custom fields (register power-features). */}
+      <Box sx={{ mt: "14px", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+        <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+          <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Additional properties</Typography>
+        </Stack>
+        <Box sx={{ p: "12px 16px" }}>
+          <CustomPropertiesCard assetId={asset.id} values={asset.customValues} canManage={canManage} />
         </Box>
       </Box>
     </Box>

@@ -11,6 +11,9 @@ import { ChipOption, FilterChip } from "../components/shared/FilterChip"
 import AssetRegister from "./AssetRegister"
 import AssetDetailPage from "./AssetDetailPage"
 import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructure"
+import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { listCustomFields } from "../lib/customFields"
+import { ManageCustomFieldsDialog } from "./customFieldsUi"
 import {
   FilterState, WarrantyKey, activeFilterCount, applyFilters, applyFiltersExcluding,
   emptyFilters, exportAssetsCsv, UNKNOWN_MANUFACTURER, warrantyStatus,
@@ -50,6 +53,11 @@ export default function AssetRegisterPage() {
     queryFn: async () => (await api.get<Asset[]>("/assets")).data,
     staleTime: 5 * 60 * 1000
   })
+
+  // Custom asset fields: drive extra export columns + the Manage fields dialog.
+  const canManageFields = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
+  const [manageFields, setManageFields] = React.useState(false)
+  const { data: customFields = [] } = useQuery({ queryKey: ["asset-custom-fields"], queryFn: listCustomFields })
 
   const filteredRows = React.useMemo(() => {
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
@@ -178,7 +186,8 @@ export default function AssetRegisterPage() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1 }} />
-            <ToolbarButton onClick={() => exportAssetsCsv(filteredRows)} disabled={filteredRows.length === 0}
+            {canManageFields ? <ToolbarButton onClick={() => setManageFields(true)}>Manage fields</ToolbarButton> : null}
+            <ToolbarButton onClick={() => exportAssetsCsv(filteredRows, customFields)} disabled={filteredRows.length === 0}
               startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: "15px !important" }} />}>
               Export {filteredRows.length}{activeCount > 0 ? " (filtered)" : ""}
             </ToolbarButton>
@@ -190,6 +199,7 @@ export default function AssetRegisterPage() {
           </Box>
         </>
       )}
+      {manageFields ? <ManageCustomFieldsDialog onClose={() => setManageFields(false)} /> : null}
     </Box>
   )
 }

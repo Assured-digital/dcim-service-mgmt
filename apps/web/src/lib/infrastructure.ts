@@ -44,6 +44,8 @@ export type Asset = {
   pendingOp?: "INSTALL" | "DECOMMISSION" | null
   pendingWorkOrderType?: "task" | "change" | null
   pendingWorkOrderId?: string | null
+  // User-defined custom properties (register power-features) — { fieldKey: value }.
+  customValues?: Record<string, unknown> | null
 }
 
 // Approver queue row (GET /assets/deletion-requests): an Asset plus the resolved requester.

@@ -1,4 +1,5 @@
 import { Asset } from "../lib/infrastructure"
+import { AssetCustomField } from "../lib/customFields"
 
 // Filter model for the Asset register (the UI is top filter chips + instant
 // search — DCIM_DESIGN_BRIEF §4.5's "search + filter chips"; the earlier left
@@ -79,7 +80,7 @@ export function applyFiltersExcluding(assets: Asset[], filters: FilterState, exc
 }
 
 // Filtered CSV export — the audit artefact ("export N (filtered)", brief §4.5).
-export function exportAssetsCsv(rows: Asset[]) {
+export function exportAssetsCsv(rows: Asset[], customFields: AssetCustomField[] = []) {
   const cols: [string, (a: Asset) => string | number | null | undefined][] = [
     ["Tag", a => a.assetTag], ["Name", a => a.name], ["Type", a => a.assetType],
     ["Manufacturer", a => a.manufacturer], ["Model", a => a.modelNumber],
@@ -89,6 +90,11 @@ export function exportAssetsCsv(rows: Asset[]) {
     ["Power (W)", a => a.powerDrawW], ["Lifecycle", a => a.lifecycleState],
     ["Warranty expiry", a => a.warrantyExpiry?.split("T")[0]],
     ["Installed", a => a.installDate?.split("T")[0]],
+    // Custom fields append as trailing columns (values live in Asset.customValues).
+    ...customFields.map(f => [f.label, (a: Asset) => {
+      const v = (a.customValues ?? {})[f.key]
+      return v == null ? "" : String(v)
+    }] as [string, (a: Asset) => string | number | null | undefined]),
   ]
   const esc = (v: unknown) => {
     const s = v == null ? "" : String(v)
