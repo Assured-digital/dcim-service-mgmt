@@ -14,6 +14,7 @@ import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructu
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { listCustomFields } from "../lib/customFields"
 import { ManageCustomFieldsDialog } from "./customFieldsUi"
+import { AssetBulkBar } from "./AssetBulkBar"
 import {
   FilterState, WarrantyKey, activeFilterCount, applyFilters, applyFiltersExcluding,
   emptyFilters, exportAssetsCsv, UNKNOWN_MANUFACTURER, warrantyStatus,
@@ -56,8 +57,21 @@ export default function AssetRegisterPage() {
 
   // Custom asset fields: drive extra export columns + the Manage fields dialog.
   const canManageFields = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
+  const canBulkEdit = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
   const [manageFields, setManageFields] = React.useState(false)
   const { data: customFields = [] } = useQuery({ queryKey: ["asset-custom-fields"], queryFn: listCustomFields })
+
+  // Bulk selection (ids ticked across the filtered set).
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const toggleRow = React.useCallback((id: string) => setSelectedIds(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
+  }), [])
+  const toggleAll = React.useCallback((ids: string[], checked: boolean) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (checked) ids.forEach(i => next.add(i)); else ids.forEach(i => next.delete(i))
+    return next
+  }), [])
+  const clearSelection = React.useCallback(() => setSelectedIds(new Set()), [])
 
   const filteredRows = React.useMemo(() => {
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
@@ -153,6 +167,7 @@ export default function AssetRegisterPage() {
 
   const assetEmbedded = !!params.assetId
   const activeCount = activeFilterCount(filters)
+  const selectedAssets = React.useMemo(() => allAssets.filter(a => selectedIds.has(a.id)), [allAssets, selectedIds])
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -193,9 +208,15 @@ export default function AssetRegisterPage() {
             </ToolbarButton>
           </ListToolbar>
 
+          {/* ── Bulk selection bar ──────────────────────────────────────── */}
+          {selectedAssets.length > 0 ? (
+            <AssetBulkBar selected={selectedAssets} customFields={customFields} canManage={canBulkEdit} onClear={clearSelection} />
+          ) : null}
+
           {/* ── Table ───────────────────────────────────────────────────── */}
           <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", bgcolor: "background.paper" }}>
-            <AssetRegister filteredRows={filteredRows} onAssetClick={handleAssetClick} />
+            <AssetRegister filteredRows={filteredRows} onAssetClick={handleAssetClick}
+              selectedIds={selectedIds} onToggleRow={toggleRow} onToggleAll={toggleAll} />
           </Box>
         </>
       )}
