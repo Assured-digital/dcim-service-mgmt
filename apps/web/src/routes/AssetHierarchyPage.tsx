@@ -3,10 +3,13 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, MenuItem, Stack, TextField, Typography
+  Box, Button, IconButton, MenuItem, Stack, TextField, Tooltip, Typography
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import StorageIcon from "@mui/icons-material/Storage"
+import KeyboardDoubleArrowLeftIcon from "@mui/icons-material/KeyboardDoubleArrowLeft"
+import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight"
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined"
 import { EditActionsButton } from "../components/EditActionsButton"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -339,6 +342,12 @@ export default function AssetHierarchyPage() {
   React.useEffect(() => { setSiteView("plan"); setSiteRoomId(null) }, [selectedSiteId])
   const [openRoomId, setOpenRoomId] = React.useState<string | null>(params.roomId ?? null)
   const [openCabinetId, setOpenCabinetId] = React.useState<string | null>(params.cabinetId ?? null)
+  // Collapsible hierarchy tree (Hyperview pattern) — sticky per browser so the
+  // choice survives navigation; collapses to a thin rail to hand the plan room.
+  const [treeCollapsed, setTreeCollapsed] = React.useState(() => localStorage.getItem("dcms_estate_tree_collapsed") === "1")
+  const toggleTree = React.useCallback(() => setTreeCollapsed(v => {
+    const next = !v; localStorage.setItem("dcms_estate_tree_collapsed", next ? "1" : "0"); return next
+  }), [])
 
   // ── Dialog state ──────────────────────────────────────────────────────
   const [activeDialog, setActiveDialog] = React.useState<DialogKey>(null)
@@ -645,19 +654,45 @@ export default function AssetHierarchyPage() {
       height: "100%", width: "100%", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
     }}>
 
-      {/* ── Left panel ──────────────────────────────────────────────────── */}
-      <Box sx={{ width: 260, minWidth: 260, bgcolor: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-primary)", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-        <SiteHierarchyTree
-          sites={sites} rooms={rooms} cabinets={cabinets}
-          selectedSiteId={selectedSiteId} selectedRoomId={selectedRoomId}
-          selectedCabinetId={selectedCabinetId} selectedAssetId={selectedAssetId}
-          openSiteIds={openSiteIds} openRoomId={openRoomId} openCabinetId={openCabinetId}
-          isLoading={isLoading}
-          onSelectSite={handleSelectSite} onToggleSite={handleToggleSite}
-          onSelectRoom={handleSelectRoom} onToggleRoom={handleToggleRoom}
-          onSelectCabinet={handleSelectCabinet} onToggleCabinet={handleToggleCabinet}
-          onSelectAsset={handleSelectAsset}
-        />
+      {/* ── Left panel (collapsible hierarchy) ─────────────────────────────── */}
+      <Box sx={{ width: treeCollapsed ? 44 : 260, minWidth: treeCollapsed ? 44 : 260, bgcolor: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-primary)", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column", transition: "width .18s ease, min-width .18s ease" }}>
+        {treeCollapsed ? (
+          <Stack alignItems="center" spacing={1.25} sx={{ pt: "10px" }}>
+            <Tooltip title="Show hierarchy" placement="right">
+              <IconButton size="small" onClick={toggleTree} aria-label="Expand hierarchy" sx={{ color: "text.secondary" }}>
+                <KeyboardDoubleArrowRightIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <AccountTreeOutlinedIcon sx={{ fontSize: 17, color: "text.tertiary" }} />
+            <Typography sx={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em", color: "text.tertiary", writingMode: "vertical-rl", mt: "2px" }}>
+              HIERARCHY
+            </Typography>
+          </Stack>
+        ) : (
+          <>
+            <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", pl: "16px", pr: "8px", borderBottom: "1px solid var(--color-border-primary)" }}>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "text.tertiary" }}>Hierarchy</Typography>
+              <Tooltip title="Collapse" placement="right">
+                <IconButton size="small" onClick={toggleTree} aria-label="Collapse hierarchy" sx={{ color: "text.secondary" }}>
+                  <KeyboardDoubleArrowLeftIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+              <SiteHierarchyTree
+                sites={sites} rooms={rooms} cabinets={cabinets}
+                selectedSiteId={selectedSiteId} selectedRoomId={selectedRoomId}
+                selectedCabinetId={selectedCabinetId} selectedAssetId={selectedAssetId}
+                openSiteIds={openSiteIds} openRoomId={openRoomId} openCabinetId={openCabinetId}
+                isLoading={isLoading}
+                onSelectSite={handleSelectSite} onToggleSite={handleToggleSite}
+                onSelectRoom={handleSelectRoom} onToggleRoom={handleToggleRoom}
+                onSelectCabinet={handleSelectCabinet} onToggleCabinet={handleToggleCabinet}
+                onSelectAsset={handleSelectAsset}
+              />
+            </Box>
+          </>
+        )}
       </Box>
 
       {/* ── Right panel ──────────────────────────────────────────────── */}
