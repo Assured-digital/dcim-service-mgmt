@@ -21,6 +21,7 @@ import CabinetDetailView from "./CabinetDetailView"
 import AssetDetailPage from "./AssetDetailPage"
 import CapacityRing from "../components/shared/CapacityRing"
 import { FloorCanvas } from "../components/floorplan/FloorCanvas"
+const Room3D = React.lazy(() => import("../components/floorplan/Room3D"))
 import { FloorLens, getFloorPlan } from "../lib/floorPlan"
 import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import { AttachmentsContent } from "../components/AttachmentsContent"
@@ -241,6 +242,8 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
   const [internalView, setInternalView] = React.useState<RoomView | null>(null) // null = auto
   const [lens, setLens] = React.useState<FloorLens>("space")
   const [findSpaceU, setFindSpaceU] = React.useState<number | null>(null)
+  const [dim, setDim] = React.useState<"2d" | "3d">(() => (localStorage.getItem("dcms_estate_plan_dim") === "3d" ? "3d" : "2d"))
+  const changeDim = React.useCallback((d: "2d" | "3d") => { setDim(d); localStorage.setItem("dcms_estate_plan_dim", d) }, [])
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ["floor-plan", roomId],
@@ -274,10 +277,16 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
               options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }, { value: "thermal", label: "Thermal" }]}
               value={lens} onChange={v => setLens(v)} sx={{ ml: 1 }}
             />
-            <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} sx={{ ml: 1 }}
-              onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}>
-              Find ≥10U free
-            </ToolbarButton>
+            <SegmentedToggle
+              options={[{ value: "2d", label: "2D" }, { value: "3d", label: "3D" }]}
+              value={dim} onChange={v => changeDim(v as "2d" | "3d")} sx={{ ml: 1 }}
+            />
+            {dim === "2d" ? (
+              <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} sx={{ ml: 1 }}
+                onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}>
+                Find ≥10U free
+              </ToolbarButton>
+            ) : null}
           </>
         ) : null}
         <Box sx={{ ml: "auto", display: "flex", gap: "8px", alignItems: "center" }}>
@@ -297,12 +306,18 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
         ) : isLoading ? (
           <Box sx={{ p: 3 }}><LoadingState /></Box>
         ) : plan && placedCount > 0 ? (
-          <FloorCanvas
-            plan={plan} lens={lens} mode="view"
-            selectedCabinetId={null} findSpaceMinU={findSpaceU} placing={false}
-            onCabinetClick={onSelectCabinet}
-            onObjectClick={() => {}} onCellClick={() => {}}
-          />
+          dim === "3d" ? (
+            <React.Suspense fallback={<Box sx={{ p: 3 }}><LoadingState /></Box>}>
+              <Room3D plan={plan} lens={lens} selectedCabinetId={null} onCabinetClick={onSelectCabinet} />
+            </React.Suspense>
+          ) : (
+            <FloorCanvas
+              plan={plan} lens={lens} mode="view"
+              selectedCabinetId={null} findSpaceMinU={findSpaceU} placing={false}
+              onCabinetClick={onSelectCabinet}
+              onObjectClick={() => {}} onCellClick={() => {}}
+            />
+          )
         ) : (
           <Box sx={{ p: "20px 24px" }}>
             <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed", borderColor: "divider", borderRadius: "10px" }}>

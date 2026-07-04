@@ -33,7 +33,12 @@ export default defineConfig({
       "@emotion/react",
       "@emotion/styled",
       "@tanstack/react-query",
-      "react-router-dom"
+      "react-router-dom",
+      // 3D floor plan (Phase C) — three + its OrbitControls addon, imported only
+      // by the lazy Room3D route. Pin both so the mid-session lazy import doesn't
+      // trigger a re-optimize / 504 (see the @mui/icons-material note above).
+      "three",
+      "three/examples/jsm/controls/OrbitControls.js"
     ]
   }
 });
