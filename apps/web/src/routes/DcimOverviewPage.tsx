@@ -6,7 +6,11 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import { EmptyState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { useThemeMode } from "../lib/theme"
+import { api } from "../lib/api"
 import { CapacityOverview, Metered, getCapacityOverview, kw, pctColor } from "../lib/capacity"
+import { Asset, Site } from "../lib/infrastructure"
+import SitesMapCard, { SiteAssetCounts } from "../components/SitesMapCard"
+import { ToolbarButton } from "../components/shared/ListToolbar"
 
 // DCIM capacity dashboard (DCIM_DESIGN_SPEC.md §4.4). Replaces the old count-cards
 // overview: KPI row → per-site RYG capacity strips → top cabinets by budgeted
@@ -23,6 +27,29 @@ export default function DcimOverviewPage() {
 
   const { data, isLoading, isError } = useQuery({ queryKey: ["capacity-overview"], queryFn: getCapacityOverview })
 
+  // Estate map (moved here from the retired Sites & cabinets overview). Sites
+  // carry the geocoords; per-site cabinet/asset counts feed the marker popups.
+  const { data: sites = [] } = useQuery({ queryKey: ["sites"], queryFn: async () => (await api.get<Site[]>("/sites")).data })
+  const { data: allAssets = [] } = useQuery({ queryKey: ["assets"], queryFn: async () => (await api.get<Asset[]>("/assets")).data, staleTime: 5 * 60 * 1000 })
+  const siteAssetCounts = React.useMemo<SiteAssetCounts>(() => {
+    const byCabinet = new Map<string, Set<string>>()
+    const byAsset = new Map<string, number>()
+    for (const asset of allAssets) {
+      if (!asset.siteId) continue
+      byAsset.set(asset.siteId, (byAsset.get(asset.siteId) ?? 0) + 1)
+      if (asset.cabinetId) {
+        const cabs = byCabinet.get(asset.siteId) ?? new Set<string>()
+        cabs.add(asset.cabinetId)
+        byCabinet.set(asset.siteId, cabs)
+      }
+    }
+    const out: SiteAssetCounts = {}
+    for (const site of sites) {
+      out[site.id] = { cabinets: byCabinet.get(site.id)?.size ?? 0, assets: byAsset.get(site.id) ?? 0 }
+    }
+    return out
+  }, [sites, allAssets])
+
   if (isLoading) return <LoadingState />
   if (isError || !data) return <EmptyState title="Couldn't load capacity" detail="The capacity overview is unavailable." />
   if (data.totals.cabinets === 0) {
@@ -34,9 +61,12 @@ export default function DcimOverviewPage() {
 
   return (
     <Stack spacing={2.5}>
-      <Typography variant="body2" color="text.secondary">
-        Space, power and weight across the estate — budgeted power (nameplate derated), calm-by-exception.
-      </Typography>
+      <Stack direction="row" alignItems="center" spacing={2}>
+        <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+          Space, power and weight across the estate — budgeted power (nameplate derated), calm-by-exception.
+        </Typography>
+        <ToolbarButton variant="primary" onClick={() => nav("/dcim/place")}>Place equipment</ToolbarButton>
+      </Stack>
 
       {/* KPI row */}
       <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5, minmax(0,1fr))" } }}>
@@ -85,6 +115,8 @@ export default function DcimOverviewPage() {
           )}
         </Panel>
       </Box>
+
+      <SitesMapCard sites={sites} siteAssetCounts={siteAssetCounts} />
     </Stack>
   )
 }

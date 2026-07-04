@@ -152,6 +152,8 @@ model Client {
   userAssignments   UserClientAssignment[]
   recordLinks       RecordLink[]
   attachments       Attachment[]
+  workNotes         WorkNote[]
+  sensorReadings    SensorReading[]
   slaPolicies       SlaPolicy[]
   cabinetReservations CabinetReservation[]
   regions           Region[]
@@ -494,6 +496,7 @@ model User {
   assignedChanges         ChangeRequest[]        @relation("AssignedChange")
   changeApprovals         ChangeApproval[]       @relation("ChangeApprovals")
   comments                Comment[]              @relation("UserComments")
+  workNotes               WorkNote[]             @relation("UserWorkNotes")
   assignedChecks          Check[]                @relation("AssignedCheck")
   reviewingChecks         Check[]                @relation("CheckReviewer")
   performedMaintenance    MaintenanceLog[]       @relation("PerformedMaintenance")
@@ -649,6 +652,13 @@ model Asset {
   deletionRequestedById String?           // bare user id (no FK), mirrors AuditEvent.actorUserId
   deletionRequestedAt   DateTime?
   deletionReason        String?
+  // MAC↔ITSM work-order fusion (Horizon 2). A pending physical operation is
+  // staged here and APPLIED AUTOMATICALLY when its linked Task/Change completes
+  // (the completion hook reverse-looks-up the asset by pendingWorkOrderId). One
+  // pending op per asset at a time. Elevation reads these to draw shadow state.
+  pendingOp             String?           // null = none | "INSTALL" | "DECOMMISSION"
+  pendingWorkOrderType  String?           // "task" | "change"
+  pendingWorkOrderId    String?           // id of the linked Task/Change
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   installDate         DateTime?
@@ -657,6 +667,29 @@ model Asset {
   incomingConnections Connection[]        @relation("ConnectionToAsset")
   ports               Port[]              // LATENT — port layer (§6)
   floorObjects        FloorObject[]       // reverse of FloorObject.assetId
+  sensorReadings      SensorReading[]     // measured power / environmental (Horizon 3)
+}
+
+// Measured telemetry (DCIM_SCHEMA_SPEC §6b, Horizon 3). The manual/CSV field-
+// reading phase — a time-series of point readings per asset. clientId is
+// denormalised for the tenant chokepoint on the hot roll-up queries (mirrors
+// Connection); the write validates the asset is in scope first. The "third
+// number" (measured) that turns estimated stranded capacity into real.
+model SensorReading {
+  id           String   @id @default(uuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id])
+  assetId      String
+  asset        Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  metric       String   // "powerW" | "temperatureC" | "humidityPct"
+  value        Float
+  readAt       DateTime
+  source       String   @default("manual") // "manual" | "csv"
+  recordedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([clientId, assetId, metric, readAt])
+  @@index([assetId, metric, readAt])
 }
 
 model MaintenanceLog {
@@ -992,6 +1025,24 @@ model Attachment {
   createdAt    DateTime @default(now())
 
   @@index([clientId, recordType, recordId])
+}
+
+// Timestamped work notes on the DCIM estate entities (asset / cabinet / site) —
+// the Hyperview "Work Notes" pattern, field-ops friendly. Same polymorphic
+// clientId-scoped pointer shape as Attachment; tenant integrity enforced in app
+// code (entity validated in-scope on write, clientId on every read).
+model WorkNote {
+  id         String   @id @default(uuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id])
+  entityType String // asset | cabinet | site
+  entityId   String
+  authorId   String?
+  author     User?    @relation("UserWorkNotes", fields: [authorId], references: [id])
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([clientId, entityType, entityId])
 }
 
 model Comment {

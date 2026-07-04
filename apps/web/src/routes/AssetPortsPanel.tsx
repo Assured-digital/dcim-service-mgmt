@@ -7,6 +7,7 @@ import {
 } from "@mui/material"
 import { api } from "../lib/api"
 import { useNotification } from "../components/NotificationProvider"
+import { ToolbarButton } from "../components/shared/ListToolbar"
 import { useThemeMode } from "../lib/theme"
 import { getApiErrorMessage } from "../lib/infrastructure"
 import {
@@ -63,7 +64,7 @@ export default function AssetPortsPanel({ assetId, assetName, canManage }: {
     <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
       <Box sx={{ px: "16px", py: "12px", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center" }}>
         <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.secondary", flex: 1 }}>Ports & connectivity ({ports.length})</Typography>
-        {canManage ? <Button size="small" variant="outlined" onClick={() => setAddOpen(true)} sx={{ textTransform: "none", fontSize: 11.5 }}>Add ports</Button> : null}
+        {canManage ? <ToolbarButton onClick={() => setAddOpen(true)}>Add ports</ToolbarButton> : null}
       </Box>
 
       {isLoading ? null : ports.length === 0 ? (

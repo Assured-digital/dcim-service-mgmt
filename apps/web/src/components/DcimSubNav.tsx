@@ -7,7 +7,6 @@ import ViewListIcon from "@mui/icons-material/ViewList"
 import HubIcon from "@mui/icons-material/Hub"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
-import MapOutlinedIcon from "@mui/icons-material/MapOutlined"
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined"
 import MonitorHeartOutlinedIcon from "@mui/icons-material/MonitorHeartOutlined"
 import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined"
@@ -17,7 +16,7 @@ import { shellTokens } from "./shared"
 // beside the collapsed main icon rail while on a DCIM route; the rail keeps every
 // module one click away (cross-module ITSM jumps), this panel owns within-DCIM
 // movement. Navy in BOTH themes — it is chrome, like the sidebar/top bar, so no
-// mode-awareness is needed. Deferred items (Floor plan / Catalogue / Monitoring)
+// mode-awareness is needed. Deferred items (Monitoring)
 // are shown visibly-but-muted under a "Later" heading per the brief — the seam
 // for the hero floor plan (its own build) and workstream B's catalogue.
 
@@ -33,21 +32,23 @@ const ICON = 18
 // the two never drift.
 export const DCIM_DESTINATIONS: DcimDestination[] = [
   { label: "Overview", path: "/dcim/overview", icon: <DashboardIcon sx={{ fontSize: ICON }} /> },
-  { label: "Floor plan", path: "/dcim/floor-plan", icon: <MapOutlinedIcon sx={{ fontSize: ICON }} /> },
-  { label: "Sites & cabinets", path: "/asset-hierarchy", icon: <AccountTreeIcon sx={{ fontSize: ICON }} /> },
+  // Floor plan is NOT a destination — Estate is the one spatial route (site →
+  // room plan → elevation). /dcim/floor-plan survives only as the layout
+  // editor, reached via "Edit layout" in context (hence the match alias).
+  { label: "Estate", path: "/asset-hierarchy", icon: <AccountTreeIcon sx={{ fontSize: ICON }} />, match: ["/asset-hierarchy", "/dcim/floor-plan"] },
   { label: "Asset register", path: "/asset-register", icon: <ViewListIcon sx={{ fontSize: ICON }} /> },
   { label: "Catalogue", path: "/dcim/catalogue", icon: <Inventory2OutlinedIcon sx={{ fontSize: ICON }} /> },
   { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON }} /> },
   { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON }} /> },
   { label: "Report", path: "/dcim/report", icon: <SummarizeOutlinedIcon sx={{ fontSize: ICON }} /> },
+  // Monitoring is LIVE (Horizon 3) — measured power + environmental readings.
+  { label: "Monitoring", path: "/dcim/monitoring", icon: <MonitorHeartOutlinedIcon sx={{ fontSize: ICON }} /> },
   { label: "Pending deletions", path: "/pending-deletions", icon: <DeleteSweepIcon sx={{ fontSize: ICON }} /> },
 ]
 const PRIMARY = DCIM_DESTINATIONS
 
-// Visibly-deferred — the future surface (brief §1 / §6b). Non-clickable until built.
-const DEFERRED: { label: string; icon: React.ReactNode; note: string }[] = [
-  { label: "Monitoring", icon: <MonitorHeartOutlinedIcon sx={{ fontSize: ICON }} />, note: "Live power & environmental" },
-]
+// Visibly-deferred — the future surface (brief §1). Empty now Monitoring shipped.
+const DEFERRED: { label: string; icon: React.ReactNode; note: string }[] = []
 
 function isItemActive(item: SubNavItem, pathname: string): boolean {
   const paths = item.match ?? [item.path]
@@ -99,10 +100,12 @@ export default function DcimSubNav({ pathname, onNavigate }: {
           )
         })}
 
-        {/* Later — visibly deferred */}
-        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#475569", px: "10px", pt: "16px", pb: "6px" }}>
-          Later
-        </Typography>
+        {/* Later — visibly deferred (hidden when nothing is deferred) */}
+        {DEFERRED.length > 0 ? (
+          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#475569", px: "10px", pt: "16px", pb: "6px" }}>
+            Later
+          </Typography>
+        ) : null}
         {DEFERRED.map(d => (
           <Tooltip key={d.label} title={`${d.note} — coming soon`} placement="right" arrow>
             <Box sx={{

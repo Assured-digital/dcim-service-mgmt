@@ -1,10 +1,10 @@
 import React from "react"
 import {
-  Box, Button, CircularProgress, Drawer, InputAdornment, Stack,
+  Box, Button, CircularProgress, Drawer, Stack,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography
 } from "@mui/material"
-import SearchIcon from "@mui/icons-material/Search"
 import AddIcon from "@mui/icons-material/Add"
+import { ListToolbar, SearchField, ToolbarButton } from "../components/shared/ListToolbar"
 import UploadIcon from "@mui/icons-material/Upload"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useBreadcrumb } from "./Shell"
@@ -42,8 +42,6 @@ export default function DeviceCataloguePage() {
     return () => { setHideModuleLabel(false); setPageFullBleed(false) }
   }, [setHideModuleLabel, setPageFullBleed, setBreadcrumbs])
 
-  React.useEffect(() => { const t = setTimeout(() => setDebounced(search.trim()), 250); return () => clearTimeout(t) }, [search])
-
   const { data: manufacturers = [] } = useQuery({ queryKey: ["manufacturers"], queryFn: listManufacturers })
   const { data: types = [], isFetching } = useQuery({
     queryKey: ["device-types", "catalogue", mfrId, debounced],
@@ -70,13 +68,12 @@ export default function DeviceCataloguePage() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Header */}
-      <Box sx={{ px: "20px", py: "12px", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, bgcolor: "background.paper" }}>
-        <TextField size="small" placeholder="Search model or manufacturer…" value={search} onChange={e => setSearch(e.target.value)}
-          sx={{ width: 320 }} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment> }} />
+      <ListToolbar>
+        <SearchField placeholder="Search model or manufacturer…" value={search} onValueChange={setSearch} onSearch={q => setDebounced(q)} />
         {isFetching ? <CircularProgress size={16} /> : null}
         <Box sx={{ flex: 1 }} />
-        {canManage ? <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setFormOpen("new")} sx={{ textTransform: "none" }}>New device type</Button> : null}
-      </Box>
+        {canManage ? <ToolbarButton variant="primary" startIcon={<AddIcon sx={{ fontSize: "15px !important" }} />} onClick={() => setFormOpen("new")}>New device type</ToolbarButton> : null}
+      </ListToolbar>
 
       <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Manufacturer rail */}

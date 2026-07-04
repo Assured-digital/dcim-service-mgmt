@@ -7,6 +7,7 @@ import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
+import { applyCompletedWorkOrder, abandonWorkOrder } from "../work-orders/apply-pending"
 import { emitNotification } from "../notifications/emit-notification"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
 
@@ -114,6 +115,10 @@ export class ChangesService {
     scheduledStart?: string
     scheduledEnd?: string
     assigneeId?: string
+    // Generic parent-context pointer (mirrors Task) — set when a change is
+    // raised against an Asset/Cabinet so it shows on that record's Linked tab.
+    linkedEntityType?: string
+    linkedEntityId?: string
   }) {
     this.assertClientScope(clientId)
 
@@ -135,6 +140,8 @@ export class ChangesService {
             scheduledStart: dto.scheduledStart ? new Date(dto.scheduledStart) : undefined,
             scheduledEnd: dto.scheduledEnd ? new Date(dto.scheduledEnd) : undefined,
             assigneeId: dto.assigneeId,
+            linkedEntityType: dto.linkedEntityType,
+            linkedEntityId: dto.linkedEntityId,
             createdById: actorUserId,
             status: "DRAFT"
           }
@@ -201,6 +208,14 @@ export class ChangesService {
       sourceType: "ChangeRequest",
       sourceId: change.id
     })
+
+    // MAC↔ITSM fusion: a completed decommission change retires its staged asset;
+    // a cancelled one abandons the pending op (clears the asset's shadow).
+    if (dto.status === "COMPLETED") {
+      await applyCompletedWorkOrder(this.prisma, { workOrderType: "change", workOrderId: change.id, actorUserId, clientId })
+    } else if (dto.status === "CANCELLED") {
+      await abandonWorkOrder(this.prisma, { workOrderType: "change", workOrderId: change.id, actorUserId, clientId })
+    }
 
     return updated
   }

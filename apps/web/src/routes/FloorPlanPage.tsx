@@ -1,9 +1,10 @@
 import React from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Box, Button, Chip, MenuItem, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography
+  Box, Button, Chip, MenuItem, Stack, TextField, Typography
 } from "@mui/material"
+import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import { api } from "../lib/api"
 import { useBreadcrumb } from "./Shell"
 import { useNotification } from "../components/NotificationProvider"
@@ -11,6 +12,7 @@ import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ROLES } from "../lib/rbac"
 import { getApiErrorMessage } from "../lib/infrastructure"
 import { kw, pctColor } from "../lib/capacity"
+import { healthColor } from "../lib/readings"
 import {
   FloorCabinet, FloorLens, createAisleZone, createFloorObject, deleteAisleZone, deleteFloorObject,
   getFloorPlan, placeCabinet,
@@ -35,8 +37,11 @@ export default function FloorPlanPage() {
   const { setBreadcrumbs, setHideModuleLabel, setPageFullBleed } = useBreadcrumb()
   const canEdit = hasAnyRole([ROLES.ORG_OWNER, ROLES.ORG_ADMIN, ROLES.ADMIN, ROLES.SERVICE_MANAGER, ROLES.ENGINEER])
 
-  const [siteId, setSiteId] = React.useState<string | null>(null)
-  const [roomId, setRoomId] = React.useState<string | null>(null)
+  // Deep-link from Sites & cabinets ("Edit layout" on a room's plan view):
+  // ?siteId=…&roomId=… pre-selects that room instead of the first-site default.
+  const [searchParams] = useSearchParams()
+  const [siteId, setSiteId] = React.useState<string | null>(() => searchParams.get("siteId"))
+  const [roomId, setRoomId] = React.useState<string | null>(() => searchParams.get("roomId"))
   const [lens, setLens] = React.useState<FloorLens>("space")
   const [edit, setEdit] = React.useState(false)
   const [selectedCabinetId, setSelectedCabinetId] = React.useState<string | null>(null)
@@ -59,7 +64,10 @@ export default function FloorPlanPage() {
     queryKey: ["site-rooms", siteId], enabled: !!siteId,
     queryFn: async () => (await api.get<Room[]>(`/sites/${siteId}/rooms`)).data,
   })
-  React.useEffect(() => { setRoomId(rooms.length ? rooms[0].id : null) }, [rooms])
+  // Default to the site's first room, but never clobber a valid deep-linked room.
+  React.useEffect(() => {
+    setRoomId(prev => (prev && rooms.some(r => r.id === prev) ? prev : rooms.length ? rooms[0].id : null))
+  }, [rooms])
 
   const { data: plan } = useQuery({ queryKey: ["floor-plan", roomId], enabled: !!roomId, queryFn: () => getFloorPlan(roomId!) })
   const refresh = () => qc.invalidateQueries({ queryKey: ["floor-plan", roomId] })
@@ -107,7 +115,7 @@ export default function FloorPlanPage() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Controls */}
-      <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.paper", display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", flexShrink: 0 }}>
+      <ListToolbar>
         <TextField select size="small" label="Site" value={siteId ?? ""} onChange={e => { setSiteId(e.target.value); setSelectedCabinetId(null) }} sx={{ minWidth: 170 }}>
           {sites.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
         </TextField>
@@ -115,12 +123,11 @@ export default function FloorPlanPage() {
           {rooms.map(r => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
           {!rooms.length ? <MenuItem value="">No rooms</MenuItem> : null}
         </TextField>
-        <ToggleButtonGroup size="small" exclusive value={lens} onChange={(_, v) => v && setLens(v)}>
-          <ToggleButton value="space" sx={{ textTransform: "none", px: 1.5 }}>Space</ToggleButton>
-          <ToggleButton value="power" sx={{ textTransform: "none", px: 1.5 }}>Power</ToggleButton>
-          <ToggleButton value="status" sx={{ textTransform: "none", px: 1.5 }}>Status</ToggleButton>
-        </ToggleButtonGroup>
-        <Button size="small" variant={findSpaceU != null ? "contained" : "outlined"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)} sx={{ textTransform: "none" }}>Find space</Button>
+        <SegmentedToggle
+          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }]}
+          value={lens} onChange={v => setLens(v)}
+        />
+        <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)}>Find space</ToolbarButton>
         {findSpaceU != null ? (
           <TextField size="small" type="number" label="≥ U free" value={findSpaceU}
             onChange={e => setFindSpaceU(Math.max(1, parseInt(e.target.value, 10) || 1))}
@@ -128,8 +135,8 @@ export default function FloorPlanPage() {
         ) : null}
         <Box sx={{ flex: 1 }} />
         <LensLegend lens={lens} mode={mode} />
-        {canEdit ? <Button size="small" variant={edit ? "contained" : "outlined"} onClick={() => { setEdit(e => !e); setPlacing(null) }} sx={{ textTransform: "none" }}>{edit ? "Done" : "Edit layout"}</Button> : null}
-      </Box>
+        {canEdit ? <ToolbarButton variant={edit ? "primary" : "default"} onClick={() => { setEdit(e => !e); setPlacing(null) }}>{edit ? "Done" : "Edit layout"}</ToolbarButton> : null}
+      </ListToolbar>
 
       {placing ? (
         <Box sx={{ px: 2, py: 0.75, bgcolor: mode === "dark" ? "#172033" : "#eff6ff", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", gap: 1 }}>
@@ -262,6 +269,8 @@ function CabinetPanel({ c, mode, onOpen, onClose }: { c: FloorCabinet; mode: "li
 function LensLegend({ lens, mode }: { lens: FloorLens; mode: "light" | "dark" }) {
   const items = lens === "status"
     ? [["Active", "#15803d"], ["Planned", "#475569"], ["Decommissioning", "#b45309"], ["Retired", "#475569"]]
+    : lens === "health"
+    ? [["OK", healthColor("OK", mode)], ["Warning", healthColor("WARNING", mode)], ["Critical", healthColor("CRITICAL", mode)], ["Not monitored", healthColor("UNKNOWN", mode)]]
     : [["<65%", pctColor(50, mode)], ["65–85%", pctColor(75, mode)], [">85%", pctColor(95, mode)]]
   return (
     <Stack direction="row" spacing={1} alignItems="center">

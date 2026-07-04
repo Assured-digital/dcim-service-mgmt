@@ -87,8 +87,23 @@ function mockPrisma(): any {
         )
         return orMatch ? row : null
       }),
-      findMany: jest.fn(async () => []),
+      // queryRecords ("asset" case) shape: strict clientId + id-in filter — the
+      // existence/tenant check work-notes and attachments route through.
+      findMany: jest.fn(async ({ where }: any) => {
+        if (where?.clientId !== A) return []
+        if (where.id?.in && !where.id.in.includes(AST)) return []
+        if (!where.id) return []
+        return [{ id: AST, assetTag: "AST-1", name: "Asset One", lifecycleState: "ACTIVE" }]
+      }),
       groupBy: jest.fn(async () => []),
+    },
+    workNote: {
+      findMany: jest.fn(async () => []),
+      create: jest.fn(async ({ data }: any) => ({ ...data, id: "note-1", createdAt: new Date(), author: null })),
+    },
+    sensorReading: {
+      create: jest.fn(async ({ data }: any) => ({ ...data, id: "reading-1", createdAt: new Date() })),
+      findMany: jest.fn(async () => []),
     },
     port: { findMany: jest.fn(async () => []) },
     // Downstream reads on the owner-success paths — empty is enough (the gate is
@@ -171,6 +186,48 @@ describe("DCIM services — query scoping refuses another client's resource (404
 
   it("report: getModel refuses a foreign client's site (404)", async () => {
     await expect(report.getModel(B, S)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("find-space: refuses a foreign client's site scope (404)", async () => {
+    await expect(capacity.findSpace(B, { uSize: 4, siteId: S })).rejects.toBeInstanceOf(NotFoundException);
+    // Control: the owner's search runs (empty fixture estate → no candidates).
+    await expect(capacity.findSpace(A, { uSize: 4, siteId: S })).resolves.toMatchObject({ scanned: 0, matched: 0 });
+  });
+
+  it("work-notes: create refuses a foreign client's entity (404); owner writes fine", async () => {
+    const { WorkNotesService } = await import("../src/work-notes/work-notes.service");
+    const notes = new WorkNotesService(prisma);
+    await expect(notes.create(B, "user-b", "asset", AST, "spoofed note")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(notes.create(A, "user-a", "asset", AST, "legit note")).resolves.toMatchObject({ body: "legit note" });
+  });
+
+  it("work-order fusion: a completed install activates ONLY the same-client waiting asset", async () => {
+    const { applyCompletedWorkOrder } = await import("../src/work-orders/apply-pending");
+    // Fixture asset staged with a pending INSTALL work order (task WO-1).
+    const staged = { id: AST, clientId: A, assetTag: "AST-1", name: "Asset One", lifecycleState: "PLANNED", disposalStatus: null, pendingOp: "INSTALL", pendingWorkOrderType: "task", pendingWorkOrderId: "WO-1" };
+    const updates: any[] = [];
+    const p: any = {
+      asset: {
+        findFirst: jest.fn(async ({ where }: any) =>
+          where.pendingWorkOrderId === "WO-1" && where.pendingWorkOrderType === "task" && where.clientId === A ? staged : null),
+        update: jest.fn(async ({ data }: any) => { updates.push(data); return { ...staged, ...data } }),
+      },
+      auditEvent: { create: jest.fn(async () => ({})) },
+    };
+    // Foreign client completing the same WO id resolves NO waiting asset → no write.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-1", actorUserId: "u", clientId: B });
+    expect(updates).toHaveLength(0);
+    // Owner completes it → asset activates, pending marker cleared.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-1", actorUserId: "u", clientId: A });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ lifecycleState: "ACTIVE", pendingOp: null, pendingWorkOrderId: null });
+  });
+
+  it("sensor readings: record refuses a foreign client's asset (404); owner records fine", async () => {
+    const { SensorReadingsService } = await import("../src/sensor-readings/sensor-readings.service");
+    const svc = new SensorReadingsService(prisma);
+    await expect(svc.record(B, "user-b", AST, { metric: "powerW", value: 500 })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.record(A, "user-a", AST, { metric: "powerW", value: 500 })).resolves.toMatchObject({ metric: "powerW", value: 500 });
   });
 
   it("ports: listForAsset refuses a foreign client's asset (404)", async () => {

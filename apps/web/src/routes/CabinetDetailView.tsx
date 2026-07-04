@@ -8,15 +8,19 @@ import {
 } from "@mui/material"
 import StorageIcon from "@mui/icons-material/Storage"
 import { StatusPill, entityStatusIntent } from "../components/shared"
+import { SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
+import { AttachmentsContent } from "../components/AttachmentsContent"
+import { WorkNotesPanel } from "../components/shared/WorkNotesPanel"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import { useNotification } from "../components/NotificationProvider"
 import {
   Cabinet, CabinetReservation, Room, RackTab, ElevationSide,
   AuditEvent, LinkedTask, LinkedServiceRequest, LinkedRisk, LinkedIssue,
-  assetBg, normalizeRackSide, formatKw, actionLabel, getApiErrorMessage
+  assetBg, barColor, normalizeRackSide, formatKw, actionLabel, getApiErrorMessage
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
-import { getSiteCapacity, kw, pctColor } from "../lib/capacity"
+import { getSiteCapacity, kw } from "../lib/capacity"
+import { healthColor } from "../lib/readings"
 import { useThemeMode } from "../lib/theme"
 import CabinetElevationV2 from "../components/elevation/CabinetElevationV2"
 import { ReservationDialog } from "../components/elevation/ReservationDialog"
@@ -204,13 +208,30 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 label: "Budgeted power",
                 value: cabCap ? kw(cabCap.power.value) : `${formatKw(nameplateKw * 0.6)} kW`,
                 detail: cabCap?.power.capacity != null ? `of ${kw(cabCap.power.capacity)} · ${cabCap.power.pct}%` : `nameplate ${formatKw(nameplateKw)} kW`,
-                accent: cabCap ? pctColor(cabCap.power.pct, mode) : undefined,
+                pct: cabCap?.power.capacity != null ? cabCap.power.pct : undefined,
               },
+              // Measured power — the third number (Horizon 3), only when readings exist.
+              ...(cabCap?.power.measured != null ? [{
+                label: "Measured power",
+                value: kw(cabCap.power.measured),
+                detail: `of ${cabCap.power.capacity != null ? kw(cabCap.power.capacity) : "—"}${cabCap.power.measuredPct != null ? ` · ${cabCap.power.measuredPct}%` : ""} · budgeted ${kw(cabCap.power.value)}`,
+                pct: cabCap.power.measuredPct ?? undefined,
+              }] : []),
+              // Environment — worst-case temp/humidity with ASHRAE health.
+              ...(cabCap?.environment && cabCap.environment.health !== "UNKNOWN" ? [{
+                label: "Environment",
+                value: cabCap.environment.temperatureC != null ? `${cabCap.environment.temperatureC}°C` : (cabCap.environment.humidityPct != null ? `${cabCap.environment.humidityPct}%` : "—"),
+                detail: [
+                  cabCap.environment.humidityPct != null && cabCap.environment.temperatureC != null ? `${cabCap.environment.humidityPct}% RH` : null,
+                  cabCap.environment.health === "OK" ? "ASHRAE OK" : cabCap.environment.health === "WARNING" ? "ASHRAE margin" : "ASHRAE breach",
+                ].filter(Boolean).join(" · "),
+                dot: healthColor(cabCap.environment.health, mode),
+              }] : []),
               {
                 label: "Space used",
                 value: cabCap ? `${cabCap.space.pct}%` : (cabinet.totalU ? `${Math.round(((cabinet.usedU ?? 0) / cabinet.totalU) * 100)}%` : "—"),
                 detail: cabCap ? `${cabCap.space.usedU} / ${cabCap.totalU} U` : undefined,
-                accent: cabCap ? pctColor(cabCap.space.pct, mode) : undefined,
+                pct: cabCap?.space.pct,
               },
               {
                 label: "Largest free block",
@@ -221,7 +242,7 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 label: "Weight",
                 value: cabCap && cabCap.weight.value > 0 ? `${Math.round(cabCap.weight.value)} kg` : (cabCap ? "—" : "—"),
                 detail: cabCap?.weight.capacity != null ? `of ${Math.round(cabCap.weight.capacity)} kg · ${cabCap.weight.pct}%` : "no limit set",
-                accent: cabCap ? pctColor(cabCap.weight.pct, mode) : undefined,
+                pct: cabCap?.weight.capacity != null ? cabCap.weight.pct : undefined,
               },
               {
                 label: "Active assets",
@@ -229,11 +250,20 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 detail: `${lifecycleCounts.RETIRED} retired · ${cabCap?.activeReservations ?? 0} reserved`,
               },
             ].map(card => (
-              <Box key={card.label} sx={{ position: "relative", overflow: "hidden", bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px" }}>
-                {card.accent ? <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, bgcolor: card.accent }} /> : null}
-                <Typography sx={{ fontSize: 10, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.06em", mb: "6px" }}>{card.label}</Typography>
-                <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{card.value}</Typography>
-                {card.detail ? <Typography sx={{ fontSize: 11, color: "text.secondary", mt: "2px" }}>{card.detail}</Typography> : null}
+              <Box key={card.label} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px", display: "flex", flexDirection: "column" }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, color: "text.tertiary", textTransform: "uppercase", letterSpacing: "0.08em", mb: "8px" }}>{card.label}</Typography>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  {(card as { dot?: string }).dot ? <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: (card as { dot?: string }).dot, flexShrink: 0 }} /> : null}
+                  <Typography sx={{ fontSize: 24, fontWeight: 750, lineHeight: 1.05, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>{card.value}</Typography>
+                </Stack>
+                {card.detail ? <Typography sx={{ fontSize: 11, color: "text.secondary", mt: "4px", fontVariantNumeric: "tabular-nums" }}>{card.detail}</Typography> : null}
+                {card.pct != null ? (
+                  <Box sx={{ mt: "auto", pt: "10px" }}>
+                    <Box sx={{ height: 6, borderRadius: "4px", bgcolor: mode === "dark" ? "rgba(148,163,184,.16)" : "rgba(100,116,139,.14)", overflow: "hidden" }}>
+                      <Box sx={{ height: "100%", width: `${Math.min(100, card.pct)}%`, borderRadius: "4px", bgcolor: barColor(card.pct, mode) }} />
+                    </Box>
+                  </Box>
+                ) : null}
               </Box>
             ))}
           </Box>
@@ -252,6 +282,31 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
               </Box>
             ))}
           </Box>
+
+          {/* Documents + Work notes (Hyperview pattern) — side by side. */}
+          <Box sx={{ mt: "14px", display: "grid", gap: "14px", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+            <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+              <Box sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Documents</Typography>
+              </Box>
+              <Box sx={{ p: "12px 16px" }}>
+                <AttachmentsContent
+                  attachments={cabinet.attachments ?? []}
+                  recordType="cabinet"
+                  recordId={cabinet.id}
+                  onChanged={refreshCabinet}
+                />
+              </Box>
+            </Box>
+            <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+              <Box sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Work notes</Typography>
+              </Box>
+              <Box sx={{ p: "12px 16px" }}>
+                <WorkNotesPanel entityType="cabinet" entityId={cabinet.id} />
+              </Box>
+            </Box>
+          </Box>
         </Box>
       ) : null}
 
@@ -260,13 +315,18 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
         <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
           <Box sx={{ width: 720, maxWidth: "56vw", flexShrink: 0, overflowY: "auto", p: "24px 16px 24px 24px", bgcolor: "background.default" }}>
             <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-              <Button size="small" onClick={() => setElevationSide("BOTH")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "BOTH" ? "rgba(29,78,216,0.1)" : "transparent" }}>Side by side</Button>
-              <Button size="small" onClick={() => setElevationSide("FRONT")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "FRONT" ? "rgba(29,78,216,0.1)" : "transparent" }}>Front ({frontAssets.length})</Button>
-              <Button size="small" onClick={() => setElevationSide("REAR")} sx={{ fontSize: 12, textTransform: "none", bgcolor: elevationSide === "REAR" ? "rgba(29,78,216,0.1)" : "transparent" }}>Rear ({rearAssets.length})</Button>
+              <SegmentedToggle
+                options={[
+                  { value: "BOTH", label: "Side by side" },
+                  { value: "FRONT", label: `Front (${frontAssets.length})` },
+                  { value: "REAR", label: `Rear (${rearAssets.length})` },
+                ]}
+                value={elevationSide} onChange={v => setElevationSide(v)}
+              />
               {canManage ? (
-                <Button size="small" onClick={() => setReservationDialog("new")} sx={{ ml: "auto !important", fontSize: 12, textTransform: "none" }}>
+                <ToolbarButton sx={{ ml: "auto !important" }} onClick={() => setReservationDialog("new")}>
                   Reserve space
-                </Button>
+                </ToolbarButton>
               ) : null}
             </Stack>
             {cabinet.totalU ? (

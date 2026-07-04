@@ -2,7 +2,7 @@ import React from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Box, Button, Chip, MenuItem,
+  Box, Button, Chip, IconButton, MenuItem,
   Stack, TextField, Typography
 } from "@mui/material"
 import type { SxProps, Theme } from "@mui/material"
@@ -12,6 +12,8 @@ import { EditActionsButton } from "../components/EditActionsButton"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
 import { StatusPill, entityStatusIntent } from "../components/shared"
+import { AttachmentsContent } from "../components/AttachmentsContent"
+import { WorkNotesPanel } from "../components/shared/WorkNotesPanel"
 import { useBreadcrumb } from "./Shell"
 import { useThemeMode } from "../lib/theme"
 import {
@@ -20,7 +22,8 @@ import {
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import {
-  ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog, RequestDeletionDialog
+  ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog,
+  RaiseDecommissionDialog, RequestDeletionDialog
 } from "./InfraDialogs"
 import { CreateTaskModal } from "./modals/CreateTaskModal"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
@@ -33,7 +36,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 // ─── Types ────────────────────────────────────────────────────────────────
 
 type TabKey = "overview" | "connections" | "linked" | "maintenance" | "history"
-type ActionDialog = "status" | "move" | "delete" | "requestDelete" | "logMaintenance" | null
+type ActionDialog = "status" | "move" | "delete" | "requestDelete" | "logMaintenance" | "decommissionWO" | null
 type CreateModal = "task" | "risk" | "issue" | "serviceRequest" | null
 
 type MaintenanceLog = {
@@ -339,6 +342,17 @@ export default function AssetDetailPage({
     } catch (e) { notify.error(getApiErrorMessage(e, "Failed to move asset")); throw e }
   }, [asset, invalidateAsset, notify])
 
+  const handleRaiseDecommission = React.useCallback(async (data: { title: string; description: string }) => {
+    if (!asset) return
+    try {
+      const res = await api.post<{ workOrder: { reference: string } }>(`/assets/${asset.id}/work-order`, {
+        op: "DECOMMISSION", workOrderType: "change", title: data.title, description: data.description,
+      })
+      invalidateAsset()
+      notify.success(`Decommission change ${res.data.workOrder.reference} raised — completing it retires the asset`)
+    } catch (e) { notify.error(getApiErrorMessage(e, "Failed to raise decommission change")); throw e }
+  }, [asset, invalidateAsset, notify])
+
   const handleDelete = React.useCallback(async () => {
     if (!asset) return
     try {
@@ -425,25 +439,32 @@ export default function AssetDetailPage({
   return (
     <Box sx={outerSx}>
 
-      {onBackToRegister ? (
-        <Box sx={{ bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", py: "6px", flexShrink: 0 }}>
-          <Stack direction="row" alignItems="center" spacing={0.5} onClick={onBackToRegister}
-            sx={{ cursor: "pointer", width: "fit-content", color: "primary.main", "&:hover": { textDecoration: "underline" } }}>
-            <ArrowBackIcon sx={{ fontSize: 14 }} />
-            <Typography sx={{ fontSize: 12, fontWeight: 500 }}>Back to register</Typography>
-          </Stack>
-        </Box>
-      ) : null}
-
       {/* ── Header ───────────────────────────────────────────────────── */}
-      <Box sx={{ height: HEADER_HEIGHT, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
-        <Stack direction="row" alignItems="baseline" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ height: HEADER_HEIGHT, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", px: onBackToRegister ? "16px" : "24px", display: "flex", alignItems: "center", flexShrink: 0, gap: 2 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+          {onBackToRegister ? (
+            <IconButton size="small" onClick={onBackToRegister} aria-label="Back to register"
+              sx={{ color: "text.secondary", mr: "2px", "&:hover": { color: "text.primary", bgcolor: "action.hover" } }}>
+              <ArrowBackIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          ) : null}
           <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {asset.name}
           </Typography>
           <Typography sx={{ fontSize: 12, color: "text.tertiary", flexShrink: 0 }}>
             {asset.assetType}
           </Typography>
+          {asset.pendingOp ? (
+            <Chip
+              size="small"
+              label={`${asset.pendingOp === "INSTALL" ? "Install" : "Decommission"} work order open`}
+              sx={{
+                flexShrink: 0, height: 20, fontSize: 10.5, fontWeight: 700,
+                bgcolor: "rgba(245,158,11,0.16)", color: "#b45309",
+                ".MuiChip-label": { px: "8px" },
+              }}
+            />
+          ) : null}
         </Stack>
 
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
@@ -459,6 +480,9 @@ export default function AssetDetailPage({
                   actions={[
                     { label: "Change status", onClick: () => setActiveDialog("status") },
                     { label: "Move asset", onClick: () => setActiveDialog("move") },
+                    ...(asset.lifecycleState !== "RETIRED" && !asset.pendingOp
+                      ? [{ label: "Raise decommission change", onClick: () => setActiveDialog("decommissionWO") }]
+                      : []),
                     { divider: true },
                     ...(canDeleteDirect
                       ? [{ label: "Delete asset", danger: true, onClick: () => setActiveDialog("delete") }]
@@ -583,6 +607,13 @@ export default function AssetDetailPage({
       )}
       {activeDialog === "logMaintenance" && (
         <LogMaintenanceDialog onClose={() => setActiveDialog(null)} onSave={handleLogMaintenance} />
+      )}
+      {activeDialog === "decommissionWO" && (
+        <RaiseDecommissionDialog
+          assetName={asset.name}
+          onClose={() => setActiveDialog(null)}
+          onSave={handleRaiseDecommission}
+        />
       )}
 
       {/* Create-record modals */}
@@ -821,9 +852,43 @@ const OverviewTab = React.memo(function OverviewTab({
           </Box>
         )}
       </Box>
+
+      {/* Documents + Work notes (Hyperview pattern) — side by side on desktop. */}
+      <Box sx={{ mt: "14px", display: "grid", gap: "14px", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Documents</Typography>
+          </Stack>
+          <Box sx={{ p: "12px 16px" }}>
+            <AssetDocuments asset={asset} />
+          </Box>
+        </Box>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ ...sectionLabelSx, flex: 1 }}>Work notes</Typography>
+          </Stack>
+          <Box sx={{ p: "12px 16px" }}>
+            <WorkNotesPanel entityType="asset" entityId={asset.id} />
+          </Box>
+        </Box>
+      </Box>
     </Box>
   )
 })
+
+// Documents card body — the shared attachments panel over the asset's resolved
+// attachments; changes refetch the asset detail (the resolver re-runs there).
+function AssetDocuments({ asset }: { asset: Asset }) {
+  const qc = useQueryClient()
+  return (
+    <AttachmentsContent
+      attachments={asset.attachments ?? []}
+      recordType="asset"
+      recordId={asset.id}
+      onChanged={() => qc.invalidateQueries({ queryKey: ["asset-detail", asset.id] })}
+    />
+  )
+}
 
 // ─── Connections tab ──────────────────────────────────────────────────────
 

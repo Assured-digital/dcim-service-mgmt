@@ -217,6 +217,35 @@ export class DecommissionAssetDto {
   step!: "RETIRE" | "REMOVE" | "DISPOSE"
 }
 
+export class RaiseWorkOrderDto {
+  @IsIn(["INSTALL", "DECOMMISSION"])
+  op!: "INSTALL" | "DECOMMISSION"
+
+  @IsIn(["task", "change"])
+  workOrderType!: "task" | "change"
+
+  @IsOptional() @IsString()
+  title?: string
+
+  @IsOptional() @IsString()
+  description?: string
+
+  @IsOptional() @IsString()
+  priority?: string
+
+  @IsOptional() @IsString()
+  changeType?: string
+
+  @IsOptional() @IsString()
+  scheduledStart?: string
+
+  @IsOptional() @IsString()
+  scheduledEnd?: string
+
+  @IsOptional() @IsString()
+  assigneeId?: string
+}
+
 export class RequestAssetDeletionDto {
   @IsOptional()
   @IsString()

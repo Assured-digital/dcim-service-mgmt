@@ -10,6 +10,10 @@ export type FloorPlanRoom = {
   shellType: string | null; backgroundOpacity: number | null
   hasBackgroundImage: boolean; shellShape: any
 }
+export type FloorHealth = "OK" | "WARNING" | "CRITICAL" | "UNKNOWN"
+export type CabinetEnvironment = {
+  temperatureC: number | null; humidityPct: number | null; health: FloorHealth; readAt: string | null
+}
 export type FloorCabinet = {
   id: string; name: string
   posX: number; posY: number; orientation: number; status: string
@@ -17,6 +21,7 @@ export type FloorCabinet = {
   space: { usedU: number; totalU: number; pct: number; largestContiguousU: number }
   power: Metered; weight: Metered
   stranded: "power" | "space" | null
+  environment?: CabinetEnvironment
   activeAssets: number
 }
 export type UnplacedCabinet = { id: string; name: string; totalU: number; status: string }
@@ -33,7 +38,7 @@ export type FloorPlan = {
   aisleZones: AisleZoneT[]
 }
 
-export type FloorLens = "space" | "power" | "status"
+export type FloorLens = "space" | "power" | "status" | "health"
 
 export async function getFloorPlan(roomId: string): Promise<FloorPlan> {
   return (await api.get<FloorPlan>(`/rooms/${roomId}/floor-plan`)).data

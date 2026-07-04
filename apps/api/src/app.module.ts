@@ -33,6 +33,8 @@ import { RecordReportModule } from "./records-report/record-report.module"
 import { DeviceTypesModule } from "./device-types/device-types.module"
 import { CapacityModule } from "./dcim/capacity.module"
 import { PortsModule } from "./ports/ports.module"
+import { WorkNotesModule } from "./work-notes/work-notes.module"
+import { SensorReadingsModule } from "./sensor-readings/sensor-readings.module"
 
 @Module({
   imports: [
@@ -68,7 +70,9 @@ import { PortsModule } from "./ports/ports.module"
     RecordReportModule,
     DeviceTypesModule,
     CapacityModule,
-    PortsModule
+    PortsModule,
+    WorkNotesModule,
+    SensorReadingsModule
   ],
   controllers: [HealthController]
 })

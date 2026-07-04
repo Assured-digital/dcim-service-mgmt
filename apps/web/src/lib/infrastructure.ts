@@ -36,6 +36,14 @@ export type Asset = {
   deletionReason: string | null
   site?: { id: string; name: string } | null
   cabinet?: { id: string; name: string; roomId: string | null; room?: { id: string; name: string } | null } | null
+  // Documents on the asset (Hyperview pattern) — resolver-spread onto the
+  // single-asset read only (list responses omit it).
+  attachments?: import("./attachments").AttachmentSummary[]
+  // MAC↔ITSM work-order fusion (Horizon 2): a staged op awaiting its linked
+  // Task/Change. null = none. Present on the single-asset read + elevation feed.
+  pendingOp?: "INSTALL" | "DECOMMISSION" | null
+  pendingWorkOrderType?: "task" | "change" | null
+  pendingWorkOrderId?: string | null
 }
 
 // Approver queue row (GET /assets/deletion-requests): an Asset plus the resolved requester.
@@ -76,6 +84,7 @@ export type Cabinet = {
   _count: { assets: number }
   assets: Asset[]
   reservations?: CabinetReservation[]
+  attachments?: import("./attachments").AttachmentSummary[]
 }
 
 export type Room = { id: string; name: string; type: string; floor: string | null }
@@ -94,6 +103,7 @@ export type Site = {
   contractedKw?: number | null
   contractedU?: number | null
   checks?: Check[]
+  attachments?: import("./attachments").AttachmentSummary[]
 }
 export type AuditEvent = { id: string; action: string; createdAt: string; data?: { from?: string; to?: string; fields?: string[] } | null }
 export type LinkedTask = { id: string; reference: string; title: string; status: string; priority: string }
@@ -136,6 +146,43 @@ const assetTypeBgByMode: Record<ThemeMode, Record<string, string>> = {
 }
 
 export const ASSET_LIFECYCLE_OPTIONS = ["ACTIVE", "PLANNED", "PROCUREMENT", "STAGING", "RETIRED"]
+
+// ── Asset-type identity accents ─────────────────────────────────────────────
+// Saturated per-type identity colour + tinted fill, shared by the register type
+// chips, the filter-rail swatches and any per-type glyph. assetType is free text
+// ("SWITCH", "Network Device", "Rack PDU"…) so lookup is normalised: lowercase,
+// alias-matched by substring. Unknown types fall back to slate.
+type TypeAccent = { fg: string; bg: string }
+const TYPE_ACCENTS: Record<string, { light: TypeAccent; dark: TypeAccent }> = {
+  server:   { light: { fg: "#3730a3", bg: "#e0e7ff" }, dark: { fg: "#a5b4fc", bg: "#1e1b4b" } },
+  switch:   { light: { fg: "#155e75", bg: "#cffafe" }, dark: { fg: "#67e8f9", bg: "#083344" } },
+  router:   { light: { fg: "#5b21b6", bg: "#ede9fe" }, dark: { fg: "#c4b5fd", bg: "#2e1065" } },
+  firewall: { light: { fg: "#9f1239", bg: "#ffe4e6" }, dark: { fg: "#fda4af", bg: "#4c0519" } },
+  storage:  { light: { fg: "#115e59", bg: "#ccfbf1" }, dark: { fg: "#5eead4", bg: "#042f2e" } },
+  pdu:      { light: { fg: "#92400e", bg: "#fef3c7" }, dark: { fg: "#fcd34d", bg: "#3a2c0f" } },
+  ups:      { light: { fg: "#065f46", bg: "#d1fae5" }, dark: { fg: "#6ee7b7", bg: "#13351f" } },
+  patch:    { light: { fg: "#475569", bg: "#f1f5f9" }, dark: { fg: "#cbd5e1", bg: "#1e293b" } },
+  kvm:      { light: { fg: "#9d174d", bg: "#fce7f3" }, dark: { fg: "#f9a8d4", bg: "#311823" } },
+  blade:    { light: { fg: "#7c2d12", bg: "#ffedd5" }, dark: { fg: "#fdba74", bg: "#3a1a0a" } },
+  cooling:  { light: { fg: "#0e7490", bg: "#ecfeff" }, dark: { fg: "#22d3ee", bg: "#083344" } },
+}
+const TYPE_ACCENT_FALLBACK: Record<ThemeMode, TypeAccent> = {
+  light: { fg: "#475569", bg: "#f1f5f9" },
+  dark: { fg: "#cbd5e1", bg: "#1e293b" },
+}
+const TYPE_ALIASES: [string, string][] = [
+  ["server", "server"], ["blade", "blade"], ["kvm", "kvm"], ["switch", "switch"],
+  ["router", "router"], ["firewall", "firewall"], ["storage", "storage"],
+  ["pdu", "pdu"], ["power", "pdu"], ["ups", "ups"], ["patch", "patch"],
+  ["cooling", "cooling"], ["crac", "cooling"], ["network", "switch"],
+]
+export function assetTypeAccent(type: string | null | undefined, mode: ThemeMode = getActiveThemeMode()): TypeAccent {
+  const t = (type ?? "").toLowerCase()
+  // "kvm switch" must resolve to kvm, not switch — first alias match wins, so
+  // more specific aliases are listed before the generic ones above.
+  const hit = TYPE_ALIASES.find(([needle]) => t.includes(needle))
+  return hit ? TYPE_ACCENTS[hit[1]][mode] : TYPE_ACCENT_FALLBACK[mode]
+}
 
 // ─── Helper functions ──────────────────────────────────────────────────────
 

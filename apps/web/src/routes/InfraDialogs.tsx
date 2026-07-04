@@ -499,6 +499,54 @@ export function RequestDeletionDialog({ label, onClose, onConfirm }: {
   )
 }
 
+// ─── Raise decommission change (MAC↔ITSM fusion) ────────────────────────────
+
+export function RaiseDecommissionDialog({ assetName, onClose, onSave }: {
+  assetName: string
+  onClose: () => void
+  onSave: (data: { title: string; description: string }) => Promise<void>
+}) {
+  const [title, setTitle] = React.useState(`Decommission ${assetName}`)
+  const [description, setDescription] = React.useState("")
+  const [submitting, setSubmitting] = React.useState(false)
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    try { await onSave({ title: title.trim(), description: description.trim() }); onClose() }
+    catch { }
+    finally { setSubmitting(false) }
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Raise decommission change</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mt: 0.5, mb: 2 }}>
+          Opens a change request linked to <strong>{assetName}</strong>. The asset shows a pending
+          work order until the change is completed — at which point it is <strong>retired</strong>
+          {" "}and its capacity freed, automatically.
+        </Typography>
+        <Stack spacing={2}>
+          <TextField label="Change title" value={title} onChange={e => setTitle(e.target.value)} fullWidth />
+          <TextField
+            label="Description / reason (optional)"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            fullWidth multiline minRows={2}
+            placeholder="Why is this asset being decommissioned?"
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={submitting || !title.trim()}>
+          {submitting ? "Raising..." : "Raise change"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ─── Change asset status ───────────────────────────────────────────────────
 
 export function ChangeAssetStatusDialog({ asset, onClose, onSave }: {

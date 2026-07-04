@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
+import { resolveAttachmentsForRecords } from "../attachments/resolve-attachments"
 
 @Injectable()
 export class CabinetsService {
@@ -31,6 +32,7 @@ export class CabinetsService {
             rackSide: true, isFullDepth: true, isZeroU: true,
             budgetedDrawW: true, weightKg: true,
             disposalStatus: true, physicallyRemoved: true,
+            pendingOp: true, pendingWorkOrderType: true, pendingWorkOrderId: true,
             deviceType: { select: { excludeFromUtilization: true } }
           }
         },
@@ -39,6 +41,12 @@ export class CabinetsService {
         reservations: { orderBy: { uStart: "asc" } }
       }
     })
+
+    // Documents per cabinet (Hyperview pattern) — batched (one query for the
+    // whole site) to avoid an N+1 of per-cabinet resolver calls.
+    const attachmentsByCabinet = await resolveAttachmentsForRecords(
+      this.prisma, clientId, "cabinet", cabinets.map((c) => c.id)
+    )
 
     // usedU is COMPUTED on read (DCIM spec §2.2): unique occupied units across
     // both faces, excluding zero-U kit and excludeFromUtilization types (blanking
@@ -55,7 +63,7 @@ export class CabinetsService {
         const h = Math.max(1, Math.ceil(a.uHeight ?? 1))
         for (let u = a.uPosition; u < a.uPosition + h; u++) occupied.add(u)
       }
-      return { ...cabinet, usedU: occupied.size }
+      return { ...cabinet, usedU: occupied.size, attachments: attachmentsByCabinet.get(cabinet.id) ?? [] }
     })
   }
 

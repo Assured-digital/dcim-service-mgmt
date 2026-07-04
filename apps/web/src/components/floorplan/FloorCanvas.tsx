@@ -5,6 +5,7 @@ import { useThemeMode } from "../../lib/theme"
 import { pctColor } from "../../lib/capacity"
 import { entityStatusIntent, semanticToken } from "../shared/tokens/colors"
 import { FloorCabinet, FloorLens, FloorObjectT, AisleZoneT, FloorPlan } from "../../lib/floorPlan"
+import { healthColor } from "../../lib/readings"
 
 // Auth-fetched plan-image backdrop (the endpoint needs the bearer token, so a
 // raw <image href> can't be used — same posture as attachments).
@@ -31,6 +32,9 @@ const CELL = 38
 
 function cabinetFill(c: FloorCabinet, lens: FloorLens, mode: "light" | "dark"): string {
   if (lens === "status") return semanticToken(entityStatusIntent(c.status), mode).solid
+  // Health lens (Horizon 3): measured/ASHRAE health; unmonitored = neutral.
+  if (lens === "health") return healthColor(c.environment?.health ?? "UNKNOWN", mode)
+  if (lens === "power" && c.power.measuredPct != null) return pctColor(c.power.measuredPct, mode) // prefer measured when available
   const pct = lens === "power" ? c.power.pct : c.space.pct
   return pctColor(pct, mode)
 }

@@ -3,11 +3,10 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Stack, Typography
+  Box, Button, MenuItem, Stack, TextField, Typography
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import StorageIcon from "@mui/icons-material/Storage"
-import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined"
 import { EditActionsButton } from "../components/EditActionsButton"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -17,7 +16,12 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import SiteHierarchyTree from "./SiteHierarchyTree"
 import CabinetDetailView from "./CabinetDetailView"
 import AssetDetailPage from "./AssetDetailPage"
-import SitesMapCard, { SiteAssetCounts } from "../components/SitesMapCard"
+import CapacityRing from "../components/shared/CapacityRing"
+import { FloorCanvas } from "../components/floorplan/FloorCanvas"
+import { FloorLens, getFloorPlan } from "../lib/floorPlan"
+import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
+import { AttachmentsContent } from "../components/AttachmentsContent"
+import { WorkNotesPanel } from "../components/shared/WorkNotesPanel"
 import SiteLocationCard from "../components/SiteLocationCard"
 import SiteLinkedRecords from "./SiteLinkedRecords"
 import {
@@ -85,10 +89,40 @@ const SiteDetailView = React.memo(function SiteDetailView({ site, rooms, cabinet
         </Box>
         <SiteLocationCard site={site} />
         <SiteLinkedRecords siteId={site.id} siteName={site.name} canManage={canManage} />
+        {/* Documents + Work notes (Hyperview pattern). */}
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ px: "20px", py: "14px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Documents</Typography>
+          </Box>
+          <Box sx={{ p: "12px 20px" }}>
+            <SiteDocuments site={site} />
+          </Box>
+        </Box>
+        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+          <Box sx={{ px: "20px", py: "14px", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>Work notes</Typography>
+          </Box>
+          <Box sx={{ p: "12px 20px" }}>
+            <WorkNotesPanel entityType="site" entityId={site.id} />
+          </Box>
+        </Box>
       </Stack>
     </Box>
   )
 })
+
+// Documents card body — changes refetch the site detail (the resolver re-runs).
+function SiteDocuments({ site }: { site: Site }) {
+  const qc = useQueryClient()
+  return (
+    <AttachmentsContent
+      attachments={site.attachments ?? []}
+      recordType="site"
+      recordId={site.id}
+      onChanged={() => qc.invalidateQueries({ queryKey: ["site-detail", site.id] })}
+    />
+  )
+}
 
 const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelectCabinet }: { cabinets: Cabinet[]; onSelectCabinet: (id: string) => void }) {
   const { mode } = useThemeMode()
@@ -122,47 +156,52 @@ const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelect
                   bgcolor: mode === "dark" ? "#3a2c0f" : "#fef3c7", color: mode === "dark" ? "#fbbf24" : "#b45309"
                 }}>Stranded</Typography>
               ) : null}
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: "14px" }}>
-                <Box sx={{ width: 32, height: 32, borderRadius: "7px", bgcolor: mode === "dark" ? "#16294a" : "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: "12px" }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: "8px", bgcolor: mode === "dark" ? "#16294a" : "#e8f1ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <StorageIcon sx={{ fontSize: 15, color: "primary.main" }} />
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: "text.primary" }}>{c.name}</Typography>
-                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>{c._count.assets} assets</Typography>
+                  <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: "text.primary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</Typography>
+                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+                    {c.totalU ? `${c.totalU}U · ` : ""}{c._count.assets} asset{c._count.assets === 1 ? "" : "s"}
+                  </Typography>
                 </Box>
+                {c.totalU ? <CapacityRing pct={fill} /> : null}
               </Stack>
               {c.totalU ? (
-                <Box sx={{ mb: "6px" }}>
-                  <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                    <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>U Space</Typography>
-                    <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
+                <Box sx={{ mb: "10px" }}>
+                  <Stack direction="row" justifyContent="space-between" sx={{ mb: "4px" }}>
+                    <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>Space</Typography>
+                    <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{c.usedU ?? 0}/{c.totalU}U</Typography>
                   </Stack>
-                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${fill}%`, bgcolor: barColor(fill, mode), borderRadius: 2 }} />
+                  <Box sx={{ height: 6, bgcolor: trackBg, borderRadius: "4px", overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${fill}%`, bgcolor: barColor(fill, mode), borderRadius: "4px" }} />
                   </Box>
                 </Box>
               ) : null}
-              <Box sx={{ mb: "6px" }}>
-                <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                  <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>Power</Typography>
-                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>{formatKw(totalPowerKw)} kW</Typography>
+              <Box sx={{ mb: "10px" }}>
+                <Stack direction="row" justifyContent="space-between" sx={{ mb: "4px" }}>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>Power</Typography>
+                  <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
+                    {formatKw(totalPowerKw)}{c.powerKw && c.powerKw > 0 ? ` / ${formatKw(c.powerKw)}` : ""} kW
+                  </Typography>
                 </Stack>
                 {c.powerKw && c.powerKw > 0 ? (
-                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${powerPct}%`, bgcolor: barColor(powerPct, mode), borderRadius: 2 }} />
+                  <Box sx={{ height: 6, bgcolor: trackBg, borderRadius: "4px", overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${powerPct}%`, bgcolor: barColor(powerPct, mode), borderRadius: "4px" }} />
                   </Box>
                 ) : null}
               </Box>
               <Box>
-                <Stack direction="row" justifyContent="space-between" sx={{ mb: "3px" }}>
-                  <Typography sx={{ fontSize: 9, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>Weight</Typography>
-                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: "text.secondary" }}>
+                <Stack direction="row" justifyContent="space-between" sx={{ mb: "4px" }}>
+                  <Typography sx={{ fontSize: 11, color: "text.tertiary" }}>Weight</Typography>
+                  <Typography sx={{ fontSize: 11, fontWeight: 600, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
                     {c.maxWeightKg && c.maxWeightKg > 0 ? `${Math.round(totalWeightKg)}/${Math.round(c.maxWeightKg)} kg` : "—"}
                   </Typography>
                 </Stack>
                 {c.maxWeightKg && c.maxWeightKg > 0 ? (
-                  <Box sx={{ height: 3, bgcolor: trackBg, borderRadius: 2, overflow: "hidden" }}>
-                    <Box sx={{ height: "100%", width: `${weightPct}%`, bgcolor: barColor(weightPct, mode), borderRadius: 2 }} />
+                  <Box sx={{ height: 6, bgcolor: trackBg, borderRadius: "4px", overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", width: `${weightPct}%`, bgcolor: barColor(weightPct, mode), borderRadius: "4px" }} />
                   </Box>
                 ) : null}
               </Box>
@@ -174,63 +213,103 @@ const RoomCabinetGrid = React.memo(function RoomCabinetGrid({ cabinets, onSelect
   )
 })
 
-const OverviewPanel = React.memo(function OverviewPanel({ sites, allAssets }: { sites: Site[]; allAssets: Asset[] }) {
-  const stats = React.useMemo(() => ({
-    totalSites: sites.length,
-    totalAssets: allAssets.length,
-    activeAssets: allAssets.filter(a => a.lifecycleState === "ACTIVE").length,
-    totalCabinets: new Set(allAssets.map(a => a.cabinetId).filter(Boolean)).size,
-  }), [sites, allAssets])
+// Room-level view of the spatial spine (redesign mock, screen 3): the room's
+// floor plan LEADS — lens-coloured cabinets, find-space, click-through to the
+// cabinet's detail/elevation — with the card grid as a toggle and the automatic
+// fallback for rooms with nothing placed. Editing stays on the full floor-plan
+// editor ("Edit layout" deep-links there); this embed is read-only.
+type RoomView = "plan" | "grid" | "details"
 
-  const siteAssetCounts = React.useMemo<SiteAssetCounts>(() => {
-    const byCabinet = new Map<string, Set<string>>()
-    const byAsset = new Map<string, number>()
-    for (const asset of allAssets) {
-      if (!asset.siteId) continue
-      byAsset.set(asset.siteId, (byAsset.get(asset.siteId) ?? 0) + 1)
-      if (asset.cabinetId) {
-        const cabs = byCabinet.get(asset.siteId) ?? new Set<string>()
-        cabs.add(asset.cabinetId)
-        byCabinet.set(asset.siteId, cabs)
-      }
-    }
-    const out: SiteAssetCounts = {}
-    for (const site of sites) {
-      out[site.id] = {
-        cabinets: byCabinet.get(site.id)?.size ?? 0,
-        assets: byAsset.get(site.id) ?? 0,
-      }
-    }
-    return out
-  }, [sites, allAssets])
+const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets, onSelectCabinet, canManage, roomOptions, onRoomChange, view, onViewChange, detailsContent, trailing }: {
+  siteId: string; roomId: string; cabinets: Cabinet[]; onSelectCabinet: (id: string) => void; canManage: boolean
+  // Site-level embed: a room switcher at the front of the toolbar (the
+  // floor-plan-forward site view) + extra trailing controls.
+  roomOptions?: { id: string; name: string }[]
+  onRoomChange?: (roomId: string) => void
+  // Controlled view (site level): the parent owns the tab so the choice
+  // survives a round-trip. `detailsContent` (when given) adds a Details tab
+  // that renders BELOW the SAME toolbar — the room switcher stays visible.
+  view?: RoomView
+  onViewChange?: (v: RoomView) => void
+  detailsContent?: React.ReactNode
+  trailing?: React.ReactNode
+}) {
+  const navigate = useNavigate()
+  const [internalView, setInternalView] = React.useState<RoomView | null>(null) // null = auto
+  const [lens, setLens] = React.useState<FloorLens>("space")
+  const [findSpaceU, setFindSpaceU] = React.useState<number | null>(null)
 
-  const cards: { label: string; value: string | number }[] = [
-    { label: "Sites", value: stats.totalSites },
-    { label: "Cabinets", value: stats.totalCabinets },
-    { label: "Assets", value: stats.totalAssets },
-    { label: "Active", value: stats.activeAssets },
-  ]
+  const { data: plan, isLoading } = useQuery({
+    queryKey: ["floor-plan", roomId],
+    queryFn: () => getFloorPlan(roomId),
+  })
+
+  const placedCount = plan?.cabinets.length ?? 0
+  const effectiveView = view ?? internalView ?? (placedCount > 0 ? "plan" : "grid")
+  const changeView = (v: RoomView) => (onViewChange ? onViewChange(v) : setInternalView(v))
 
   return (
-    <Box sx={{ p: "24px", maxWidth: 960 }}>
-      <Stack spacing="16px">
-        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
-          <Box sx={{ px: "20px", py: "16px", borderBottom: "1px solid", borderColor: "divider" }}>
-            <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.secondary" }}>
-              Infrastructure Overview
-            </Typography>
-          </Box>
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
-            {cards.map((card, i) => (
-              <Box key={card.label} sx={{ py: "14px", textAlign: "center", borderRight: i < cards.length - 1 ? "1px solid" : "none", borderColor: "divider" }}>
-                <Typography sx={{ fontSize: 22, fontWeight: 600, color: "text.primary", lineHeight: 1 }}>{card.value}</Typography>
-                <Typography sx={{ fontSize: 10, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em", mt: "4px" }}>{card.label}</Typography>
-              </Box>
-            ))}
-          </Box>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <ListToolbar sx={{ bgcolor: "transparent" }}>
+        {roomOptions && onRoomChange ? (
+          <TextField select size="small" label="Room" value={roomId} onChange={e => onRoomChange(e.target.value)} sx={{ minWidth: 150, mr: 0.5 }}>
+            {roomOptions.map(r => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
+          </TextField>
+        ) : null}
+        <SegmentedToggle
+          options={[
+            { value: "plan", label: "Plan" },
+            { value: "grid", label: "Grid" },
+            ...(detailsContent ? [{ value: "details" as const, label: "Details" }] : []),
+          ]}
+          value={effectiveView}
+          onChange={v => changeView(v as RoomView)}
+        />
+        {effectiveView === "plan" ? (
+          <>
+            <SegmentedToggle
+              options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }]}
+              value={lens} onChange={v => setLens(v)} sx={{ ml: 1 }}
+            />
+            <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} sx={{ ml: 1 }}
+              onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}>
+              Find ≥10U free
+            </ToolbarButton>
+          </>
+        ) : null}
+        <Box sx={{ ml: "auto", display: "flex", gap: "8px", alignItems: "center" }}>
+          {trailing}
+          {canManage && effectiveView !== "details" ? (
+            <ToolbarButton onClick={() => navigate(`/dcim/floor-plan?siteId=${siteId}&roomId=${roomId}`)}>
+              Edit layout
+            </ToolbarButton>
+          ) : null}
         </Box>
-        <SitesMapCard sites={sites} siteAssetCounts={siteAssetCounts} />
-      </Stack>
+      </ListToolbar>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        {effectiveView === "details" ? (
+          detailsContent
+        ) : effectiveView === "grid" ? (
+          <RoomCabinetGrid cabinets={cabinets} onSelectCabinet={onSelectCabinet} />
+        ) : isLoading ? (
+          <Box sx={{ p: 3 }}><LoadingState /></Box>
+        ) : plan && placedCount > 0 ? (
+          <FloorCanvas
+            plan={plan} lens={lens} mode="view"
+            selectedCabinetId={null} findSpaceMinU={findSpaceU} placing={false}
+            onCabinetClick={onSelectCabinet}
+            onObjectClick={() => {}} onCellClick={() => {}}
+          />
+        ) : (
+          <Box sx={{ p: "20px 24px" }}>
+            <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed", borderColor: "divider", borderRadius: "10px" }}>
+              <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+                No cabinets placed on this room's floor plan yet{canManage ? " — use Edit layout to position them." : "."}
+              </Typography>
+            </Box>
+          </Box>
+        )}
+      </Box>
     </Box>
   )
 })
@@ -241,7 +320,7 @@ export default function AssetHierarchyPage() {
   const params = useParams<{ siteId?: string; roomId?: string; cabinetId?: string; assetId?: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { setBreadcrumbs } = useBreadcrumb()
+  const { setBreadcrumbs, setPageFullBleed } = useBreadcrumb()
 
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
@@ -251,6 +330,13 @@ export default function AssetHierarchyPage() {
   const [selectedRoomId, setSelectedRoomId] = React.useState<string | "unassigned" | null>(params.roomId ?? null)
   const [selectedCabinetId, setSelectedCabinetId] = React.useState<string | null>(params.cabinetId ?? null)
   const [selectedAssetId, setSelectedAssetId] = React.useState<string | null>(params.assetId ?? null)
+  // Site level is floor-plan-forward: the featured room's plan leads, Details
+  // is the toggle-away. The Plan/Grid choice lives HERE (not in RoomPlanView)
+  // so it survives a round-trip through Details. Local preview state only —
+  // the tree/URL stay on the site.
+  const [siteView, setSiteView] = React.useState<"plan" | "grid" | "details">("plan")
+  const [siteRoomId, setSiteRoomId] = React.useState<string | null>(null)
+  React.useEffect(() => { setSiteView("plan"); setSiteRoomId(null) }, [selectedSiteId])
   const [openRoomId, setOpenRoomId] = React.useState<string | null>(params.roomId ?? null)
   const [openCabinetId, setOpenCabinetId] = React.useState<string | null>(params.cabinetId ?? null)
 
@@ -262,21 +348,24 @@ export default function AssetHierarchyPage() {
 
   const { notify } = useNotification()
 
-  // ── Fix parent overflow (Shell content area) ─────────────────────────
-  const containerRef = React.useRef<HTMLDivElement>(null)
-  React.useLayoutEffect(() => {
-    const parent = containerRef.current?.parentElement
-    if (!parent) return
-    const prev = parent.style.overflow
-    parent.style.overflow = "hidden"
-    return () => { parent.style.overflow = prev }
-  }, [])
+  // ── Full-bleed: the Shell drops content padding + hides overflow, so this
+  //    navigator owns its own edge-to-edge layout and internal scrolling. ──
+  React.useEffect(() => {
+    setPageFullBleed(true)
+    return () => setPageFullBleed(false)
+  }, [setPageFullBleed])
 
   // ── Data queries ──────────────────────────────────────────────────────
   const { data: sites = [], isLoading: sitesLoading } = useQuery({
     queryKey: ["sites"],
     queryFn: async () => (await api.get<Site[]>("/sites")).data
   })
+
+  // No estate-level overview here any more (the DCIM Overview page owns that
+  // job) — a bare /asset-hierarchy lands straight on the first site.
+  React.useEffect(() => {
+    if (!params.siteId && sites.length) navigate(`/asset-hierarchy/${sites[0].id}`, { replace: true })
+  }, [params.siteId, sites, navigate])
   const { data: site } = useQuery({
     queryKey: ["site-detail", selectedSiteId],
     queryFn: async () => (await api.get<Site>(`/sites/${selectedSiteId}`)).data,
@@ -545,44 +634,19 @@ export default function AssetHierarchyPage() {
   const headerEntityName = selectedCabinet ? selectedCabinet.name
     : selectedRoom ? selectedRoom.name
     : selectedSite ? selectedSite.name
-    : "Overview"
+    : "Estate"
 
   const assetEmbedded = !!params.assetId
 
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <Box ref={containerRef} sx={{
-      mx: { xs: "-12px", md: "-24px" }, mt: { xs: "-12px", md: "-24px" }, mb: { xs: "-12px", md: "-24px" },
-      height: "calc(100vh - 56px)", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
+    <Box sx={{
+      height: "100%", width: "100%", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
     }}>
 
       {/* ── Left panel ──────────────────────────────────────────────────── */}
       <Box sx={{ width: 260, minWidth: 260, bgcolor: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-primary)", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-        <Box
-          onClick={() => {
-            setSelectedSiteId(null)
-            setSelectedRoomId(null)
-            setSelectedCabinetId(null)
-            setSelectedAssetId(null)
-            setOpenRoomId(null)
-            setOpenCabinetId(null)
-            navigate("/asset-hierarchy")
-          }}
-          sx={{
-            height: HEADER_HEIGHT, px: "10px", cursor: "pointer", flexShrink: 0,
-            borderBottom: "1px solid var(--color-border-primary)",
-            bgcolor: selectedSiteId === null ? "rgba(29,78,216,0.08)" : "transparent",
-            borderLeft: "2px solid", borderLeftColor: selectedSiteId === null ? "primary.main" : "transparent",
-            display: "flex", alignItems: "center", gap: "7px",
-            "&:hover": { bgcolor: selectedSiteId === null ? "rgba(29,78,216,0.08)" : "rgba(0,0,0,0.03)" },
-          }}
-        >
-          <GridViewOutlinedIcon sx={{ fontSize: 12.5, color: selectedSiteId === null ? "primary.main" : "text.secondary" }} />
-          <Typography sx={{ fontSize: 12.5, fontWeight: selectedSiteId === null ? 600 : 500, color: selectedSiteId === null ? "primary.main" : "text.primary" }}>
-            Overview
-          </Typography>
-        </Box>
         <SiteHierarchyTree
           sites={sites} rooms={rooms} cabinets={cabinets}
           selectedSiteId={selectedSiteId} selectedRoomId={selectedRoomId}
@@ -612,6 +676,9 @@ export default function AssetHierarchyPage() {
 
             {canManage ? (
               <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+                <ToolbarButton onClick={() => navigate(`/dcim/place${selectedSiteId ? `?siteId=${selectedSiteId}` : ""}`)}>
+                  Place equipment
+                </ToolbarButton>
                 {selectedCabinet ? (
                   <EditActionsButton
                     onEdit={() => setActiveDialog("editCabinet")}
@@ -656,11 +723,7 @@ export default function AssetHierarchyPage() {
           </Box>
         ) : (
           <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-            {!selectedSiteId && !isLoading ? (
-              <OverviewPanel sites={sites} allAssets={allAssets} />
-            ) : null}
-
-            {selectedSiteId && isLoading ? <Box sx={{ p: 3 }}><LoadingState /></Box> : null}
+            {isLoading || !selectedSiteId ? <Box sx={{ p: 3 }}><LoadingState /></Box> : null}
 
             {selectedSiteId && !isLoading && selectedCabinet ? (
               <CabinetDetailView
@@ -673,11 +736,37 @@ export default function AssetHierarchyPage() {
             ) : null}
 
             {selectedSiteId && !isLoading && !selectedCabinet && selectedRoomId ? (
-              <RoomCabinetGrid cabinets={visibleCabinets} onSelectCabinet={handleSelectCabinetFromGrid} />
+              <RoomPlanView
+                siteId={selectedSiteId} roomId={selectedRoomId}
+                cabinets={visibleCabinets} onSelectCabinet={handleSelectCabinetFromGrid}
+                canManage={canManage}
+              />
             ) : null}
 
             {selectedSiteId && !isLoading && !selectedRoomId && selectedSite ? (
-              <SiteDetailView site={selectedSite} rooms={rooms} cabinets={cabinets} canManage={canManage} />
+              // Floor-plan-forward site view (brief §4.1): the featured room's
+              // plan leads; Plan/Grid/Details is one toggle sharing ONE toolbar
+              // (the room switcher stays visible in Details too).
+              (() => {
+                const featuredRoomId = siteRoomId ?? rooms[0]?.id ?? null
+                // Roomless site: no plan/grid to show — just the details record.
+                if (!featuredRoomId) {
+                  return <SiteDetailView site={site ?? selectedSite} rooms={rooms} cabinets={cabinets} canManage={canManage} />
+                }
+                return (
+                  <RoomPlanView
+                    siteId={selectedSiteId} roomId={featuredRoomId}
+                    cabinets={cabinets.filter(c => c.roomId === featuredRoomId)}
+                    onSelectCabinet={handleSelectCabinetFromGrid}
+                    canManage={canManage}
+                    roomOptions={rooms.map(r => ({ id: r.id, name: r.name }))}
+                    onRoomChange={setSiteRoomId}
+                    view={siteView}
+                    onViewChange={v => setSiteView(v)}
+                    detailsContent={<SiteDetailView site={site ?? selectedSite} rooms={rooms} cabinets={cabinets} canManage={canManage} />}
+                  />
+                )
+              })()
             ) : null}
           </Box>
         )}

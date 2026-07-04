@@ -44,13 +44,13 @@ export default function SitesMapCard({ sites, siteAssetCounts }: Props) {
   const withoutCoords = totalSites - mappedSites.length
 
   return (
-    <Box sx={{ bgcolor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-      <Box sx={{ px: "20px", py: "14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#94a3b8" }}>
+    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
+      <Box sx={{ px: "20px", py: "14px", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.tertiary" }}>
           Site Map
         </Typography>
         {withoutCoords > 0 && mappedSites.length > 0 ? (
-          <Typography sx={{ fontSize: 10, color: "#94a3b8" }}>
+          <Typography sx={{ fontSize: 10, color: "text.tertiary" }}>
             {withoutCoords} site{withoutCoords === 1 ? "" : "s"} without a mapped location
           </Typography>
         ) : null}
@@ -58,11 +58,11 @@ export default function SitesMapCard({ sites, siteAssetCounts }: Props) {
 
       {mappedSites.length === 0 ? (
         <Box sx={{ py: 6, px: 4, textAlign: "center" }}>
-          <PlaceOutlinedIcon sx={{ fontSize: 32, color: "#cbd5e1", mb: 1 }} />
-          <Typography sx={{ fontSize: 13, color: "#64748b", fontWeight: 500 }}>
+          <PlaceOutlinedIcon sx={{ fontSize: 32, color: "text.tertiary", mb: 1 }} />
+          <Typography sx={{ fontSize: 13, color: "text.secondary", fontWeight: 500 }}>
             No sites with mapped locations yet
           </Typography>
-          <Typography sx={{ fontSize: 12, color: "#94a3b8", mt: "4px" }}>
+          <Typography sx={{ fontSize: 12, color: "text.tertiary", mt: "4px" }}>
             Add an address to a site and it'll appear here automatically.
           </Typography>
         </Box>
