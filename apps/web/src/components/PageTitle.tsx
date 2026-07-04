@@ -10,6 +10,7 @@ const TITLE_MAP: { prefix: string; title: string }[] = [
   { prefix: "/dashboard", title: "Dashboard" },
   { prefix: "/overview", title: "Overview" },
   { prefix: "/dcim/overview", title: "DCIM Overview" },
+  { prefix: "/dcim/monitoring", title: "Monitoring" },
   { prefix: "/service-desk", title: "Service Desk" },
   { prefix: "/risks-issues", title: "Risks & Issues" },
   { prefix: "/incidents", title: "Incidents" },

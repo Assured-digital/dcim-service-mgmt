@@ -41,14 +41,14 @@ export const DCIM_DESTINATIONS: DcimDestination[] = [
   { label: "Connections", path: "/connections", icon: <HubIcon sx={{ fontSize: ICON }} /> },
   { label: "Maintenance", path: "/maintenance", icon: <PrecisionManufacturingIcon sx={{ fontSize: ICON }} /> },
   { label: "Report", path: "/dcim/report", icon: <SummarizeOutlinedIcon sx={{ fontSize: ICON }} /> },
+  // Monitoring is LIVE (Horizon 3) — measured power + environmental readings.
+  { label: "Monitoring", path: "/dcim/monitoring", icon: <MonitorHeartOutlinedIcon sx={{ fontSize: ICON }} /> },
   { label: "Pending deletions", path: "/pending-deletions", icon: <DeleteSweepIcon sx={{ fontSize: ICON }} /> },
 ]
 const PRIMARY = DCIM_DESTINATIONS
 
-// Visibly-deferred — the future surface (brief §1 / §6b). Non-clickable until built.
-const DEFERRED: { label: string; icon: React.ReactNode; note: string }[] = [
-  { label: "Monitoring", icon: <MonitorHeartOutlinedIcon sx={{ fontSize: ICON }} />, note: "Live power & environmental" },
-]
+// Visibly-deferred — the future surface (brief §1). Empty now Monitoring shipped.
+const DEFERRED: { label: string; icon: React.ReactNode; note: string }[] = []
 
 function isItemActive(item: SubNavItem, pathname: string): boolean {
   const paths = item.match ?? [item.path]
@@ -100,10 +100,12 @@ export default function DcimSubNav({ pathname, onNavigate }: {
           )
         })}
 
-        {/* Later — visibly deferred */}
-        <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#475569", px: "10px", pt: "16px", pb: "6px" }}>
-          Later
-        </Typography>
+        {/* Later — visibly deferred (hidden when nothing is deferred) */}
+        {DEFERRED.length > 0 ? (
+          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#475569", px: "10px", pt: "16px", pb: "6px" }}>
+            Later
+          </Typography>
+        ) : null}
         {DEFERRED.map(d => (
           <Tooltip key={d.label} title={`${d.note} — coming soon`} placement="right" arrow>
             <Box sx={{

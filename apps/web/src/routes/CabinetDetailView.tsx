@@ -20,6 +20,7 @@ import {
 } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { getSiteCapacity, kw } from "../lib/capacity"
+import { healthColor } from "../lib/readings"
 import { useThemeMode } from "../lib/theme"
 import CabinetElevationV2 from "../components/elevation/CabinetElevationV2"
 import { ReservationDialog } from "../components/elevation/ReservationDialog"
@@ -209,6 +210,23 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
                 detail: cabCap?.power.capacity != null ? `of ${kw(cabCap.power.capacity)} · ${cabCap.power.pct}%` : `nameplate ${formatKw(nameplateKw)} kW`,
                 pct: cabCap?.power.capacity != null ? cabCap.power.pct : undefined,
               },
+              // Measured power — the third number (Horizon 3), only when readings exist.
+              ...(cabCap?.power.measured != null ? [{
+                label: "Measured power",
+                value: kw(cabCap.power.measured),
+                detail: `of ${cabCap.power.capacity != null ? kw(cabCap.power.capacity) : "—"}${cabCap.power.measuredPct != null ? ` · ${cabCap.power.measuredPct}%` : ""} · budgeted ${kw(cabCap.power.value)}`,
+                pct: cabCap.power.measuredPct ?? undefined,
+              }] : []),
+              // Environment — worst-case temp/humidity with ASHRAE health.
+              ...(cabCap?.environment && cabCap.environment.health !== "UNKNOWN" ? [{
+                label: "Environment",
+                value: cabCap.environment.temperatureC != null ? `${cabCap.environment.temperatureC}°C` : (cabCap.environment.humidityPct != null ? `${cabCap.environment.humidityPct}%` : "—"),
+                detail: [
+                  cabCap.environment.humidityPct != null && cabCap.environment.temperatureC != null ? `${cabCap.environment.humidityPct}% RH` : null,
+                  cabCap.environment.health === "OK" ? "ASHRAE OK" : cabCap.environment.health === "WARNING" ? "ASHRAE margin" : "ASHRAE breach",
+                ].filter(Boolean).join(" · "),
+                dot: healthColor(cabCap.environment.health, mode),
+              }] : []),
               {
                 label: "Space used",
                 value: cabCap ? `${cabCap.space.pct}%` : (cabinet.totalU ? `${Math.round(((cabinet.usedU ?? 0) / cabinet.totalU) * 100)}%` : "—"),
@@ -234,7 +252,10 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
             ].map(card => (
               <Box key={card.label} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", p: "14px 16px", display: "flex", flexDirection: "column" }}>
                 <Typography sx={{ fontSize: 10, fontWeight: 700, color: "text.tertiary", textTransform: "uppercase", letterSpacing: "0.08em", mb: "8px" }}>{card.label}</Typography>
-                <Typography sx={{ fontSize: 24, fontWeight: 750, lineHeight: 1.05, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>{card.value}</Typography>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  {(card as { dot?: string }).dot ? <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: (card as { dot?: string }).dot, flexShrink: 0 }} /> : null}
+                  <Typography sx={{ fontSize: 24, fontWeight: 750, lineHeight: 1.05, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>{card.value}</Typography>
+                </Stack>
                 {card.detail ? <Typography sx={{ fontSize: 11, color: "text.secondary", mt: "4px", fontVariantNumeric: "tabular-nums" }}>{card.detail}</Typography> : null}
                 {card.pct != null ? (
                   <Box sx={{ mt: "auto", pt: "10px" }}>

@@ -4,15 +4,21 @@ import type { ThemeMode } from "../components/shared/tokens/colors"
 
 // Client mirror of the capacity API (DCIM spec §4.3). Read-only.
 
-export type Metered = { value: number; capacity: number | null; pct: number | null }
+// `measured`/`measuredPct` (Horizon 3) — the third power number; null when unmonitored.
+export type Metered = { value: number; capacity: number | null; pct: number | null; measured?: number | null; measuredPct?: number | null }
 export type SpaceCap = {
   usedU: number; freeU: number; totalU: number; pct: number
   largestContiguousU: number; freeBlocks: { start: number; size: number }[]
+}
+export type Health = "OK" | "WARNING" | "CRITICAL" | "UNKNOWN"
+export type CabinetEnvironment = {
+  temperatureC: number | null; humidityPct: number | null; health: Health; readAt: string | null
 }
 export type CabinetCapacity = {
   cabinetId: string; name: string; roomId: string | null; totalU: number
   activeAssets: number; activeReservations: number
   space: SpaceCap; power: Metered; weight: Metered
+  environment?: CabinetEnvironment
   stranded: "power" | "space" | null
 }
 export type SiteCapacity = {
@@ -21,6 +27,7 @@ export type SiteCapacity = {
     cabinets: number; activeAssets: number
     space: { usedU: number; totalU: number; pct: number }
     power: Metered; weight: Metered; strandedCabinets: number
+    monitoredCabinets?: number
   }
   cabinets: CabinetCapacity[]
 }

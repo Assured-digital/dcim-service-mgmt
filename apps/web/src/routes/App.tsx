@@ -27,6 +27,7 @@ const MyWorkPage               = React.lazy(() => import("./MyWorkPage"))
 const OverviewPage             = React.lazy(() => import("./OverviewPage"))
 const DcimOverviewPage         = React.lazy(() => import("./DcimOverviewPage"))
 const PlaceEquipmentPage       = React.lazy(() => import("./PlaceEquipmentPage"))
+const MonitoringPage           = React.lazy(() => import("./MonitoringPage"))
 const DeviceCataloguePage      = React.lazy(() => import("./DeviceCataloguePage"))
 const FloorPlanPage            = React.lazy(() => import("./FloorPlanPage"))
 const InfrastructureReportPage = React.lazy(() => import("./InfrastructureReportPage"))
@@ -126,6 +127,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="dcim/overview" element={<DcimOverviewPage />} />
           <Route path="dcim/place" element={<PlaceEquipmentPage />} />
+          <Route path="dcim/monitoring" element={<MonitoringPage />} />
           <Route path="dcim/catalogue" element={<DeviceCataloguePage />} />
           <Route path="dcim/floor-plan" element={<FloorPlanPage />} />
           <Route path="dcim/report" element={<InfrastructureReportPage />} />
