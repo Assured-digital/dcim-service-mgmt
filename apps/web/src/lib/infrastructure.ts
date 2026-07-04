@@ -41,9 +41,13 @@ export type Asset = {
   attachments?: import("./attachments").AttachmentSummary[]
   // MAC↔ITSM work-order fusion (Horizon 2): a staged op awaiting its linked
   // Task/Change. null = none. Present on the single-asset read + elevation feed.
-  pendingOp?: "INSTALL" | "DECOMMISSION" | null
+  pendingOp?: "INSTALL" | "DECOMMISSION" | "MOVE" | null
   pendingWorkOrderType?: "task" | "change" | null
   pendingWorkOrderId?: string | null
+  // MOVE target (Phase 2) — where a pending MOVE relocates the asset to.
+  pendingTargetCabinetId?: string | null
+  pendingTargetUPosition?: number | null
+  pendingTargetRackSide?: "FRONT" | "REAR" | null
   // User-defined custom properties (register power-features) — { fieldKey: value }.
   customValues?: Record<string, unknown> | null
 }
@@ -87,6 +91,18 @@ export type Cabinet = {
   assets: Asset[]
   reservations?: CabinetReservation[]
   attachments?: import("./attachments").AttachmentSummary[]
+  // Assets relocating INTO this cabinet via a pending MOVE (dual-position shadow).
+  incoming?: IncomingMove[]
+}
+
+// An asset relocating INTO a cabinet via a pending MOVE work order — drawn as an
+// "incoming" ghost at its target U while it still sits at its current cabinet
+// (dual-position shadow, MAC Phase 2). uPosition/rackSide are the TARGET slot.
+export type IncomingMove = {
+  id: string; name: string; assetTag: string; assetType: string
+  uHeight: number | null; manufacturer: string | null; modelNumber: string | null
+  isFullDepth: boolean | null; uPosition: number | null; rackSide: "FRONT" | "REAR" | null
+  fromCabinet: { id: string; name: string } | null
 }
 
 export type Room = { id: string; name: string; type: string; floor: string | null }

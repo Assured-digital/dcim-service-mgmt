@@ -12,6 +12,7 @@ import { ElevationEntry, computeMoveTargets, useElevationModel } from "./useElev
 import { ElevationAssetSlot } from "./ElevationAssetSlot"
 import { ElevationEmptySlot } from "./ElevationEmptySlot"
 import { ReservationBlock } from "./ReservationBlock"
+import { IncomingBlock } from "./IncomingBlock"
 import { ZeroUTray } from "./ZeroUTray"
 import { RACK_U_HEIGHT } from "./constants"
 
@@ -69,6 +70,9 @@ function Face({
                   onPickTarget={(u) => onPickTarget(u, label)}
                 />
               )
+            }
+            if (entry.kind === "incoming") {
+              return <IncomingBlock key={`i${entry.incoming.id}`} incoming={entry.incoming} h={entry.h} />
             }
             if (entry.kind === "reservation") {
               // In move mode the reservation range IS a pickable (advisory)

@@ -24,7 +24,7 @@ import {
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import {
   ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog,
-  RaiseDecommissionDialog, RequestDeletionDialog
+  RaiseDecommissionDialog, RaiseMoveWorkOrderDialog, RequestDeletionDialog
 } from "./InfraDialogs"
 import { CreateTaskModal } from "./modals/CreateTaskModal"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
@@ -37,7 +37,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 // ─── Types ────────────────────────────────────────────────────────────────
 
 type TabKey = "overview" | "connections" | "linked" | "maintenance" | "history"
-type ActionDialog = "status" | "move" | "delete" | "requestDelete" | "logMaintenance" | "decommissionWO" | null
+type ActionDialog = "status" | "move" | "delete" | "requestDelete" | "logMaintenance" | "decommissionWO" | "moveWO" | null
 type CreateModal = "task" | "risk" | "issue" | "serviceRequest" | null
 
 type MaintenanceLog = {
@@ -354,6 +354,17 @@ export default function AssetDetailPage({
     } catch (e) { notify.error(getApiErrorMessage(e, "Failed to raise decommission change")); throw e }
   }, [asset, invalidateAsset, notify])
 
+  const handleRaiseMove = React.useCallback(async (data: {
+    workOrderType: "task" | "change"; targetCabinetId: string; targetUPosition: number; targetRackSide: "FRONT" | "REAR"; title: string
+  }) => {
+    if (!asset) return
+    try {
+      const res = await api.post<{ workOrder: { reference: string } }>(`/assets/${asset.id}/work-order`, { op: "MOVE", ...data })
+      invalidateAsset()
+      notify.success(`Move ${data.workOrderType} ${res.data.workOrder.reference} raised — completing it relocates the asset`)
+    } catch (e) { notify.error(getApiErrorMessage(e, "Failed to raise move work order")); throw e }
+  }, [asset, invalidateAsset, notify])
+
   const handleDelete = React.useCallback(async () => {
     if (!asset) return
     try {
@@ -458,7 +469,7 @@ export default function AssetDetailPage({
           {asset.pendingOp ? (
             <Chip
               size="small"
-              label={`${asset.pendingOp === "INSTALL" ? "Install" : "Decommission"} work order open`}
+              label={`${asset.pendingOp === "INSTALL" ? "Install" : asset.pendingOp === "MOVE" ? "Move" : "Decommission"} work order open`}
               sx={{
                 flexShrink: 0, height: 20, fontSize: 10.5, fontWeight: 700,
                 bgcolor: "rgba(245,158,11,0.16)", color: "#b45309",
@@ -481,6 +492,9 @@ export default function AssetDetailPage({
                   actions={[
                     { label: "Change status", onClick: () => setActiveDialog("status") },
                     { label: "Move asset", onClick: () => setActiveDialog("move") },
+                    ...(asset.lifecycleState === "ACTIVE" && !asset.pendingOp
+                      ? [{ label: "Raise move work order", onClick: () => setActiveDialog("moveWO") }]
+                      : []),
                     ...(asset.lifecycleState !== "RETIRED" && !asset.pendingOp
                       ? [{ label: "Raise decommission change", onClick: () => setActiveDialog("decommissionWO") }]
                       : []),
@@ -615,6 +629,13 @@ export default function AssetDetailPage({
           assetName={asset.name}
           onClose={() => setActiveDialog(null)}
           onSave={handleRaiseDecommission}
+        />
+      )}
+      {activeDialog === "moveWO" && (
+        <RaiseMoveWorkOrderDialog
+          asset={{ id: asset.id, name: asset.name, siteId: asset.siteId, cabinetId: asset.cabinetId, uHeight: asset.uHeight }}
+          onClose={() => setActiveDialog(null)}
+          onSave={handleRaiseMove}
         />
       )}
 
