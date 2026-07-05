@@ -358,6 +358,38 @@ export async function runCrmSweep() {
   return (await api.post<SweepResult>("/crm/sweep")).data
 }
 
+// ── Shared-mailbox email sync + triage (phase 7b) ─────────────────────────
+export type MailSyncResult =
+  | { status: "disabled" }
+  | { status: "ok"; processed: number; filed: number; triaged: number; skipped: number }
+
+export type TriageItem = {
+  id: string
+  subject: string
+  fromAddress: string
+  fromName: string | null
+  receivedAt: string
+  bodyPreview: string | null
+  webLink: string | null
+  status: string
+}
+
+export async function runMailSync() {
+  return (await api.post<MailSyncResult>("/crm/mail-sync")).data
+}
+
+export async function listTriage() {
+  return (await api.get<TriageItem[]>("/crm/triage")).data
+}
+
+export async function assignTriage(id: string, dto: { clientId: string; contactId?: string }) {
+  return (await api.post(`/crm/triage/${id}/assign`, dto)).data
+}
+
+export async function dismissTriage(id: string) {
+  return (await api.post(`/crm/triage/${id}/dismiss`, {})).data
+}
+
 // ── Quotes (phase 4) ──────────────────────────────────────────────────────
 // `value` and line-item `unitPrice` are ABSENT for field roles (decision 12).
 export type QuoteLineItemView = {

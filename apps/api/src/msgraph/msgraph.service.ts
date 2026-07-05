@@ -30,6 +30,21 @@ export type DriveItem = {
   mimeType?: string
 }
 
+// Normalised inbound email (CRM_DESIGN.md §8 phase 7b). Participants are the
+// union of from + to + cc addresses, lower-cased — the match keys for the
+// correlation ladder.
+export type MailMessage = {
+  internetMessageId: string
+  conversationId?: string
+  subject: string
+  fromAddress: string
+  fromName?: string
+  participants: string[]
+  receivedDateTime: string
+  bodyPreview?: string
+  webLink?: string
+}
+
 @Injectable()
 export class MsGraphService {
   private readonly logger = new Logger(MsGraphService.name)
@@ -39,6 +54,13 @@ export class MsGraphService {
 
   isConfigured(): boolean {
     return process.env.GRAPH_ENABLED === "true" && !!process.env.SHAREPOINT_SITE_ID
+  }
+
+  // Mail sync is gated separately (its own Entra permission — Mail.Read
+  // application, scoped to the one mailbox by an Exchange application access
+  // policy — and its own env, so SharePoint and mail can ship independently).
+  isMailConfigured(): boolean {
+    return process.env.GRAPH_ENABLED === "true" && !!process.env.CRM_MAILBOX_ADDRESS
   }
 
   private async getToken(): Promise<string> {
@@ -108,5 +130,37 @@ export class MsGraphService {
       `/drives/${driveId}/items/${folder.id}/search(q='${encodeURIComponent(query.replace(/'/g, "''"))}')?$top=100`
     )
     return data.value.map(v => this.mapItem(v))
+  }
+
+  // Read recent messages from the shared CRM mailbox (app-only Mail.Read scoped
+  // to that one mailbox by the Exchange policy). Bounded by `sinceIso` when
+  // given; dedupe is on internetMessageId downstream, so re-reading overlap is
+  // safe. Delta-query cursoring is a later optimisation — for a low-volume CRM
+  // mailbox a bounded recent read + dedupe is sufficient and stateless.
+  async listMailboxMessages(sinceIso?: string): Promise<MailMessage[]> {
+    const mailbox = process.env.CRM_MAILBOX_ADDRESS!
+    const select = "internetMessageId,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,bodyPreview,webLink"
+    const filter = sinceIso ? `&$filter=receivedDateTime ge ${encodeURIComponent(sinceIso)}` : ""
+    const data = await this.graphGet<{ value: any[] }>(
+      `/users/${encodeURIComponent(mailbox)}/messages?$select=${select}&$top=50&$orderby=receivedDateTime desc${filter}`
+    )
+    return data.value.map(m => {
+      const addr = (r: any): string | undefined => r?.emailAddress?.address?.toLowerCase()
+      const fromAddress = addr(m.from) ?? ""
+      const to = (m.toRecipients ?? []).map(addr)
+      const cc = (m.ccRecipients ?? []).map(addr)
+      const participants = [fromAddress, ...to, ...cc].filter((a): a is string => !!a)
+      return {
+        internetMessageId: m.internetMessageId,
+        conversationId: m.conversationId,
+        subject: m.subject ?? "(no subject)",
+        fromAddress,
+        fromName: m.from?.emailAddress?.name,
+        participants: [...new Set(participants)],
+        receivedDateTime: m.receivedDateTime,
+        bodyPreview: m.bodyPreview,
+        webLink: m.webLink
+      }
+    })
   }
 }

@@ -4,11 +4,12 @@ import { OpportunitiesModule } from "../opportunities/opportunities.module"
 import { TasksModule } from "../tasks/tasks.module"
 import { MsGraphModule } from "../msgraph/msgraph.module"
 import { CrmService } from "./crm.service"
+import { MailSyncService } from "./mail-sync.service"
 import { CrmController } from "./crm.controller"
 
 @Module({
   imports: [PrismaModule, OpportunitiesModule, TasksModule, MsGraphModule],
-  providers: [CrmService],
+  providers: [CrmService, MailSyncService],
   controllers: [CrmController]
 })
 export class CrmModule {}

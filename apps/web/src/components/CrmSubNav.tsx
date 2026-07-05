@@ -8,6 +8,7 @@ import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined"
 import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined"
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined"
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined"
+import MarkEmailUnreadOutlinedIcon from "@mui/icons-material/MarkEmailUnreadOutlined"
 import { ORG_SUPER_ROLES, ROLES, hasAnyRole } from "../lib/rbac"
 
 // CRM sub-nav — the "app within the app" panel, mirroring DcimSubNav (DCIM
@@ -42,6 +43,7 @@ export const CRM_DESTINATIONS: CrmDestination[] = [
   { label: "Quotes", path: "/crm/quotes", icon: <RequestQuoteOutlinedIcon sx={{ fontSize: ICON }} />, roles: AD_STAFF },
   { label: "Documents", path: "/crm/documents", icon: <FolderSharedOutlinedIcon sx={{ fontSize: ICON }} />, roles: AD_STAFF },
   { label: "Reports", path: "/crm/reports", icon: <InsightsOutlinedIcon sx={{ fontSize: ICON }} />, roles: COMMERCIAL },
+  { label: "Email triage", path: "/crm/triage", icon: <MarkEmailUnreadOutlinedIcon sx={{ fontSize: ICON }} />, roles: [...ORG_SUPER_ROLES] },
 ]
 
 function isItemActive(item: CrmDestination, pathname: string): boolean {

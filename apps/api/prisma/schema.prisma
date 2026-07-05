@@ -298,6 +298,7 @@ model Activity {
   body           String?
   occurredAt     DateTime  @default(now())
   emailMessageId String?   @unique // Graph internetMessageId — sync dedupe (phase 7b)
+  emailConversationId String? // Graph conversationId — thread continuity (phase 7b)
   createdById    String?   // AD staff who logged it (null for EMAIL_SYNC)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -314,6 +315,30 @@ model ActivityContact {
   contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@id([activityId, contactId])
+}
+
+// Unmatched shared-mailbox email (CRM_DESIGN.md §8 phase 7b). When the sync
+// can't correlate a message to a client (no ref token / thread / contact), it
+// lands here for one-click triage instead of being dropped. Org-scoped (the
+// mailbox belongs to the org, not a client). internetMessageId is the sync
+// dedupe key — a message is EITHER an Activity or a triage row, never both.
+model EmailTriage {
+  id                 String   @id @default(uuid())
+  organizationId     String
+  internetMessageId  String   @unique
+  conversationId     String?
+  subject            String
+  fromAddress        String
+  fromName           String?
+  receivedAt         DateTime
+  bodyPreview        String?
+  webLink            String?
+  status             String   @default("PENDING") // PENDING | RESOLVED | DISMISSED
+  resolvedActivityId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([organizationId, status])
 }
 
 model SlaPolicy {
