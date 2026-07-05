@@ -11,6 +11,7 @@ import { emitNotification } from "../notifications/emit-notification";
 import { NotificationType } from "@prisma/client";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
+import { resolvedAtUpdate, INCIDENT_RESOLVED_STATUSES } from "../metrics/resolved-status";
 
 type ListFilters = {
   dateFrom?: string;
@@ -272,7 +273,7 @@ export class IncidentsService {
     const incident = await this.getForClient(clientId, id, viewer);
     const updated = await this.prisma.incident.update({
       where: { id: incident.id },
-      data: { status }
+      data: { status, ...resolvedAtUpdate(incident.status, status, INCIDENT_RESOLVED_STATUSES) }
     });
 
     await emitAudit(this.prisma, {
