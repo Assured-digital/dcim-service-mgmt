@@ -41,6 +41,7 @@ import { PortsModule } from "./ports/ports.module"
 import { WorkNotesModule } from "./work-notes/work-notes.module"
 import { SensorReadingsModule } from "./sensor-readings/sensor-readings.module"
 import { AssetCustomFieldsModule } from "./asset-custom-fields/asset-custom-fields.module"
+import { MetricsModule } from "./metrics/metrics.module"
 
 @Module({
   imports: [
@@ -84,7 +85,8 @@ import { AssetCustomFieldsModule } from "./asset-custom-fields/asset-custom-fiel
     PortsModule,
     WorkNotesModule,
     SensorReadingsModule,
-    AssetCustomFieldsModule
+    AssetCustomFieldsModule,
+    MetricsModule
   ],
   controllers: [HealthController]
 })
