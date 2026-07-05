@@ -103,7 +103,17 @@ function mockPrisma(): any {
     },
     sensorReading: {
       create: jest.fn(async ({ data }: any) => ({ ...data, id: "reading-1", createdAt: new Date() })),
-      findMany: jest.fn(async () => []),
+      // Client A has one CRITICAL temperature reading on AST; anyone else sees none.
+      findMany: jest.fn(async ({ where }: any) =>
+        where?.clientId === A
+          ? [{ assetId: AST, metric: "temperatureC", value: 35, readAt: new Date("2026-07-04T00:00:00Z") }]
+          : []),
+    },
+    assetCustomField: {
+      findMany: jest.fn(async ({ where }: any) => (where?.clientId === A ? [{ id: "f-1", clientId: A, key: "owner", label: "Owner", type: "text", options: [], order: 1 }] : [])),
+      findUnique: jest.fn(async () => null),
+      aggregate: jest.fn(async () => ({ _max: { order: 0 } })),
+      create: jest.fn(async ({ data }: any) => ({ ...data, id: "f-1", createdAt: new Date() })),
     },
     port: { findMany: jest.fn(async () => []) },
     // Downstream reads on the owner-success paths — empty is enough (the gate is
@@ -221,6 +231,53 @@ describe("DCIM services — query scoping refuses another client's resource (404
     await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-1", actorUserId: "u", clientId: A });
     expect(updates).toHaveLength(1);
     expect(updates[0]).toMatchObject({ lifecycleState: "ACTIVE", pendingOp: null, pendingWorkOrderId: null });
+  });
+
+  it("work-order fusion (MOVE): a completed move relocates ONLY the same-client waiting asset", async () => {
+    const { applyCompletedWorkOrder } = await import("../src/work-orders/apply-pending");
+    const staged = {
+      id: AST, clientId: A, assetTag: "AST-1", name: "Asset One", lifecycleState: "ACTIVE",
+      siteId: "site-old", cabinetId: "cab-old", uPosition: 35, uHeight: 1, isFullDepth: true, disposalStatus: null,
+      pendingOp: "MOVE", pendingWorkOrderType: "task", pendingWorkOrderId: "WO-M",
+      pendingTargetCabinetId: "cab-new", pendingTargetUPosition: 10, pendingTargetRackSide: "FRONT",
+    };
+    const updates: any[] = [];
+    const p: any = {
+      asset: {
+        findFirst: jest.fn(async ({ where }: any) =>
+          where.pendingWorkOrderId === "WO-M" && where.clientId === A ? staged : null),
+        findMany: jest.fn(async () => []),               // target slot empty → no conflict
+        update: jest.fn(async ({ data }: any) => { updates.push(data); return { ...staged, ...data } }),
+      },
+      cabinet: { findUnique: jest.fn(async () => ({ siteId: "site-new", name: "CAB-NEW" })) },
+      auditEvent: { create: jest.fn(async () => ({})) },
+    };
+    // Foreign client resolves NO waiting asset → no write.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-M", actorUserId: "u", clientId: B });
+    expect(updates).toHaveLength(0);
+    // Owner completes it → asset relocates to the target, pending + target cleared.
+    await applyCompletedWorkOrder(p, { workOrderType: "task", workOrderId: "WO-M", actorUserId: "u", clientId: A });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({
+      cabinetId: "cab-new", siteId: "site-new", uPosition: 10, rackSide: "FRONT",
+      pendingOp: null, pendingTargetCabinetId: null, pendingTargetUPosition: null,
+    });
+  });
+
+  it("derived health: resolver is clientId-scoped (foreign client sees UNKNOWN, owner sees the reading)", async () => {
+    const { resolveHealthForAssets } = await import("../src/sensor-readings/resolve-health");
+    const assets = [{ id: AST, budgetedDrawW: null }];
+    const foreign = await resolveHealthForAssets(prisma, B, assets);
+    expect(foreign.get(AST)).toMatchObject({ health: "UNKNOWN", temperatureC: null });
+    const owner = await resolveHealthForAssets(prisma, A, assets);
+    expect(owner.get(AST)).toMatchObject({ health: "CRITICAL", temperatureC: 35 });
+  });
+
+  it("custom fields: list is clientId-scoped (only the owner's fields resolve)", async () => {
+    const { AssetCustomFieldsService } = await import("../src/asset-custom-fields/asset-custom-fields.service");
+    const svc = new AssetCustomFieldsService(prisma);
+    await expect(svc.list(B)).resolves.toEqual([]);
+    await expect(svc.list(A)).resolves.toEqual([expect.objectContaining({ key: "owner", clientId: A })]);
   });
 
   it("sensor readings: record refuses a foreign client's asset (404); owner records fine", async () => {

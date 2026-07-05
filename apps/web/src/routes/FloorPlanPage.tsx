@@ -124,7 +124,7 @@ export default function FloorPlanPage() {
           {!rooms.length ? <MenuItem value="">No rooms</MenuItem> : null}
         </TextField>
         <SegmentedToggle
-          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }]}
+          options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }, { value: "thermal", label: "Thermal" }]}
           value={lens} onChange={v => setLens(v)}
         />
         <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} onClick={() => setFindSpaceU(v => v == null ? 10 : null)}>Find space</ToolbarButton>
@@ -154,7 +154,7 @@ export default function FloorPlanPage() {
           squash the canvas); side-by-side from md up. */}
       <Box sx={{ flex: 1, display: "flex", flexDirection: { xs: "column", md: "row" }, overflow: "hidden", minHeight: 0 }}>
         {/* Canvas */}
-        <Box sx={{ flex: 1, overflow: "auto", bgcolor: "background.default", minHeight: { xs: 280, md: 0 } }}>
+        <Box sx={{ flex: 1, overflow: "hidden", bgcolor: "background.default", minHeight: { xs: 360, md: 0 } }}>
           {plan ? (
             <FloorCanvas plan={plan} lens={lens} mode={edit ? "edit" : "view"} selectedCabinetId={selectedCabinetId}
               findSpaceMinU={findSpaceU} placing={!!placing || !!aisleDraw}

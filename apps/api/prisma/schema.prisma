@@ -154,6 +154,7 @@ model Client {
   attachments       Attachment[]
   workNotes         WorkNote[]
   sensorReadings    SensorReading[]
+  assetCustomFields AssetCustomField[]
   slaPolicies       SlaPolicy[]
   cabinetReservations CabinetReservation[]
   regions           Region[]
@@ -424,6 +425,10 @@ model Cabinet {
   orientation   Int     @default(0) // rotation degrees: 0 | 90 | 180 | 270
   posX          Float?  // x on the room canvas (grid units); null = unplaced tray
   posY          Float?  // y on the room canvas
+  // Physical footprint (mm) for the true-scale floor plan (Phase A). null → the
+  // canvas assumes a standard 600 × 1070 mm cabinet.
+  widthMm       Int?
+  depthMm       Int?
   // Cabinet lifecycle for the floor-plan Status lens. String (not enum) to match
   // Asset.status; values resolve through entityStatusIntent (§8): ACTIVE | PLANNED
   // | DECOMMISSIONING | RETIRED.
@@ -656,9 +661,20 @@ model Asset {
   // staged here and APPLIED AUTOMATICALLY when its linked Task/Change completes
   // (the completion hook reverse-looks-up the asset by pendingWorkOrderId). One
   // pending op per asset at a time. Elevation reads these to draw shadow state.
-  pendingOp             String?           // null = none | "INSTALL" | "DECOMMISSION"
+  pendingOp             String?           // null = none | "INSTALL" | "DECOMMISSION" | "MOVE"
   pendingWorkOrderType  String?           // "task" | "change"
   pendingWorkOrderId    String?           // id of the linked Task/Change
+  // MOVE target (Phase 2). Set only when pendingOp = "MOVE": the destination the
+  // asset relocates to when the work order completes. The target cabinet implies
+  // its site. Elevation draws the asset as an "incoming" ghost at this position
+  // while it still physically sits at its current cabinet (dual-position shadow).
+  pendingTargetCabinetId String?
+  pendingTargetUPosition Int?
+  pendingTargetRackSide  String?          // "FRONT" | "REAR"
+  // User-defined custom properties (register power-features). A flat map of
+  // { fieldKey: value }; the field schema lives in AssetCustomField per client.
+  // Values travel with the asset (no join table) — the Hyperview pattern.
+  customValues          Json?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   installDate         DateTime?
@@ -668,6 +684,23 @@ model Asset {
   ports               Port[]              // LATENT — port layer (§6)
   floorObjects        FloorObject[]       // reverse of FloorObject.assetId
   sensorReadings      SensorReading[]     // measured power / environmental (Horizon 3)
+}
+
+// User-defined asset field schema (register power-features). Per client; drives
+// the "Additional properties" card + the register. Values live on Asset.customValues.
+model AssetCustomField {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  key       String   // stable identifier used as the customValues map key
+  label     String
+  type      String   // "text" | "number" | "select" | "date"
+  options   String[] // choices for type=select (empty otherwise)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, key])
+  @@index([clientId])
 }
 
 // Measured telemetry (DCIM_SCHEMA_SPEC §6b, Horizon 3). The manual/CSV field-

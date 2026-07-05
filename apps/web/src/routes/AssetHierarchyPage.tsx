@@ -3,10 +3,13 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, MenuItem, Stack, TextField, Typography
+  Box, Button, IconButton, MenuItem, Stack, TextField, Tooltip, Typography
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import StorageIcon from "@mui/icons-material/Storage"
+import KeyboardDoubleArrowLeftIcon from "@mui/icons-material/KeyboardDoubleArrowLeft"
+import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight"
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined"
 import { EditActionsButton } from "../components/EditActionsButton"
 import { ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -18,6 +21,7 @@ import CabinetDetailView from "./CabinetDetailView"
 import AssetDetailPage from "./AssetDetailPage"
 import CapacityRing from "../components/shared/CapacityRing"
 import { FloorCanvas } from "../components/floorplan/FloorCanvas"
+const Room3D = React.lazy(() => import("../components/floorplan/Room3D"))
 import { FloorLens, getFloorPlan } from "../lib/floorPlan"
 import { ListToolbar, SegmentedToggle, ToolbarButton } from "../components/shared/ListToolbar"
 import { AttachmentsContent } from "../components/AttachmentsContent"
@@ -238,10 +242,18 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
   const [internalView, setInternalView] = React.useState<RoomView | null>(null) // null = auto
   const [lens, setLens] = React.useState<FloorLens>("space")
   const [findSpaceU, setFindSpaceU] = React.useState<number | null>(null)
+  const [dim, setDim] = React.useState<"2d" | "3d">(() => (localStorage.getItem("dcms_estate_plan_dim") === "3d" ? "3d" : "2d"))
+  const changeDim = React.useCallback((d: "2d" | "3d") => { setDim(d); localStorage.setItem("dcms_estate_plan_dim", d) }, [])
+  // Live mode polls the plan so telemetry-driven lenses (health/thermal/power)
+  // stay current on a NOC wall without a manual refresh.
+  const [live, setLive] = React.useState(false)
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ["floor-plan", roomId],
     queryFn: () => getFloorPlan(roomId),
+    refetchInterval: live ? 15000 : false,
+    // Live mode is a wall-display feature — keep polling even when the tab isn't focused.
+    refetchIntervalInBackground: true,
   })
 
   const placedCount = plan?.cabinets.length ?? 0
@@ -268,12 +280,25 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
         {effectiveView === "plan" ? (
           <>
             <SegmentedToggle
-              options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }]}
+              options={[{ value: "space", label: "Space" }, { value: "power", label: "Power" }, { value: "status", label: "Status" }, { value: "health", label: "Health" }, { value: "thermal", label: "Thermal" }]}
               value={lens} onChange={v => setLens(v)} sx={{ ml: 1 }}
             />
-            <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} sx={{ ml: 1 }}
-              onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}>
-              Find ≥10U free
+            <SegmentedToggle
+              options={[{ value: "2d", label: "2D" }, { value: "3d", label: "3D" }]}
+              value={dim} onChange={v => changeDim(v as "2d" | "3d")} sx={{ ml: 1 }}
+            />
+            {dim === "2d" ? (
+              <ToolbarButton variant={findSpaceU != null ? "primary" : "default"} sx={{ ml: 1 }}
+                onClick={() => setFindSpaceU(v => (v == null ? 10 : null))}>
+                Find ≥10U free
+              </ToolbarButton>
+            ) : null}
+            <ToolbarButton variant={live ? "primary" : "default"} sx={{ ml: 1 }} onClick={() => setLive(v => !v)}>
+              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: live ? "#22c55e" : "text.disabled",
+                  ...(live ? { animation: "fp-pulse 1.4s ease-in-out infinite", "@keyframes fp-pulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } } } : {}) }} />
+                Live
+              </Box>
             </ToolbarButton>
           </>
         ) : null}
@@ -286,7 +311,7 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
           ) : null}
         </Box>
       </ListToolbar>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: effectiveView === "plan" ? "hidden" : "auto" }}>
         {effectiveView === "details" ? (
           detailsContent
         ) : effectiveView === "grid" ? (
@@ -294,12 +319,18 @@ const RoomPlanView = React.memo(function RoomPlanView({ siteId, roomId, cabinets
         ) : isLoading ? (
           <Box sx={{ p: 3 }}><LoadingState /></Box>
         ) : plan && placedCount > 0 ? (
-          <FloorCanvas
-            plan={plan} lens={lens} mode="view"
-            selectedCabinetId={null} findSpaceMinU={findSpaceU} placing={false}
-            onCabinetClick={onSelectCabinet}
-            onObjectClick={() => {}} onCellClick={() => {}}
-          />
+          dim === "3d" ? (
+            <React.Suspense fallback={<Box sx={{ p: 3 }}><LoadingState /></Box>}>
+              <Room3D plan={plan} lens={lens} selectedCabinetId={null} onCabinetClick={onSelectCabinet} />
+            </React.Suspense>
+          ) : (
+            <FloorCanvas
+              plan={plan} lens={lens} mode="view"
+              selectedCabinetId={null} findSpaceMinU={findSpaceU} placing={false}
+              onCabinetClick={onSelectCabinet}
+              onObjectClick={() => {}} onCellClick={() => {}}
+            />
+          )
         ) : (
           <Box sx={{ p: "20px 24px" }}>
             <Box sx={{ py: 6, textAlign: "center", border: "1.5px dashed", borderColor: "divider", borderRadius: "10px" }}>
@@ -339,6 +370,12 @@ export default function AssetHierarchyPage() {
   React.useEffect(() => { setSiteView("plan"); setSiteRoomId(null) }, [selectedSiteId])
   const [openRoomId, setOpenRoomId] = React.useState<string | null>(params.roomId ?? null)
   const [openCabinetId, setOpenCabinetId] = React.useState<string | null>(params.cabinetId ?? null)
+  // Collapsible hierarchy tree (Hyperview pattern) — sticky per browser so the
+  // choice survives navigation; collapses to a thin rail to hand the plan room.
+  const [treeCollapsed, setTreeCollapsed] = React.useState(() => localStorage.getItem("dcms_estate_tree_collapsed") === "1")
+  const toggleTree = React.useCallback(() => setTreeCollapsed(v => {
+    const next = !v; localStorage.setItem("dcms_estate_tree_collapsed", next ? "1" : "0"); return next
+  }), [])
 
   // ── Dialog state ──────────────────────────────────────────────────────
   const [activeDialog, setActiveDialog] = React.useState<DialogKey>(null)
@@ -645,19 +682,45 @@ export default function AssetHierarchyPage() {
       height: "100%", width: "100%", display: "flex", overflow: "hidden", bgcolor: "var(--color-background-tertiary)"
     }}>
 
-      {/* ── Left panel ──────────────────────────────────────────────────── */}
-      <Box sx={{ width: 260, minWidth: 260, bgcolor: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-primary)", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-        <SiteHierarchyTree
-          sites={sites} rooms={rooms} cabinets={cabinets}
-          selectedSiteId={selectedSiteId} selectedRoomId={selectedRoomId}
-          selectedCabinetId={selectedCabinetId} selectedAssetId={selectedAssetId}
-          openSiteIds={openSiteIds} openRoomId={openRoomId} openCabinetId={openCabinetId}
-          isLoading={isLoading}
-          onSelectSite={handleSelectSite} onToggleSite={handleToggleSite}
-          onSelectRoom={handleSelectRoom} onToggleRoom={handleToggleRoom}
-          onSelectCabinet={handleSelectCabinet} onToggleCabinet={handleToggleCabinet}
-          onSelectAsset={handleSelectAsset}
-        />
+      {/* ── Left panel (collapsible hierarchy) ─────────────────────────────── */}
+      <Box sx={{ width: treeCollapsed ? 44 : 260, minWidth: treeCollapsed ? 44 : 260, bgcolor: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-primary)", overflow: "hidden", flexShrink: 0, display: "flex", flexDirection: "column", transition: "width .18s ease, min-width .18s ease" }}>
+        {treeCollapsed ? (
+          <Stack alignItems="center" spacing={1.25} sx={{ pt: "10px" }}>
+            <Tooltip title="Show hierarchy" placement="right">
+              <IconButton size="small" onClick={toggleTree} aria-label="Expand hierarchy" sx={{ color: "text.secondary" }}>
+                <KeyboardDoubleArrowRightIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <AccountTreeOutlinedIcon sx={{ fontSize: 17, color: "text.tertiary" }} />
+            <Typography sx={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em", color: "text.tertiary", writingMode: "vertical-rl", mt: "2px" }}>
+              HIERARCHY
+            </Typography>
+          </Stack>
+        ) : (
+          <>
+            <Box sx={{ height: HEADER_HEIGHT, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", pl: "16px", pr: "8px", borderBottom: "1px solid var(--color-border-primary)" }}>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "text.tertiary" }}>Hierarchy</Typography>
+              <Tooltip title="Collapse" placement="right">
+                <IconButton size="small" onClick={toggleTree} aria-label="Collapse hierarchy" sx={{ color: "text.secondary" }}>
+                  <KeyboardDoubleArrowLeftIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+              <SiteHierarchyTree
+                sites={sites} rooms={rooms} cabinets={cabinets}
+                selectedSiteId={selectedSiteId} selectedRoomId={selectedRoomId}
+                selectedCabinetId={selectedCabinetId} selectedAssetId={selectedAssetId}
+                openSiteIds={openSiteIds} openRoomId={openRoomId} openCabinetId={openCabinetId}
+                isLoading={isLoading}
+                onSelectSite={handleSelectSite} onToggleSite={handleToggleSite}
+                onSelectRoom={handleSelectRoom} onToggleRoom={handleToggleRoom}
+                onSelectCabinet={handleSelectCabinet} onToggleCabinet={handleToggleCabinet}
+                onSelectAsset={handleSelectAsset}
+              />
+            </Box>
+          </>
+        )}
       </Box>
 
       {/* ── Right panel ──────────────────────────────────────────────── */}

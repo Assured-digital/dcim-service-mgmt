@@ -70,6 +70,7 @@ export class FloorPlanService {
       )
       return {
         id: c.id, name: c.name, posX: c.posX, posY: c.posY, orientation: c.orientation,
+        widthMm: c.widthMm, depthMm: c.depthMm,
         status: c.status, row: c.row, positionInRow: c.positionInRow, totalU: c.totalU ?? 0,
         space: { usedU: cap.space.usedU, totalU: cap.space.totalU, pct: cap.space.pct, largestContiguousU: cap.space.largestContiguousU },
         power: cap.power, weight: cap.weight, stranded: cap.stranded, environment,

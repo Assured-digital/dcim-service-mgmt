@@ -17,6 +17,7 @@ export type CabinetEnvironment = {
 export type FloorCabinet = {
   id: string; name: string
   posX: number; posY: number; orientation: number; status: string
+  widthMm?: number | null; depthMm?: number | null
   row: string | null; positionInRow: number | null; totalU: number
   space: { usedU: number; totalU: number; pct: number; largestContiguousU: number }
   power: Metered; weight: Metered
@@ -38,7 +39,7 @@ export type FloorPlan = {
   aisleZones: AisleZoneT[]
 }
 
-export type FloorLens = "space" | "power" | "status" | "health"
+export type FloorLens = "space" | "power" | "status" | "health" | "thermal"
 
 export async function getFloorPlan(roomId: string): Promise<FloorPlan> {
   return (await api.get<FloorPlan>(`/rooms/${roomId}/floor-plan`)).data

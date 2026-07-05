@@ -7,6 +7,7 @@ import { computeDisplayName, userDisplaySelect } from "../users/display";
 import { activeReservationWhere, findUSlotConflicts, uSlotOutOfBounds, UPlacement } from "../cabinets/u-slot.util";
 import { DCIM_DEFAULT_DERATE_PCT } from "../dcim/capacity.util";
 import { resolveAttachments } from "../attachments/resolve-attachments";
+import { resolveHealthForAssets } from "../sensor-readings/resolve-health";
 import { TasksService } from "../tasks/tasks.service";
 import { ChangesService } from "../changes/changes.service";
 
@@ -94,27 +95,17 @@ export class AssetsService {
       site: true,
     } as const;
 
-    if (!isOrgSuperRole(role)) {
-      return this.prisma.asset.findMany({
-        where: {
-          ownerType: OwnerType.CLIENT,
-          clientId
-        },
-        include: assetInclude,
-        orderBy: { updatedAt: "desc" }
-      });
-    }
-
-    return this.prisma.asset.findMany({
-      where: {
-        OR: [
-          { ownerType: OwnerType.INTERNAL },
-          { ownerType: OwnerType.CLIENT, clientId }
-        ]
-      },
-      include: assetInclude,
-      orderBy: { updatedAt: "desc" }
+    const where = isOrgSuperRole(role)
+      ? { OR: [{ ownerType: OwnerType.INTERNAL }, { ownerType: OwnerType.CLIENT, clientId }] }
+      : { ownerType: OwnerType.CLIENT, clientId };
+    const assets = await this.prisma.asset.findMany({
+      where, include: assetInclude, orderBy: { updatedAt: "desc" }
     });
+
+    // Derived health (Horizon 3) — resolver-spread, never stored (§6b). One
+    // batched readings query for the whole list; unmonitored assets → UNKNOWN.
+    const healthByAsset = await resolveHealthForAssets(this.prisma, clientId, assets);
+    return assets.map((a) => ({ ...a, health: healthByAsset.get(a.id) ?? null }));
   }
 
   async getByIdForClient(assetId: string, clientId: string, role: Role) {
@@ -140,7 +131,8 @@ export class AssetsService {
     // other attachable read. Concrete clientId in the resolver means INTERNAL
     // (null-client) assets simply resolve to none.
     const attachments = await resolveAttachments(this.prisma, clientId, "asset", asset.id);
-    return { ...asset, attachments };
+    const healthByAsset = await resolveHealthForAssets(this.prisma, clientId, [asset]);
+    return { ...asset, attachments, health: healthByAsset.get(asset.id) ?? null };
   }
 
   async create(dto: any, requesterClientId: string, requesterRole: Role, actorUserId: string) {
@@ -510,10 +502,11 @@ export class AssetsService {
     requesterRole: Role,
     actorUserId: string,
     dto: {
-      op: "INSTALL" | "DECOMMISSION"
+      op: "INSTALL" | "DECOMMISSION" | "MOVE"
       workOrderType: "task" | "change"
       title?: string; description?: string; priority?: string
       changeType?: string; scheduledStart?: string; scheduledEnd?: string; assigneeId?: string
+      targetCabinetId?: string; targetUPosition?: number; targetRackSide?: "FRONT" | "REAR"
     }
   ) {
     if (!requesterClientId) throw new ForbiddenException("Missing client scope");
@@ -530,12 +523,43 @@ export class AssetsService {
     }
 
     const clientId = asset.clientId ?? requesterClientId;
+
+    // MOVE (Phase 2): validate the destination up front and stage it on the asset.
+    // The asset must be live (ACTIVE) and the target U-range free NOW — a fresh
+    // re-check runs again at completion (the slot could fill in the interim).
+    let moveTarget: { cabinetId: string; uPosition: number; rackSide: "FRONT" | "REAR"; cabinetName: string } | null = null;
+    if (dto.op === "MOVE") {
+      if (asset.lifecycleState !== AssetLifecycleState.ACTIVE) {
+        throw new BadRequestException("Move work orders apply to active assets only.");
+      }
+      if (!dto.targetCabinetId || dto.targetUPosition == null) {
+        throw new BadRequestException("A move needs a target cabinet and U position.");
+      }
+      const targetCabinet = await this.prisma.cabinet.findUnique({
+        where: { id: dto.targetCabinetId }, select: { id: true, name: true, site: { select: { clientId: true } } },
+      });
+      if (!targetCabinet || targetCabinet.site.clientId !== clientId) {
+        throw new BadRequestException("Target cabinet not found.");
+      }
+      const rackSide = dto.targetRackSide === "REAR" ? "REAR" : "FRONT";
+      await this.assertUSlotAvailable(
+        this.prisma,
+        { cabinetId: targetCabinet.id, uPosition: dto.targetUPosition, uHeight: asset.uHeight, rackSide, isFullDepth: asset.isFullDepth },
+        { excludeAssetId: asset.id },
+      );
+      moveTarget = { cabinetId: targetCabinet.id, uPosition: dto.targetUPosition, rackSide, cabinetName: targetCabinet.name };
+    }
+
     const where = `${asset.name} (${asset.assetTag})`;
     const title = dto.title?.trim() ||
-      (dto.op === "INSTALL" ? `Install ${where}` : `Decommission ${where}`);
+      (dto.op === "INSTALL" ? `Install ${where}`
+        : dto.op === "MOVE" ? `Move ${where} to ${moveTarget!.cabinetName} U${moveTarget!.uPosition}`
+        : `Decommission ${where}`);
     const description = dto.description?.trim() ||
       (dto.op === "INSTALL"
         ? `Physically install and commission ${where}. Mark this work order done once it is racked and live — the asset then activates automatically.`
+        : dto.op === "MOVE"
+        ? `Physically relocate ${where} to ${moveTarget!.cabinetName} U${moveTarget!.uPosition} (${moveTarget!.rackSide.toLowerCase()}). Completing this work order moves the asset automatically.`
         : `Decommission ${where}. Completing this change retires the asset and frees its capacity.`);
 
     const workOrder = dto.workOrderType === "task"
@@ -551,13 +575,19 @@ export class AssetsService {
 
     const updated = await this.prisma.asset.update({
       where: { id: asset.id },
-      data: { pendingOp: dto.op, pendingWorkOrderType: dto.workOrderType, pendingWorkOrderId: workOrder.id },
+      data: {
+        pendingOp: dto.op, pendingWorkOrderType: dto.workOrderType, pendingWorkOrderId: workOrder.id,
+        pendingTargetCabinetId: moveTarget?.cabinetId ?? null,
+        pendingTargetUPosition: moveTarget?.uPosition ?? null,
+        pendingTargetRackSide: moveTarget?.rackSide ?? null,
+      },
     });
 
+    const opLabel = dto.op === "INSTALL" ? "Install" : dto.op === "MOVE" ? "Move" : "Decommission";
     await emitAudit(this.prisma, {
       entityType: "Asset", entityId: asset.id, action: "WORK_ORDER_RAISED",
       actorUserId, clientId, reference: asset.assetTag, title: asset.name,
-      comment: `${dto.op === "INSTALL" ? "Install" : "Decommission"} ${dto.workOrderType} raised: ${workOrder.reference}`,
+      comment: `${opLabel} ${dto.workOrderType} raised: ${workOrder.reference}`,
     });
 
     return {
@@ -590,6 +620,7 @@ export class AssetsService {
     location?: string
     rackSide?: "FRONT" | "REAR" | null
     overrideReservationId?: string | null
+    customValues?: Record<string, unknown>
   }, requesterClientId: string, requesterRole: Role, actorUserId: string) {
     if (!requesterClientId) throw new ForbiddenException("Missing client scope");
 
@@ -695,7 +726,12 @@ export class AssetsService {
           lifecycleState: dto.lifecycleState ?? asset.lifecycleState,
           notes: dto.notes ?? asset.notes,
           location: dto.location ?? asset.location,
-          rackSide: targetRackSide
+          rackSide: targetRackSide,
+          // Merge custom property values (partial patch), preserving unrelated
+          // keys; explicit null on a key clears just that field.
+          customValues: dto.customValues !== undefined
+            ? ({ ...(asset.customValues as Record<string, unknown> ?? {}), ...dto.customValues } as Prisma.InputJsonValue)
+            : undefined,
         }
       });
     });

@@ -10,10 +10,16 @@ import { ListToolbar, SearchField, ToolbarButton } from "../components/shared/Li
 import { ChipOption, FilterChip } from "../components/shared/FilterChip"
 import AssetRegister from "./AssetRegister"
 import AssetDetailPage from "./AssetDetailPage"
-import { Asset, assetTypeAccent, lifecycleGlyphColor } from "../lib/infrastructure"
+import { Asset, assetTypeAccent, lifecycleGlyphColor, HealthLevel } from "../lib/infrastructure"
+import { healthColor, HEALTH_LABEL } from "../lib/readings"
+import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
+import { listCustomFields } from "../lib/customFields"
+import { ManageCustomFieldsDialog } from "./customFieldsUi"
+import { AssetBulkBar } from "./AssetBulkBar"
+import { AssetSavedViews } from "./AssetSavedViews"
 import {
   FilterState, WarrantyKey, activeFilterCount, applyFilters, applyFiltersExcluding,
-  emptyFilters, exportAssetsCsv, UNKNOWN_MANUFACTURER, warrantyStatus,
+  assetHealth, emptyFilters, exportAssetsCsv, UNKNOWN_MANUFACTURER, warrantyStatus,
 } from "./assetRegisterFilters"
 
 // Asset register — the flat, non-spatial escape hatch (DCIM_DESIGN_BRIEF §4.5):
@@ -50,6 +56,24 @@ export default function AssetRegisterPage() {
     queryFn: async () => (await api.get<Asset[]>("/assets")).data,
     staleTime: 5 * 60 * 1000
   })
+
+  // Custom asset fields: drive extra export columns + the Manage fields dialog.
+  const canManageFields = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
+  const canBulkEdit = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
+  const [manageFields, setManageFields] = React.useState(false)
+  const { data: customFields = [] } = useQuery({ queryKey: ["asset-custom-fields"], queryFn: listCustomFields })
+
+  // Bulk selection (ids ticked across the filtered set).
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const toggleRow = React.useCallback((id: string) => setSelectedIds(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
+  }), [])
+  const toggleAll = React.useCallback((ids: string[], checked: boolean) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (checked) ids.forEach(i => next.add(i)); else ids.forEach(i => next.delete(i))
+    return next
+  }), [])
+  const clearSelection = React.useCallback(() => setSelectedIds(new Set()), [])
 
   const filteredRows = React.useMemo(() => {
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
@@ -127,6 +151,15 @@ export default function AssetRegisterPage() {
     ].filter(w => w.count > 0)
   }, [allAssets, filters, mode])
 
+  const healthOptions = React.useMemo<ChipOption[]>(() => {
+    const sub = applyFiltersExcluding(allAssets, filters, "health")
+    const counts = new Map<HealthLevel, number>()
+    for (const a of sub) { const h = assetHealth(a); counts.set(h, (counts.get(h) ?? 0) + 1) }
+    return (["CRITICAL", "WARNING", "OK", "UNKNOWN"] as HealthLevel[])
+      .filter(h => counts.has(h))
+      .map(h => ({ key: h, label: HEALTH_LABEL[h], count: counts.get(h)!, glyph: { color: healthColor(h, mode), shape: "dot" as const } }))
+  }, [allAssets, filters, mode])
+
   // ── Callbacks ───────────────────────────────────────────────────────────
   const toggleIn = (key: Exclude<keyof FilterState, "search">) => (value: string) =>
     setFilters(prev => {
@@ -137,6 +170,7 @@ export default function AssetRegisterPage() {
   const clearKey = (key: Exclude<keyof FilterState, "search">) => () =>
     setFilters(prev => ({ ...prev, [key]: new Set() }))
   const clearAll = React.useCallback(() => { setFilters(emptyFilters()); setSearchInput("") }, [])
+  const applyView = React.useCallback((next: FilterState) => { setFilters(next); setSearchInput(next.search) }, [])
 
   const handleAssetClick = React.useCallback((asset: Asset) => {
     navigate(`/asset-register/assets/${asset.id}`)
@@ -145,6 +179,7 @@ export default function AssetRegisterPage() {
 
   const assetEmbedded = !!params.assetId
   const activeCount = activeFilterCount(filters)
+  const selectedAssets = React.useMemo(() => allAssets.filter(a => selectedIds.has(a.id)), [allAssets, selectedIds])
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -166,9 +201,11 @@ export default function AssetRegisterPage() {
               placeholder="Search assets — tag, serial, IP, model…"
               value={searchInput} onValueChange={setSearchInput} onSearch={commitSearch}
             />
+            <AssetSavedViews filters={filters} onApply={applyView} />
             <FilterChip label="Site" options={siteOptions} selected={filters.siteIds} onToggle={toggleIn("siteIds")} onClear={clearKey("siteIds")} />
             <FilterChip label="Type" options={typeOptions} selected={filters.types} onToggle={toggleIn("types")} onClear={clearKey("types")} />
             <FilterChip label="Lifecycle" options={lifecycleOptions} selected={filters.lifecycles} onToggle={toggleIn("lifecycles")} onClear={clearKey("lifecycles")} />
+            <FilterChip label="Health" options={healthOptions} selected={filters.health as unknown as Set<string>} onToggle={(k) => toggleIn("health")(k as HealthLevel)} onClear={clearKey("health")} />
             <FilterChip label="Manufacturer" options={manufacturerOptions} selected={filters.manufacturers} onToggle={toggleIn("manufacturers")} onClear={clearKey("manufacturers")} />
             <FilterChip label="Warranty" options={warrantyOptions} selected={filters.warranty as unknown as Set<string>} onToggle={(k) => toggleIn("warranty")(k as WarrantyKey)} onClear={clearKey("warranty")} />
             {activeCount > 0 ? (
@@ -178,18 +215,26 @@ export default function AssetRegisterPage() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1 }} />
-            <ToolbarButton onClick={() => exportAssetsCsv(filteredRows)} disabled={filteredRows.length === 0}
+            {canManageFields ? <ToolbarButton onClick={() => setManageFields(true)}>Manage fields</ToolbarButton> : null}
+            <ToolbarButton onClick={() => exportAssetsCsv(filteredRows, customFields)} disabled={filteredRows.length === 0}
               startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: "15px !important" }} />}>
               Export {filteredRows.length}{activeCount > 0 ? " (filtered)" : ""}
             </ToolbarButton>
           </ListToolbar>
 
+          {/* ── Bulk selection bar ──────────────────────────────────────── */}
+          {selectedAssets.length > 0 ? (
+            <AssetBulkBar selected={selectedAssets} customFields={customFields} canManage={canBulkEdit} onClear={clearSelection} />
+          ) : null}
+
           {/* ── Table ───────────────────────────────────────────────────── */}
           <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", bgcolor: "background.paper" }}>
-            <AssetRegister filteredRows={filteredRows} onAssetClick={handleAssetClick} />
+            <AssetRegister filteredRows={filteredRows} onAssetClick={handleAssetClick}
+              selectedIds={selectedIds} onToggleRow={toggleRow} onToggleAll={toggleAll} />
           </Box>
         </>
       )}
+      {manageFields ? <ManageCustomFieldsDialog onClose={() => setManageFields(false)} /> : null}
     </Box>
   )
 }

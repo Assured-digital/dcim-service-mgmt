@@ -1,6 +1,6 @@
 import React from "react"
 import {
-  Asset, Cabinet, CabinetReservation, ElevationSide,
+  Asset, Cabinet, CabinetReservation, ElevationSide, IncomingMove,
   normalizeRackSide, reservationExpired
 } from "../../lib/infrastructure"
 
@@ -14,6 +14,7 @@ import {
 export type ElevationEntry =
   | { kind: "asset"; asset: Asset; u: number; h: number; ghost: boolean }
   | { kind: "reservation"; reservation: CabinetReservation; u: number; h: number; expired: boolean }
+  | { kind: "incoming"; incoming: IncomingMove; u: number; h: number }
   | { kind: "empty"; u: number }
 
 export type ElevationModel = {
@@ -54,6 +55,18 @@ function buildFace(cabinet: Cabinet, face: ElevationSide, startingUnit: number, 
     let clear = true
     for (let u = r.uStart; u < r.uStart + r.uHeight; u++) if (covered.has(u)) { clear = false; break }
     if (clear) claim({ kind: "reservation", reservation: r, u: r.uStart, h: r.uHeight, expired: false })
+  }
+
+  // Incoming MOVE ghosts (Phase 2): drawn at the target slot on the target face,
+  // only where nothing already occupies the units (defensive — the server frees
+  // the slot before completing).
+  for (const inc of cabinet.incoming ?? []) {
+    if (inc.uPosition == null) continue
+    if (normalizeRackSide(inc.rackSide) !== face) continue
+    const h = spanH(inc.uHeight)
+    let clear = true
+    for (let u = inc.uPosition; u < inc.uPosition + h; u++) if (covered.has(u)) { clear = false; break }
+    if (clear) claim({ kind: "incoming", incoming: inc, u: inc.uPosition, h })
   }
 
   const entries: ElevationEntry[] = []

@@ -547,6 +547,88 @@ export function RaiseDecommissionDialog({ assetName, onClose, onSave }: {
   )
 }
 
+// ─── Raise move work order (MAC Phase 2) ────────────────────────────────────
+
+export function RaiseMoveWorkOrderDialog({ asset, onClose, onSave }: {
+  asset: { id: string; name: string; siteId: string | null; cabinetId: string | null; uHeight: number | null }
+  onClose: () => void
+  onSave: (data: {
+    workOrderType: "task" | "change"
+    targetCabinetId: string; targetUPosition: number; targetRackSide: "FRONT" | "REAR"
+    title: string
+  }) => Promise<void>
+}) {
+  const [siteId, setSiteId] = React.useState<string>(asset.siteId ?? "")
+  const [cabinetId, setCabinetId] = React.useState<string>("")
+  const [uPosition, setUPosition] = React.useState<string>("")
+  const [rackSide, setRackSide] = React.useState<"FRONT" | "REAR">("FRONT")
+  const [workOrderType, setWorkOrderType] = React.useState<"task" | "change">("task")
+  const [submitting, setSubmitting] = React.useState(false)
+
+  const { data: sites = [] } = useQuery({ queryKey: ["sites"], queryFn: async () => (await api.get<Site[]>("/sites")).data })
+  const { data: cabinets = [] } = useQuery({
+    queryKey: ["site-cabinets", siteId],
+    queryFn: async () => (await api.get<Cabinet[]>(`/sites/${siteId}/cabinets`)).data,
+    enabled: !!siteId,
+  })
+  // Don't offer the asset's current cabinet as a move target.
+  const cabinetOptions = cabinets.filter(c => c.id !== asset.cabinetId)
+  const targetCabinet = cabinets.find(c => c.id === cabinetId)
+  const uNum = Number(uPosition)
+  const valid = !!cabinetId && uPosition !== "" && Number.isInteger(uNum) && uNum >= 1
+
+  async function handleSubmit() {
+    if (!valid || !targetCabinet) return
+    setSubmitting(true)
+    try {
+      await onSave({
+        workOrderType, targetCabinetId: cabinetId, targetUPosition: uNum, targetRackSide: rackSide,
+        title: `Move ${asset.name} to ${targetCabinet.name} U${uNum}`,
+      })
+      onClose()
+    } catch { }
+    finally { setSubmitting(false) }
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Raise move work order</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mt: 0.5, mb: 2 }}>
+          Opens a {workOrderType} linked to <strong>{asset.name}</strong>. The asset shows as
+          {" "}<strong>incoming</strong> at the target and pending at its current slot until the work
+          order completes — at which point it is <strong>relocated</strong> automatically.
+        </Typography>
+        <Stack spacing={2}>
+          <TextField select label="Target site" value={siteId} onChange={e => { setSiteId(e.target.value); setCabinetId("") }} fullWidth>
+            {sites.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+          </TextField>
+          <TextField select label="Target cabinet" value={cabinetId} onChange={e => setCabinetId(e.target.value)} fullWidth disabled={!siteId}>
+            {cabinetOptions.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+          </TextField>
+          <Stack direction="row" spacing={2}>
+            <TextField label="U position" type="number" value={uPosition} onChange={e => setUPosition(e.target.value)} sx={{ flex: 1 }} inputProps={{ min: 1 }} />
+            <TextField select label="Face" value={rackSide} onChange={e => setRackSide(e.target.value as "FRONT" | "REAR")} sx={{ width: 120 }}>
+              <MenuItem value="FRONT">Front</MenuItem>
+              <MenuItem value="REAR">Rear</MenuItem>
+            </TextField>
+          </Stack>
+          <TextField select label="Work order type" value={workOrderType} onChange={e => setWorkOrderType(e.target.value as "task" | "change")} fullWidth>
+            <MenuItem value="task">Task</MenuItem>
+            <MenuItem value="change">Change</MenuItem>
+          </TextField>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={submitting || !valid}>
+          {submitting ? "Raising..." : "Raise work order"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ─── Change asset status ───────────────────────────────────────────────────
 
 export function ChangeAssetStatusDialog({ asset, onClose, onSave }: {
