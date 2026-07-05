@@ -131,6 +131,81 @@ export class CrmService {
     }
   }
 
+  // ── Reports (CRM_DESIGN.md §7 "the reporting five") — commercial-gated at
+  // the controller, so figures are always present here. Client-scoped.
+  async getReports(clientId: string, months = 6) {
+    if (!clientId) throw new ForbiddenException("Missing client scope")
+    const now = new Date()
+    const since = new Date(now.getTime() - months * 30 * DAY)
+
+    const [openOpps, decidedOpps] = await Promise.all([
+      this.prisma.opportunity.findMany({
+        where: { clientId, stage: { in: OPEN_STAGES } },
+        select: { id: true, reference: true, title: true, stage: true, value: true, probability: true, expectedCloseDate: true, lastStageChangeAt: true, nextStepDate: true }
+      }),
+      this.prisma.opportunity.findMany({
+        where: { clientId, stage: { in: ["WON", "LOST"] }, lastStageChangeAt: { gte: since } },
+        select: { stage: true, value: true, lostReason: true }
+      })
+    ])
+
+    // 1. Pipeline by stage (count / value / weighted)
+    const pipeline = OPEN_STAGES.map(stage => {
+      const rows = openOpps.filter(o => o.stage === stage)
+      const value = rows.reduce((s, o) => s + (o.value ?? 0), 0)
+      const weighted = rows.reduce((s, o) => s + (o.value ?? 0) * ((o.probability ?? 0) / 100), 0)
+      return { stage, count: rows.length, value, weighted: Math.round(weighted) }
+    })
+
+    // 2. Forecast by expected-close month (open, weighted)
+    const byMonth = new Map<string, { value: number; weighted: number; count: number }>()
+    for (const o of openOpps) {
+      if (!o.expectedCloseDate) continue
+      const d = new Date(o.expectedCloseDate)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+      const cur = byMonth.get(key) ?? { value: 0, weighted: 0, count: 0 }
+      cur.value += o.value ?? 0
+      cur.weighted += (o.value ?? 0) * ((o.probability ?? 0) / 100)
+      cur.count += 1
+      byMonth.set(key, cur)
+    }
+    const forecast = [...byMonth.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, v]) => ({ month, count: v.count, value: v.value, weighted: Math.round(v.weighted) }))
+
+    // 3. Win/loss (period): win rate + loss-reason breakdown
+    const won = decidedOpps.filter(o => o.stage === "WON")
+    const lost = decidedOpps.filter(o => o.stage === "LOST")
+    const lossReasons: Record<string, number> = {}
+    for (const o of lost) {
+      const r = o.lostReason ?? "UNKNOWN"
+      lossReasons[r] = (lossReasons[r] ?? 0) + 1
+    }
+    const winLoss = {
+      periodMonths: months,
+      won: won.length,
+      lost: lost.length,
+      winRate: won.length + lost.length > 0 ? Math.round((won.length / (won.length + lost.length)) * 100) : null,
+      wonValue: won.reduce((s, o) => s + (o.value ?? 0), 0),
+      lossReasons
+    }
+
+    // 4. Stalled deals (open, past stage threshold OR next step overdue)
+    const stalled = openOpps
+      .filter(o => {
+        const limit = STAGE_ROT_DAYS[o.stage]
+        const ageDays = (now.getTime() - new Date(o.lastStageChangeAt).getTime()) / DAY
+        return (limit && ageDays > limit) || (!!o.nextStepDate && new Date(o.nextStepDate) < now)
+      })
+      .map(o => ({
+        id: o.id, reference: o.reference, title: o.title, stage: o.stage, value: o.value ?? null,
+        daysInStage: Math.floor((now.getTime() - new Date(o.lastStageChangeAt).getTime()) / DAY),
+        nextStepOverdue: !!o.nextStepDate && new Date(o.nextStepDate) < now
+      }))
+
+    return { pipeline, forecast, winLoss, stalled }
+  }
+
   // ── Renewals due across the scoped client (CRM_DESIGN.md §7 renewals panel) ──
   async getRenewals(clientId: string, withinDays = 90) {
     if (!clientId) throw new ForbiddenException("Missing client scope")

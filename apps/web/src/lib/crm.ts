@@ -335,6 +335,21 @@ export async function getAccountOverview() {
   return (await api.get<AccountOverview>("/crm/overview")).data
 }
 
+// ── Reports (the reporting five) — commercial roles only ──────────────────
+export type CrmReports = {
+  pipeline: Array<{ stage: string; count: number; value: number; weighted: number }>
+  forecast: Array<{ month: string; count: number; value: number; weighted: number }>
+  winLoss: {
+    periodMonths: number; won: number; lost: number; winRate: number | null
+    wonValue: number; lossReasons: Record<string, number>
+  }
+  stalled: Array<{ id: string; reference: string; title: string; stage: string; value: number | null; daysInStage: number; nextStepOverdue: boolean }>
+}
+
+export async function getCrmReports(months = 6) {
+  return (await api.get<CrmReports>("/crm/reports", { params: { months } })).data
+}
+
 export async function getRenewals(withinDays = 90) {
   return (await api.get<RenewalRow[]>("/crm/renewals", { params: { withinDays } })).data
 }

@@ -27,6 +27,7 @@ const CrmOpportunityDetailPage = React.lazy(() => import("./CrmOpportunityDetail
 const CrmQuotesPage            = React.lazy(() => import("./CrmQuotesPage"))
 const CrmQuoteDetailPage       = React.lazy(() => import("./CrmQuoteDetailPage"))
 const CrmDocumentsPage         = React.lazy(() => import("./CrmDocumentsPage"))
+const CrmReportsPage           = React.lazy(() => import("./CrmReportsPage"))
 const PendingDeletionsPage     = React.lazy(() => import("./PendingDeletionsPage").then(m => ({ default: m.PendingDeletionsPage })))
 const AuditTrailPage           = React.lazy(() => import("./AuditTrailPage"))
 const UsersPage                = React.lazy(() => import("./UsersPage"))
@@ -318,6 +319,14 @@ export default function App() {
             element={
               <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
                 <CrmDocumentsPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/reports"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+                <CrmReportsPage />
               </RequireRoles>
             }
           />

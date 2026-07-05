@@ -1,0 +1,29 @@
+# CRM worktree — parallel verification stack. Run with a distinct project name:
+#   docker compose -p dcms-crm up -d --build
+# Remaps HOST ports so it coexists with the main checkout's stack (which keeps
+# 3001/5173/5432/9000). Internal docker-network ports are unchanged, so the API's
+# DATABASE_URL (@postgres:5432) and S3_ENDPOINT (minio:9000) still resolve.
+# `!override` REPLACES the base ports list (compose merges sequences additively).
+services:
+  postgres:
+    ports: !override
+      - "5433:5432"
+
+  minio:
+    ports: !override
+      - "9002:9000"
+      - "9003:9001"
+
+  api:
+    environment:
+      # Allow the worktree web (5174) + direct curl (3002) as CORS origins.
+      CORS_ORIGINS: "http://localhost:5174,http://localhost:3002"
+    ports: !override
+      - "3002:3001"
+
+  web:
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3002
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    ports: !override
+      - "5174:5173"

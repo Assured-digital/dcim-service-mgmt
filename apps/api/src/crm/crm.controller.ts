@@ -13,6 +13,9 @@ const AD_STAFF = [
   Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER
 ] as const
 
+// Reports are all-about-money → commercial roles only (decision 12).
+const COMMERCIAL = [Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER] as const
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiTags("crm")
 @ApiBearerAuth()
@@ -38,6 +41,18 @@ export class CrmController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.crm.getRenewals(clientId, withinDays ? Number(withinDays) : 90)
+  }
+
+  @Get("reports")
+  @Roles(...COMMERCIAL)
+  async reports(
+    @Req() req: any,
+    @Headers("x-client-id") requestedClientId?: string,
+    @Query("months") months?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.crm.getReports(clientId, months ? Number(months) : 6)
   }
 
   // SharePoint document browse/search (CRM_DESIGN.md §8 Phase 7a). AD-staff
