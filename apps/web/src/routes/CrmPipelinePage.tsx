@@ -293,7 +293,7 @@ export default function CrmPipelinePage() {
               disableRowSelectionOnClick
               onRowClick={p => navigate(`/crm/opportunities/${p.id}`)}
               slots={{ toolbar: OpportunitiesToolbar }}
-              sx={dataGridSx(false, themeMode)}
+              sx={dataGridSx(true, themeMode)}
             />
           </Box>
         )}

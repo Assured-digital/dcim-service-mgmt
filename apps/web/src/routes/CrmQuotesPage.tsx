@@ -196,7 +196,7 @@ export default function CrmQuotesPage() {
                 </Box>
               )
             }}
-            sx={dataGridSx(false, themeMode)}
+            sx={dataGridSx(true, themeMode)}
           />
         </Box>
       </Card>

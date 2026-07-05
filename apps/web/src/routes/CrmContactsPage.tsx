@@ -1,23 +1,17 @@
 import React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Alert, Box, Button, Card, Chip, Drawer, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography
+  Alert, Box, Button, Card, Chip, Drawer, FormControlLabel, InputAdornment, MenuItem, Stack, Switch, TextField, Typography
 } from "@mui/material"
-import { DataGrid, GridColDef } from "@mui/x-data-grid"
 import PersonAddAlt1Icon from "@mui/icons-material/PersonAddAlt1"
-import EditIcon from "@mui/icons-material/Edit"
-import StarIcon from "@mui/icons-material/Star"
-import { StatusPill, entityStatusIntent } from "../components/shared"
-import { EmptyState, ErrorState } from "../components/PageState"
-import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
-import { useThemeMode } from "../lib/theme"
+import SearchIcon from "@mui/icons-material/Search"
+import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import ContactListRow from "../components/ContactListRow"
 import { type ApiError, api } from "../lib/api"
 import {
   CONTACT_CATEGORIES, CONTACT_CATEGORY_LABELS, contactDisplayName,
   createContact, listContacts, updateContact, type ContactInput, type ContactView
 } from "../lib/crm"
-
-const ContactsToolbar = makeGridToolbar("contacts")
 
 // ── Create/edit drawer (single-use — lives with the page, mirrors ClientFormDrawer) ──
 type DrawerState = { open: boolean; contact: ContactView | null }
@@ -151,164 +145,88 @@ function ContactFormDrawer({ state, onClose }: { state: DrawerState; onClose: ()
 
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function CrmContactsPage() {
-  const { mode: themeMode } = useThemeMode()
   const [drawer, setDrawer] = React.useState<DrawerState>({ open: false, contact: null })
   const [categoryFilter, setCategoryFilter] = React.useState<string | null>(null)
   const [showInactive, setShowInactive] = React.useState(false)
+  const [search, setSearch] = React.useState("")
 
   const contacts = useQuery({
     queryKey: ["contacts", { showInactive }],
     queryFn: () => listContacts(showInactive ? {} : { status: "ACTIVE" })
   })
 
-  const rows = React.useMemo(
-    () => (contacts.data ?? []).filter(c => !categoryFilter || c.category === categoryFilter),
-    [contacts.data, categoryFilter]
-  )
-
-  const columns: GridColDef<ContactView>[] = React.useMemo(() => [
-    {
-      field: "name",
-      headerName: "Name",
-      flex: 1,
-      minWidth: 200,
-      valueGetter: (_v, row) => contactDisplayName(row),
-      renderCell: p => (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-          {p.row.isPrimary ? <StarIcon sx={{ fontSize: 15, color: "#eab308" }} titleAccess="Primary contact" /> : null}
-          <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{p.value as string}</Typography>
-        </Box>
-      )
-    },
-    {
-      field: "jobTitle",
-      headerName: "Job title",
-      width: 180,
-      renderCell: p => <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>{(p.value as string) || "—"}</Typography>
-    },
-    {
-      field: "category",
-      headerName: "Category",
-      width: 150,
-      renderCell: p => (
-        <Chip size="small" label={CONTACT_CATEGORY_LABELS[p.value as string] ?? p.value}
-          sx={{ fontSize: 11.5, height: 22, bgcolor: "rgba(29,78,216,0.08)", color: "#1d4ed8" }} />
-      )
-    },
-    {
-      field: "email",
-      headerName: "Email",
-      flex: 1,
-      minWidth: 200,
-      renderCell: p => <Typography sx={{ fontSize: 12.5 }}>{(p.value as string) || "—"}</Typography>
-    },
-    {
-      field: "phone",
-      headerName: "Phone",
-      width: 140,
-      valueGetter: (_v, row) => row.phone || row.mobile || "",
-      renderCell: p => <Typography sx={{ fontSize: 12.5 }}>{(p.value as string) || "—"}</Typography>
-    },
-    {
-      field: "site",
-      headerName: "Site",
-      width: 150,
-      valueGetter: (_v, row) => row.site?.name ?? "",
-      renderCell: p => <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>{(p.value as string) || "—"}</Typography>
-    },
-    {
-      field: "status",
-      headerName: "Status",
-      width: 110,
-      renderCell: p => (
-        <StatusPill intent={entityStatusIntent(p.value as string)} label={(p.value as string).toLowerCase()} size="sm" />
-      )
-    },
-    {
-      field: "actions",
-      headerName: "",
-      width: 90,
-      sortable: false,
-      filterable: false,
-      disableExport: true,
-      renderCell: p => (
-        <Button size="small" variant="outlined" startIcon={<EditIcon sx={{ fontSize: 15 }} />}
-          onClick={() => setDrawer({ open: true, contact: p.row })}>
-          Edit
-        </Button>
-      )
-    }
-  ], [])
+  // Client-side: category filter + name/email/job search. Primary contact first.
+  const rows = React.useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return (contacts.data ?? [])
+      .filter(c => !categoryFilter || c.category === categoryFilter)
+      .filter(c => {
+        if (!q) return true
+        return contactDisplayName(c).toLowerCase().includes(q)
+          || (c.email ?? "").toLowerCase().includes(q)
+          || (c.jobTitle ?? "").toLowerCase().includes(q)
+      })
+      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || contactDisplayName(a).localeCompare(contactDisplayName(b)))
+  }, [contacts.data, categoryFilter, search])
 
   return (
     <Box>
-      <Card>
-        <Box sx={{
-          borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.25,
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5, flexWrap: "wrap"
-        }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: themeMode === "dark" ? "#e2e8f0" : "#334155", mr: 1 }}>
-              Contacts
-            </Typography>
-            {CONTACT_CATEGORIES.map(cat => {
-              const active = categoryFilter === cat
-              return (
-                <Chip
-                  key={cat}
-                  size="small"
-                  label={CONTACT_CATEGORY_LABELS[cat]}
-                  onClick={() => setCategoryFilter(active ? null : cat)}
-                  sx={{
-                    fontSize: 11.5, height: 24, cursor: "pointer",
-                    bgcolor: active ? "rgba(29,78,216,0.14)" : "transparent",
-                    color: active ? "#1d4ed8" : "var(--color-text-muted)",
-                    border: "1px solid", borderColor: active ? "rgba(29,78,216,0.35)" : "divider"
-                  }}
-                />
-              )
-            })}
-            <Chip
-              size="small"
-              label={showInactive ? "Hiding nothing" : "Hiding inactive"}
-              onClick={() => setShowInactive(v => !v)}
-              sx={{ fontSize: 11.5, height: 24, cursor: "pointer", color: "var(--color-text-muted)", border: "1px solid", borderColor: "divider", bgcolor: "transparent" }}
-            />
-          </Box>
-          <Button size="small" variant="contained" startIcon={<PersonAddAlt1Icon sx={{ fontSize: 16 }} />}
-            onClick={() => setDrawer({ open: true, contact: null })}>
-            Add Contact
-          </Button>
-        </Box>
+      {/* Toolbar — title + Add (Admin → Users pattern) */}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5, mb: 1.5 }}>
+        <Typography sx={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary, #0f172a)" }}>Contacts</Typography>
+        <Button size="small" variant="contained" startIcon={<PersonAddAlt1Icon sx={{ fontSize: 16 }} />}
+          onClick={() => setDrawer({ open: true, contact: null })}>
+          Add contact
+        </Button>
+      </Box>
 
-        {contacts.isError ? (
-          <Box sx={{ p: 2 }}><ErrorState title="Failed to load contacts" /></Box>
-        ) : null}
+      <TextField
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by name, email or job title"
+        size="small"
+        fullWidth
+        sx={{ mb: 1.5 }}
+        InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: "var(--color-text-muted, #64748b)" }} /></InputAdornment> }}
+      />
 
-        <Box sx={{ height: 620 }}>
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            loading={contacts.isLoading}
-            density="compact"
-            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-            pageSizeOptions={[25, 50, 100]}
-            disableRowSelectionOnClick
-            slots={{
-              toolbar: ContactsToolbar,
-              noRowsOverlay: () => (
-                <Box sx={{ p: 2 }}>
-                  <EmptyState
-                    title="No contacts yet"
-                    detail="Record the people at this client — decision makers, technical contacts, billing and site access."
-                  />
-                </Box>
-              )
-            }}
-            sx={dataGridSx(false, themeMode)}
-          />
-        </Box>
-      </Card>
+      {/* Category + status filter chips */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2, flexWrap: "wrap" }}>
+        {CONTACT_CATEGORIES.map(cat => {
+          const active = categoryFilter === cat
+          return (
+            <Chip key={cat} size="small" label={CONTACT_CATEGORY_LABELS[cat]}
+              onClick={() => setCategoryFilter(active ? null : cat)}
+              sx={{
+                fontSize: 11.5, height: 24, cursor: "pointer",
+                bgcolor: active ? "rgba(29,78,216,0.14)" : "transparent",
+                color: active ? "#1d4ed8" : "var(--color-text-muted)",
+                border: "1px solid", borderColor: active ? "rgba(29,78,216,0.35)" : "divider"
+              }} />
+          )
+        })}
+        <Chip size="small" label={showInactive ? "Showing inactive" : "Hiding inactive"}
+          onClick={() => setShowInactive(v => !v)}
+          sx={{ fontSize: 11.5, height: 24, cursor: "pointer", color: "var(--color-text-muted)", border: "1px solid", borderColor: "divider", bgcolor: "transparent" }} />
+      </Box>
+
+      {contacts.isError ? (
+        <ErrorState title="Failed to load contacts" />
+      ) : contacts.isLoading ? (
+        <LoadingState label="Loading contacts…" />
+      ) : rows.length === 0 ? (
+        search.trim() || categoryFilter ? (
+          <EmptyState title="No matching contacts" detail="Try a different search or clear the filters." />
+        ) : (
+          <EmptyState title="No contacts yet" detail="Record the people at this client — decision makers, technical contacts, billing and site access." />
+        )
+      ) : (
+        <Stack spacing={1}>
+          {rows.map(c => (
+            <ContactListRow key={c.id} contact={c} onEdit={contact => setDrawer({ open: true, contact })} />
+          ))}
+        </Stack>
+      )}
 
       <ContactFormDrawer state={drawer} onClose={() => setDrawer({ open: false, contact: null })} />
     </Box>
