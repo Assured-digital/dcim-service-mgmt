@@ -18,6 +18,17 @@ const CheckDetailPage          = React.lazy(() => import("./CheckDetailPage"))
 const CheckTemplatesPage       = React.lazy(() => import("./CheckTemplatesPage"))
 const CheckTemplateDetailPage  = React.lazy(() => import("./CheckTemplateDetailPage"))
 const WorkPackagesPage         = React.lazy(() => import("./WorkPackagesPage"))
+const WorkPackageDetailPage    = React.lazy(() => import("./WorkPackageDetailPage"))
+const CrmOverviewPage          = React.lazy(() => import("./CrmOverviewPage"))
+const CrmContactsPage          = React.lazy(() => import("./CrmContactsPage"))
+const CrmActivityPage          = React.lazy(() => import("./CrmActivityPage"))
+const CrmPipelinePage          = React.lazy(() => import("./CrmPipelinePage"))
+const CrmOpportunityDetailPage = React.lazy(() => import("./CrmOpportunityDetailPage"))
+const CrmQuotesPage            = React.lazy(() => import("./CrmQuotesPage"))
+const CrmQuoteDetailPage       = React.lazy(() => import("./CrmQuoteDetailPage"))
+const CrmDocumentsPage         = React.lazy(() => import("./CrmDocumentsPage"))
+const CrmReportsPage           = React.lazy(() => import("./CrmReportsPage"))
+const CrmTriagePage            = React.lazy(() => import("./CrmTriagePage"))
 const PendingDeletionsPage     = React.lazy(() => import("./PendingDeletionsPage").then(m => ({ default: m.PendingDeletionsPage })))
 const AuditTrailPage           = React.lazy(() => import("./AuditTrailPage"))
 const UsersPage                = React.lazy(() => import("./UsersPage"))
@@ -235,6 +246,96 @@ export default function App() {
             element={
               <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]}>
                 <WorkPackagesPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="work-packages/:id"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <WorkPackageDetailPage />
+              </RequireRoles>
+            }
+          />
+
+          {/* CRM (CRM_DESIGN.md §7) — AD-staff only, never CLIENT_VIEWER */}
+          <Route
+            path="crm"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmOverviewPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/contacts"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmContactsPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/activity"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmActivityPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/pipeline"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmPipelinePage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/opportunities/:id"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmOpportunityDetailPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/quotes"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmQuotesPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/quotes/:id"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmQuoteDetailPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/documents"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <CrmDocumentsPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/reports"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER]}>
+                <CrmReportsPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="crm/triage"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES]}>
+                <CrmTriagePage />
               </RequireRoles>
             }
           />

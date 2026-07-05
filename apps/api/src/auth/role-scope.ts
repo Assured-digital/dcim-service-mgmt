@@ -10,6 +10,14 @@ export function isOrgOwnerRole(role: Role | undefined | null) {
   return role === Role.ORG_OWNER || role === Role.ADMIN;
 }
 
+// Commercial-figure visibility (CRM_DESIGN.md decision 12): opportunity/quote/
+// work-package money is shown to org-super + SERVICE_MANAGER only. Field roles
+// (ENGINEER, SERVICE_DESK_ANALYST) see records exist but not the figures.
+const COMMERCIAL_ROLES: Role[] = [Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER];
+export function canSeeCommercial(role: Role | undefined | null) {
+  return !!role && COMMERCIAL_ROLES.includes(role);
+}
+
 // The minimal slice of the authenticated user needed to scope rows by assignment.
 // A JwtUser satisfies it structurally, so controllers pass `user` straight through.
 export type ScopeViewer = { role: Role; userId: string };

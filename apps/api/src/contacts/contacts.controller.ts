@@ -6,54 +6,66 @@ import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { PrismaService } from "../prisma/prisma.service"
-import { WorkPackagesService } from "./work-packages.service"
-import { CreateWorkPackageDto, UpdateWorkPackageDto } from "./dto"
+import { ContactsService } from "./contacts.service"
+import { CreateContactDto, UpdateContactDto } from "./dto"
+
+// CRM contacts (CRM_DESIGN.md §6) — AD-staff only, no CLIENT_VIEWER.
+const AD_STAFF = [
+  Role.ORG_OWNER,
+  Role.ORG_ADMIN,
+  Role.ADMIN,
+  Role.SERVICE_MANAGER,
+  Role.SERVICE_DESK_ANALYST,
+  Role.ENGINEER
+] as const
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@ApiTags("work-packages")
+@ApiTags("contacts")
 @ApiBearerAuth()
-@Controller("work-packages")
-export class WorkPackagesController {
-  constructor(private workPackages: WorkPackagesService, private prisma: PrismaService) {}
+@Controller("contacts")
+export class ContactsController {
+  constructor(private contacts: ContactsService, private prisma: PrismaService) {}
 
   @Get()
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER, Role.CLIENT_VIEWER)
+  @Roles(...AD_STAFF)
   async list(
     @Req() req: any,
     @Headers("x-client-id") requestedClientId?: string,
-    @Query("renewingBefore") renewingBefore?: string
+    @Query("status") status?: string,
+    @Query("category") category?: string,
+    @Query("siteId") siteId?: string
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.workPackages.listForClient(clientId, user.role, { renewingBefore })
+    return this.contacts.listForClient(clientId, { status, category, siteId })
   }
 
   @Get(":id")
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER, Role.CLIENT_VIEWER)
+  @Roles(...AD_STAFF)
   async get(@Req() req: any, @Param("id") id: string, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.workPackages.getForClient(clientId, id, user.role)
+    return this.contacts.getForClient(clientId, id)
   }
 
   @Post()
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
-  async create(@Req() req: any, @Body() dto: CreateWorkPackageDto, @Headers("x-client-id") requestedClientId?: string) {
+  @Roles(...AD_STAFF)
+  async create(@Req() req: any, @Body() dto: CreateContactDto, @Headers("x-client-id") requestedClientId?: string) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.workPackages.createForClient(clientId, user.userId, dto)
+    return this.contacts.createForClient(clientId, user.userId, dto)
   }
 
   @Patch(":id")
-  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER)
+  @Roles(...AD_STAFF)
   async update(
     @Req() req: any,
     @Param("id") id: string,
-    @Body() dto: UpdateWorkPackageDto,
+    @Body() dto: UpdateContactDto,
     @Headers("x-client-id") requestedClientId?: string
   ) {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
-    return this.workPackages.updateForClient(clientId, user.userId, id, dto)
+    return this.contacts.updateForClient(clientId, user.userId, id, dto)
   }
 }

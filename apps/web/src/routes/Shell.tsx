@@ -30,6 +30,7 @@ import EngineeringIcon from "@mui/icons-material/Engineering"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import BusinessIcon from "@mui/icons-material/Business"
 import DnsIcon from "@mui/icons-material/Dns"
+import HandshakeIcon from "@mui/icons-material/Handshake"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
@@ -38,6 +39,7 @@ import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
 import DcimSubNav, { DCIM_DESTINATIONS } from "../components/DcimSubNav"
+import CrmSubNav, { CRM_DESTINATIONS } from "../components/CrmSubNav"
 import NotificationBell from "../components/NotificationBell"
 import { LoadingState } from "../components/PageState"
 import { shellTokens } from "../components/shared"
@@ -224,6 +226,14 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
   )
 }
 
+// Nav items whose route is a PREFIX of sibling routes must match exactly, else
+// they'd highlight on every child page (/dashboard; /crm is the CRM overview
+// and prefixes /crm/pipeline etc).
+const EXACT_MATCH_NAV_PATHS = new Set(["/dashboard", "/crm"])
+function navItemActive(itemPath: string, pathname: string) {
+  return EXACT_MATCH_NAV_PATHS.has(itemPath) ? pathname === itemPath : pathname.startsWith(itemPath)
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────
 const SIDEBAR_EXPANDED = 236
 const SIDEBAR_COLLAPSED = 56
@@ -239,6 +249,10 @@ const DCIM_ROUTE_PREFIXES = [
   "/connections", "/maintenance", "/pending-deletions",
 ]
 const DCIM_LANDING = "/dcim/overview"
+
+// CRM is a second "app within the app" — same launcher + sub-nav pattern as DCIM.
+const CRM_ROUTE_PREFIXES = ["/crm"]
+const CRM_LANDING = "/crm"
 
 type NavItem = { label: string; path: string; icon: React.ReactNode; roles: string[] }
 type NavGroup = { kind: "group"; label: string; icon: React.ReactNode; matchPaths: string[]; roles: string[]; items: NavItem[] }
@@ -268,6 +282,15 @@ const clientSections: NavSection[] = [
       { label: "Risks & Issues", path: "/risks-issues", icon: <ReportProblemIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
       // Changes + Incidents are unified into Service Desk — they no longer have their own nav entries.
     ]
+  },
+  {
+    // CRM (CRM_DESIGN.md §7) — AD-staff only, never CLIENT_VIEWER. A module
+    // launcher on desktop (enters the CrmSubNav "app within the app", like
+    // DCIM); expands inline on mobile. Items derive from the shared
+    // CRM_DESTINATIONS (single source of truth with the desktop sub-nav) so
+    // the two never drift.
+    title: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />,
+    items: CRM_DESTINATIONS.map(d => ({ label: d.label, path: d.path, icon: d.icon, roles: d.roles })),
   },
   {
     // DCIM is gated to ORG-super roles only — the module is unfinished, so it's hidden
@@ -333,7 +356,7 @@ function SectionFlyout({ title, items, anchorEl, onClose, onNavigate, pathname }
         </Typography>
         <Box sx={{ height: "1px", bgcolor: "rgba(255,255,255,0.06)", mb: "4px" }} />
         {items.map(item => {
-          const isActive = item.path === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.path)
+          const isActive = navItemActive(item.path, pathname)
           return (
             <Box key={item.path} onClick={() => { onNavigate(item.path); onClose() }} sx={{
               display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "8px", cursor: "pointer",
@@ -352,7 +375,7 @@ function SectionFlyout({ title, items, anchorEl, onClose, onNavigate, pathname }
 }
 
 function ClientFlyout({ anchorEl, clients, selectedClientId, onSelect, onClose }: {
-  anchorEl: HTMLElement; clients: { id: string; name: string }[]
+  anchorEl: HTMLElement; clients: { id: string; name: string; lifecycleStage?: string }[]
   selectedClientId: string; onSelect: (id: string) => void; onClose: () => void
 }) {
   const rect = anchorEl.getBoundingClientRect()
@@ -379,7 +402,9 @@ function ClientFlyout({ anchorEl, clients, selectedClientId, onSelect, onClose }
               "&:hover": { bgcolor: "rgba(255,255,255,0.06)", color: "#cbd5e1" }
             }}>
               <BusinessIcon sx={{ fontSize: ICON_SIZE, color: isSelected ? "#7db4f5" : "#475569" }} />
-              <Typography sx={{ fontSize: 13.5, fontWeight: isSelected ? 500 : 400, flex: 1 }}>{c.name}</Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: isSelected ? 500 : 400, flex: 1 }}>
+                {c.name}{c.lifecycleStage === "PROSPECT" ? " · prospect" : c.lifecycleStage === "ONBOARDING" ? " · onboarding" : ""}
+              </Typography>
               {isSelected ? <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#22c55e", flexShrink: 0 }} /> : null}
             </Box>
           )
@@ -676,18 +701,20 @@ export default function Shell() {
   // expanded flag so the effect only fires on enter/leave transitions, leaving
   // any manual expand/collapse the user makes WHILE inside DCIM untouched.
   const isDcimRoute = !isMobile && DCIM_ROUTE_PREFIXES.some(p => loc.pathname.startsWith(p))
-  const preDcimExpandedRef = useRef<boolean | null>(null)
+  const isCrmRoute = !isMobile && CRM_ROUTE_PREFIXES.some(p => loc.pathname.startsWith(p))
+  const isModuleRoute = isDcimRoute || isCrmRoute
+  const preModuleExpandedRef = useRef<boolean | null>(null)
   React.useEffect(() => {
-    if (isDcimRoute) {
-      if (preDcimExpandedRef.current === null) {
-        preDcimExpandedRef.current = sidebarExpanded
+    if (isModuleRoute) {
+      if (preModuleExpandedRef.current === null) {
+        preModuleExpandedRef.current = sidebarExpanded
         setSidebarExpanded(false)
       }
-    } else if (preDcimExpandedRef.current !== null) {
-      setSidebarExpanded(preDcimExpandedRef.current)
-      preDcimExpandedRef.current = null
+    } else if (preModuleExpandedRef.current !== null) {
+      setSidebarExpanded(preModuleExpandedRef.current)
+      preModuleExpandedRef.current = null
     }
-  }, [isDcimRoute]) // eslint-disable-line
+  }, [isModuleRoute]) // eslint-disable-line
 
   function toggleSection(title: string) { setOpenSection(prev => prev === title ? null : title) }
 
@@ -697,7 +724,7 @@ export default function Shell() {
       s.title &&
       s.items.some(item => {
         if ('kind' in item) return item.matchPaths.some(p => loc.pathname.startsWith(p))
-        return item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)
+        return navItemActive(item.path, loc.pathname)
       })
     )
     setOpenSection(active?.title ?? null)
@@ -711,14 +738,20 @@ export default function Shell() {
   // Org-super: all org clients. Client-scoped: only the caller's assignments.
   const clients = useQuery({
     queryKey: ["clients"], enabled: isOrgSuper,
-    queryFn: async () => (await api.get<Array<{ id: string; name: string }>>("/clients")).data
+    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string }>>("/clients")).data
   })
   const myClients = useQuery({
     queryKey: ["clients-mine"], enabled: !isOrgSuper,
-    queryFn: async () => (await api.get<Array<{ id: string; name: string }>>("/clients/mine")).data
+    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string }>>("/clients/mine")).data
   })
-  // The list that populates the selector + flyout for this user.
-  const clientList = isOrgSuper ? (clients.data ?? []) : (myClients.data ?? [])
+  // The list that populates the selector + flyout for this user. Live clients
+  // first, prospects grouped after them, FORMER hidden (CRM_DESIGN.md §2).
+  const rawClientList = isOrgSuper ? (clients.data ?? []) : (myClients.data ?? [])
+  const clientList = React.useMemo(() => {
+    const visible = rawClientList.filter(c => c.lifecycleStage !== "FORMER")
+    const rank = (c: { lifecycleStage?: string }) => (c.lifecycleStage === "PROSPECT" ? 1 : 0)
+    return [...visible].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  }, [rawClientList])
 
   // The JWT (and thus getCurrentUser) carries no name — only email. Fetch the profile so the
   // account menu can show the person's actual name (knownAs verbatim, see personName) rather
@@ -801,7 +834,7 @@ export default function Shell() {
 
   function resolveActivePage(pathname: string) {
     const direct = flatNavItems.find(i =>
-      i.path === "/dashboard" ? pathname === "/dashboard" : i.path !== "/dashboard" && pathname.startsWith(i.path)
+      navItemActive(i.path, pathname)
     )
     if (direct) return direct
     const parentPath = Object.entries(PATH_PARENT_MAP).find(([prefix]) => pathname.startsWith(prefix))?.[1]
@@ -812,7 +845,7 @@ export default function Shell() {
   function sectionHasActive(section: NavSection) {
     return section.items.some(entry => {
       if ('kind' in entry) return entry.matchPaths.some(p => loc.pathname.startsWith(p))
-      return entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)
+      return navItemActive(entry.path, loc.pathname)
     }) || section.items.some(entry => {
       if ('kind' in entry) return false
       return Object.entries(PATH_PARENT_MAP).some(
@@ -912,7 +945,7 @@ export default function Shell() {
                         onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
                         pathname={loc.pathname} onNavigate={navigateTo} expanded={navExpanded} />
                     : <NavItem key={entry.path} item={entry}
-                        selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
+                        selected={navItemActive(entry.path, loc.pathname)}
                         onClick={() => navigateTo(entry.path)} expanded={navExpanded} />
                 )}
               </List>
@@ -943,7 +976,11 @@ export default function Shell() {
             <Select size="small" value={selectedClientId} onChange={e => handleClientChange(e.target.value)} displayEmpty IconComponent={KeyboardArrowDownIcon}
               sx={{ width: "100%", fontSize: 13, color: selectedClientId ? "#e2e8f0" : "#64748b", bgcolor: "rgba(255,255,255,0.04)", borderRadius: "6px", border: selectedClientId ? "1px solid rgba(255,255,255,0.1)" : "1px dashed rgba(255,255,255,0.08)", "& .MuiOutlinedInput-notchedOutline": { border: "none" }, "& .MuiSvgIcon-root": { color: "#64748b", fontSize: 16 }, "& .MuiSelect-select": { py: "7px", px: "10px" }, "&:hover": { bgcolor: "rgba(255,255,255,0.06)" } }}>
               <MenuItem value="" sx={{ fontSize: 13, color: "#94a3b8" }}>— Select client —</MenuItem>
-              {clientList.map(c => <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>{c.name}</MenuItem>)}
+              {clientList.map(c => (
+                <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>
+                  {c.name}{c.lifecycleStage === "PROSPECT" ? " · prospect" : c.lifecycleStage === "ONBOARDING" ? " · onboarding" : ""}
+                </MenuItem>
+              ))}
             </Select>
           </Box>
           <SbDivider />
@@ -977,13 +1014,14 @@ export default function Shell() {
               // Launcher (enter-the-module → sub-nav) is a DESKTOP behaviour. On
               // mobile there is no sub-nav, so DCIM expands inline in the drawer
               // like any other section — otherwise its pages are unreachable.
-              const isDcimLauncher = section.title === "DCIM" && !isMobile
+              const isModuleLauncher = (section.title === "DCIM" || section.title === "CRM") && !isMobile
+              const moduleLanding = section.title === "DCIM" ? DCIM_LANDING : CRM_LANDING
 
               return (
                 <CollapsibleSection key={section.title} title={section.title} icon={section.icon}
-                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded} launcher={isDcimLauncher}
+                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded} launcher={isModuleLauncher}
                   onToggle={(e) => {
-                    if (isDcimLauncher) { navigateTo(DCIM_LANDING); return }
+                    if (isModuleLauncher) { navigateTo(moduleLanding); return }
                     if (!navExpanded) {
                       const target = e.currentTarget as HTMLElement
                       const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
@@ -1020,7 +1058,7 @@ export default function Shell() {
                             onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
                             pathname={loc.pathname} onNavigate={navigateTo} expanded={navExpanded} />
                         : <NavItem key={entry.path} item={entry}
-                            selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
+                            selected={navItemActive(entry.path, loc.pathname)}
                             onClick={() => navigateTo(entry.path)} expanded={navExpanded} />
                     )}
                   </List>
@@ -1080,6 +1118,7 @@ export default function Shell() {
 
       {/* DCIM sub-nav — the "app within the app" panel (brief §1), beside the rail */}
       {isDcimRoute ? <DcimSubNav pathname={loc.pathname} onNavigate={navigateTo} /> : null}
+      {isCrmRoute ? <CrmSubNav pathname={loc.pathname} onNavigate={navigateTo} /> : null}
 
       {/* Right column: header + content. minWidth:0 lets it shrink below its
           content's intrinsic width — without it, a wide table/elevation (esp.

@@ -6,6 +6,8 @@ export type ClientView = {
   id: string
   name: string
   status: string
+  lifecycleStage: string // PROSPECT | ONBOARDING | ACTIVE | FORMER (CRM_DESIGN.md §2)
+  sharePointFolderPath?: string | null // folder within the org SharePoint site (phase 7a)
   organizationId: string | null
   createdAt: string
   updatedAt: string
@@ -15,12 +17,16 @@ export type ClientView = {
 export type CreateClientInput = {
   name: string
   status: string
+  lifecycleStage?: string
+  sharePointFolderPath?: string
 }
 
 // Matches the existing /clients PATCH payload.
 export type UpdateClientInput = {
   name?: string
   status?: string
+  lifecycleStage?: string
+  sharePointFolderPath?: string
 }
 
 // ── Calls ─────────────────────────────────────────────────────────────────

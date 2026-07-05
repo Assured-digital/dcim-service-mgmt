@@ -21,6 +21,11 @@ import { RisksModule } from "./risks/risks.module"
 import { IssuesModule } from "./issues/issues.module"
 import { CommentsModule } from "./comments/comments.module"
 import { WorkPackagesModule } from "./work-packages/work-packages.module"
+import { ContactsModule } from "./contacts/contacts.module"
+import { ActivitiesModule } from "./activities/activities.module"
+import { OpportunitiesModule } from "./opportunities/opportunities.module"
+import { QuotesModule } from "./quotes/quotes.module"
+import { CrmModule } from "./crm/crm.module"
 import { CabinetsModule } from "./cabinets/cabinets.module"
 import { MyWorkModule } from "./my-work/my-work.module"
 import { OverviewModule } from "./overview/overview.module"
@@ -59,6 +64,11 @@ import { AssetCustomFieldsModule } from "./asset-custom-fields/asset-custom-fiel
     IssuesModule,
     CommentsModule,
     WorkPackagesModule,
+    ContactsModule,
+    ActivitiesModule,
+    OpportunitiesModule,
+    QuotesModule,
+    CrmModule,
     MyWorkModule,
     CabinetsModule,
     OverviewModule,

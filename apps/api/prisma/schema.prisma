@@ -130,6 +130,11 @@ model Client {
   organization   Organization? @relation(fields: [organizationId], references: [id])
   name           String
   status         String        @default("ACTIVE")
+  // CRM lifecycle (CRM_DESIGN.md §2): PROSPECT | ONBOARDING | ACTIVE | FORMER.
+  // Never auto-downgraded; transitions are deliberate staff edits (or the WON prompt).
+  lifecycleStage String        @default("ACTIVE")
+  // CRM_DESIGN.md §8 — folder within the org SharePoint site (dormant until phase 7a)
+  sharePointFolderPath String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -159,6 +164,181 @@ model Client {
   cabinetReservations CabinetReservation[]
   regions           Region[]
   importMappings    ImportMapping[]
+  contacts          Contact[]
+  activities        Activity[]
+  opportunities     Opportunity[]
+  quotes            Quote[]
+}
+
+// CRM (CRM_DESIGN.md §4) — a person AT the client (no login, not a User).
+model Contact {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  firstName String
+  lastName  String
+  jobTitle  String?
+  email     String?  // match key for email sync (phase 7b)
+  phone     String?
+  mobile    String?
+  siteId    String?  // optional: primarily based at this site
+  site      Site?    @relation(fields: [siteId], references: [id])
+  category  String   @default("GENERAL") // DECISION_MAKER | TECHNICAL | BILLING | OPERATIONS | ACCESS | GENERAL
+  isPrimary Boolean  @default(false)     // the main account contact for this client
+  userId    String?  // optional link to a portal User (display-only)
+  notes     String?
+  status    String   @default("ACTIVE")  // ACTIVE | INACTIVE (soft delete)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities ActivityContact[]
+  opportunities Opportunity[]
+  quotes     Quote[]
+
+  @@index([clientId, status])
+  @@index([email]) // cross-client lookup for email-sync matching (phase 7b)
+}
+
+// CRM quotes (CRM_DESIGN.md §4). Line items from day one (a single scalar value
+// forces a rebuild the moment anyone wants an itemised PDF); revise-as-new-version
+// (the Dynamics pattern): revising a SENT quote withdraws it and clones DRAFT v+1.
+model Quote {
+  id            String    @id @default(uuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id])
+  reference     String    // QUO-YYYY-NNNN — stable across versions; unique per (reference, version)
+  title         String
+  description   String?
+  status        String    @default("DRAFT") // DRAFT → SENT → ACCEPTED | REJECTED | EXPIRED | WITHDRAWN
+  version       Int       @default(1)
+  revisedFromId String?   // the withdrawn predecessor version
+  isPrimary     Boolean   @default(true) // the quote whose value feeds the opportunity display
+  value         Float     @default(0) // DERIVED: Σ line totals (denormalised for lists)
+  currency      String    @default("GBP")
+  validUntil    DateTime?
+  contactId     String?
+  contact       Contact?  @relation(fields: [contactId], references: [id])
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  workPackageId String?   // set on acceptance → the resulting engagement
+  workPackage   WorkPackage? @relation("QuoteWorkPackage", fields: [workPackageId], references: [id])
+  sentAt        DateTime?
+  decidedAt     DateTime?
+  notes         String?
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lineItems QuoteLineItem[]
+
+  @@unique([reference, version])
+  @@index([clientId, status])
+}
+
+model QuoteLineItem {
+  id          String  @id @default(uuid())
+  quoteId     String
+  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float
+  sortOrder   Int     @default(0)
+  // line total = quantity × unitPrice (computed); quote.value = Σ line totals.
+  // NO product catalogue in v1 — free-text lines (CPQ consciously skipped).
+}
+
+// CRM pipeline (CRM_DESIGN.md §4). A deal at a client — including renewals
+// (type RENEWAL), so new business and renewals share one pipeline.
+model Opportunity {
+  id                String    @id @default(uuid())
+  clientId          String
+  client            Client    @relation(fields: [clientId], references: [id])
+  reference         String    @unique // OPP-YYYY-NNNN
+  title             String
+  type              String    @default("NEW_BUSINESS") // NEW_BUSINESS | RENEWAL | EXPANSION
+  stage             String    @default("DISCOVERY")
+  // DISCOVERY | QUALIFIED | PROPOSAL | NEGOTIATION | WON | LOST — forward-only
+  // among open stages; LOST reachable from any open stage (requires lostReason).
+  lastStageChangeAt DateTime  @default(now()) // rotting flags + time-in-stage reporting
+  probability       Int?      // % — defaulted from stage on stage change, editable per-deal
+  value             Float?
+  currency          String    @default("GBP")
+  expectedCloseDate DateTime?
+  nextStep          String?   // no future-dated next step ⇒ stalled by definition
+  nextStepDate      DateTime?
+  ownerId           String?   // AD staff owner (assignable-users pattern)
+  contactId         String?
+  contact           Contact?  @relation(fields: [contactId], references: [id])
+  workPackageId     String?   // set on WON → the resulting engagement
+  workPackage       WorkPackage? @relation("OpportunityWorkPackage", fields: [workPackageId], references: [id])
+  renewsWorkPackageId String? // type RENEWAL: the WP being renewed (sweep dedupe key)
+  renewsWorkPackage WorkPackage? @relation("OpportunityRenewsWorkPackage", fields: [renewsWorkPackageId], references: [id])
+  lostReason        String?   // REQUIRED on LOST: PRICE | COMPETITOR | NO_DECISION | TIMING | SCOPE | RELATIONSHIP
+  lostDetail        String?
+  notes             String?
+  createdById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  quotes Quote[]
+
+  @@index([clientId, stage])
+}
+
+// CRM activity/comms log (CRM_DESIGN.md §4). No delete endpoint by design —
+// a log you can delete isn't a log. source/emailMessageId are dormant until
+// the phase-7b shared-mailbox sync.
+model Activity {
+  id             String    @id @default(uuid())
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id])
+  type           String    // CALL | MEETING | EMAIL | SITE_VISIT | NOTE
+  source         String    @default("MANUAL") // MANUAL | EMAIL_SYNC
+  subject        String
+  body           String?
+  occurredAt     DateTime  @default(now())
+  emailMessageId String?   @unique // Graph internetMessageId — sync dedupe (phase 7b)
+  emailConversationId String? // Graph conversationId — thread continuity (phase 7b)
+  createdById    String?   // AD staff who logged it (null for EMAIL_SYNC)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  contacts ActivityContact[]
+
+  @@index([clientId, occurredAt])
+}
+
+model ActivityContact {
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  contactId  String
+  contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, contactId])
+}
+
+// Unmatched shared-mailbox email (CRM_DESIGN.md §8 phase 7b). When the sync
+// can't correlate a message to a client (no ref token / thread / contact), it
+// lands here for one-click triage instead of being dropped. Org-scoped (the
+// mailbox belongs to the org, not a client). internetMessageId is the sync
+// dedupe key — a message is EITHER an Activity or a triage row, never both.
+model EmailTriage {
+  id                 String   @id @default(uuid())
+  organizationId     String
+  internetMessageId  String   @unique
+  conversationId     String?
+  subject            String
+  fromAddress        String
+  fromName           String?
+  receivedAt         DateTime
+  bodyPreview        String?
+  webLink            String?
+  status             String   @default("PENDING") // PENDING | RESOLVED | DISMISSED
+  resolvedActivityId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([organizationId, status])
 }
 
 model SlaPolicy {
@@ -205,6 +385,7 @@ model Site {
   checks           Check[]           @relation("SiteChecks")
   checkTemplates   CheckTemplate[]   @relation("SiteCheckTemplates")
   workPackageSites WorkPackageSite[]
+  contacts         Contact[]
 }
 
 // Geography above Site (DCIM_SCHEMA_SPEC §5, LATENT — no phase-one UI). Exists so
@@ -910,10 +1091,19 @@ model WorkPackage {
   endDate     DateTime?
   value       Float?
   notes       String?
+  // Contract layer (CRM_DESIGN.md §3): renewal tracking — the renewal sweep
+  // (phase 6) fires at renewalDate − noticePeriodDays − buffer.
+  renewalDate      DateTime?
+  noticePeriodDays Int?
+  autoRenews       Boolean   @default(false)
+  commercialNotes  String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   sites WorkPackageSite[]
+  wonOpportunities     Opportunity[] @relation("OpportunityWorkPackage")
+  renewalOpportunities Opportunity[] @relation("OpportunityRenewsWorkPackage")
+  acceptedQuotes       Quote[]       @relation("QuoteWorkPackage")
 }
 
 model WorkPackageSite {

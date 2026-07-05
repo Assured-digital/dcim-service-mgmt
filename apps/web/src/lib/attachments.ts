@@ -21,7 +21,7 @@ export interface AttachmentSummary {
 // install photos, room documents). All the extras are attachable but NOT linkable
 // (decoupled from the link union).
 // Mirrors the backend `ATTACHMENT_RECORD_TYPES` contract (the on-the-wire `recordType`).
-export type AttachmentRecordType = LinkRecordType | "maintenance" | "check" | "check-item" | "asset" | "cabinet" | "site"
+export type AttachmentRecordType = LinkRecordType | "maintenance" | "check" | "check-item" | "asset" | "cabinet" | "site" | "quote"
 
 export function isImageType(contentType: string): boolean {
   return contentType.startsWith("image/")

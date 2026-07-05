@@ -1,13 +1,21 @@
 import React from "react"
+import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Card, CardContent, Chip, Dialog, DialogContent,
-  DialogTitle, MenuItem, Stack, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Typography
+  Box, Button, Card, Chip, Dialog, DialogContent,
+  DialogTitle, MenuItem, Stack, TextField, Typography
 } from "@mui/material"
+import { DataGrid, GridColDef } from "@mui/x-data-grid"
+import AddIcon from "@mui/icons-material/Add"
+import AutorenewIcon from "@mui/icons-material/Autorenew"
 import { StatusPill, entityStatusIntent } from "../components/shared"
-import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { EmptyState, ErrorState } from "../components/PageState"
+import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { useThemeMode } from "../lib/theme"
+import { daysUntilRenewal } from "../lib/workPackages"
+
+const WpToolbar = makeGridToolbar("work-packages")
 
 type WorkPackage = {
   id: string
@@ -18,9 +26,12 @@ type WorkPackage = {
   startDate: string | null
   endDate: string | null
   value: number | null
+  renewalDate: string | null
 }
 
 export default function WorkPackagesPage() {
+  const navigate = useNavigate()
+  const { mode: themeMode } = useThemeMode()
   const [open, setOpen] = React.useState(false)
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
@@ -55,53 +66,67 @@ export default function WorkPackagesPage() {
     }
   }
 
+  const columns: GridColDef<WorkPackage>[] = React.useMemo(() => [
+    { field: "reference", headerName: "Reference", width: 140,
+      renderCell: p => <Typography sx={{ fontSize: 12.5, fontWeight: 700, fontFamily: "monospace" }}>{p.value as string}</Typography> },
+    { field: "title", headerName: "Title", flex: 1, minWidth: 220,
+      renderCell: p => <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{p.value as string}</Typography> },
+    { field: "type", headerName: "Type", width: 150,
+      renderCell: p => <Chip size="small" label={(p.value as string).replace("_", " ").toLowerCase()} sx={{ fontSize: 11, height: 20, textTransform: "capitalize" }} /> },
+    { field: "status", headerName: "Status", width: 120,
+      renderCell: p => <StatusPill intent={entityStatusIntent(p.value as string)} label={(p.value as string).toLowerCase()} size="sm" /> },
+    { field: "startDate", headerName: "Start", width: 110,
+      renderCell: p => <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>{p.value ? new Date(p.value as string).toLocaleDateString("en-GB") : "—"}</Typography> },
+    { field: "endDate", headerName: "End", width: 110,
+      renderCell: p => <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>{p.value ? new Date(p.value as string).toLocaleDateString("en-GB") : "—"}</Typography> },
+    { field: "renewalDate", headerName: "Renewal", width: 130,
+      renderCell: p => {
+        if (!p.value) return <Typography sx={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>—</Typography>
+        const days = daysUntilRenewal(p.row)
+        return (
+          <Chip size="small" icon={<AutorenewIcon sx={{ fontSize: 13 }} />}
+            label={days !== null && days < 0 ? `${-days}d overdue` : `${days}d`}
+            sx={{ fontSize: 11, height: 20, bgcolor: days !== null && days <= 90 ? "rgba(234,179,8,0.12)" : "transparent", color: days !== null && days < 0 ? "#dc2626" : undefined }} />
+        )
+      } },
+    { field: "value", headerName: "Value", width: 120,
+      renderCell: p => <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{p.value ? `£${(p.value as number).toLocaleString()}` : "—"}</Typography> }
+  ], [])
+
   return (
     <Box>
       <Card>
-        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.25, display: "flex", justifyContent: "flex-end" }}>
-          <Button size="small" variant="contained" onClick={() => setOpen(true)}>New service scope</Button>
+        <Box sx={{
+          borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.25,
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5
+        }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 600, color: themeMode === "dark" ? "#e2e8f0" : "#334155" }}>Service scope</Typography>
+          <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 16 }} />} onClick={() => setOpen(true)}>New service scope</Button>
         </Box>
-        <CardContent>
-          {isLoading ? <LoadingState /> : null}
-          {error ? <ErrorState title="Failed to load work packages" /> : null}
-          {!isLoading && !error && (data?.length ?? 0) === 0 ? (
-            <EmptyState title="No work packages" detail="Create a work package to get started." />
-          ) : null}
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Reference</TableCell>
-                  <TableCell>Title</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Start</TableCell>
-                  <TableCell>End</TableCell>
-                  <TableCell>Value</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(data ?? []).map((wp) => (
-                  <TableRow key={wp.id}>
-                    <TableCell sx={{ fontWeight: 700, fontFamily: "monospace" }}>{wp.reference}</TableCell>
-                    <TableCell>{wp.title}</TableCell>
-                    <TableCell><Chip size="small" label={wp.type.replace("_", " ")} /></TableCell>
-                    <TableCell>
-                      <StatusPill
-                        intent={entityStatusIntent(wp.status)}
-                        label={wp.status.toLowerCase()}
-                        size="sm"
-                      />
-                    </TableCell>
-                    <TableCell>{wp.startDate ? new Date(wp.startDate).toLocaleDateString("en-GB") : "—"}</TableCell>
-                    <TableCell>{wp.endDate ? new Date(wp.endDate).toLocaleDateString("en-GB") : "—"}</TableCell>
-                    <TableCell>{wp.value ? `£${wp.value.toLocaleString()}` : "—"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
+
+        {error ? <Box sx={{ p: 2 }}><ErrorState title="Failed to load work packages" /></Box> : null}
+
+        <Box sx={{ height: 620 }}>
+          <DataGrid
+            rows={data ?? []}
+            columns={columns}
+            loading={isLoading}
+            density="compact"
+            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+            pageSizeOptions={[25, 50, 100]}
+            disableRowSelectionOnClick
+            onRowClick={p => navigate(`/work-packages/${p.id}`)}
+            slots={{
+              toolbar: WpToolbar,
+              noRowsOverlay: () => (
+                <Box sx={{ p: 2 }}>
+                  <EmptyState title="No work packages" detail="Create a work package to get started." />
+                </Box>
+              )
+            }}
+            sx={dataGridSx(true, themeMode)}
+          />
+        </Box>
       </Card>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>

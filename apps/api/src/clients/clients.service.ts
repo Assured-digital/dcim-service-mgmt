@@ -48,11 +48,11 @@ export class ClientsService {
   async listMine(actor: JwtUser) {
     const assignments = await this.prisma.userClientAssignment.findMany({
       where: { userId: actor.userId },
-      select: { client: { select: { id: true, name: true } } }
+      select: { client: { select: { id: true, name: true, lifecycleStage: true } } }
     });
     return assignments
       .map((a) => a.client)
-      .filter((c): c is { id: string; name: string } => !!c)
+      .filter((c): c is { id: string; name: string; lifecycleStage: string } => !!c)
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -72,7 +72,9 @@ export class ClientsService {
       data: {
         organizationId,
         name,
-        status: dto.status ?? "ACTIVE"
+        status: dto.status ?? "ACTIVE",
+        lifecycleStage: dto.lifecycleStage ?? "ACTIVE",
+        sharePointFolderPath: dto.sharePointFolderPath?.trim() || undefined
       }
     });
   }
@@ -90,7 +92,9 @@ export class ClientsService {
       where: { id },
       data: {
         name: nextName,
-        status: dto.status
+        status: dto.status,
+        lifecycleStage: dto.lifecycleStage,
+        sharePointFolderPath: dto.sharePointFolderPath?.trim() ?? undefined
       }
     });
   }
