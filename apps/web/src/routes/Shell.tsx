@@ -31,13 +31,6 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import BusinessIcon from "@mui/icons-material/Business"
 import DnsIcon from "@mui/icons-material/Dns"
 import HandshakeIcon from "@mui/icons-material/Handshake"
-import ContactsIcon from "@mui/icons-material/Contacts"
-import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined"
-import TrendingUpIcon from "@mui/icons-material/TrendingUp"
-import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined"
-import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined"
-import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined"
-import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
@@ -46,6 +39,7 @@ import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
 import DcimSubNav, { DCIM_DESTINATIONS } from "../components/DcimSubNav"
+import CrmSubNav, { CRM_DESTINATIONS } from "../components/CrmSubNav"
 import NotificationBell from "../components/NotificationBell"
 import { LoadingState } from "../components/PageState"
 import { shellTokens } from "../components/shared"
@@ -256,6 +250,10 @@ const DCIM_ROUTE_PREFIXES = [
 ]
 const DCIM_LANDING = "/dcim/overview"
 
+// CRM is a second "app within the app" — same launcher + sub-nav pattern as DCIM.
+const CRM_ROUTE_PREFIXES = ["/crm"]
+const CRM_LANDING = "/crm"
+
 type NavItem = { label: string; path: string; icon: React.ReactNode; roles: string[] }
 type NavGroup = { kind: "group"; label: string; icon: React.ReactNode; matchPaths: string[]; roles: string[]; items: NavItem[] }
 type NavSectionEntry = NavItem | NavGroup
@@ -286,16 +284,13 @@ const clientSections: NavSection[] = [
     ]
   },
   {
-    // CRM (CRM_DESIGN.md §7) — AD-staff only, never CLIENT_VIEWER.
-    title: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Account", path: "/crm", icon: <SpaceDashboardOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Pipeline", path: "/crm/pipeline", icon: <TrendingUpIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Contacts", path: "/crm/contacts", icon: <ContactsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Activity", path: "/crm/activity", icon: <ForumOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Quotes", path: "/crm/quotes", icon: <RequestQuoteOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Documents", path: "/crm/documents", icon: <FolderSharedOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Reports", path: "/crm/reports", icon: <InsightsOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
-    ]
+    // CRM (CRM_DESIGN.md §7) — AD-staff only, never CLIENT_VIEWER. A module
+    // launcher on desktop (enters the CrmSubNav "app within the app", like
+    // DCIM); expands inline on mobile. Items derive from the shared
+    // CRM_DESTINATIONS (single source of truth with the desktop sub-nav) so
+    // the two never drift.
+    title: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />,
+    items: CRM_DESTINATIONS.map(d => ({ label: d.label, path: d.path, icon: d.icon, roles: d.roles })),
   },
   {
     // DCIM is gated to ORG-super roles only — the module is unfinished, so it's hidden
@@ -706,18 +701,20 @@ export default function Shell() {
   // expanded flag so the effect only fires on enter/leave transitions, leaving
   // any manual expand/collapse the user makes WHILE inside DCIM untouched.
   const isDcimRoute = !isMobile && DCIM_ROUTE_PREFIXES.some(p => loc.pathname.startsWith(p))
-  const preDcimExpandedRef = useRef<boolean | null>(null)
+  const isCrmRoute = !isMobile && CRM_ROUTE_PREFIXES.some(p => loc.pathname.startsWith(p))
+  const isModuleRoute = isDcimRoute || isCrmRoute
+  const preModuleExpandedRef = useRef<boolean | null>(null)
   React.useEffect(() => {
-    if (isDcimRoute) {
-      if (preDcimExpandedRef.current === null) {
-        preDcimExpandedRef.current = sidebarExpanded
+    if (isModuleRoute) {
+      if (preModuleExpandedRef.current === null) {
+        preModuleExpandedRef.current = sidebarExpanded
         setSidebarExpanded(false)
       }
-    } else if (preDcimExpandedRef.current !== null) {
-      setSidebarExpanded(preDcimExpandedRef.current)
-      preDcimExpandedRef.current = null
+    } else if (preModuleExpandedRef.current !== null) {
+      setSidebarExpanded(preModuleExpandedRef.current)
+      preModuleExpandedRef.current = null
     }
-  }, [isDcimRoute]) // eslint-disable-line
+  }, [isModuleRoute]) // eslint-disable-line
 
   function toggleSection(title: string) { setOpenSection(prev => prev === title ? null : title) }
 
@@ -1017,13 +1014,14 @@ export default function Shell() {
               // Launcher (enter-the-module → sub-nav) is a DESKTOP behaviour. On
               // mobile there is no sub-nav, so DCIM expands inline in the drawer
               // like any other section — otherwise its pages are unreachable.
-              const isDcimLauncher = section.title === "DCIM" && !isMobile
+              const isModuleLauncher = (section.title === "DCIM" || section.title === "CRM") && !isMobile
+              const moduleLanding = section.title === "DCIM" ? DCIM_LANDING : CRM_LANDING
 
               return (
                 <CollapsibleSection key={section.title} title={section.title} icon={section.icon}
-                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded} launcher={isDcimLauncher}
+                  isOpen={isOpen} hasActive={hasActive} expanded={navExpanded} launcher={isModuleLauncher}
                   onToggle={(e) => {
-                    if (isDcimLauncher) { navigateTo(DCIM_LANDING); return }
+                    if (isModuleLauncher) { navigateTo(moduleLanding); return }
                     if (!navExpanded) {
                       const target = e.currentTarget as HTMLElement
                       const flyoutItems: NavItem[] = visible.flatMap(entry => 'kind' in entry ? entry.items : [entry])
@@ -1120,6 +1118,7 @@ export default function Shell() {
 
       {/* DCIM sub-nav — the "app within the app" panel (brief §1), beside the rail */}
       {isDcimRoute ? <DcimSubNav pathname={loc.pathname} onNavigate={navigateTo} /> : null}
+      {isCrmRoute ? <CrmSubNav pathname={loc.pathname} onNavigate={navigateTo} /> : null}
 
       {/* Right column: header + content. minWidth:0 lets it shrink below its
           content's intrinsic width — without it, a wide table/elevation (esp.
