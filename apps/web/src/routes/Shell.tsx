@@ -33,6 +33,7 @@ import DnsIcon from "@mui/icons-material/Dns"
 import HandshakeIcon from "@mui/icons-material/Handshake"
 import ContactsIcon from "@mui/icons-material/Contacts"
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined"
+import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
@@ -275,6 +276,7 @@ const clientSections: NavSection[] = [
   {
     // CRM (CRM_DESIGN.md §7) — AD-staff only, never CLIENT_VIEWER.
     title: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+      { label: "Pipeline", path: "/crm/pipeline", icon: <TrendingUpIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Contacts", path: "/crm/contacts", icon: <ContactsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Activity", path: "/crm/activity", icon: <ForumOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
     ]

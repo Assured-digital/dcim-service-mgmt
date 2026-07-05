@@ -23,6 +23,7 @@ import { CommentsModule } from "./comments/comments.module"
 import { WorkPackagesModule } from "./work-packages/work-packages.module"
 import { ContactsModule } from "./contacts/contacts.module"
 import { ActivitiesModule } from "./activities/activities.module"
+import { OpportunitiesModule } from "./opportunities/opportunities.module"
 import { CabinetsModule } from "./cabinets/cabinets.module"
 import { MyWorkModule } from "./my-work/my-work.module"
 import { OverviewModule } from "./overview/overview.module"
@@ -63,6 +64,7 @@ import { AssetCustomFieldsModule } from "./asset-custom-fields/asset-custom-fiel
     WorkPackagesModule,
     ContactsModule,
     ActivitiesModule,
+    OpportunitiesModule,
     MyWorkModule,
     CabinetsModule,
     OverviewModule,

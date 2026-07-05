@@ -166,6 +166,7 @@ model Client {
   importMappings    ImportMapping[]
   contacts          Contact[]
   activities        Activity[]
+  opportunities     Opportunity[]
 }
 
 // CRM (CRM_DESIGN.md §4) — a person AT the client (no login, not a User).
@@ -190,9 +191,46 @@ model Contact {
   updatedAt DateTime @updatedAt
 
   activities ActivityContact[]
+  opportunities Opportunity[]
 
   @@index([clientId, status])
   @@index([email]) // cross-client lookup for email-sync matching (phase 7b)
+}
+
+// CRM pipeline (CRM_DESIGN.md §4). A deal at a client — including renewals
+// (type RENEWAL), so new business and renewals share one pipeline.
+model Opportunity {
+  id                String    @id @default(uuid())
+  clientId          String
+  client            Client    @relation(fields: [clientId], references: [id])
+  reference         String    @unique // OPP-YYYY-NNNN
+  title             String
+  type              String    @default("NEW_BUSINESS") // NEW_BUSINESS | RENEWAL | EXPANSION
+  stage             String    @default("DISCOVERY")
+  // DISCOVERY | QUALIFIED | PROPOSAL | NEGOTIATION | WON | LOST — forward-only
+  // among open stages; LOST reachable from any open stage (requires lostReason).
+  lastStageChangeAt DateTime  @default(now()) // rotting flags + time-in-stage reporting
+  probability       Int?      // % — defaulted from stage on stage change, editable per-deal
+  value             Float?
+  currency          String    @default("GBP")
+  expectedCloseDate DateTime?
+  nextStep          String?   // no future-dated next step ⇒ stalled by definition
+  nextStepDate      DateTime?
+  ownerId           String?   // AD staff owner (assignable-users pattern)
+  contactId         String?
+  contact           Contact?  @relation(fields: [contactId], references: [id])
+  workPackageId     String?   // set on WON → the resulting engagement
+  workPackage       WorkPackage? @relation("OpportunityWorkPackage", fields: [workPackageId], references: [id])
+  renewsWorkPackageId String? // type RENEWAL: the WP being renewed (sweep dedupe key)
+  renewsWorkPackage WorkPackage? @relation("OpportunityRenewsWorkPackage", fields: [renewsWorkPackageId], references: [id])
+  lostReason        String?   // REQUIRED on LOST: PRICE | COMPETITOR | NO_DECISION | TIMING | SCOPE | RELATIONSHIP
+  lostDetail        String?
+  notes             String?
+  createdById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([clientId, stage])
 }
 
 // CRM activity/comms log (CRM_DESIGN.md §4). No delete endpoint by design —
@@ -980,6 +1018,8 @@ model WorkPackage {
   updatedAt   DateTime  @updatedAt
 
   sites WorkPackageSite[]
+  wonOpportunities     Opportunity[] @relation("OpportunityWorkPackage")
+  renewalOpportunities Opportunity[] @relation("OpportunityRenewsWorkPackage")
 }
 
 model WorkPackageSite {

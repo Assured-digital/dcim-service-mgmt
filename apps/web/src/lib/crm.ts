@@ -127,6 +127,133 @@ export async function createActivityFollowUp(id: string, dto: FollowUpInput) {
   return (await api.post(`/activities/${id}/follow-up`, dto)).data
 }
 
+// ── Opportunities / pipeline (phase 3) ────────────────────────────────────
+// NB: `value` and `probability` are ABSENT from API responses for field roles
+// (ENGINEER / SERVICE_DESK_ANALYST) — commercial-figure RBAC, CRM_DESIGN.md
+// decision 12. All consumers must handle undefined.
+export type OpportunityView = {
+  id: string
+  clientId: string
+  reference: string
+  title: string
+  type: string
+  stage: string
+  lastStageChangeAt: string
+  probability?: number | null
+  value?: number | null
+  currency: string
+  expectedCloseDate: string | null
+  nextStep: string | null
+  nextStepDate: string | null
+  ownerId: string | null
+  owner?: { id: string; displayName: string | null } | null
+  contactId: string | null
+  contact: { id: string; firstName: string; lastName: string } | null
+  workPackageId: string | null
+  workPackage: { id: string; reference: string; title: string } | null
+  renewsWorkPackageId: string | null
+  renewsWorkPackage: { id: string; reference: string; title: string } | null
+  lostReason: string | null
+  lostDetail: string | null
+  notes: string | null
+  createdById: string
+  createdBy?: { id: string; displayName: string } | null
+  client?: { id: string; name: string; lifecycleStage: string } | null
+  createdAt: string
+  updatedAt: string
+}
+
+export const OPPORTUNITY_STAGES = ["DISCOVERY", "QUALIFIED", "PROPOSAL", "NEGOTIATION", "WON", "LOST"] as const
+export const OPEN_STAGES = ["DISCOVERY", "QUALIFIED", "PROPOSAL", "NEGOTIATION"] as const
+export const OPPORTUNITY_STAGE_LABELS: Record<string, string> = {
+  DISCOVERY: "Discovery",
+  QUALIFIED: "Qualified",
+  PROPOSAL: "Proposal",
+  NEGOTIATION: "Negotiation",
+  WON: "Won",
+  LOST: "Lost"
+}
+
+export const OPPORTUNITY_TYPES = ["NEW_BUSINESS", "RENEWAL", "EXPANSION"] as const
+export const OPPORTUNITY_TYPE_LABELS: Record<string, string> = {
+  NEW_BUSINESS: "New business",
+  RENEWAL: "Renewal",
+  EXPANSION: "Expansion"
+}
+
+export const LOST_REASONS = ["PRICE", "COMPETITOR", "NO_DECISION", "TIMING", "SCOPE", "RELATIONSHIP"] as const
+export const LOST_REASON_LABELS: Record<string, string> = {
+  PRICE: "Price",
+  COMPETITOR: "Lost to competitor",
+  NO_DECISION: "No decision",
+  TIMING: "Timing",
+  SCOPE: "Scope mismatch",
+  RELATIONSHIP: "Relationship"
+}
+
+// Days-in-stage beyond which a deal shows the rotting badge (per-stage; the
+// time-in-stage signal every major CRM converged on).
+export const STAGE_ROT_DAYS: Record<string, number> = {
+  DISCOVERY: 21,
+  QUALIFIED: 21,
+  PROPOSAL: 14,
+  NEGOTIATION: 14
+}
+
+export function isRotting(o: Pick<OpportunityView, "stage" | "lastStageChangeAt" | "nextStepDate">) {
+  const limit = STAGE_ROT_DAYS[o.stage]
+  if (!limit) return false // terminal stages never rot
+  const ageDays = (Date.now() - new Date(o.lastStageChangeAt).getTime()) / 86_400_000
+  if (ageDays > limit) return true
+  // A past-due next step also counts as stalled (hygiene rule).
+  return !!o.nextStepDate && new Date(o.nextStepDate).getTime() < Date.now()
+}
+
+export function formatMoney(value: number | null | undefined, currency = "GBP") {
+  if (value === null || value === undefined) return null
+  return new Intl.NumberFormat("en-GB", { style: "currency", currency, maximumFractionDigits: 0 }).format(value)
+}
+
+export type OpportunityInput = {
+  title: string
+  type?: string
+  value?: number
+  expectedCloseDate?: string
+  nextStep?: string
+  nextStepDate?: string
+  ownerId?: string
+  contactId?: string
+  renewsWorkPackageId?: string
+  notes?: string
+}
+
+export type OpportunityPatch = Partial<OpportunityInput> & {
+  stage?: string
+  probability?: number
+  lostReason?: string
+  lostDetail?: string
+}
+
+export async function listOpportunities(filters?: { stage?: string; type?: string; ownerId?: string }) {
+  return (await api.get<OpportunityView[]>("/opportunities", { params: filters })).data
+}
+
+export async function getOpportunity(id: string) {
+  return (await api.get<OpportunityView>(`/opportunities/${id}`)).data
+}
+
+export async function createOpportunity(dto: OpportunityInput) {
+  return (await api.post<OpportunityView>("/opportunities", dto)).data
+}
+
+export async function updateOpportunity(id: string, dto: OpportunityPatch) {
+  return (await api.patch<OpportunityView>(`/opportunities/${id}`, dto)).data
+}
+
+export async function createWorkPackageFromOpportunity(id: string, dto?: { title?: string; type?: string; startDate?: string; endDate?: string }) {
+  return (await api.post(`/opportunities/${id}/work-package`, dto ?? {})).data
+}
+
 // The x-client-id scope header is auto-attached by the api.ts interceptor.
 export async function listContacts(filters?: { status?: string; category?: string; siteId?: string }) {
   return (await api.get<ContactView[]>("/contacts", { params: filters })).data
