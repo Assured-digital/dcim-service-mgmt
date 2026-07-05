@@ -30,7 +30,8 @@ export const ATTACHMENT_RECORD_TYPES = [
   "check-item",
   "asset",
   "cabinet",
-  "site"
+  "site",
+  "quote" // CRM (CRM_DESIGN.md decision 11) — the quote PDF; attachable, not linkable
 ] as const;
 
 export type AttachmentRecordType = (typeof ATTACHMENT_RECORD_TYPES)[number];
@@ -123,6 +124,17 @@ async function queryRecords(
     }
     case "issue": {
       const rows = await prisma.issue.findMany({
+        where: { clientId, ...idWhere, ...textWhere("title") },
+        select: { id: true, reference: true, title: true, status: true },
+        orderBy,
+        take
+      });
+      return rows.map((r) => ({ type, id: r.id, reference: r.reference, title: r.title, status: r.status }));
+    }
+    case "quote": {
+      // CRM quote — directly client-scoped with reference/title/status, same shape
+      // as the six work-item types. Attachable (the quote PDF), never linkable.
+      const rows = await prisma.quote.findMany({
         where: { clientId, ...idWhere, ...textWhere("title") },
         select: { id: true, reference: true, title: true, status: true },
         orderBy,

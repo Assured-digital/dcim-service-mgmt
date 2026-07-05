@@ -167,6 +167,7 @@ model Client {
   contacts          Contact[]
   activities        Activity[]
   opportunities     Opportunity[]
+  quotes            Quote[]
 }
 
 // CRM (CRM_DESIGN.md §4) — a person AT the client (no login, not a User).
@@ -192,9 +193,58 @@ model Contact {
 
   activities ActivityContact[]
   opportunities Opportunity[]
+  quotes     Quote[]
 
   @@index([clientId, status])
   @@index([email]) // cross-client lookup for email-sync matching (phase 7b)
+}
+
+// CRM quotes (CRM_DESIGN.md §4). Line items from day one (a single scalar value
+// forces a rebuild the moment anyone wants an itemised PDF); revise-as-new-version
+// (the Dynamics pattern): revising a SENT quote withdraws it and clones DRAFT v+1.
+model Quote {
+  id            String    @id @default(uuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id])
+  reference     String    // QUO-YYYY-NNNN — stable across versions; unique per (reference, version)
+  title         String
+  description   String?
+  status        String    @default("DRAFT") // DRAFT → SENT → ACCEPTED | REJECTED | EXPIRED | WITHDRAWN
+  version       Int       @default(1)
+  revisedFromId String?   // the withdrawn predecessor version
+  isPrimary     Boolean   @default(true) // the quote whose value feeds the opportunity display
+  value         Float     @default(0) // DERIVED: Σ line totals (denormalised for lists)
+  currency      String    @default("GBP")
+  validUntil    DateTime?
+  contactId     String?
+  contact       Contact?  @relation(fields: [contactId], references: [id])
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  workPackageId String?   // set on acceptance → the resulting engagement
+  workPackage   WorkPackage? @relation("QuoteWorkPackage", fields: [workPackageId], references: [id])
+  sentAt        DateTime?
+  decidedAt     DateTime?
+  notes         String?
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lineItems QuoteLineItem[]
+
+  @@unique([reference, version])
+  @@index([clientId, status])
+}
+
+model QuoteLineItem {
+  id          String  @id @default(uuid())
+  quoteId     String
+  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float
+  sortOrder   Int     @default(0)
+  // line total = quantity × unitPrice (computed); quote.value = Σ line totals.
+  // NO product catalogue in v1 — free-text lines (CPQ consciously skipped).
 }
 
 // CRM pipeline (CRM_DESIGN.md §4). A deal at a client — including renewals
@@ -229,6 +279,8 @@ model Opportunity {
   createdById       String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+
+  quotes Quote[]
 
   @@index([clientId, stage])
 }
@@ -1020,6 +1072,7 @@ model WorkPackage {
   sites WorkPackageSite[]
   wonOpportunities     Opportunity[] @relation("OpportunityWorkPackage")
   renewalOpportunities Opportunity[] @relation("OpportunityRenewsWorkPackage")
+  acceptedQuotes       Quote[]       @relation("QuoteWorkPackage")
 }
 
 model WorkPackageSite {

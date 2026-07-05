@@ -254,6 +254,105 @@ export async function createWorkPackageFromOpportunity(id: string, dto?: { title
   return (await api.post(`/opportunities/${id}/work-package`, dto ?? {})).data
 }
 
+// ── Quotes (phase 4) ──────────────────────────────────────────────────────
+// `value` and line-item `unitPrice` are ABSENT for field roles (decision 12).
+export type QuoteLineItemView = {
+  id: string
+  description: string
+  quantity: number
+  unitPrice?: number
+  sortOrder: number
+}
+
+export type QuoteView = {
+  id: string
+  clientId: string
+  reference: string
+  title: string
+  description: string | null
+  status: string
+  version: number
+  revisedFromId: string | null
+  isPrimary: boolean
+  value?: number
+  currency: string
+  validUntil: string | null
+  contactId: string | null
+  contact: { id: string; firstName: string; lastName: string } | null
+  opportunityId: string | null
+  opportunity: { id: string; reference: string; title: string; stage: string } | null
+  workPackageId: string | null
+  workPackage: { id: string; reference: string; title: string } | null
+  sentAt: string | null
+  decidedAt: string | null
+  notes: string | null
+  createdById: string
+  createdBy?: { id: string; displayName: string } | null
+  attachments?: import("./attachments").AttachmentSummary[]
+  versions?: Array<{ id: string; version: number; status: string }>
+  lineItems: QuoteLineItemView[]
+  createdAt: string
+  updatedAt: string
+}
+
+export const QUOTE_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED", "WITHDRAWN"] as const
+export const QUOTE_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  ACCEPTED: "Accepted",
+  REJECTED: "Rejected",
+  EXPIRED: "Expired",
+  WITHDRAWN: "Withdrawn"
+}
+// Mirrors the backend QUOTE_TRANSITIONS map — used to disable illegal moves in the UI.
+export const QUOTE_TRANSITIONS: Record<string, readonly string[]> = {
+  DRAFT: ["SENT", "WITHDRAWN"],
+  SENT: ["ACCEPTED", "REJECTED", "EXPIRED", "WITHDRAWN"],
+  ACCEPTED: [],
+  REJECTED: [],
+  EXPIRED: [],
+  WITHDRAWN: []
+}
+
+export type QuoteLineInput = { description: string; quantity: number; unitPrice: number }
+export type QuoteInput = {
+  title: string
+  description?: string
+  validUntil?: string
+  contactId?: string
+  opportunityId?: string
+  notes?: string
+  lineItems?: QuoteLineInput[]
+}
+
+export async function listQuotes(filters?: { status?: string; opportunityId?: string }) {
+  return (await api.get<QuoteView[]>("/quotes", { params: filters })).data
+}
+
+export async function getQuote(id: string) {
+  return (await api.get<QuoteView>(`/quotes/${id}`)).data
+}
+
+export async function createQuote(dto: QuoteInput) {
+  return (await api.post<QuoteView>("/quotes", dto)).data
+}
+
+export async function updateQuote(id: string, dto: Partial<QuoteInput> & { status?: string }) {
+  return (await api.patch<QuoteView>(`/quotes/${id}`, dto)).data
+}
+
+export async function replaceQuoteLineItems(id: string, lineItems: QuoteLineInput[]) {
+  return (await api.put<QuoteView>(`/quotes/${id}/line-items`, { lineItems })).data
+}
+
+export async function reviseQuote(id: string) {
+  return (await api.post<QuoteView>(`/quotes/${id}/revise`)).data
+}
+
+export async function createWorkPackageFromQuote(id: string, dto?: { title?: string; type?: string; startDate?: string; endDate?: string }) {
+  return (await api.post(`/quotes/${id}/work-package`, dto ?? {})).data
+}
+
 // The x-client-id scope header is auto-attached by the api.ts interceptor.
 export async function listContacts(filters?: { status?: string; category?: string; siteId?: string }) {
   return (await api.get<ContactView[]>("/contacts", { params: filters })).data
