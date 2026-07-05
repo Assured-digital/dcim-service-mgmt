@@ -35,6 +35,7 @@ import ContactsIcon from "@mui/icons-material/Contacts"
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined"
+import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
@@ -229,6 +230,14 @@ function RecordBreadcrumbTrail({ breadcrumbs, nav }: { breadcrumbs: Crumb[]; nav
   )
 }
 
+// Nav items whose route is a PREFIX of sibling routes must match exactly, else
+// they'd highlight on every child page (/dashboard; /crm is the CRM overview
+// and prefixes /crm/pipeline etc).
+const EXACT_MATCH_NAV_PATHS = new Set(["/dashboard", "/crm"])
+function navItemActive(itemPath: string, pathname: string) {
+  return EXACT_MATCH_NAV_PATHS.has(itemPath) ? pathname === itemPath : pathname.startsWith(itemPath)
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────
 const SIDEBAR_EXPANDED = 236
 const SIDEBAR_COLLAPSED = 56
@@ -277,6 +286,7 @@ const clientSections: NavSection[] = [
   {
     // CRM (CRM_DESIGN.md §7) — AD-staff only, never CLIENT_VIEWER.
     title: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+      { label: "Account", path: "/crm", icon: <SpaceDashboardOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Pipeline", path: "/crm/pipeline", icon: <TrendingUpIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Contacts", path: "/crm/contacts", icon: <ContactsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Activity", path: "/crm/activity", icon: <ForumOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
@@ -347,7 +357,7 @@ function SectionFlyout({ title, items, anchorEl, onClose, onNavigate, pathname }
         </Typography>
         <Box sx={{ height: "1px", bgcolor: "rgba(255,255,255,0.06)", mb: "4px" }} />
         {items.map(item => {
-          const isActive = item.path === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.path)
+          const isActive = navItemActive(item.path, pathname)
           return (
             <Box key={item.path} onClick={() => { onNavigate(item.path); onClose() }} sx={{
               display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "8px", cursor: "pointer",
@@ -713,7 +723,7 @@ export default function Shell() {
       s.title &&
       s.items.some(item => {
         if ('kind' in item) return item.matchPaths.some(p => loc.pathname.startsWith(p))
-        return item.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(item.path)
+        return navItemActive(item.path, loc.pathname)
       })
     )
     setOpenSection(active?.title ?? null)
@@ -823,7 +833,7 @@ export default function Shell() {
 
   function resolveActivePage(pathname: string) {
     const direct = flatNavItems.find(i =>
-      i.path === "/dashboard" ? pathname === "/dashboard" : i.path !== "/dashboard" && pathname.startsWith(i.path)
+      navItemActive(i.path, pathname)
     )
     if (direct) return direct
     const parentPath = Object.entries(PATH_PARENT_MAP).find(([prefix]) => pathname.startsWith(prefix))?.[1]
@@ -834,7 +844,7 @@ export default function Shell() {
   function sectionHasActive(section: NavSection) {
     return section.items.some(entry => {
       if ('kind' in entry) return entry.matchPaths.some(p => loc.pathname.startsWith(p))
-      return entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)
+      return navItemActive(entry.path, loc.pathname)
     }) || section.items.some(entry => {
       if ('kind' in entry) return false
       return Object.entries(PATH_PARENT_MAP).some(
@@ -934,7 +944,7 @@ export default function Shell() {
                         onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
                         pathname={loc.pathname} onNavigate={navigateTo} expanded={navExpanded} />
                     : <NavItem key={entry.path} item={entry}
-                        selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
+                        selected={navItemActive(entry.path, loc.pathname)}
                         onClick={() => navigateTo(entry.path)} expanded={navExpanded} />
                 )}
               </List>
@@ -1046,7 +1056,7 @@ export default function Shell() {
                             onToggle={() => setOpenSubSection(s => s === entry.label ? null : entry.label)}
                             pathname={loc.pathname} onNavigate={navigateTo} expanded={navExpanded} />
                         : <NavItem key={entry.path} item={entry}
-                            selected={entry.path === "/dashboard" ? loc.pathname === "/dashboard" : loc.pathname.startsWith(entry.path)}
+                            selected={navItemActive(entry.path, loc.pathname)}
                             onClick={() => navigateTo(entry.path)} expanded={navExpanded} />
                     )}
                   </List>

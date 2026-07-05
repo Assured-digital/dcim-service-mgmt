@@ -335,12 +335,18 @@ guards) → service (clientId-filtered Prisma) → dto.
   `PUT /quotes/:id/line-items` (replace-set while DRAFT; recomputes value),
   `POST /quotes/:id/revise` (withdraw + clone next version), `POST /quotes/:id/work-package`.
   Write: ORG_SUPER + SERVICE_MANAGER; read: AD-staff. `QUO-` generator.
-- **CRM sweep job** (one scheduled job, not three): nightly pass that (a) creates due RENEWAL
-  opportunities (`renewalDate − noticePeriodDays − 14d buffer`, deduped on
+- **CRM sweep** (`POST /crm/sweep`, `apps/api/src/crm/`) — ONE idempotent pass that (a) creates
+  due RENEWAL opportunities (`renewalDate − noticePeriodDays − 14d buffer`, deduped on
   `renewsWorkPackageId`), (b) flags stalled opportunities (days-in-stage over per-stage
   threshold OR `nextStepDate` in the past) and (c) flags SENT quotes unanswered past
-  `validUntil` → each emits a Task for the owner. Mirrors the Zendesk/Freshdesk "time-based
-  automation" pattern; new nudge types join this job rather than spawning bespoke schedulers.
+  `validUntil` → each emits a Task (nudges deduped on an open Task already linked to that
+  opportunity/quote). Runs across every non-FORMER client in the actor's org. Mirrors the
+  Zendesk/Freshdesk "time-based automation" pattern; new nudge types join this pass rather than
+  spawning bespoke schedulers. **Implemented as an idempotent endpoint, NOT an in-process cron**
+  — the stack has no `@nestjs/schedule`, and this matches the deploy model (the migrate job is
+  already an external Container Apps job). Wiring it to a schedule (Container Apps cron job
+  hitting the endpoint, or `@nestjs/schedule` later) is an ops task; re-running is safe.
+  Also exposes `GET /crm/overview` (account hub) and `GET /crm/renewals?withinDays=` (renewals panel).
 - `clients/` — additive: `lifecycleStage` + `sharePointFolderPath` on DTOs; stage transition =
   PATCH gated ORG_SUPER + SERVICE_MANAGER.
 - `work-packages/` — additive: renewal fields on DTO; `GET /work-packages?renewingBefore=<date>`

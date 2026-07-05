@@ -1,0 +1,188 @@
+import { ForbiddenException, Injectable } from "@nestjs/common"
+import { Role } from "@prisma/client"
+import { PrismaService } from "../prisma/prisma.service"
+import { canSeeCommercial } from "../auth/role-scope"
+import { OpportunitiesService } from "../opportunities/opportunities.service"
+import { TasksService } from "../tasks/tasks.service"
+
+const DAY = 86_400_000
+const RENEWAL_BUFFER_DAYS = 14 // sweep fires at renewalDate − noticePeriodDays − buffer
+const STAGE_ROT_DAYS: Record<string, number> = { DISCOVERY: 21, QUALIFIED: 21, PROPOSAL: 14, NEGOTIATION: 14 }
+const OPEN_STAGES = ["DISCOVERY", "QUALIFIED", "PROPOSAL", "NEGOTIATION"]
+
+@Injectable()
+export class CrmService {
+  constructor(
+    private prisma: PrismaService,
+    private opportunities: OpportunitiesService,
+    private tasks: TasksService
+  ) {}
+
+  // ── Account overview (CRM_DESIGN.md §7) — the /crm landing for one client ──
+  async getAccountOverview(clientId: string, viewerRole: Role | undefined) {
+    if (!clientId) throw new ForbiddenException("Missing client scope")
+    const allowed = canSeeCommercial(viewerRole)
+    const now = new Date()
+
+    const [client, primaryContact, openOpps, recentActivity, openQuotes, nextRenewal,
+           openIncidents, openSRs, lastActivityRow] = await Promise.all([
+      this.prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true, lifecycleStage: true } }),
+      this.prisma.contact.findFirst({
+        where: { clientId, isPrimary: true, status: "ACTIVE" },
+        select: { id: true, firstName: true, lastName: true, jobTitle: true, email: true, phone: true, mobile: true }
+      }),
+      this.prisma.opportunity.findMany({
+        where: { clientId, stage: { in: OPEN_STAGES } },
+        orderBy: { lastStageChangeAt: "desc" },
+        select: { id: true, reference: true, title: true, stage: true, value: true, probability: true, expectedCloseDate: true }
+      }),
+      this.prisma.activity.findMany({
+        where: { clientId },
+        orderBy: { occurredAt: "desc" },
+        take: 5,
+        select: { id: true, type: true, subject: true, occurredAt: true }
+      }),
+      this.prisma.quote.findMany({
+        where: { clientId, status: { in: ["DRAFT", "SENT"] } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, reference: true, title: true, status: true, value: true, validUntil: true }
+      }),
+      this.prisma.workPackage.findFirst({
+        where: { clientId, renewalDate: { not: null, gte: now } },
+        orderBy: { renewalDate: "asc" },
+        select: { id: true, reference: true, title: true, renewalDate: true, noticePeriodDays: true }
+      }),
+      this.prisma.incident.count({ where: { clientId, status: { notIn: ["RESOLVED", "CLOSED"] } } }),
+      this.prisma.serviceRequest.count({ where: { clientId, status: { notIn: ["COMPLETED", "CLOSED"] } } }),
+      // Most recent CRM touch across activities (the relationship-recency signal).
+      this.prisma.activity.findFirst({ where: { clientId }, orderBy: { occurredAt: "desc" }, select: { occurredAt: true } })
+    ])
+
+    const daysSinceLastActivity = lastActivityRow
+      ? Math.floor((now.getTime() - new Date(lastActivityRow.occurredAt).getTime()) / DAY)
+      : null
+
+    const weightedPipeline = allowed
+      ? Math.round(openOpps.reduce((s, o) => s + (o.value ?? 0) * ((o.probability ?? 0) / 100), 0))
+      : undefined
+
+    // Strip commercial figures for field roles (decision 12).
+    const oppView = openOpps.map(o => (allowed ? o : (({ value: _v, probability: _p, ...rest }) => rest)(o)))
+    const quoteView = openQuotes.map(q => (allowed ? q : (({ value: _v, ...rest }) => rest)(q)))
+
+    return {
+      client,
+      primaryContact,
+      pipeline: { open: oppView, count: openOpps.length, weightedValue: weightedPipeline },
+      recentActivity,
+      quotes: quoteView,
+      nextRenewal,
+      // Raw health signals (NOT a composite score — CRM_DESIGN.md §7).
+      health: { daysSinceLastActivity, openIncidents, openServiceRequests: openSRs }
+    }
+  }
+
+  // ── Renewals due across the scoped client (CRM_DESIGN.md §7 renewals panel) ──
+  async getRenewals(clientId: string, withinDays = 90) {
+    if (!clientId) throw new ForbiddenException("Missing client scope")
+    const cutoff = new Date(Date.now() + withinDays * DAY)
+    return this.prisma.workPackage.findMany({
+      where: { clientId, renewalDate: { not: null, lte: cutoff } },
+      orderBy: { renewalDate: "asc" },
+      select: { id: true, reference: true, title: true, renewalDate: true, noticePeriodDays: true, autoRenews: true, status: true }
+    })
+  }
+
+  // ── The CRM sweep (CRM_DESIGN.md §6) — ONE idempotent pass, triggered by an
+  // external schedule (Azure Container Apps job), not an in-process cron. Runs
+  // across every client in the actor's organisation. Re-running is safe:
+  // renewal opps dedupe on renewsWorkPackageId; nudge tasks dedupe on an open
+  // task already linked to the same opportunity/quote.
+  async runSweep(organizationId: string, actorUserId: string) {
+    const now = new Date()
+    const clients = await this.prisma.client.findMany({
+      where: { organizationId, lifecycleStage: { not: "FORMER" } },
+      select: { id: true }
+    })
+
+    let renewalOppsCreated = 0
+    let stalledNudges = 0
+    let staleQuoteNudges = 0
+
+    for (const { id: clientId } of clients) {
+      // (a) Due renewals → RENEWAL opportunity + follow-up task, deduped.
+      const dueRenewals = await this.prisma.workPackage.findMany({
+        where: { clientId, renewalDate: { not: null }, status: { notIn: ["CANCELLED", "COMPLETED"] } },
+        select: { id: true, reference: true, title: true, renewalDate: true, noticePeriodDays: true }
+      })
+      for (const wp of dueRenewals) {
+        const fireAt = new Date(new Date(wp.renewalDate!).getTime() - ((wp.noticePeriodDays ?? 0) + RENEWAL_BUFFER_DAYS) * DAY)
+        if (fireAt > now) continue
+        const existing = await this.prisma.opportunity.findFirst({
+          where: { clientId, renewsWorkPackageId: wp.id, stage: { notIn: ["WON", "LOST"] } },
+          select: { id: true }
+        })
+        if (existing) continue
+        const opp = await this.opportunities.createForClient(clientId, actorUserId, {
+          title: `Renewal — ${wp.title}`,
+          type: "RENEWAL",
+          renewsWorkPackageId: wp.id
+        })
+        await this.tasks.createForClient(clientId, actorUserId, {
+          title: `Prepare renewal for ${wp.reference}`,
+          description: `Auto-raised by the CRM sweep — renewal window reached for ${wp.reference} (${wp.title}).`,
+          linkedEntityType: "opportunity",
+          linkedEntityId: opp.id
+        })
+        renewalOppsCreated++
+      }
+
+      // (b) Stalled opportunities → nudge task, deduped on an open linked task.
+      const openOpps = await this.prisma.opportunity.findMany({
+        where: { clientId, stage: { in: OPEN_STAGES } },
+        select: { id: true, reference: true, title: true, stage: true, lastStageChangeAt: true, nextStepDate: true, ownerId: true }
+      })
+      for (const o of openOpps) {
+        const limit = STAGE_ROT_DAYS[o.stage]
+        const ageDays = (now.getTime() - new Date(o.lastStageChangeAt).getTime()) / DAY
+        const overdueNextStep = !!o.nextStepDate && new Date(o.nextStepDate) < now
+        if (ageDays <= limit && !overdueNextStep) continue
+        if (await this.hasOpenNudge(clientId, "opportunity", o.id)) continue
+        await this.tasks.createForClient(clientId, actorUserId, {
+          title: `Stalled deal — ${o.reference}`,
+          description: `${o.title} has been in ${o.stage} too long${overdueNextStep ? " and its next step is overdue" : ""}. Move it forward or update the next step.`,
+          assigneeId: o.ownerId ?? undefined,
+          linkedEntityType: "opportunity",
+          linkedEntityId: o.id
+        })
+        stalledNudges++
+      }
+
+      // (c) SENT quotes past validUntil → nudge task, deduped.
+      const staleQuotes = await this.prisma.quote.findMany({
+        where: { clientId, status: "SENT", validUntil: { not: null, lt: now } },
+        select: { id: true, reference: true, title: true }
+      })
+      for (const q of staleQuotes) {
+        if (await this.hasOpenNudge(clientId, "quote", q.id)) continue
+        await this.tasks.createForClient(clientId, actorUserId, {
+          title: `Quote unanswered — ${q.reference}`,
+          description: `${q.title} was sent and is now past its valid-until date with no decision. Chase it or mark it expired.`,
+          linkedEntityType: "quote",
+          linkedEntityId: q.id
+        })
+        staleQuoteNudges++
+      }
+    }
+
+    return { clientsSwept: clients.length, renewalOppsCreated, stalledNudges, staleQuoteNudges }
+  }
+
+  private async hasOpenNudge(clientId: string, linkedEntityType: string, linkedEntityId: string) {
+    const existing = await this.prisma.task.findFirst({
+      where: { clientId, linkedEntityType, linkedEntityId, status: { not: "DONE" } },
+      select: { id: true }
+    })
+    return !!existing
+  }
+}

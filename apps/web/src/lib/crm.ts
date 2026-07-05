@@ -254,6 +254,45 @@ export async function createWorkPackageFromOpportunity(id: string, dto?: { title
   return (await api.post(`/opportunities/${id}/work-package`, dto ?? {})).data
 }
 
+// ── Account overview + renewals (phase 6) ─────────────────────────────────
+export type AccountOverview = {
+  client: { id: string; name: string; lifecycleStage: string } | null
+  primaryContact: {
+    id: string; firstName: string; lastName: string; jobTitle: string | null
+    email: string | null; phone: string | null; mobile: string | null
+  } | null
+  pipeline: {
+    open: Array<{ id: string; reference: string; title: string; stage: string; value?: number | null; probability?: number | null; expectedCloseDate: string | null }>
+    count: number
+    weightedValue?: number
+  }
+  recentActivity: Array<{ id: string; type: string; subject: string; occurredAt: string }>
+  quotes: Array<{ id: string; reference: string; title: string; status: string; value?: number | null; validUntil: string | null }>
+  nextRenewal: { id: string; reference: string; title: string; renewalDate: string; noticePeriodDays: number | null } | null
+  health: { daysSinceLastActivity: number | null; openIncidents: number; openServiceRequests: number }
+}
+
+export type RenewalRow = {
+  id: string; reference: string; title: string
+  renewalDate: string; noticePeriodDays: number | null; autoRenews: boolean; status: string
+}
+
+export type SweepResult = {
+  clientsSwept: number; renewalOppsCreated: number; stalledNudges: number; staleQuoteNudges: number
+}
+
+export async function getAccountOverview() {
+  return (await api.get<AccountOverview>("/crm/overview")).data
+}
+
+export async function getRenewals(withinDays = 90) {
+  return (await api.get<RenewalRow[]>("/crm/renewals", { params: { withinDays } })).data
+}
+
+export async function runCrmSweep() {
+  return (await api.post<SweepResult>("/crm/sweep")).data
+}
+
 // ── Quotes (phase 4) ──────────────────────────────────────────────────────
 // `value` and line-item `unitPrice` are ABSENT for field roles (decision 12).
 export type QuoteLineItemView = {
