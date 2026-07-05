@@ -69,6 +69,64 @@ export type ContactInput = {
   status?: string
 }
 
+// ── Activities (phase 2) ──────────────────────────────────────────────────
+export type ActivityView = {
+  id: string
+  clientId: string
+  type: string
+  source: string
+  subject: string
+  body: string | null
+  occurredAt: string
+  createdById: string | null
+  createdBy: { id: string; displayName: string | null } | null
+  contacts: Array<{ id: string; firstName: string; lastName: string }>
+  createdAt: string
+  updatedAt: string
+}
+
+export const ACTIVITY_TYPES = ["CALL", "MEETING", "EMAIL", "SITE_VISIT", "NOTE"] as const
+export type ActivityType = (typeof ACTIVITY_TYPES)[number]
+
+export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
+  CALL: "Call",
+  MEETING: "Meeting",
+  EMAIL: "Email",
+  SITE_VISIT: "Site visit",
+  NOTE: "Note"
+}
+
+export type ActivityInput = {
+  type: string
+  subject: string
+  body?: string
+  occurredAt?: string
+  contactIds?: string[]
+}
+
+export type FollowUpInput = {
+  title: string
+  description?: string
+  dueAt?: string
+  assigneeId?: string
+}
+
+export async function listActivities(filters?: { type?: string; contactId?: string; from?: string; to?: string }) {
+  return (await api.get<ActivityView[]>("/activities", { params: filters })).data
+}
+
+export async function createActivity(dto: ActivityInput) {
+  return (await api.post<ActivityView>("/activities", dto)).data
+}
+
+export async function updateActivity(id: string, dto: Partial<ActivityInput>) {
+  return (await api.patch<ActivityView>(`/activities/${id}`, dto)).data
+}
+
+export async function createActivityFollowUp(id: string, dto: FollowUpInput) {
+  return (await api.post(`/activities/${id}/follow-up`, dto)).data
+}
+
 // The x-client-id scope header is auto-attached by the api.ts interceptor.
 export async function listContacts(filters?: { status?: string; category?: string; siteId?: string }) {
   return (await api.get<ContactView[]>("/contacts", { params: filters })).data

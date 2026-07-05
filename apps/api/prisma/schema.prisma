@@ -165,6 +165,7 @@ model Client {
   regions           Region[]
   importMappings    ImportMapping[]
   contacts          Contact[]
+  activities        Activity[]
 }
 
 // CRM (CRM_DESIGN.md §4) — a person AT the client (no login, not a User).
@@ -188,8 +189,41 @@ model Contact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  activities ActivityContact[]
+
   @@index([clientId, status])
   @@index([email]) // cross-client lookup for email-sync matching (phase 7b)
+}
+
+// CRM activity/comms log (CRM_DESIGN.md §4). No delete endpoint by design —
+// a log you can delete isn't a log. source/emailMessageId are dormant until
+// the phase-7b shared-mailbox sync.
+model Activity {
+  id             String    @id @default(uuid())
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id])
+  type           String    // CALL | MEETING | EMAIL | SITE_VISIT | NOTE
+  source         String    @default("MANUAL") // MANUAL | EMAIL_SYNC
+  subject        String
+  body           String?
+  occurredAt     DateTime  @default(now())
+  emailMessageId String?   @unique // Graph internetMessageId — sync dedupe (phase 7b)
+  createdById    String?   // AD staff who logged it (null for EMAIL_SYNC)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  contacts ActivityContact[]
+
+  @@index([clientId, occurredAt])
+}
+
+model ActivityContact {
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  contactId  String
+  contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, contactId])
 }
 
 model SlaPolicy {
