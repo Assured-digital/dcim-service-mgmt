@@ -408,6 +408,23 @@ pattern — and the same gotcha applies: `AZURE_CLIENT_ID` must be set explicitl
 #5). Config out-of-band like all env (deploy gotcha #6).
 
 ### SharePoint documents (folder-per-client, one site)
+> **BUILT 2026-07-05 (Phase 7a) — APP-ONLY, a deliberate deviation from the delegated-auth
+> design below.** Decided with Jake: app-only Graph access via the container app's managed
+> identity (the same `@azure/identity` credential the storage provider uses — NO new npm
+> dependency, NO container rebuild; calls Graph over global `fetch`). Consequence: SharePoint
+> does NOT enforce per-user file permissions — access is gated by our AD-staff RBAC at the API
+> instead. This is consistent with the "SharePoint permissions are never the tenant boundary"
+> rule and CRM docs are AD-staff-only regardless, but it means ANY AD-staff user sees any client
+> folder the app can see. Delegated auth (per-user, below) is **carded** as a future upgrade if
+> per-user document confidentiality is ever needed. Code: `apps/api/src/msgraph/` (env-gated —
+> inert until `GRAPH_ENABLED=true` + `SHAREPOINT_SITE_ID`; identity needs `Sites.Read.All` +
+> `Files.Read.All` application permissions + admin consent). Endpoints: `GET /crm/documents`
+> (browse, path-traversal-guarded to the client folder), `GET /crm/documents/search`. Pinning
+> reuses the existing `POST /documents` (DocumentReference). Frontend: `/crm/documents` browser
+> + "Documents" nav item; `sharePointFolderPath` is set per client in the client form. Eager
+> folder creation is NOT built (read-only Graph) — carded. **Untestable without the Entra app
+> registration + a real site; not yet exercised.**
+
 - `Client.sharePointFolderPath` maps each client to its folder in the org document library.
   Admin sets it on the client record (with a "browse to pick" affordance later). Folders are
   created **eagerly** when the mapping is set (or at client creation once the integration is

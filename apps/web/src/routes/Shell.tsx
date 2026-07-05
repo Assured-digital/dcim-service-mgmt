@@ -36,6 +36,7 @@ import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined"
 import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined"
+import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined"
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing"
 import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
@@ -291,6 +292,7 @@ const clientSections: NavSection[] = [
       { label: "Contacts", path: "/crm/contacts", icon: <ContactsIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Activity", path: "/crm/activity", icon: <ForumOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Quotes", path: "/crm/quotes", icon: <RequestQuoteOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
+      { label: "Documents", path: "/crm/documents", icon: <FolderSharedOutlinedIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
     ]
   },
   {

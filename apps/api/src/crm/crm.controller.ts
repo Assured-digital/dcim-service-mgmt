@@ -40,6 +40,32 @@ export class CrmController {
     return this.crm.getRenewals(clientId, withinDays ? Number(withinDays) : 90)
   }
 
+  // SharePoint document browse/search (CRM_DESIGN.md §8 Phase 7a). AD-staff
+  // gated; the app-only Graph access is scoped to the client's mapped folder.
+  @Get("documents")
+  @Roles(...AD_STAFF)
+  async documents(
+    @Req() req: any,
+    @Headers("x-client-id") requestedClientId?: string,
+    @Query("subPath") subPath?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.crm.listDocuments(clientId, subPath)
+  }
+
+  @Get("documents/search")
+  @Roles(...AD_STAFF)
+  async searchDocuments(
+    @Req() req: any,
+    @Headers("x-client-id") requestedClientId?: string,
+    @Query("q") q?: string
+  ) {
+    const user = getJwtUser(req)
+    const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
+    return this.crm.searchDocuments(clientId, q ?? "")
+  }
+
   // The CRM sweep (CRM_DESIGN.md §6). Idempotent; runs across the actor's org.
   // Triggered by an external schedule (Azure Container Apps job) — NOT an
   // in-process cron. Org-super only (it is a system-level maintenance action).

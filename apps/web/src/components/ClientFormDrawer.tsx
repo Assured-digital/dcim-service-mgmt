@@ -20,6 +20,7 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
   const [name, setName] = useState("")
   const [status, setStatus] = useState("ACTIVE")
   const [lifecycleStage, setLifecycleStage] = useState("ACTIVE")
+  const [sharePointFolderPath, setSharePointFolderPath] = useState("")
 
   // Reset form whenever the drawer opens or the target client changes.
   useEffect(() => {
@@ -28,19 +29,22 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
       setName(client.name)
       setStatus(client.status)
       setLifecycleStage(client.lifecycleStage ?? "ACTIVE")
+      setSharePointFolderPath(client.sharePointFolderPath ?? "")
     } else {
       setName("")
       setStatus("ACTIVE")
       setLifecycleStage("ACTIVE")
+      setSharePointFolderPath("")
     }
   }, [open, mode, client])
 
   const mutation = useMutation({
     mutationFn: async () => {
+      const folder = sharePointFolderPath.trim()
       if (isEdit && client) {
-        return updateClient(client.id, { name: name.trim(), status, lifecycleStage })
+        return updateClient(client.id, { name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder })
       }
-      return createClient({ name: name.trim(), status, lifecycleStage })
+      return createClient({ name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder || undefined })
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["clients"] })
@@ -107,6 +111,16 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
             <MenuItem value="ACTIVE">Active</MenuItem>
             <MenuItem value="FORMER">Former</MenuItem>
           </TextField>
+
+          <TextField
+            label="SharePoint folder path"
+            value={sharePointFolderPath}
+            onChange={(e) => setSharePointFolderPath(e.target.value)}
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            placeholder="Clients/Acme Ltd"
+            helperText="Folder within the org SharePoint site — powers CRM → Documents."
+          />
 
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>

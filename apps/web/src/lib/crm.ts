@@ -254,6 +254,56 @@ export async function createWorkPackageFromOpportunity(id: string, dto?: { title
   return (await api.post(`/opportunities/${id}/work-package`, dto ?? {})).data
 }
 
+// ── SharePoint documents (phase 7a) ───────────────────────────────────────
+export type DriveItem = {
+  id: string
+  name: string
+  webUrl: string
+  size?: number
+  lastModifiedDateTime?: string
+  isFolder: boolean
+  childCount?: number
+  mimeType?: string
+}
+
+// Discriminated result — the UI distinguishes integration-off / no-folder / ok.
+export type DocumentsResult =
+  | { status: "disabled" }
+  | { status: "unmapped" }
+  | { status: "ok"; folderPath: string; subPath: string; items: DriveItem[] }
+
+export type DocumentsSearchResult =
+  | { status: "disabled" }
+  | { status: "unmapped" }
+  | { status: "ok"; items: DriveItem[] }
+
+// A pinned document (DocumentReference) — the existing pin layer.
+export type PinnedDocument = {
+  id: string
+  title: string
+  url: string
+  docType: string | null
+  linkedEntityType: string | null
+  linkedEntityId: string | null
+  createdAt: string
+}
+
+export async function browseDocuments(subPath?: string) {
+  return (await api.get<DocumentsResult>("/crm/documents", { params: subPath ? { subPath } : {} })).data
+}
+
+export async function searchDocuments(q: string) {
+  return (await api.get<DocumentsSearchResult>("/crm/documents/search", { params: { q } })).data
+}
+
+export async function listPinnedDocuments() {
+  return (await api.get<PinnedDocument[]>("/documents")).data
+}
+
+export async function pinDocument(dto: { title: string; url: string; docType?: string; linkedEntityType?: string; linkedEntityId?: string }) {
+  return (await api.post<PinnedDocument>("/documents", dto)).data
+}
+
 // ── Account overview + renewals (phase 6) ─────────────────────────────────
 export type AccountOverview = {
   client: { id: string; name: string; lifecycleStage: string } | null

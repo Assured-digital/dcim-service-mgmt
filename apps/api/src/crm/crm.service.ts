@@ -1,9 +1,10 @@
-import { ForbiddenException, Injectable } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common"
 import { Role } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import { canSeeCommercial } from "../auth/role-scope"
 import { OpportunitiesService } from "../opportunities/opportunities.service"
 import { TasksService } from "../tasks/tasks.service"
+import { MsGraphService, type DriveItem } from "../msgraph/msgraph.service"
 
 const DAY = 86_400_000
 const RENEWAL_BUFFER_DAYS = 14 // sweep fires at renewalDate − noticePeriodDays − buffer
@@ -15,8 +16,56 @@ export class CrmService {
   constructor(
     private prisma: PrismaService,
     private opportunities: OpportunitiesService,
-    private tasks: TasksService
+    private tasks: TasksService,
+    private graph: MsGraphService
   ) {}
+
+  // ── SharePoint documents (CRM_DESIGN.md §8, Phase 7a app-only) ────────────
+  // Browse/search the client's SharePoint folder. Returns a discriminated
+  // status so the UI can distinguish "integration off", "no folder mapped"
+  // and results — without throwing.
+  async listDocuments(clientId: string, subPath?: string): Promise<
+    | { status: "disabled" }
+    | { status: "unmapped" }
+    | { status: "ok"; folderPath: string; subPath: string; items: DriveItem[] }
+  > {
+    if (!clientId) throw new ForbiddenException("Missing client scope")
+    if (!this.graph.isConfigured()) return { status: "disabled" }
+    const client = await this.prisma.client.findUnique({ where: { id: clientId }, select: { sharePointFolderPath: true } })
+    const base = client?.sharePointFolderPath?.trim()
+    if (!base) return { status: "unmapped" }
+    const rel = this.safeSubPath(subPath)
+    const fullPath = rel ? `${base.replace(/\/+$/g, "")}/${rel}` : base
+    const items = await this.graph.listChildren(fullPath)
+    return { status: "ok", folderPath: base, subPath: rel, items }
+  }
+
+  async searchDocuments(clientId: string, query: string): Promise<
+    | { status: "disabled" }
+    | { status: "unmapped" }
+    | { status: "ok"; items: DriveItem[] }
+  > {
+    if (!clientId) throw new ForbiddenException("Missing client scope")
+    if (!this.graph.isConfigured()) return { status: "disabled" }
+    if (!query?.trim()) throw new BadRequestException("A search term is required")
+    const client = await this.prisma.client.findUnique({ where: { id: clientId }, select: { sharePointFolderPath: true } })
+    const base = client?.sharePointFolderPath?.trim()
+    if (!base) return { status: "unmapped" }
+    const items = await this.graph.searchInFolder(base, query.trim())
+    return { status: "ok", items }
+  }
+
+  // Reject traversal and absolute paths — the browse can never escape the
+  // client's mapped folder (the tenant-scope boundary for documents).
+  private safeSubPath(subPath?: string): string {
+    const s = (subPath ?? "").replace(/^\/+|\/+$/g, "")
+    if (!s) return ""
+    if (s.split("/").some(seg => seg === "." || seg === "..")) {
+      throw new BadRequestException("Invalid path")
+    }
+    return s
+  }
+
 
   // ── Account overview (CRM_DESIGN.md §7) — the /crm landing for one client ──
   async getAccountOverview(clientId: string, viewerRole: Role | undefined) {

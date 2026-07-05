@@ -73,7 +73,8 @@ export class ClientsService {
         organizationId,
         name,
         status: dto.status ?? "ACTIVE",
-        lifecycleStage: dto.lifecycleStage ?? "ACTIVE"
+        lifecycleStage: dto.lifecycleStage ?? "ACTIVE",
+        sharePointFolderPath: dto.sharePointFolderPath?.trim() || undefined
       }
     });
   }
@@ -92,7 +93,8 @@ export class ClientsService {
       data: {
         name: nextName,
         status: dto.status,
-        lifecycleStage: dto.lifecycleStage
+        lifecycleStage: dto.lifecycleStage,
+        sharePointFolderPath: dto.sharePointFolderPath?.trim() ?? undefined
       }
     });
   }

@@ -15,6 +15,11 @@ export class CreateClientDto {
   @IsOptional()
   @IsIn([...CLIENT_LIFECYCLE_STAGES])
   lifecycleStage?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(400)
+  sharePointFolderPath?: string;
 }
 
 export class UpdateClientDto {
@@ -31,4 +36,9 @@ export class UpdateClientDto {
   @IsOptional()
   @IsIn([...CLIENT_LIFECYCLE_STAGES])
   lifecycleStage?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(400)
+  sharePointFolderPath?: string;
 }
