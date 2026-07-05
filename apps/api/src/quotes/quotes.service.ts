@@ -5,7 +5,7 @@ import { emitAudit } from "../audit-events/emit-audit"
 import { resolveCreator } from "../users/creator"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { WorkPackagesService } from "../work-packages/work-packages.service"
-import { canSeeCommercial } from "../opportunities/opportunities.service"
+import { canSeeCommercial } from "../auth/role-scope"
 import {
   CreateQuoteDto, CreateWorkPackageFromQuoteDto, QUOTE_TRANSITIONS, QuoteLineItemDto, ReplaceLineItemsDto, UpdateQuoteDto
 } from "./dto"

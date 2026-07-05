@@ -1,13 +1,16 @@
 import React from "react"
+import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Box, Button, Card, CardContent, Chip, Dialog, DialogContent,
   DialogTitle, MenuItem, Stack, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Typography
+  TableContainer, TableHead, TableRow, TextField
 } from "@mui/material"
+import AutorenewIcon from "@mui/icons-material/Autorenew"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { daysUntilRenewal } from "../lib/workPackages"
 
 type WorkPackage = {
   id: string
@@ -18,9 +21,11 @@ type WorkPackage = {
   startDate: string | null
   endDate: string | null
   value: number | null
+  renewalDate: string | null
 }
 
 export default function WorkPackagesPage() {
+  const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
@@ -77,12 +82,15 @@ export default function WorkPackagesPage() {
                   <TableCell>Status</TableCell>
                   <TableCell>Start</TableCell>
                   <TableCell>End</TableCell>
+                  <TableCell>Renewal</TableCell>
                   <TableCell>Value</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(data ?? []).map((wp) => (
-                  <TableRow key={wp.id}>
+                {(data ?? []).map((wp) => {
+                  const days = daysUntilRenewal(wp)
+                  return (
+                  <TableRow key={wp.id} hover sx={{ cursor: "pointer" }} onClick={() => navigate(`/work-packages/${wp.id}`)}>
                     <TableCell sx={{ fontWeight: 700, fontFamily: "monospace" }}>{wp.reference}</TableCell>
                     <TableCell>{wp.title}</TableCell>
                     <TableCell><Chip size="small" label={wp.type.replace("_", " ")} /></TableCell>
@@ -95,9 +103,16 @@ export default function WorkPackagesPage() {
                     </TableCell>
                     <TableCell>{wp.startDate ? new Date(wp.startDate).toLocaleDateString("en-GB") : "—"}</TableCell>
                     <TableCell>{wp.endDate ? new Date(wp.endDate).toLocaleDateString("en-GB") : "—"}</TableCell>
+                    <TableCell>
+                      {wp.renewalDate ? (
+                        <Chip size="small" icon={<AutorenewIcon sx={{ fontSize: 13 }} />}
+                          label={days !== null && days < 0 ? `${-days}d overdue` : `${days}d`}
+                          sx={{ fontSize: 11, height: 20, bgcolor: days !== null && days <= 90 ? "rgba(234,179,8,0.12)" : "transparent" }} />
+                      ) : "—"}
+                    </TableCell>
                     <TableCell>{wp.value ? `£${wp.value.toLocaleString()}` : "—"}</TableCell>
                   </TableRow>
-                ))}
+                )})}
               </TableBody>
             </Table>
           </TableContainer>

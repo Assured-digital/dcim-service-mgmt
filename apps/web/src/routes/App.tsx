@@ -18,6 +18,7 @@ const CheckDetailPage          = React.lazy(() => import("./CheckDetailPage"))
 const CheckTemplatesPage       = React.lazy(() => import("./CheckTemplatesPage"))
 const CheckTemplateDetailPage  = React.lazy(() => import("./CheckTemplateDetailPage"))
 const WorkPackagesPage         = React.lazy(() => import("./WorkPackagesPage"))
+const WorkPackageDetailPage    = React.lazy(() => import("./WorkPackageDetailPage"))
 const CrmContactsPage          = React.lazy(() => import("./CrmContactsPage"))
 const CrmActivityPage          = React.lazy(() => import("./CrmActivityPage"))
 const CrmPipelinePage          = React.lazy(() => import("./CrmPipelinePage"))
@@ -241,6 +242,14 @@ export default function App() {
             element={
               <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST]}>
                 <WorkPackagesPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="work-packages/:id"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER]}>
+                <WorkPackageDetailPage />
               </RequireRoles>
             }
           />

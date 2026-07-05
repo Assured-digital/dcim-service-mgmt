@@ -5,6 +5,7 @@ import { emitAudit } from "../audit-events/emit-audit"
 import { resolveCreator } from "../users/creator"
 import { userDisplaySelect, computeDisplayName } from "../users/display"
 import { WorkPackagesService } from "../work-packages/work-packages.service"
+import { canSeeCommercial } from "../auth/role-scope"
 import {
   CreateOpportunityDto, CreateWorkPackageFromOpportunityDto, OPEN_STAGES, STAGE_PROBABILITIES, UpdateOpportunityDto
 } from "./dto"
@@ -15,13 +16,8 @@ function makeRef() {
   return `OPP-${y}-${n}`
 }
 
-// Commercial figures are hidden from field roles (CRM_DESIGN.md decision 12):
-// ENGINEER + SERVICE_DESK_ANALYST see deals exist (title/stage/contacts) but
-// value/probability are omitted from their responses.
-const COMMERCIAL_ROLES: Role[] = [Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER]
-export function canSeeCommercial(role: Role | undefined | null) {
-  return !!role && COMMERCIAL_ROLES.includes(role)
-}
+// Commercial-figure RBAC lives in auth/role-scope (canSeeCommercial) — shared
+// by opportunities, quotes and work-packages.
 
 function stripCommercial<T extends { value?: number | null; probability?: number | null }>(row: T, allowed: boolean): T {
   if (allowed) return row
