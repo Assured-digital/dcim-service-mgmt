@@ -3,12 +3,20 @@ import { CssBaseline, ThemeProvider, createTheme } from "@mui/material"
 import type { Theme } from "@mui/material"
 import { setActiveThemeMode, type ThemeMode } from "../components/shared/tokens/colors"
 
+// ── Dark-only switch ─────────────────────────────────────────────────────────
+// The app ships DARK-ONLY. `FORCE_DARK` pins every user to dark and the UI toggle
+// is removed (see Shell.tsx). The full LIGHT palette + persistence below are kept
+// intact as a DORMANT, reversible fallback: flip this to `false` and restore the
+// toggle row in Shell.tsx to bring light mode back — no palette rebuild needed.
+const FORCE_DARK = true
+
 // ── Persistence ──────────────────────────────────────────────────────────────
 // Mirrors lib/scope.ts: one localStorage key, read on init, written on change.
-// No backend — the User model is not touched.
+// No backend — the User model is not touched. Bypassed while FORCE_DARK is on.
 const THEME_MODE_KEY = "dcms_theme_mode"
 
 export function getStoredThemeMode(): ThemeMode {
+  if (FORCE_DARK) return "dark"
   return localStorage.getItem(THEME_MODE_KEY) === "dark" ? "dark" : "light"
 }
 

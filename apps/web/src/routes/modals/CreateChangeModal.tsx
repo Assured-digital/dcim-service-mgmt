@@ -1,12 +1,9 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
-import {
-  Button, Dialog, DialogContent, DialogTitle, MenuItem, Stack, TextField
-} from "@mui/material"
 import { api } from "../../lib/api"
 import { useNotification } from "../../components/NotificationProvider"
-import { useAssignableUsers } from "../../lib/useAssignableUsers"
+import { FormTextField, EnumSelect, AssigneePicker, DateField, FormDialog } from "../../components/fields"
 
 const CHANGE_TYPES = ["STANDARD", "NORMAL", "EMERGENCY"]
 const PRIORITIES = ["low", "medium", "high", "critical"]
@@ -42,10 +39,6 @@ export function CreateChangeModal({
   const [assigneeId, setAssigneeId] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
-  // Assignee picker source — operational-callable & client-scoped, replacing the
-  // admin-only GET /users that 403'd for operational roles. value = id, label = displayName.
-  const { data: users = [] } = useAssignableUsers()
-
   async function handleCreate() {
     if (!title.trim() || !description.trim()) return
     setSaving(true)
@@ -78,49 +71,28 @@ export function CreateChangeModal({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Log change</DialogTitle>
-      <DialogContent>
-        <Stack gap={2} sx={{ mt: 1 }}>
-          <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} required fullWidth />
-          <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} required fullWidth multiline rows={3} />
-          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
-            <TextField select label="Change type" value={changeType} onChange={e => setChangeType(e.target.value)} fullWidth>
-              {CHANGE_TYPES.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-            </TextField>
-            <TextField select label="Priority" value={priority} onChange={e => setPriority(e.target.value)} fullWidth>
-              {PRIORITIES.map(v => <MenuItem key={v} value={v}>{capitalize(v)}</MenuItem>)}
-            </TextField>
-            <TextField select label="Assignee" value={assigneeId} onChange={e => setAssigneeId(e.target.value)} fullWidth>
-              <MenuItem value="">Unassigned</MenuItem>
-              {users.map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-            </TextField>
-          </Stack>
-          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
-            <TextField
-              label="Scheduled start" type="datetime-local"
-              InputLabelProps={{ shrink: true }}
-              value={scheduledStart} onChange={e => setScheduledStart(e.target.value)}
-              fullWidth
-            />
-            <TextField
-              label="Scheduled end" type="datetime-local"
-              InputLabelProps={{ shrink: true }}
-              value={scheduledEnd} onChange={e => setScheduledEnd(e.target.value)}
-              fullWidth
-            />
-          </Stack>
-          <TextField label="Reason" value={reason} onChange={e => setReason(e.target.value)} fullWidth multiline rows={2} />
-          <TextField label="Impact assessment" value={impactAssessment} onChange={e => setImpactAssessment(e.target.value)} fullWidth multiline rows={2} />
-          <TextField label="Rollback plan" value={rollbackPlan} onChange={e => setRollbackPlan(e.target.value)} fullWidth multiline rows={2} />
-          <Stack direction="row" justifyContent="flex-end" gap={1}>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="contained" onClick={handleCreate} disabled={saving || !title.trim() || !description.trim()}>
-              {saving ? "Saving..." : "Log change"}
-            </Button>
-          </Stack>
-        </Stack>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      title="Log change"
+      submitLabel="Log change"
+      submitting={saving}
+      canSubmit={!!title.trim() && !!description.trim()}
+      onSubmit={handleCreate}
+    >
+      <FormTextField span="full" label="Title" value={title} onChange={e => setTitle(e.target.value)} required />
+      <FormTextField span="full" label="Description" value={description} onChange={e => setDescription(e.target.value)} required multiline rows={3} />
+      <EnumSelect label="Change type" value={changeType} onChange={setChangeType}
+        options={CHANGE_TYPES.map(v => ({ value: v, label: v }))} />
+      <EnumSelect label="Priority" value={priority} onChange={setPriority}
+        options={PRIORITIES.map(v => ({ value: v, label: capitalize(v) }))} />
+      <DateField label="Scheduled start" type="datetime-local" value={scheduledStart} onChange={setScheduledStart} />
+      <DateField label="Scheduled end" type="datetime-local" value={scheduledEnd} onChange={setScheduledEnd} />
+      <AssigneePicker span="full" value={assigneeId} onChange={setAssigneeId} />
+      <FormTextField span="full" label="Reason" value={reason} onChange={e => setReason(e.target.value)} multiline rows={2} />
+      <FormTextField span="full" label="Impact assessment" value={impactAssessment} onChange={e => setImpactAssessment(e.target.value)} multiline rows={2} />
+      <FormTextField span="full" label="Rollback plan" value={rollbackPlan} onChange={e => setRollbackPlan(e.target.value)} multiline rows={2} />
+    </FormDialog>
   )
 }

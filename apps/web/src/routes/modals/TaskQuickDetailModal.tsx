@@ -2,10 +2,11 @@ import React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
-  MenuItem, Stack, Tab, Tabs, TextField, Typography
+  Stack, Tab, Tabs, Typography
 } from "@mui/material"
 import { api } from "../../lib/api"
 import { useNotification } from "../../components/NotificationProvider"
+import { FormTextField, EnumSelect, AssigneePicker, DateField, FormGrid } from "../../components/fields"
 import { StatusPill, PriorityPill } from "../../components/shared"
 import { ActivityFeedItem, type FeedEvent, type ResolvedMention } from "../../components/detail"
 import { formatDateTime } from "../../lib/format"
@@ -215,68 +216,49 @@ export function TaskQuickDetailModal({
 
         <Box sx={{ maxHeight: { xs: "48vh", md: "44vh" }, overflowY: "auto", pr: 0.5, pt: 0.5 }}>
           {activeTab === "details" ? (
-            <Stack spacing={1.5} sx={{ pt: 0.5 }}>
-              <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
-              <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} multiline rows={3} fullWidth />
-              <Stack direction="row" spacing={1.5}>
-                <TextField
-                  select
-                  label="Status"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  fullWidth
-                  disabled={!canManage}
-                >
-                  {ALL_STATUSES.map((s) => <MenuItem key={s} value={s}>{STATUS_LABELS[s] ?? s}</MenuItem>)}
-                </TextField>
-                <TextField
-                  select
-                  label="Priority"
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  fullWidth
-                  disabled={!canManage}
-                >
-                  {ALL_PRIORITIES.map((p) => <MenuItem key={p} value={p}>{capitalize(p)}</MenuItem>)}
-                </TextField>
-              </Stack>
-              <Stack direction="row" spacing={1.5}>
-                <TextField
-                  select
-                  label="Assignee"
-                  value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.target.value)}
-                  fullWidth
-                  disabled={!canManage}
-                >
-                  <MenuItem value="">Unassigned</MenuItem>
-                  {users.map((u) => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-                </TextField>
-                <TextField
-                  type="date"
-                  label="Due date"
-                  value={dueAt}
-                  onChange={(e) => setDueAt(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                  disabled={!canManage}
-                />
-              </Stack>
+            <FormGrid sx={{ pt: 0.5 }}>
+              <FormTextField span="full" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <FormTextField span="full" label="Description" value={description} onChange={(e) => setDescription(e.target.value)} multiline rows={3} />
+              <EnumSelect
+                label="Status"
+                value={status}
+                onChange={setStatus}
+                disabled={!canManage}
+                options={ALL_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+              />
+              <EnumSelect
+                label="Priority"
+                value={priority}
+                onChange={setPriority}
+                disabled={!canManage}
+                options={ALL_PRIORITIES.map((p) => ({ value: p, label: capitalize(p) }))}
+              />
+              <AssigneePicker
+                value={assigneeId}
+                onChange={setAssigneeId}
+                users={users}
+                disabled={!canManage}
+              />
+              <DateField
+                label="Due date"
+                value={dueAt}
+                onChange={setDueAt}
+                disabled={!canManage}
+              />
               {task?.linkedEntityType ? (
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ gridColumn: "1 / -1" }}>
                   Linked to: {linkedLabel(task)}
                 </Typography>
               ) : null}
-            </Stack>
+            </FormGrid>
           ) : null}
 
           {activeTab === "work-notes" ? (
             <Stack spacing={1.5}>
               {canManage ? (
                 <Stack spacing={1}>
-                  <TextField
+                  <FormTextField
                     size="small"
-                    fullWidth
                     multiline
                     rows={2}
                     placeholder="Add work note..."

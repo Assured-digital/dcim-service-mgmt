@@ -4,7 +4,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Box, Collapse, Drawer, IconButton, List, ListItemButton, ListItemIcon,
-  ListItemText, MenuItem, Select, Switch, Tooltip, Typography, useMediaQuery, useTheme
+  ListItemText, MenuItem, Select, Tooltip, Typography, useMediaQuery, useTheme
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
 import DashboardIcon from "@mui/icons-material/Dashboard"
@@ -23,7 +23,6 @@ import AutorenewIcon from "@mui/icons-material/Autorenew"
 import NotificationImportantIcon from "@mui/icons-material/NotificationImportant"
 import LogoutIcon from "@mui/icons-material/Logout"
 import SettingsIcon from "@mui/icons-material/Settings"
-import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import SupportAgentIcon from "@mui/icons-material/SupportAgent"
 import EngineeringIcon from "@mui/icons-material/Engineering"
@@ -553,7 +552,7 @@ function UserMenu({ name, initials, email, roleLabel, loggingOut, onLogout }: {
 }) {
   const [open, setOpen] = React.useState(false)
   const nav = useNavigate()
-  const { mode, toggleMode } = useThemeMode()
+  const { mode } = useThemeMode()
   const isDark = mode === "dark"
 
   // Popover surface is mode-aware so the menu hosting the toggle reads correctly in
@@ -581,19 +580,8 @@ function UserMenu({ name, initials, email, roleLabel, loggingOut, onLogout }: {
               <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: "1px", wordBreak: "break-all" }}>{email}</Typography>
               <Typography sx={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize", mt: "2px" }}>{roleLabel}</Typography>
             </Box>
-            {/* Dark mode — same item pattern as Settings/Sign out; the row toggles, the
-                switch reflects current state. Does NOT close the menu, so the flip is visible. */}
-            <Box onClick={toggleMode} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: itemColor, "&:hover": { bgcolor: itemHoverBg, color: itemHoverColor } }}>
-              <DarkModeOutlinedIcon sx={{ fontSize: 14 }} />
-              <Typography sx={{ fontSize: 13, flex: 1 }}>Dark mode</Typography>
-              <Switch
-                size="small"
-                checked={isDark}
-                onClick={e => e.stopPropagation()}
-                onChange={toggleMode}
-                sx={{ m: 0 }}
-              />
-            </Box>
+            {/* Dark-mode toggle removed — the app is dark-only (see lib/theme.tsx
+                FORCE_DARK). Light mode remains a dormant, reversible fallback. */}
             <Box onClick={() => { setOpen(false); nav("/settings") }} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "12px", py: "9px", cursor: "pointer", color: itemColor, "&:hover": { bgcolor: itemHoverBg, color: itemHoverColor } }}>
               <SettingsIcon sx={{ fontSize: 14 }} />
               <Typography sx={{ fontSize: 13 }}>Settings</Typography>

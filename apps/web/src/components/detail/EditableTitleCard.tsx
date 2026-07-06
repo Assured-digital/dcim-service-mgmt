@@ -3,14 +3,20 @@ import { Box, Button, InputBase, Stack } from "@mui/material"
 import { SectionPanel } from "./RecordDetailShell"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EditableField — explicit click-to-edit with dirty-tracked Save/Cancel.
+// EditableField — the ONE inline text editor. Click-to-edit over a single
+// InputBase (a real textarea — accessible, no contentEditable/DOM juggling),
+// with a transparent→accent border and no footprint change idle↔editing.
 //
-// Unlike the per-page `InlineEditable` (contentEditable, commit-on-blur), this
-// editor requires explicit commit: a *dirty* edit must be explicitly Saved or
-// Cancelled — clicking out does NOT auto-commit. A *clean* edit (no change) is
-// free to exit on click-out / Cancel / Escape. Used only for Subject and
-// Description; the other inline fields (assessment/impl/notes) keep their own
-// commit-on-blur InlineEditable.
+// Two commit models, chosen per field via `commit`:
+//  • "explicit" (default) — a *dirty* edit must be Saved or Cancelled; clicking
+//    out does NOT auto-commit (used for Subject/Description).
+//  • "blur" — a dirty edit commits on click-out; no Save/Cancel buttons mount
+//    (used for assessment/implementation/notes; replaces the old per-page
+//    contentEditable `InlineEditable`, now deleted).
+// In both models a *clean* edit (unchanged) exits quietly and Escape reverts.
+//
+// `allowEmpty` lets a field be cleared to "" (persists the empty value); by
+// default an empty draft is treated as clean and reverts (no field cleared).
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface EditableFieldProps {
@@ -26,6 +32,10 @@ interface EditableFieldProps {
   // Styling applied to the read-mode text and the editor input, so edit mode
   // reads consistently with the rest of the page.
   textSx?: object
+  // Commit model — see header. Defaults to explicit Save/Cancel.
+  commit?: "explicit" | "blur"
+  // When true, an empty draft is a valid (persisted) value; otherwise it reverts.
+  allowEmpty?: boolean
 }
 
 export const EditableField = React.memo(function EditableField({
@@ -35,16 +45,18 @@ export const EditableField = React.memo(function EditableField({
   placeholder,
   ariaLabel,
   textSx,
+  commit = "explicit",
+  allowEmpty = false,
 }: EditableFieldProps) {
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(value)
 
   const trimmed = draft.trim()
-  // Dirty only when editing AND non-empty AND changed — an empty draft is
-  // non-savable and counts as clean (preserves today's "empty reverts"
-  // behaviour: no field can be cleared via this editor). Save/Cancel mount only
-  // while dirty, so merely focusing the field never pushes surrounding content.
-  const dirty = editing && trimmed !== "" && trimmed !== value
+  // Dirty = editing AND changed AND savable. An empty draft is savable only when
+  // allowEmpty (a clear); otherwise it counts as clean and reverts (no field can
+  // be cleared). Save/Cancel mount only while dirty (explicit mode), so merely
+  // focusing the field never pushes surrounding content.
+  const dirty = editing && trimmed !== value && (allowEmpty || trimmed !== "")
 
   const startEditing = React.useCallback(() => {
     setDraft(value)
@@ -52,8 +64,8 @@ export const EditableField = React.memo(function EditableField({
   }, [value])
 
   const save = React.useCallback(async () => {
-    // Clean (empty or unchanged) → just exit edit mode, nothing to persist.
-    if (trimmed === "" || trimmed === value) {
+    // Clean (unchanged, or empty when not allowed) → just exit, nothing to persist.
+    if (trimmed === value || (trimmed === "" && !allowEmpty)) {
       setEditing(false)
       return
     }
@@ -64,23 +76,25 @@ export const EditableField = React.memo(function EditableField({
       // Save failed: the owning page surfaced an error toast; keep the field in
       // edit mode with the draft intact so the user can retry without retyping.
     }
-  }, [trimmed, value, onSave])
+  }, [trimmed, value, onSave, allowEmpty])
 
   const cancel = React.useCallback(() => {
     setDraft(value)
     setEditing(false)
   }, [value])
 
-  // Focus left the editor entirely. If clean, exit edit mode; if dirty, stay
-  // (force an explicit Save/Cancel). Focus moving to the Save/Cancel buttons is
+  // Focus left the editor entirely. In blur mode, commit (save() is a no-op for
+  // a clean edit). In explicit mode, exit only if clean; a dirty edit stays put,
+  // forcing an explicit Save/Cancel. Focus moving to the Save/Cancel buttons is
   // still inside the wrapper, so it does not count as "clicking out".
   const handleBlur = React.useCallback(
     (e: React.FocusEvent<HTMLDivElement>) => {
       const next = e.relatedTarget as Node | null
       if (next && e.currentTarget.contains(next)) return
-      if (!dirty) setEditing(false)
+      if (commit === "blur") save()
+      else if (!dirty) setEditing(false)
     },
-    [dirty]
+    [commit, dirty, save]
   )
 
   const handleKeyDown = React.useCallback(
@@ -143,7 +157,7 @@ export const EditableField = React.memo(function EditableField({
           "& .MuiInputBase-input": { p: 0, cursor: "inherit" },
         }}
       />
-      {dirty && (
+      {commit === "explicit" && dirty && (
         <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1 }}>
           <Button
             size="small"

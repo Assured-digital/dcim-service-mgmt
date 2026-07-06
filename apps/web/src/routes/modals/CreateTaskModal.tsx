@@ -1,13 +1,10 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
-import {
-  Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
-  MenuItem, Stack, TextField, Typography
-} from "@mui/material"
+import { Box, Typography } from "@mui/material"
 import { api } from "../../lib/api"
 import { useNotification } from "../../components/NotificationProvider"
-import { useAssignableUsers } from "../../lib/useAssignableUsers"
+import { FormTextField, EnumSelect, AssigneePicker, DateField, FormDialog } from "../../components/fields"
 import { useThemeMode } from "../../lib/theme"
 
 const PRIORITIES = ["low", "medium", "high", "critical"]
@@ -45,11 +42,8 @@ export function CreateTaskModal({
   const [assigneeId, setAssigneeId] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
-  // Assignee picker source — operational-callable & client-scoped (the shared hook).
-  const { data: users = [] } = useAssignableUsers()
-
   // Linked-entity info banner — light branch = the prior literals exactly.
-  const banner = mode === "dark"
+  const bannerColors = mode === "dark"
     ? { bg: "#0c2a3a", border: "#164e63", text: "#7dd3fc" }
     : { bg: "#f0f9ff", border: "#bae6fd", text: "#0369a1" }
 
@@ -82,35 +76,28 @@ export function CreateTaskModal({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Create task</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
-          {linkedEntityLabel ? (
-            <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: banner.bg, border: `1px solid ${banner.border}` }}>
-              <Typography variant="caption" color={banner.text}>Linked to: <strong>{linkedEntityLabel}</strong></Typography>
-            </Box>
-          ) : null}
-          <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} fullWidth required />
-          <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} multiline rows={3} fullWidth />
-          <Stack direction="row" spacing={1.5}>
-            <TextField select label="Priority" value={priority} onChange={e => setPriority(e.target.value)} fullWidth>
-              {PRIORITIES.map(p => <MenuItem key={p} value={p}>{capitalise(p)}</MenuItem>)}
-            </TextField>
-            <TextField label="Due date" type="date" InputLabelProps={{ shrink: true }} value={dueAt} onChange={e => setDueAt(e.target.value)} fullWidth />
-          </Stack>
-          <TextField select label="Assignee" value={assigneeId} onChange={e => setAssigneeId(e.target.value)} fullWidth>
-            <MenuItem value="">Unassigned</MenuItem>
-            {users.map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-          </TextField>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleCreate} disabled={saving || !title.trim()}>
-          {saving ? "Creating..." : "Create task"}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      title="Create task"
+      submitLabel="Create task"
+      submittingLabel="Creating…"
+      submitting={saving}
+      canSubmit={!!title.trim()}
+      onSubmit={handleCreate}
+      banner={linkedEntityLabel ? (
+        <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: bannerColors.bg, border: `1px solid ${bannerColors.border}` }}>
+          <Typography variant="caption" color={bannerColors.text}>Linked to: <strong>{linkedEntityLabel}</strong></Typography>
+        </Box>
+      ) : undefined}
+    >
+      <FormTextField span="full" label="Title" value={title} onChange={e => setTitle(e.target.value)} required />
+      <FormTextField span="full" label="Description" value={description} onChange={e => setDescription(e.target.value)} multiline rows={3} />
+      <EnumSelect label="Priority" value={priority} onChange={setPriority}
+        options={PRIORITIES.map(p => ({ value: p, label: capitalise(p) }))} />
+      <DateField label="Due date" value={dueAt} onChange={setDueAt} />
+      <AssigneePicker span="full" value={assigneeId} onChange={setAssigneeId} />
+    </FormDialog>
   )
 }

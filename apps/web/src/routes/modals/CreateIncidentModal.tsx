@@ -1,12 +1,9 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
-import {
-  Button, Dialog, DialogContent, DialogTitle, MenuItem, Stack, TextField
-} from "@mui/material"
 import { api } from "../../lib/api"
 import { useNotification } from "../../components/NotificationProvider"
-import { useAssignableUsers } from "../../lib/useAssignableUsers"
+import { FormTextField, EnumSelect, AssigneePicker, FormDialog } from "../../components/fields"
 
 const SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 const PRIORITIES = ["low", "medium", "high", "critical"]
@@ -37,10 +34,6 @@ export function CreateIncidentModal({
   const [assigneeId, setAssigneeId] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
-  // Assignee picker source — operational-callable & client-scoped, replacing the
-  // admin-only GET /users that 403'd for operational roles. value = id, label = displayName.
-  const { data: users = [] } = useAssignableUsers()
-
   async function handleCreate() {
     if (!title.trim() || !description.trim()) return
     setSaving(true)
@@ -67,32 +60,23 @@ export function CreateIncidentModal({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Log incident</DialogTitle>
-      <DialogContent>
-        <Stack gap={2} sx={{ mt: 1 }}>
-          <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} required fullWidth />
-          <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} required fullWidth multiline rows={3} />
-          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
-            <TextField select label="Severity" value={severity} onChange={e => setSeverity(e.target.value)} fullWidth>
-              {SEVERITIES.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-            </TextField>
-            <TextField select label="Priority" value={priority} onChange={e => setPriority(e.target.value)} fullWidth>
-              {PRIORITIES.map(v => <MenuItem key={v} value={v}>{capitalize(v)}</MenuItem>)}
-            </TextField>
-          </Stack>
-          <TextField select label="Assignee" value={assigneeId} onChange={e => setAssigneeId(e.target.value)} fullWidth>
-            <MenuItem value="">Unassigned</MenuItem>
-            {users.map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-          </TextField>
-          <Stack direction="row" justifyContent="flex-end" gap={1}>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="contained" onClick={handleCreate} disabled={saving || !title.trim() || !description.trim()}>
-              {saving ? "Saving..." : "Log incident"}
-            </Button>
-          </Stack>
-        </Stack>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      title="Log incident"
+      submitLabel="Log incident"
+      submitting={saving}
+      canSubmit={!!title.trim() && !!description.trim()}
+      onSubmit={handleCreate}
+    >
+      <FormTextField span="full" label="Title" value={title} onChange={e => setTitle(e.target.value)} required />
+      <FormTextField span="full" label="Description" value={description} onChange={e => setDescription(e.target.value)} required multiline rows={3} />
+      <EnumSelect label="Severity" value={severity} onChange={setSeverity}
+        options={SEVERITIES.map(v => ({ value: v, label: v }))} />
+      <EnumSelect label="Priority" value={priority} onChange={setPriority}
+        options={PRIORITIES.map(v => ({ value: v, label: capitalize(v) }))} />
+      <AssigneePicker span="full" value={assigneeId} onChange={setAssigneeId} />
+    </FormDialog>
   )
 }
