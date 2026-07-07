@@ -15,9 +15,10 @@ import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import { useNotification } from "../components/NotificationProvider"
 import {
   Cabinet, CabinetReservation, Room, RackTab, ElevationSide,
-  AuditEvent, LinkedTask, LinkedServiceRequest, LinkedRisk, LinkedIssue,
+  AuditEvent,
   assetBg, barColor, normalizeRackSide, formatKw, actionLabel, getApiErrorMessage
 } from "../lib/infrastructure"
+import { ParentLinkedRecords, parentLinkedKey } from "../components/ParentLinkedRecords"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { getSiteCapacity, kw } from "../lib/capacity"
 import { healthColor } from "../lib/readings"
@@ -126,26 +127,6 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
     enabled: rackTab === "history"
   })
 
-  const { data: linkedTasks = [] } = useQuery({
-    queryKey: ["linked-tasks-cabinet", cabinet.id],
-    queryFn: async () => (await api.get<LinkedTask[]>("/tasks", { params: { linkedEntityType: "Cabinet", linkedEntityId: cabinet.id } })).data,
-    enabled: rackTab === "linked"
-  })
-  const { data: linkedServiceRequests = [] } = useQuery({
-    queryKey: ["linked-service-requests-cabinet", cabinet.id],
-    queryFn: async () => (await api.get<LinkedServiceRequest[]>("/service-requests", { params: { linkedEntityType: "Cabinet", linkedEntityId: cabinet.id } })).data,
-    enabled: rackTab === "linked"
-  })
-  const { data: linkedRisks = [] } = useQuery({
-    queryKey: ["linked-risks-cabinet", cabinet.id],
-    queryFn: async () => (await api.get<LinkedRisk[]>("/risks", { params: { linkedEntityType: "Cabinet", linkedEntityId: cabinet.id } })).data,
-    enabled: rackTab === "linked"
-  })
-  const { data: linkedIssues = [] } = useQuery({
-    queryKey: ["linked-issues-cabinet", cabinet.id],
-    queryFn: async () => (await api.get<LinkedIssue[]>("/issues", { params: { linkedEntityType: "Cabinet", linkedEntityId: cabinet.id } })).data,
-    enabled: rackTab === "linked"
-  })
   // Assignee picker source (feeds the linked-task quick-detail modal) —
   // operational-callable & client-scoped, replacing admin-only GET /users.
   const { data: users = [] } = useAssignableUsers()
@@ -170,12 +151,12 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
 
   async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
     await api.put(`/tasks/${taskId}`, patch)
-    qc.invalidateQueries({ queryKey: ["linked-tasks-cabinet", cabinet.id] })
+    qc.invalidateQueries({ queryKey: parentLinkedKey("Cabinet", cabinet.id, "task") })
     qc.invalidateQueries({ queryKey: ["tasks"] })
   }
   async function updateLinkedTaskStatus(taskId: string, status: string) {
     await api.post(`/tasks/${taskId}/status`, { status })
-    qc.invalidateQueries({ queryKey: ["linked-tasks-cabinet", cabinet.id] })
+    qc.invalidateQueries({ queryKey: parentLinkedKey("Cabinet", cabinet.id, "task") })
     qc.invalidateQueries({ queryKey: ["tasks"] })
   }
 
@@ -475,31 +456,13 @@ const CabinetDetailView = React.memo(function CabinetDetailView({
       {/* ── Linked records ────────────────────────────────────────────── */}
       {rackTab === "linked" ? (
         <Box sx={{ flex: 1, overflowY: "auto", p: "16px 20px" }}>
-          <Box sx={{ display: "grid", gap: "12px", gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" } }}>
-            {[
-              { title: "Service requests", items: linkedServiceRequests, onClick: (id: string) => navigate(`/service-requests/${id}`), subtitle: (item: any) => item.subject },
-              { title: "Risks", items: linkedRisks, onClick: (id: string) => navigate(`/risks/${id}`), subtitle: (item: any) => `${item.likelihood} / ${item.impact}` },
-              { title: "Issues", items: linkedIssues, onClick: (id: string) => navigate(`/issues/${id}`), subtitle: (item: any) => item.severity },
-              { title: "Tasks", items: linkedTasks, onClick: (id: string) => setQuickTaskId(id), subtitle: (item: any) => item.title },
-            ].map(section => (
-              <Box key={section.title} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
-                <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.default" }}>
-                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>{section.title} ({section.items.length})</Typography>
-                </Box>
-                {section.items.length === 0 ? (
-                  <Box sx={{ p: 2 }}><Typography sx={{ fontSize: 12, color: "text.tertiary" }}>No linked {section.title.toLowerCase()}</Typography></Box>
-                ) : section.items.map((item: any, idx: number) => (
-                  <Stack key={item.id} direction="row" alignItems="center" onClick={() => section.onClick(item.id)} sx={{ p: 1.5, cursor: "pointer", borderBottom: idx < section.items.length - 1 ? "1px solid" : "none", borderColor: "divider", "&:hover": { bgcolor: "action.hover" } }}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{item.reference}</Typography>
-                      <Typography sx={{ fontSize: 11, color: "text.secondary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{section.subtitle(item)}</Typography>
-                    </Box>
-                    <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
-                  </Stack>
-                ))}
-              </Box>
-            ))}
-          </Box>
+          <ParentLinkedRecords
+            entityType="Cabinet"
+            entityId={cabinet.id}
+            entityLabel={cabinet.name}
+            canManage={canManage}
+            onOpenTask={(id) => setQuickTaskId(id)}
+          />
         </Box>
       ) : null}
 

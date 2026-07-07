@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom"
 import { Box, Button, IconButton, Tooltip, Typography, useTheme } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import LinkOffIcon from "@mui/icons-material/LinkOff"
-import { ResolvedLink, routeForLink, navSegmentForType, visualForType } from "../lib/linkedRecords"
+import { ResolvedLink, routeForLink, navSegmentForType } from "../lib/linkedRecords"
 import { useDrillNav } from "../lib/drillNav"
 import { accentToken, type ThemeMode } from "./shared/tokens/colors"
+import { RecordTypeBadge } from "./RecordTypeBadge"
+import { isHistoricalStatus, partitionByHistory } from "../lib/recordStatus"
 
 interface LinkedRecordsContentProps {
   links: ResolvedLink[]
@@ -19,10 +21,8 @@ interface LinkedRecordsContentProps {
 // Coarse semantic tone for a status pill — terminal states read as "done" (slate),
 // everything else as active (blue). Avoids a per-type status colour map while still
 // giving the spec's coloured badge.
-const TERMINAL = /(closed|resolved|done|complete|completed|cancelled|canceled|rejected|retired|implemented)/i
-
 function statusTone(status: string, mode: ThemeMode): { bg: string; fg: string } {
-  if (TERMINAL.test(status)) {
+  if (isHistoricalStatus(status)) {
     return mode === "dark" ? { bg: "#1e293b", fg: "#94a3b8" } : { bg: "#eef2f6", fg: "#475569" }
   }
   // active tone = the blue identity wash (light value is byte-identical to the prior #e6f1fb/#185fa5)
@@ -41,6 +41,13 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
   // Inside the Service Desk navigator, a row drills to depth 2 (in place);
   // standalone (no provider) it navigates to the record's own detail route.
   const drill = useDrillNav()
+  const [view, setView] = React.useState<"live" | "history">("live")
+
+  // Split active from closed (terminal-status) links so history stays accessible
+  // without burying live work. Only surface the Live/History switch when there IS
+  // history to show (keeps the common all-live panel clean).
+  const { live, historical } = React.useMemo(() => partitionByHistory(links, (l) => l.status), [links])
+  const shown = view === "live" ? live : historical
 
   return (
     <Box>
@@ -49,9 +56,30 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
           No linked records
         </Typography>
       ) : (
-        links.map((link) => {
-          const visual = visualForType(link.type)
-          const Icon = visual.Icon
+        <>
+          {historical.length > 0 ? (
+            <Box sx={{ display: "flex", gap: 1.5, mb: 0.5, borderBottom: "1px solid", borderColor: "divider" }}>
+              {(["live", "history"] as const).map((v) => {
+                const active = view === v
+                const count = v === "live" ? live.length : historical.length
+                return (
+                  <Box
+                    key={v}
+                    onClick={() => setView(v)}
+                    sx={{
+                      py: 0.5, cursor: "pointer", fontSize: 11, fontWeight: 600, mb: "-1px",
+                      color: active ? "primary.main" : "text.tertiary",
+                      borderBottom: "2px solid", borderBottomColor: active ? "primary.main" : "transparent",
+                    }}
+                  >
+                    {(v === "live" ? "Live" : "History") + ` (${count})`}
+                  </Box>
+                )
+              })}
+            </Box>
+          ) : null}
+
+          {shown.map((link) => {
           const tone = statusTone(link.status, theme.palette.mode)
           return (
             <Box
@@ -72,21 +100,7 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
                 "&:hover .rl-unlink": { opacity: 1 },
               }}
             >
-              <Box
-                sx={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 1,
-                  bgcolor: visual.bg,
-                  color: visual.fg,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <Icon sx={{ fontSize: 14 }} />
-              </Box>
+              <RecordTypeBadge type={link.type} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography
                   sx={{
@@ -153,7 +167,8 @@ export const LinkedRecordsContent = React.memo(function LinkedRecordsContent({
               ) : null}
             </Box>
           )
-        })
+        })}
+        </>
       )}
       {showAddButton ? (
         <Button

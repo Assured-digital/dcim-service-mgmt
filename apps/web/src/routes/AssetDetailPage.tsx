@@ -26,10 +26,8 @@ import {
   ChangeAssetStatusDialog, DeleteConfirmDialog, LogMaintenanceDialog, MoveAssetDialog,
   RaiseDecommissionDialog, RaiseMoveWorkOrderDialog, RequestDeletionDialog
 } from "./InfraDialogs"
-import { CreateTaskModal } from "./modals/CreateTaskModal"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
-import { CreateRiskModal, CreateIssueModal } from "./RisksIssuesPage"
-import { CreateServiceRequestModal } from "./ServiceDeskPage"
+import { ParentLinkedRecords, parentLinkedKey } from "../components/ParentLinkedRecords"
 import { DeviceTypePicker } from "./DeviceTypePicker"
 import AssetPortsPanel from "./AssetPortsPanel"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -38,7 +36,6 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 
 type TabKey = "overview" | "connections" | "linked" | "maintenance" | "history"
 type ActionDialog = "status" | "move" | "delete" | "requestDelete" | "logMaintenance" | "decommissionWO" | "moveWO" | null
-type CreateModal = "task" | "risk" | "issue" | "serviceRequest" | null
 
 type MaintenanceLog = {
   id: string
@@ -199,7 +196,6 @@ export default function AssetDetailPage({
   const [savingEdit, setSavingEdit] = React.useState(false)
   const { notify } = useNotification()
   const [activeDialog, setActiveDialog] = React.useState<ActionDialog>(null)
-  const [createModal, setCreateModal] = React.useState<CreateModal>(null)
   const [quickTaskId, setQuickTaskId] = React.useState<string | null>(null)
 
   // ── Main asset query ──────────────────────────────────────────────────
@@ -249,23 +245,26 @@ export default function AssetDetailPage({
 
   const linkedEnabled = !!assetId
 
+  // Query keys aligned with ParentLinkedRecords (parentLinkedKey) so the Linked-
+  // records tab and this overview "recent linked" share ONE fetch + cache, and a
+  // create in that tab invalidates the base key → both refresh together.
   const { data: linkedTasks = [] } = useQuery({
-    queryKey: ["linked-tasks-asset", assetId],
+    queryKey: parentLinkedKey("Asset", assetId, "task"),
     queryFn: async () => (await api.get<LinkedTask[]>("/tasks", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
     enabled: linkedEnabled
   })
   const { data: linkedServiceRequests = [] } = useQuery({
-    queryKey: ["linked-service-requests-asset", assetId],
+    queryKey: parentLinkedKey("Asset", assetId, "sr"),
     queryFn: async () => (await api.get<LinkedServiceRequest[]>("/service-requests", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
     enabled: linkedEnabled
   })
   const { data: linkedRisks = [] } = useQuery({
-    queryKey: ["linked-risks-asset", assetId],
+    queryKey: parentLinkedKey("Asset", assetId, "risk"),
     queryFn: async () => (await api.get<LinkedRisk[]>("/risks", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
     enabled: linkedEnabled
   })
   const { data: linkedIssues = [] } = useQuery({
-    queryKey: ["linked-issues-asset", assetId],
+    queryKey: parentLinkedKey("Asset", assetId, "issue"),
     queryFn: async () => (await api.get<LinkedIssue[]>("/issues", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
     enabled: linkedEnabled
   })
@@ -397,12 +396,12 @@ export default function AssetDetailPage({
 
   async function patchLinkedTask(taskId: string, patch: Record<string, any>) {
     await api.put(`/tasks/${taskId}`, patch)
-    qc.invalidateQueries({ queryKey: ["linked-tasks-asset", assetId] })
+    qc.invalidateQueries({ queryKey: parentLinkedKey("Asset", assetId, "task") })
     qc.invalidateQueries({ queryKey: ["tasks"] })
   }
   async function updateLinkedTaskStatus(taskId: string, status: string) {
     await api.post(`/tasks/${taskId}/status`, { status })
-    qc.invalidateQueries({ queryKey: ["linked-tasks-asset", assetId] })
+    qc.invalidateQueries({ queryKey: parentLinkedKey("Asset", assetId, "task") })
     qc.invalidateQueries({ queryKey: ["tasks"] })
   }
 
@@ -567,15 +566,12 @@ export default function AssetDetailPage({
         {tab === "connections" ? <ConnectionsTab asset={asset} canManage={canManage} /> : null}
 
         {tab === "linked" ? (
-          <LinkedTab
-            tasks={linkedTasks}
-            serviceRequests={linkedServiceRequests}
-            risks={linkedRisks}
-            issues={linkedIssues}
-            onCreate={kind => setCreateModal(kind)}
-            onOpenTask={id => setQuickTaskId(id)}
-            navigate={navigate}
+          <ParentLinkedRecords
+            entityType="Asset"
+            entityId={asset.id}
+            entityLabel={asset.name}
             canManage={canManage}
+            onOpenTask={id => setQuickTaskId(id)}
           />
         ) : null}
 
@@ -638,30 +634,6 @@ export default function AssetDetailPage({
           onSave={handleRaiseMove}
         />
       )}
-
-      {/* Create-record modals */}
-      <CreateTaskModal
-        navigateAfterCreate={false}
-        open={createModal === "task"} onClose={() => setCreateModal(null)}
-        linkedEntityType="Asset" linkedEntityId={asset.id} linkedEntityLabel={asset.name}
-        onSuccess={async () => { qc.invalidateQueries({ queryKey: ["linked-tasks-asset", asset.id] }) }}
-      />
-      <CreateRiskModal
-        open={createModal === "risk"} onClose={() => setCreateModal(null)}
-        linkedEntityType="Asset" linkedEntityId={asset.id} linkedEntityLabel={asset.name}
-        onSuccess={async () => { qc.invalidateQueries({ queryKey: ["linked-risks-asset", asset.id] }) }}
-      />
-      <CreateIssueModal
-        open={createModal === "issue"} onClose={() => setCreateModal(null)}
-        linkedEntityType="Asset" linkedEntityId={asset.id} linkedEntityLabel={asset.name}
-        onSuccess={async () => { qc.invalidateQueries({ queryKey: ["linked-issues-asset", asset.id] }) }}
-      />
-      <CreateServiceRequestModal
-        open={createModal === "serviceRequest"} onClose={() => setCreateModal(null)}
-        linkedEntityType="Asset" linkedEntityId={asset.id} linkedEntityLabel={asset.name}
-        navigateAfterCreate={false}
-        onSuccess={async () => { qc.invalidateQueries({ queryKey: ["linked-service-requests-asset", asset.id] }) }}
-      />
 
       <TaskQuickDetailModal
         open={Boolean(quickTaskId)} taskId={quickTaskId} users={users} canManage={canManage}
@@ -859,9 +831,9 @@ const OverviewTab = React.memo(function OverviewTab({
               <Box key={`${item.kind}-${item.id}`}
                 onClick={() => {
                   if (item.kind === "task") return onOpenTask(item.id)
-                  if (item.kind === "sr") return navigate(`/service-desk/${item.id}`)
-                  if (item.kind === "risk") return navigate(`/risks-issues/risks/${item.id}`)
-                  if (item.kind === "issue") return navigate(`/risks-issues/issues/${item.id}`)
+                  if (item.kind === "sr") return navigate(`/service-desk/sr/${item.id}`)
+                  if (item.kind === "risk") return navigate(`/service-desk/risk/${item.id}`)
+                  if (item.kind === "issue") return navigate(`/service-desk/issue/${item.id}`)
                 }}
                 sx={{ border: "1px solid", borderColor: "divider", borderRadius: "8px", p: "10px 12px", cursor: "pointer", "&:hover": { bgcolor: "action.hover", borderColor: "text.tertiary" } }}>
                 <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: "4px" }}>
@@ -953,62 +925,6 @@ const ConnectionsTab = React.memo(function ConnectionsTab({ asset, canManage }: 
     </Stack>
   )
 })
-
-// ─── Linked tab ───────────────────────────────────────────────────────────
-
-function LinkedTab({
-  tasks, serviceRequests, risks, issues, onCreate, onOpenTask, navigate, canManage
-}: {
-  tasks: LinkedTask[]
-  serviceRequests: LinkedServiceRequest[]
-  risks: LinkedRisk[]
-  issues: LinkedIssue[]
-  onCreate: (kind: CreateModal) => void
-  onOpenTask: (id: string) => void
-  navigate: (path: string) => void
-  canManage: boolean
-}) {
-  const sections: {
-    title: string
-    kind: CreateModal
-    items: { id: string; reference: string; status: string; subtitle: string }[]
-    onRowClick: (id: string) => void
-  }[] = [
-    { title: "Tasks", kind: "task", items: tasks.map(t => ({ id: t.id, reference: t.reference, status: t.status, subtitle: t.title })), onRowClick: id => onOpenTask(id) },
-    { title: "Service requests", kind: "serviceRequest", items: serviceRequests.map(s => ({ id: s.id, reference: s.reference, status: s.status, subtitle: s.subject })), onRowClick: id => navigate(`/service-desk/${id}`) },
-    { title: "Risks", kind: "risk", items: risks.map(r => ({ id: r.id, reference: r.reference, status: r.status, subtitle: `${r.likelihood}/${r.impact} · ${r.title}` })), onRowClick: id => navigate(`/risks-issues/risks/${id}`) },
-    { title: "Issues", kind: "issue", items: issues.map(i => ({ id: i.id, reference: i.reference, status: i.status, subtitle: `${i.severity} · ${i.title}` })), onRowClick: id => navigate(`/risks-issues/issues/${id}`) },
-  ]
-
-  return (
-    <Box sx={{ display: "grid", gap: "12px", gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" } }}>
-      {sections.map(section => (
-        <Box key={section.title} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: "10px", overflow: "hidden" }}>
-          <Stack direction="row" alignItems="center" sx={{ bgcolor: "background.default", px: "16px", py: "10px", borderBottom: "1px solid", borderColor: "divider" }}>
-            <Typography sx={{ ...sectionLabelSx, flex: 1 }}>{section.title} ({section.items.length})</Typography>
-            {canManage ? (
-              <Button size="small" onClick={() => onCreate(section.kind)} sx={{ textTransform: "none", fontSize: 11.5, minWidth: 0, px: "8px", py: "2px" }}>+ Create</Button>
-            ) : null}
-          </Stack>
-          {section.items.length === 0 ? (
-            <Box sx={{ p: "14px 16px" }}>
-              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>No linked {section.title.toLowerCase()}</Typography>
-            </Box>
-          ) : section.items.map((item, idx) => (
-            <Stack key={item.id} direction="row" alignItems="center" onClick={() => section.onRowClick(item.id)}
-              sx={{ p: "10px 16px", cursor: "pointer", borderBottom: idx < section.items.length - 1 ? "1px solid" : "none", borderColor: "divider", "&:hover": { bgcolor: "action.hover" }, gap: "10px" }}>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.primary", fontFamily: "monospace" }}>{item.reference}</Typography>
-                <Typography sx={{ fontSize: 11, color: "text.secondary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle}</Typography>
-              </Box>
-              <StatusPill value={item.status} label={String(item.status).toLowerCase().replaceAll("_", " ")} size="sm" />
-            </Stack>
-          ))}
-        </Box>
-      ))}
-    </Box>
-  )
-}
 
 // ─── Maintenance tab ──────────────────────────────────────────────────────
 
