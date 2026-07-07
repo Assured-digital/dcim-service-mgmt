@@ -81,6 +81,18 @@ const CHANGE_TYPE_OPTIONS = [
   { value: "EMERGENCY", label: "Emergency" },
 ]
 
+const RAG_OPTIONS = [
+  { value: "LOW", label: "Low" },
+  { value: "MEDIUM", label: "Medium" },
+  { value: "HIGH", label: "High" },
+]
+
+const ISSUE_SEVERITY_OPTIONS = [
+  { value: "RED", label: "Red — High" },
+  { value: "AMBER", label: "Amber — Medium" },
+  { value: "GREEN", label: "Green — Low" },
+]
+
 function trimmedOrUndefined(v: string) {
   return v.trim() || undefined
 }
@@ -174,12 +186,86 @@ const change: RecordTypeConfig = {
   }),
 }
 
-// Registry. Add service_request/risk/issue/maintenance/check here as each type
-// migrates onto the shared surface (spec §2 / §4).
+// ── Service Request ──────────────────────────────────────────────────────────
+const service_request: RecordTypeConfig = {
+  label: "Service request",
+  titlePlaceholder: "What do you need?",
+  hasDescription: true,
+  requireDescription: true,
+  fields: [
+    { kind: "enum", key: "priority", label: "Priority", options: PRIORITY_OPTIONS },
+    { kind: "assignee", key: "assigneeId", label: "Assignee", span: "full" },
+  ],
+  defaults: { priority: "medium", assigneeId: "" },
+  endpoint: "/service-requests",
+  route: (id) => `/service-desk/sr/${id}`,
+  invalidateKeys: [["tickets"]],
+  successMessage: "Service request logged",
+  buildPayload: (v, ctx) => ({
+    subject: ctx.title.trim(),
+    description: ctx.description.trim(),
+    priority: v.priority,
+    assigneeId: v.assigneeId || undefined,
+  }),
+}
+
+// ── Risk ─────────────────────────────────────────────────────────────────────
+const risk: RecordTypeConfig = {
+  label: "Risk",
+  titlePlaceholder: "What's the risk?",
+  hasDescription: true,
+  requireDescription: true,
+  fields: [
+    { kind: "enum", key: "likelihood", label: "Likelihood", options: RAG_OPTIONS },
+    { kind: "enum", key: "impact", label: "Impact", options: RAG_OPTIONS },
+    { kind: "assignee", key: "assigneeId", label: "Owner", span: "full" },
+  ],
+  defaults: { likelihood: "MEDIUM", impact: "MEDIUM", assigneeId: "" },
+  endpoint: "/risks",
+  route: (id) => `/service-desk/risk/${id}`,
+  invalidateKeys: [["tickets"]],
+  successMessage: "Risk logged",
+  buildPayload: (v, ctx) => ({
+    title: ctx.title.trim(),
+    description: ctx.description.trim(),
+    likelihood: v.likelihood,
+    impact: v.impact,
+    assigneeId: v.assigneeId || undefined,
+  }),
+}
+
+// ── Issue ────────────────────────────────────────────────────────────────────
+const issue: RecordTypeConfig = {
+  label: "Issue",
+  titlePlaceholder: "What's the issue?",
+  hasDescription: true,
+  requireDescription: true,
+  fields: [
+    { kind: "enum", key: "severity", label: "Severity", options: ISSUE_SEVERITY_OPTIONS },
+    { kind: "assignee", key: "assigneeId", label: "Assignee", span: "full" },
+  ],
+  defaults: { severity: "AMBER", assigneeId: "" },
+  endpoint: "/issues",
+  route: (id) => `/service-desk/issue/${id}`,
+  invalidateKeys: [["tickets"]],
+  successMessage: "Issue logged",
+  buildPayload: (v, ctx) => ({
+    title: ctx.title.trim(),
+    description: ctx.description.trim(),
+    severity: v.severity,
+    assigneeId: v.assigneeId || undefined,
+  }),
+}
+
+// Registry. Maintenance + Check remain (special cases: required Asset FK / heavy
+// template step) — spec §2 / §4.
 export const RECORD_TYPE_CONFIG: Record<string, RecordTypeConfig> = {
   task,
   incident,
   change,
+  service_request,
+  risk,
+  issue,
 }
 
 export type CreatableRecordType = keyof typeof RECORD_TYPE_CONFIG

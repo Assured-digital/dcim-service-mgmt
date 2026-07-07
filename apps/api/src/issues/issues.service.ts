@@ -106,6 +106,7 @@ export class IssuesService {
     description: string
     severity?: string
     reviewDate?: string
+    assigneeId?: string
     linkedEntityType?: string
     linkedEntityId?: string
   }) {
@@ -122,6 +123,7 @@ export class IssuesService {
             description: dto.description,
             severity: dto.severity ?? "AMBER",
             reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : undefined,
+            assigneeId: dto.assigneeId || undefined,
             linkedEntityType: dto.linkedEntityType,
             linkedEntityId: dto.linkedEntityId,
             status: "OPEN",

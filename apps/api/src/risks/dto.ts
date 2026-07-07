@@ -28,6 +28,10 @@ export class CreateRiskDto {
 
   @IsOptional()
   @IsString()
+  assigneeId?: string
+
+  @IsOptional()
+  @IsString()
   linkedEntityType?: string
 
   @IsOptional()

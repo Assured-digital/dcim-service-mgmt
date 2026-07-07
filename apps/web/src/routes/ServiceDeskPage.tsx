@@ -55,7 +55,7 @@ const SLA_FILTER_LABELS: Record<SlaFilter, string> = {
 import { CreateIncidentModal } from "./modals/CreateIncidentModal"
 import { CreateChangeModal } from "./modals/CreateChangeModal"
 import { CreateTaskModal } from "./modals/CreateTaskModal"
-import { CreateRiskModal, CreateIssueModal } from "./RisksIssuesPage"
+import { CreateRecordModal } from "../components/create/CreateRecordModal"
 import { RAG_LABELS } from "../lib/risksIssuesQueue"
 import ServiceDeskBoard from "./ServiceDeskBoard"
 
@@ -678,12 +678,13 @@ function UnifiedServiceDeskView() {
           { kind: "ISS", title: "Issue",           subtitle: "An active problem requiring resolution" },
         ]}
       />
-      <CreateServiceRequestModal open={srOpen} onClose={() => setSrOpen(false)} />
+      {/* All six create flows go through the shared CreateRecordModal. */}
+      <CreateRecordModal recordType="service_request" open={srOpen} onClose={() => setSrOpen(false)} />
       <CreateIncidentModal open={incOpen} onClose={() => setIncOpen(false)} />
       <CreateChangeModal open={chgOpen} onClose={() => setChgOpen(false)} />
       <CreateTaskModal open={taskOpen} onClose={() => setTaskOpen(false)} />
-      <CreateRiskModal open={riskOpen} onClose={() => setRiskOpen(false)} />
-      <CreateIssueModal open={issueOpen} onClose={() => setIssueOpen(false)} />
+      <CreateRecordModal recordType="risk" open={riskOpen} onClose={() => setRiskOpen(false)} />
+      <CreateRecordModal recordType="issue" open={issueOpen} onClose={() => setIssueOpen(false)} />
     </Box>
   )
 }

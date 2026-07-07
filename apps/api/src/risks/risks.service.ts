@@ -112,6 +112,7 @@ export class RisksService {
     impact?: string
     mitigationPlan?: string
     source?: string
+    assigneeId?: string
     linkedEntityType?: string
     linkedEntityId?: string
   }) {
@@ -130,6 +131,7 @@ export class RisksService {
             impact: dto.impact ?? "MEDIUM",
             mitigationPlan: dto.mitigationPlan,
             source: dto.source ?? "MANUAL",
+            assigneeId: dto.assigneeId || undefined,
             linkedEntityType: dto.linkedEntityType,
             linkedEntityId: dto.linkedEntityId,
             status: "IDENTIFIED",

@@ -20,6 +20,10 @@ export class CreateIssueDto {
 
   @IsOptional()
   @IsString()
+  assigneeId?: string
+
+  @IsOptional()
+  @IsString()
   linkedEntityType?: string
 
   @IsOptional()

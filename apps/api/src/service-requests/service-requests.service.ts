@@ -122,6 +122,7 @@ export class ServiceRequestsService {
         subject: dto.subject,
         description: dto.description,
         priority,
+        assigneeId: dto.assigneeId || undefined,
         ...slaData,
         linkedEntityType: dto.linkedEntityType,
         linkedEntityId: dto.linkedEntityId,
