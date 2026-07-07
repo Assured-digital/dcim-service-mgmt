@@ -38,6 +38,10 @@ export interface CreateRecordModalProps {
   linkedEntityLabel?: string
   onSuccess?: () => Promise<void> | void
   navigateAfterCreate?: boolean
+  // Options for the config's asyncEnum fields, keyed by their `source` (e.g.
+  // { assets: [...] } for Maintenance, { templates, sites } for Check). The caller
+  // fetches these so the generic modal stays data-free.
+  asyncOptions?: Record<string, { value: string; label: string }[]>
 }
 
 export function CreateRecordModal({
@@ -49,6 +53,7 @@ export function CreateRecordModal({
   linkedEntityLabel,
   onSuccess,
   navigateAfterCreate = true,
+  asyncOptions,
 }: CreateRecordModalProps) {
   const cfg = RECORD_TYPE_CONFIG[recordType]
   const qc = useQueryClient()
@@ -63,6 +68,7 @@ export function CreateRecordModal({
   const [values, setValues] = React.useState<Record<string, string>>({})
   const [titleError, setTitleError] = React.useState<string | null>(null)
   const [descriptionError, setDescriptionError] = React.useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
   const [createAnother, setCreateAnother] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
@@ -74,17 +80,24 @@ export function CreateRecordModal({
     setValues({ ...cfg.defaults })
     setTitleError(null)
     setDescriptionError(null)
+    setFieldErrors({})
   }, [open, recordType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!cfg) return null
 
-  const setValue = (key: string, val: string) =>
+  const hasTitle = cfg.hasTitle !== false
+
+  const setValue = (key: string, val: string) => {
     setValues((v) => ({ ...v, [key]: val }))
+    setFieldErrors((e) => (e[key] ? { ...e, [key]: "" } : e))
+  }
 
   const typeLower = cfg.label.toLowerCase()
+  // Fields currently shown (a hidden showIf field is neither rendered nor required).
+  const visibleFields = cfg.fields.filter((f) => !f.showIf || f.showIf(values))
 
   async function handleCreate() {
-    if (!title.trim()) {
+    if (hasTitle && !title.trim()) {
       setTitleError(`Give the ${typeLower} a title before creating it`)
       titleRef.current?.focus()
       return
@@ -92,6 +105,17 @@ export function CreateRecordModal({
     if (cfg.requireDescription && !description.trim()) {
       setDescriptionError(`Give the ${typeLower} a description before creating it`)
       descriptionRef.current?.focus()
+      return
+    }
+    // Required Details fields (the primary gate for the no-title types).
+    const missing: Record<string, string> = {}
+    for (const f of visibleFields) {
+      if ("required" in f && f.required && !(values[f.key] ?? "").trim()) {
+        missing[f.key] = "Required"
+      }
+    }
+    if (Object.keys(missing).length > 0) {
+      setFieldErrors(missing)
       return
     }
     setSaving(true)
@@ -113,7 +137,8 @@ export function CreateRecordModal({
         setValues({ ...cfg.defaults })
         setTitleError(null)
         setDescriptionError(null)
-        requestAnimationFrame(() => titleRef.current?.focus())
+        setFieldErrors({})
+        if (hasTitle) requestAnimationFrame(() => titleRef.current?.focus())
       } else {
         onClose()
         if (navigateAfterCreate && cfg.route) navigate(cfg.route(res.data.id))
@@ -126,6 +151,7 @@ export function CreateRecordModal({
   }
 
   function renderField(f: FieldDescriptor) {
+    const err = fieldErrors[f.key] || undefined
     switch (f.kind) {
       case "enum":
         return (
@@ -135,7 +161,25 @@ export function CreateRecordModal({
             value={values[f.key] ?? ""}
             onChange={(val) => setValue(f.key, val)}
             options={f.options}
+            includeEmpty={f.includeEmpty}
             required={f.required}
+            error={!!err}
+            helperText={err}
+            span={f.span}
+          />
+        )
+      case "asyncEnum":
+        return (
+          <EnumSelect
+            key={f.key}
+            label={f.label}
+            value={values[f.key] ?? ""}
+            onChange={(val) => setValue(f.key, val)}
+            options={asyncOptions?.[f.source] ?? []}
+            includeEmpty={f.includeEmpty}
+            required={f.required}
+            error={!!err}
+            helperText={err}
             span={f.span}
           />
         )
@@ -147,6 +191,9 @@ export function CreateRecordModal({
             type={f.datetime ? "datetime-local" : "date"}
             value={values[f.key] ?? ""}
             onChange={(val) => setValue(f.key, val)}
+            required={f.required}
+            error={!!err}
+            helperText={err}
             span={f.span}
           />
         )
@@ -157,6 +204,9 @@ export function CreateRecordModal({
             label={f.label ?? "Assignee"}
             value={values[f.key] ?? ""}
             onChange={(val) => setValue(f.key, val)}
+            emptyLabel={f.emptyLabel}
+            error={!!err}
+            helperText={err}
             span={f.span}
           />
         )
@@ -170,6 +220,8 @@ export function CreateRecordModal({
             multiline={f.multiline}
             rows={f.rows}
             required={f.required}
+            error={!!err}
+            helperText={err}
             span={f.span}
           />
         )
@@ -203,20 +255,23 @@ export function CreateRecordModal({
 
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          {/* Title — the one always-present field; prominent, action-prompt placeholder. */}
-          <FormTextField
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value)
-              if (titleError) setTitleError(null)
-            }}
-            placeholder={cfg.titlePlaceholder}
-            inputRef={titleRef}
-            autoFocus
-            error={!!titleError}
-            helperText={titleError ?? undefined}
-            InputProps={{ sx: { fontSize: "1rem", fontWeight: 500 } }}
-          />
+          {/* Title — the prominent, action-prompt field. Omitted for the non-title
+              types (Maintenance/Check), where required Details fields drive validation. */}
+          {hasTitle ? (
+            <FormTextField
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                if (titleError) setTitleError(null)
+              }}
+              placeholder={cfg.titlePlaceholder}
+              inputRef={titleRef}
+              autoFocus
+              error={!!titleError}
+              helperText={titleError ?? undefined}
+              InputProps={{ sx: { fontSize: "1rem", fontWeight: 500 } }}
+            />
+          ) : null}
 
           {cfg.hasDescription ? (
             <FormTextField
@@ -243,7 +298,7 @@ export function CreateRecordModal({
             >
               Details
             </Typography>
-            <FormGrid>{cfg.fields.map(renderField)}</FormGrid>
+            <FormGrid>{visibleFields.map(renderField)}</FormGrid>
           </Box>
 
           {/* Linked record — echoes a parent context for now; interactive picker is track 2. */}

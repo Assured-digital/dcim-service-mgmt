@@ -12,6 +12,9 @@ import type { QueryKey } from "@tanstack/react-query"
 // JSX. `span: "full"` makes a field span both FormGrid columns.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line no-unused-vars
+type ShowIf = (values: Record<string, string>) => boolean
+
 export type FieldDescriptor =
   | {
       kind: "enum"
@@ -19,10 +22,24 @@ export type FieldDescriptor =
       label: string
       options: { value: string; label: string }[]
       required?: boolean
+      includeEmpty?: string
       span?: "full"
+      showIf?: ShowIf
     }
-  | { kind: "assignee"; key: string; label?: string; span?: "full" }
-  | { kind: "date"; key: string; label: string; datetime?: boolean; span?: "full" }
+  // Options fetched by the caller and passed to the modal via `asyncOptions[source]`
+  // (e.g. Maintenance's Asset list, a Check's Templates/Sites).
+  | {
+      kind: "asyncEnum"
+      key: string
+      label: string
+      source: string
+      required?: boolean
+      includeEmpty?: string
+      span?: "full"
+      showIf?: ShowIf
+    }
+  | { kind: "assignee"; key: string; label?: string; required?: boolean; emptyLabel?: string; span?: "full"; showIf?: ShowIf }
+  | { kind: "date"; key: string; label: string; datetime?: boolean; required?: boolean; span?: "full"; showIf?: ShowIf }
   | {
       kind: "text"
       key: string
@@ -31,6 +48,7 @@ export type FieldDescriptor =
       rows?: number
       required?: boolean
       span?: "full"
+      showIf?: ShowIf
     }
 
 // Context handed to buildPayload: the always-present title/description plus any
@@ -45,6 +63,11 @@ export interface CreatePayloadContext {
 export interface RecordTypeConfig {
   label: string // "Task" — used in header + submit button
   titlePlaceholder: string
+  // Whether this type has the always-present Title field. Default true; set false
+  // for the non-title-centric types (Maintenance is asset-centric; a Check's title
+  // comes from its template). When false the modal validates the required Details
+  // fields instead of the title.
+  hasTitle?: boolean
   hasDescription: boolean
   // When true the Description is required — an empty one surfaces an inline error
   // (same treatment as the title). Incident/Change/SR require a description.
@@ -206,6 +229,8 @@ const service_request: RecordTypeConfig = {
     description: ctx.description.trim(),
     priority: v.priority,
     assigneeId: v.assigneeId || undefined,
+    linkedEntityType: ctx.linkedEntityType || undefined,
+    linkedEntityId: ctx.linkedEntityId || undefined,
   }),
 }
 
@@ -231,6 +256,8 @@ const risk: RecordTypeConfig = {
     likelihood: v.likelihood,
     impact: v.impact,
     assigneeId: v.assigneeId || undefined,
+    linkedEntityType: ctx.linkedEntityType || undefined,
+    linkedEntityId: ctx.linkedEntityId || undefined,
   }),
 }
 
@@ -254,11 +281,79 @@ const issue: RecordTypeConfig = {
     description: ctx.description.trim(),
     severity: v.severity,
     assigneeId: v.assigneeId || undefined,
+    linkedEntityType: ctx.linkedEntityType || undefined,
+    linkedEntityId: ctx.linkedEntityId || undefined,
   }),
 }
 
-// Registry. Maintenance + Check remain (special cases: required Asset FK / heavy
-// template step) — spec §2 / §4.
+const MAINTENANCE_WORK_TYPE_OPTIONS = [
+  "INSPECTION", "PSU_REPLACEMENT", "FIRMWARE_UPGRADE", "PAT_INSPECTION",
+  "COOLING_CHECK", "CABLE_AUDIT", "REPAIR", "UPGRADE", "OTHER",
+].map((v) => ({ value: v, label: v.replaceAll("_", " ") }))
+
+// ── Maintenance ──────────────────────────────────────────────────────────────
+// No title (asset-centric). Asset options are fetched by the caller and passed in
+// via asyncOptions.assets. "Performed by" empty = the current user.
+const maintenance: RecordTypeConfig = {
+  label: "Maintenance",
+  titlePlaceholder: "",
+  hasTitle: false,
+  hasDescription: false,
+  fields: [
+    { kind: "asyncEnum", key: "assetId", label: "Asset", source: "assets", required: true, includeEmpty: "Select asset…", span: "full" },
+    { kind: "enum", key: "workType", label: "Work type", options: MAINTENANCE_WORK_TYPE_OPTIONS, required: true },
+    { kind: "text", key: "workTypeOther", label: "Custom work type", required: true, span: "full", showIf: (v) => v.workType === "OTHER" },
+    { kind: "date", key: "performedAt", label: "Performed at", required: true },
+    { kind: "date", key: "nextDueAt", label: "Next due" },
+    { kind: "assignee", key: "performedById", label: "Performed by", emptyLabel: "Use current user", span: "full" },
+    { kind: "text", key: "notes", label: "Notes", multiline: true, rows: 3, span: "full" },
+  ],
+  defaults: { assetId: "", workType: "INSPECTION", workTypeOther: "", performedAt: "", nextDueAt: "", performedById: "", notes: "" },
+  endpoint: "/maintenance",
+  route: (id) => `/maintenance/${id}`,
+  invalidateKeys: [["maintenance"]],
+  successMessage: "Maintenance logged",
+  buildPayload: (v) => ({
+    assetId: v.assetId,
+    workType: v.workType,
+    workTypeOther: v.workType === "OTHER" ? (v.workTypeOther.trim() || undefined) : undefined,
+    performedAt: v.performedAt ? new Date(v.performedAt).toISOString() : undefined,
+    nextDueAt: v.nextDueAt ? new Date(v.nextDueAt).toISOString() : undefined,
+    performedById: v.performedById || undefined,
+    notes: trimmedOrUndefined(v.notes),
+  }),
+}
+
+// ── Check ────────────────────────────────────────────────────────────────────
+// No title (comes from the template). Template + Site options fetched by the
+// caller and passed via asyncOptions.templates / asyncOptions.sites.
+const check: RecordTypeConfig = {
+  label: "Check",
+  titlePlaceholder: "",
+  hasTitle: false,
+  hasDescription: false,
+  fields: [
+    { kind: "asyncEnum", key: "templateId", label: "Template", source: "templates", required: true, includeEmpty: "Select a template…", span: "full" },
+    { kind: "asyncEnum", key: "siteId", label: "Site", source: "sites", required: true, includeEmpty: "Select a site…", span: "full" },
+    { kind: "assignee", key: "assigneeId", label: "Assign engineer (optional)", span: "full" },
+    { kind: "date", key: "scheduledAt", label: "Scheduled date (optional)", span: "full" },
+    { kind: "text", key: "scopeNotes", label: "Scope notes (optional)", multiline: true, rows: 2, span: "full" },
+  ],
+  defaults: { templateId: "", siteId: "", assigneeId: "", scheduledAt: "", scopeNotes: "" },
+  endpoint: "/checks",
+  route: (id) => `/checks/${id}`,
+  invalidateKeys: [["checks"]],
+  successMessage: "Check scheduled",
+  buildPayload: (v) => ({
+    templateId: v.templateId,
+    siteId: v.siteId,
+    assigneeId: v.assigneeId || undefined,
+    scheduledAt: v.scheduledAt || undefined,
+    scopeNotes: trimmedOrUndefined(v.scopeNotes),
+  }),
+}
+
+// Registry — all eight governed record types now create through CreateRecordModal.
 export const RECORD_TYPE_CONFIG: Record<string, RecordTypeConfig> = {
   task,
   incident,
@@ -266,6 +361,8 @@ export const RECORD_TYPE_CONFIG: Record<string, RecordTypeConfig> = {
   service_request,
   risk,
   issue,
+  maintenance,
+  check,
 }
 
 export type CreatableRecordType = keyof typeof RECORD_TYPE_CONFIG

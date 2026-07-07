@@ -1,6 +1,6 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Box,
@@ -17,8 +17,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
 import { ListToolbar, ToolbarButton } from "../components/shared/ListToolbar"
-import { FormDialog, EnumSelect, DateField, AssigneePicker, FormTextField } from "../components/fields"
-import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { CreateRecordModal } from "../components/create/CreateRecordModal"
 
 type MaintenanceRecord = {
   id: string
@@ -92,18 +91,9 @@ const maintenanceColumns: GridColDef<MaintenanceRecord>[] = [
 
 export default function MaintenancePage() {
   const navigate = useNavigate()
-  const qc = useQueryClient()
   const canManage = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER])
 
   const [open, setOpen] = React.useState(false)
-  const [assetId, setAssetId] = React.useState("")
-  const [workType, setWorkType] = React.useState("INSPECTION")
-  const [workTypeOther, setWorkTypeOther] = React.useState("")
-  const [performedAt, setPerformedAt] = React.useState("")
-  const [nextDueAt, setNextDueAt] = React.useState("")
-  const [performedById, setPerformedById] = React.useState("")
-  const [notes, setNotes] = React.useState("")
-  const [saving, setSaving] = React.useState(false)
   const [filterType, setFilterType] = React.useState("ALL")
 
   const records = useQuery({
@@ -121,37 +111,11 @@ export default function MaintenancePage() {
     queryFn: async () => (await api.get<AssetOption[]>("/assets")).data
   })
 
-  // Assignee picker source ("Performed by") — operational-callable &
-  // client-scoped, replacing admin-only GET /users. value = id, label = displayName.
-  const users = useAssignableUsers()
-
-  async function handleCreate() {
-    if (!assetId || !performedAt) return
-    setSaving(true)
-    try {
-      const res = await api.post<{ id: string }>("/maintenance", {
-        assetId,
-        workType,
-        workTypeOther: workType === "OTHER" ? workTypeOther || undefined : undefined,
-        performedAt,
-        nextDueAt: nextDueAt || undefined,
-        performedById: performedById || undefined,
-        notes: notes || undefined
-      })
-      setOpen(false)
-      setAssetId("")
-      setWorkType("INSPECTION")
-      setWorkTypeOther("")
-      setPerformedAt("")
-      setNextDueAt("")
-      setPerformedById("")
-      setNotes("")
-      await qc.invalidateQueries({ queryKey: ["maintenance"] })
-      navigate(`/maintenance/${res.data.id}`)
-    } finally {
-      setSaving(false)
-    }
-  }
+  // Asset options for the shared create surface's asyncEnum field.
+  const assetOptions = React.useMemo(
+    () => (assets.data ?? []).map((a) => ({ value: a.id, label: `${a.assetTag} - ${a.name}` })),
+    [assets.data]
+  )
 
   return (
     <Box>
@@ -205,30 +169,12 @@ export default function MaintenancePage() {
         ) : null}
       </Card>
 
-      <FormDialog
+      <CreateRecordModal
+        recordType="maintenance"
         open={open}
         onClose={() => setOpen(false)}
-        maxWidth="sm"
-        title="Log maintenance"
-        submitLabel="Create record"
-        submittingLabel="Saving…"
-        submitting={saving}
-        canSubmit={!!assetId && !!performedAt && !(workType === "OTHER" && !workTypeOther.trim())}
-        onSubmit={handleCreate}
-      >
-        <EnumSelect span="full" label="Asset" required value={assetId} onChange={setAssetId} includeEmpty="Select asset..."
-          options={(assets.data ?? []).map((asset) => ({ value: asset.id, label: `${asset.assetTag} - ${asset.name}` }))} />
-        <EnumSelect span="full" label="Work type" required value={workType} onChange={setWorkType}
-          options={WORK_TYPES.map((type) => ({ value: type, label: type.replaceAll("_", " ") }))} />
-        {workType === "OTHER" ? (
-          <FormTextField span="full" label="Custom work type" required value={workTypeOther} onChange={(e) => setWorkTypeOther(e.target.value)} />
-        ) : null}
-        <DateField span="full" label="Performed at" required value={performedAt} onChange={setPerformedAt} />
-        <DateField span="full" label="Next due (optional)" value={nextDueAt} onChange={setNextDueAt} />
-        <AssigneePicker span="full" label="Performed by (optional)" value={performedById} onChange={setPerformedById}
-          users={users.data} emptyLabel="Use current user" />
-        <FormTextField span="full" label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} multiline rows={3} />
-      </FormDialog>
+        asyncOptions={{ assets: assetOptions }}
+      />
     </Box>
   )
 }

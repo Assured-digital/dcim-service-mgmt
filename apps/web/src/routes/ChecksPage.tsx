@@ -1,22 +1,20 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
   Box, Button, Stack, Tooltip, Typography
 } from "@mui/material"
-import { FormDialog, EnumSelect, DateField, AssigneePicker, FormTextField } from "../components/fields"
+import { CreateRecordModal } from "../components/create/CreateRecordModal"
 import FactCheckIcon from "@mui/icons-material/FactCheck"
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline"
 import EventIcon from "@mui/icons-material/Event"
 import EditNoteIcon from "@mui/icons-material/EditNote"
 import HistoryIcon from "@mui/icons-material/History"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
-import { useNotification } from "../components/NotificationProvider"
 import { semanticToken } from "../components/shared"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getCurrentUser } from "../lib/auth"
-import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { PAGE_GUTTER } from "../lib/layout"
 import { useThemeMode } from "../lib/theme"
 import { useBreadcrumb } from "./Shell"
@@ -33,8 +31,6 @@ type Site = { id: string; name: string }
 
 export default function ChecksPage() {
   const navigate = useNavigate()
-  const qc = useQueryClient()
-  const { notify } = useNotification()
   const { setPageFullBleed } = useBreadcrumb()
   const { mode } = useThemeMode()
 
@@ -48,12 +44,6 @@ export default function ChecksPage() {
   const meId = getCurrentUser()?.userId ?? ""
 
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [templateId, setTemplateId] = React.useState("")
-  const [siteId, setSiteId] = React.useState("")
-  const [assigneeId, setAssigneeId] = React.useState("")
-  const [scheduledAt, setScheduledAt] = React.useState("")
-  const [scopeNotes, setScopeNotes] = React.useState("")
-  const [saving, setSaving] = React.useState(false)
 
   // Active workday landing — a list page, so claim full-bleed (Shell drops its padding).
   React.useEffect(() => {
@@ -76,41 +66,21 @@ export default function ChecksPage() {
     queryFn: async () => (await api.get<Site[]>("/sites")).data
   })
 
-  // Assignee picker source ("Assign engineer") — operational-callable &
-  // client-scoped, replacing admin-only GET /users. value = id, label = displayName.
-  const { data: users } = useAssignableUsers()
+  // Template + Site options for the shared create surface's asyncEnum fields.
+  const templateOptions = React.useMemo(
+    () => (templates ?? []).map((t) => ({ value: t.id, label: `${t.name} — ${t.checkType}` })),
+    [templates]
+  )
+  const siteOptions = React.useMemo(
+    () => (sites ?? []).map((s) => ({ value: s.id, label: s.name })),
+    [sites]
+  )
 
   const all = data ?? []
   const queues = React.useMemo(() => partitionChecks(all, view, meId), [all, view, meId])
   const totalActive = queues.review.length + queues.progress.length + queues.upcoming.length + queues.drafts.length
 
   const openCheck = (id: string) => navigate(`/checks/${id}`)
-
-  async function handleCreate() {
-    if (!templateId || !siteId) return
-    setSaving(true)
-    try {
-      const res = await api.post("/checks", {
-        templateId,
-        siteId,
-        assigneeId: assigneeId || undefined,
-        scheduledAt: scheduledAt || undefined,
-        scopeNotes: scopeNotes || undefined
-      })
-      setCreateOpen(false)
-      setTemplateId(""); setSiteId(""); setAssigneeId("")
-      setScheduledAt(""); setScopeNotes("")
-      qc.invalidateQueries({ queryKey: ["checks"] })
-      // Navigates to the new check, so the toast (app-level) is the lasting confirmation.
-      notify.success("Check scheduled")
-      navigate(`/checks/${res.data.id}`)
-    } catch {
-      // Was fully silent on failure (dialog just stayed open) — surface it.
-      notify.error("Couldn't schedule the check — please try again")
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <Box>
@@ -205,28 +175,12 @@ export default function ChecksPage() {
         ) : null}
       </Box>
 
-      <FormDialog
+      <CreateRecordModal
+        recordType="check"
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        maxWidth="sm"
-        title="Schedule engineering check"
-        submitLabel="Schedule check"
-        submittingLabel="Creating…"
-        submitting={saving}
-        canSubmit={!!templateId && !!siteId}
-        onSubmit={handleCreate}
-      >
-        <EnumSelect span="full" label="Template" required value={templateId}
-          onChange={setTemplateId} includeEmpty="Select a template..."
-          options={(templates ?? []).map(t => ({ value: t.id, label: `${t.name} — ${t.checkType}` }))} />
-        <EnumSelect span="full" label="Site" required value={siteId}
-          onChange={setSiteId} includeEmpty="Select a site..."
-          options={(sites ?? []).map(s => ({ value: s.id, label: s.name }))} />
-        <AssigneePicker span="full" label="Assign engineer (optional)" value={assigneeId} onChange={setAssigneeId} />
-        <DateField span="full" label="Scheduled date (optional)" value={scheduledAt} onChange={setScheduledAt} />
-        <FormTextField span="full" label="Scope notes (optional)" multiline rows={2}
-          value={scopeNotes} onChange={(e) => setScopeNotes(e.target.value)} />
-      </FormDialog>
+        asyncOptions={{ templates: templateOptions, sites: siteOptions }}
+      />
     </Box>
   )
 }
