@@ -8,6 +8,7 @@ import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
 import { emitNotification } from "../notifications/emit-notification"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
+import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope"
 import { NotificationType, Role } from "@prisma/client"
 
 function makeRef() {
@@ -73,20 +74,22 @@ export class RisksService {
     dateTo?: string
     linkedEntityType?: string
     linkedEntityId?: string
-  } = {}) {
+  } & ListScope = {}) {
     this.assertClientScope(clientId)
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
+    const scope = buildListScope(TERMINAL_STATUSES.risk, filters)
     const rows = await this.prisma.risk.findMany({
       where: applyAssignedScope(
         {
           clientId,
           linkedEntityType: filters.linkedEntityType || undefined,
           linkedEntityId: filters.linkedEntityId || undefined,
-          createdAt
+          createdAt,
+          ...scope.where
         },
         viewer
       ),
-      orderBy: { createdAt: "desc" },
+      orderBy: scope.orderBy ?? { createdAt: "desc" },
       include: { assignee: { select: userDisplaySelect } }
     })
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
@@ -112,6 +115,7 @@ export class RisksService {
     impact?: string
     mitigationPlan?: string
     source?: string
+    assigneeId?: string
     linkedEntityType?: string
     linkedEntityId?: string
   }) {
@@ -130,6 +134,7 @@ export class RisksService {
             impact: dto.impact ?? "MEDIUM",
             mitigationPlan: dto.mitigationPlan,
             source: dto.source ?? "MANUAL",
+            assigneeId: dto.assigneeId || undefined,
             linkedEntityType: dto.linkedEntityType,
             linkedEntityId: dto.linkedEntityId,
             status: "IDENTIFIED",
@@ -156,12 +161,17 @@ export class RisksService {
     acceptanceNote?: string
   }, viewer: ScopeViewer) {
     const risk = await this.getForClient(clientId, id, viewer)
+    // Resolved-date (Live/History split): both ACCEPTED and CLOSED are terminal for a
+    // Risk. Stamp on entering terminal, clear on reopen, preserve if already terminal.
+    const RISK_TERMINAL = ["ACCEPTED", "CLOSED"]
+    const nowTerminal = RISK_TERMINAL.includes(dto.status)
+    const wasTerminal = RISK_TERMINAL.includes(risk.status)
     const updated = await this.prisma.risk.update({
       where: { id: risk.id },
       data: {
         status: dto.status,
         acceptanceNote: dto.acceptanceNote,
-        closedAt: dto.status === "CLOSED" ? new Date() : undefined
+        closedAt: nowTerminal ? (wasTerminal ? undefined : new Date()) : null
       }
     })
     await emitAudit(this.prisma, {

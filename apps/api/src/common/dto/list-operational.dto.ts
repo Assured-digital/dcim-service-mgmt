@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString } from "class-validator"
+import { IsDateString, IsIn, IsOptional, IsString } from "class-validator"
 
 export class ListOperationalQueryDto {
   @IsOptional()
@@ -20,4 +20,14 @@ export class ListOperationalQueryDto {
   @IsOptional()
   @IsString()
   linkedEntityId?: string
+
+  // Live/History split (Service Desk). "live" → non-terminal rows only.
+  @IsOptional()
+  @IsIn(["live"])
+  scope?: string
+
+  // History window — ISO date; returns terminal rows closed on/after it, newest first.
+  @IsOptional()
+  @IsDateString()
+  closedSince?: string
 }

@@ -15,6 +15,7 @@ import { useNotification } from "../components/NotificationProvider"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { FormDialog, FormTextField, EnumSelect, DateField, AssigneePicker } from "../components/fields"
 import { formatMoney } from "../lib/crm"
 import {
   WP_STATUS_LABELS, WP_STATUSES, WP_TYPE_LABELS, createWorkPackageTask, daysUntilRenewal,
@@ -268,27 +269,22 @@ function AddTaskDialog({ workPackageId, open, onClose, onCreated }: { workPackag
   })
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>Add project task</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <TextField label="Title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} fullWidth InputLabelProps={{ shrink: true }} />
-          <TextField select label="Priority" value={form.priority ?? "medium"} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} fullWidth InputLabelProps={{ shrink: true }}>
-            {["low", "medium", "high", "critical"].map(p => <MenuItem key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</MenuItem>)}
-          </TextField>
-          <TextField label="Due" type="date" value={form.dueAt ? form.dueAt.slice(0, 10) : ""} onChange={e => setForm(f => ({ ...f, dueAt: e.target.value || undefined }))} fullWidth InputLabelProps={{ shrink: true }} />
-          <TextField select label="Assignee" value={form.assigneeId ?? ""} onChange={e => setForm(f => ({ ...f, assigneeId: e.target.value || undefined }))} fullWidth InputLabelProps={{ shrink: true }}>
-            <MenuItem value="">— Unassigned —</MenuItem>
-            {(assignable ?? []).map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-          </TextField>
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={form.title.trim().length < 3 || mutation.isPending} onClick={() => mutation.mutate()}>
-          {mutation.isPending ? "Adding…" : "Add task"}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xs"
+      title="Add project task"
+      submitLabel="Add task"
+      submittingLabel="Adding…"
+      submitting={mutation.isPending}
+      canSubmit={form.title.trim().length >= 3}
+      onSubmit={() => mutation.mutate()}
+    >
+      <FormTextField span="full" label="Title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+      <EnumSelect span="full" label="Priority" value={form.priority ?? "medium"} onChange={val => setForm(f => ({ ...f, priority: val }))}
+        options={["low", "medium", "high", "critical"].map(p => ({ value: p, label: p[0].toUpperCase() + p.slice(1) }))} />
+      <DateField span="full" label="Due" value={form.dueAt ? form.dueAt.slice(0, 10) : ""} onChange={val => setForm(f => ({ ...f, dueAt: val || undefined }))} />
+      <AssigneePicker span="full" label="Assignee" value={form.assigneeId ?? ""} onChange={val => setForm(f => ({ ...f, assigneeId: val || undefined }))} users={assignable} />
+    </FormDialog>
   )
 }

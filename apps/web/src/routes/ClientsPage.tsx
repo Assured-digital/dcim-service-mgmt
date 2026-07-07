@@ -8,6 +8,8 @@ import { StatusPill, entityStatusIntent } from "../components/shared"
 import { listClients, type ClientView } from "../lib/clients"
 import { EmptyState, ErrorState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { LiveHistoryTabs, type LiveHistoryView } from "../components/LiveHistoryTabs"
+import { partitionByHistory } from "../lib/recordStatus"
 import { useThemeMode } from "../lib/theme"
 import ClientFormDrawer, { type ClientFormMode } from "../components/ClientFormDrawer"
 
@@ -31,7 +33,16 @@ export default function ClientsPage() {
   // Aliased — `mode` above is the form's create/edit mode, distinct from the theme mode.
   const { mode: themeMode } = useThemeMode()
 
+  const [view, setView] = React.useState<LiveHistoryView>("live")
+
   const clients = useQuery({ queryKey: ["clients-admin"], queryFn: listClients })
+
+  // Historical = INACTIVE status OR FORMER lifecycle stage; classify on both fields.
+  const { live, historical } = React.useMemo(
+    () => partitionByHistory(clients.data ?? [], (c) => `${c.status ?? ""} ${(c as any).lifecycleStage ?? ""}`),
+    [clients.data]
+  )
+  const shown = view === "live" ? live : historical
 
   function openCreate() {
     setSelected(null)
@@ -143,9 +154,11 @@ export default function ClientsPage() {
           </Box>
         ) : null}
 
+        <LiveHistoryTabs view={view} onChange={setView} liveCount={live.length} historyCount={historical.length} />
+
         <Box sx={{ height: 620 }}>
           <DataGrid
-            rows={clients.data ?? []}
+            rows={shown}
             columns={columns}
             loading={clients.isLoading}
             density="compact"

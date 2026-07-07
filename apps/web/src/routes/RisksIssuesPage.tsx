@@ -8,12 +8,11 @@ import {
 } from "@mui/material"
 import {
   DataGrid, GridColDef, GridRenderCellParams,
-  GridFooterContainer, GridPagination, GridPreferencePanelsValue,
+  GridFooterContainer, GridPagination,
   GridToolbarExport, useGridApiRef,
 } from "@mui/x-data-grid"
 import AddIcon from "@mui/icons-material/Add"
 import SearchIcon from "@mui/icons-material/Search"
-import ViewColumnIcon from "@mui/icons-material/ViewColumn"
 import InboxIcon from "@mui/icons-material/Inbox"
 import PersonIcon from "@mui/icons-material/Person"
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh"
@@ -49,7 +48,7 @@ function ragChipSx(rag: string, mode: ThemeMode) {
 // ─── Shared sub-components ──────────────────────────────────────────────────
 
 // Grid footer — Export on the left, pagination on the right (mirrors the
-// Service Desk queue footer). Columns lives in the top bar via apiRef.
+// Service Desk queue footer). Column visibility / filter / sort via header menus.
 function RIFooter() {
   const fileName = `risks-issues-${new Date().toISOString().split("T")[0]}`
   return (
@@ -251,18 +250,6 @@ function RisksIssuesQueueView() {
             }}
           />
           <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: "auto" }}>
-            <Button
-              size="small"
-              startIcon={<ViewColumnIcon sx={{ fontSize: 16 }} />}
-              onClick={() => apiRef.current?.showPreferences(GridPreferencePanelsValue.columns)}
-              sx={{
-                fontSize: 12, fontWeight: 500, textTransform: "none",
-                color: "primary.main", px: 0.75, py: 0.25, minWidth: 0,
-                "& .MuiButton-startIcon": { mr: 0.5 },
-              }}
-            >
-              Columns
-            </Button>
             {canManage ? (
               <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 13 }} />} onClick={() => setPickerOpen(true)} sx={{ fontSize: 12 }}>
                 New record

@@ -63,16 +63,10 @@ export default function AssetRegisterPage() {
   const [manageFields, setManageFields] = React.useState(false)
   const { data: customFields = [] } = useQuery({ queryKey: ["asset-custom-fields"], queryFn: listCustomFields })
 
-  // Bulk selection (ids ticked across the filtered set).
+  // Bulk selection (ids ticked across the filtered set). The DataGrid owns the
+  // checkbox interactions and hands back the full selection model.
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
-  const toggleRow = React.useCallback((id: string) => setSelectedIds(prev => {
-    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
-  }), [])
-  const toggleAll = React.useCallback((ids: string[], checked: boolean) => setSelectedIds(prev => {
-    const next = new Set(prev)
-    if (checked) ids.forEach(i => next.add(i)); else ids.forEach(i => next.delete(i))
-    return next
-  }), [])
+  const setSelection = React.useCallback((ids: string[]) => setSelectedIds(new Set(ids)), [])
   const clearSelection = React.useCallback(() => setSelectedIds(new Set()), [])
 
   const filteredRows = React.useMemo(() => {
@@ -230,7 +224,7 @@ export default function AssetRegisterPage() {
           {/* ── Table ───────────────────────────────────────────────────── */}
           <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", bgcolor: "background.paper" }}>
             <AssetRegister filteredRows={filteredRows} onAssetClick={handleAssetClick}
-              selectedIds={selectedIds} onToggleRow={toggleRow} onToggleAll={toggleAll} />
+              selectedIds={selectedIds} onSelectionChange={setSelection} />
           </Box>
         </>
       )}

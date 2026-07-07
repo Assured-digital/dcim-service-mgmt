@@ -1,11 +1,12 @@
 import React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Alert, Box, Button, Card, Chip, Drawer, FormControlLabel, InputAdornment, MenuItem, Stack, Switch, TextField, Typography
+  Alert, Box, Button, Chip, Drawer, FormControlLabel, InputAdornment, Stack, Switch, TextField, Typography
 } from "@mui/material"
 import PersonAddAlt1Icon from "@mui/icons-material/PersonAddAlt1"
 import SearchIcon from "@mui/icons-material/Search"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
+import { FormTextField, EnumSelect } from "../components/fields"
 import ContactListRow from "../components/ContactListRow"
 import { type ApiError, api } from "../lib/api"
 import {
@@ -81,40 +82,35 @@ function ContactFormDrawer({ state, onClose }: { state: DrawerState; onClose: ()
 
         <Stack spacing={2} sx={{ flex: 1, overflowY: "auto", pr: 0.5 }}>
           <Stack direction="row" spacing={1.2}>
-            <TextField label="First name" value={form.firstName} onChange={e => set({ firstName: e.target.value })}
-              required fullWidth InputLabelProps={{ shrink: true }} />
-            <TextField label="Last name" value={form.lastName} onChange={e => set({ lastName: e.target.value })}
-              required fullWidth InputLabelProps={{ shrink: true }} />
+            <Box sx={{ flex: 1 }}>
+              <FormTextField label="First name" value={form.firstName} onChange={e => set({ firstName: e.target.value })} required />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <FormTextField label="Last name" value={form.lastName} onChange={e => set({ lastName: e.target.value })} required />
+            </Box>
           </Stack>
 
-          <TextField label="Job title" value={form.jobTitle ?? ""} onChange={e => set({ jobTitle: e.target.value || undefined })}
-            fullWidth InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Job title" value={form.jobTitle ?? ""} onChange={e => set({ jobTitle: e.target.value || undefined })} />
 
-          <TextField select label="Category" value={form.category ?? "GENERAL"} onChange={e => set({ category: e.target.value })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            {CONTACT_CATEGORIES.map(cat => (
-              <MenuItem key={cat} value={cat}>{CONTACT_CATEGORY_LABELS[cat]}</MenuItem>
-            ))}
-          </TextField>
+          <EnumSelect label="Category" value={form.category ?? "GENERAL"} onChange={val => set({ category: val })}
+            options={CONTACT_CATEGORIES.map(cat => ({ value: cat, label: CONTACT_CATEGORY_LABELS[cat] }))} />
 
-          <TextField label="Email" type="email" value={form.email ?? ""} onChange={e => set({ email: e.target.value || undefined })}
-            fullWidth InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Email" type="email" value={form.email ?? ""} onChange={e => set({ email: e.target.value || undefined })} />
 
           <Stack direction="row" spacing={1.2}>
-            <TextField label="Phone" value={form.phone ?? ""} onChange={e => set({ phone: e.target.value || undefined })}
-              fullWidth InputLabelProps={{ shrink: true }} />
-            <TextField label="Mobile" value={form.mobile ?? ""} onChange={e => set({ mobile: e.target.value || undefined })}
-              fullWidth InputLabelProps={{ shrink: true }} />
+            <Box sx={{ flex: 1 }}>
+              <FormTextField label="Phone" value={form.phone ?? ""} onChange={e => set({ phone: e.target.value || undefined })} />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <FormTextField label="Mobile" value={form.mobile ?? ""} onChange={e => set({ mobile: e.target.value || undefined })} />
+            </Box>
           </Stack>
 
-          <TextField select label="Based at site" value={form.siteId ?? ""} onChange={e => set({ siteId: e.target.value || undefined })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            <MenuItem value="">— None —</MenuItem>
-            {(sites.data ?? []).map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
-          </TextField>
+          <EnumSelect label="Based at site" value={form.siteId ?? ""} onChange={val => set({ siteId: val || undefined })} includeEmpty="— None —"
+            options={(sites.data ?? []).map(s => ({ value: s.id, label: s.name }))} />
 
-          <TextField label="Notes" value={form.notes ?? ""} onChange={e => set({ notes: e.target.value || undefined })}
-            fullWidth multiline minRows={2} InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Notes" value={form.notes ?? ""} onChange={e => set({ notes: e.target.value || undefined })}
+            multiline minRows={2} />
 
           <FormControlLabel
             control={<Switch checked={form.isPrimary ?? false} onChange={e => set({ isPrimary: e.target.checked })} />}
@@ -122,11 +118,8 @@ function ContactFormDrawer({ state, onClose }: { state: DrawerState; onClose: ()
           />
 
           {isEdit ? (
-            <TextField select label="Status" value={form.status ?? "ACTIVE"} onChange={e => set({ status: e.target.value })}
-              fullWidth InputLabelProps={{ shrink: true }}>
-              <MenuItem value="ACTIVE">ACTIVE</MenuItem>
-              <MenuItem value="INACTIVE">INACTIVE</MenuItem>
-            </TextField>
+            <EnumSelect label="Status" value={form.status ?? "ACTIVE"} onChange={val => set({ status: val })}
+              options={[{ value: "ACTIVE", label: "ACTIVE" }, { value: "INACTIVE", label: "INACTIVE" }]} />
           ) : null}
 
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}

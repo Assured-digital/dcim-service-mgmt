@@ -81,9 +81,9 @@ export function routeForLink(link: { type: string; id: string }): string {
     case "task":
       return `/service-desk/task/${link.id}`
     case "risk":
-      return `/risks-issues/risks/${link.id}`
+      return `/service-desk/risk/${link.id}`
     case "issue":
-      return `/risks-issues/issues/${link.id}`
+      return `/service-desk/issue/${link.id}`
     default:
       return "#"
   }
@@ -103,9 +103,9 @@ export function routeForSegment(seg: string, id: string): string {
     case "task":
       return `/service-desk/task/${id}`
     case "risk":
-      return `/risks-issues/risks/${id}`
+      return `/service-desk/risk/${id}`
     case "issue":
-      return `/risks-issues/issues/${id}`
+      return `/service-desk/issue/${id}`
     default:
       return "#"
   }
@@ -156,4 +156,20 @@ export async function createRecordLink(dto: {
 
 export async function deleteRecordLink(linkId: string): Promise<void> {
   await api.delete(`/record-links/${linkId}`)
+}
+
+// ── Parent-context links (DCIM estate: Asset / Cabinet / Site) ────────────────
+// Point an existing work item at ONE parent via its linkedEntity* scalar, or clear
+// it. Server validates both endpoints in the current client scope.
+export async function setParentLink(dto: {
+  childType: LinkRecordType
+  childId: string
+  parentType: "Asset" | "Cabinet" | "Site"
+  parentId: string
+}): Promise<void> {
+  await api.post("/record-links/parent", dto)
+}
+
+export async function clearParentLink(childType: LinkRecordType, childId: string): Promise<void> {
+  await api.delete(`/record-links/parent/${childType}/${childId}`)
 }

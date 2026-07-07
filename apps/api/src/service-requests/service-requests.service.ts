@@ -10,6 +10,7 @@ import { emitAudit } from "../audit-events/emit-audit";
 import { emitNotification } from "../notifications/emit-notification";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
+import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
 import { resolvedAtUpdate, SR_RESOLVED_STATUSES } from "../metrics/resolved-status";
 
 type ListFilters = {
@@ -18,7 +19,7 @@ type ListFilters = {
   assigneeId?: string;
   linkedEntityType?: string;
   linkedEntityId?: string;
-};
+} & ListScope;
 
 function makeRef() {
   const d = new Date();
@@ -65,6 +66,7 @@ export class ServiceRequestsService {
   async listForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
+    const scope = buildListScope(TERMINAL_STATUSES.serviceRequest, filters);
     const rows = await this.prisma.serviceRequest.findMany({
       where: applyAssignedScope(
         {
@@ -72,11 +74,12 @@ export class ServiceRequestsService {
           assigneeId: filters.assigneeId || undefined,
           linkedEntityType: filters.linkedEntityType || undefined,
           linkedEntityId: filters.linkedEntityId || undefined,
-          createdAt
+          createdAt,
+          ...scope.where
         },
         viewer
       ),
-      orderBy: { updatedAt: "desc" },
+      orderBy: scope.orderBy ?? { updatedAt: "desc" },
       include: {
         assignee: {
           select: userDisplaySelect
@@ -123,6 +126,7 @@ export class ServiceRequestsService {
         subject: dto.subject,
         description: dto.description,
         priority,
+        assigneeId: dto.assigneeId || undefined,
         ...slaData,
         linkedEntityType: dto.linkedEntityType,
         linkedEntityId: dto.linkedEntityId,
@@ -182,11 +186,23 @@ async updateStatusForClient(
 
   const sr = await this.getForClient(clientId, id, viewer);
 
+  // Resolved-date bookkeeping (Live/History split): stamp closedAt when entering a
+  // terminal state, clear it on reopen, preserve it if already terminal (undefined =
+  // Prisma no-op).
+  const SR_TERMINAL: ServiceRequestStatus[] = [
+    ServiceRequestStatus.COMPLETED, ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED
+  ];
+  const nowTerminal = SR_TERMINAL.includes(dto.status as ServiceRequestStatus);
+  const wasTerminal = SR_TERMINAL.includes(sr.status as ServiceRequestStatus);
+  const closedAt = nowTerminal ? (wasTerminal ? undefined : new Date()) : null;
+
   const updated = await this.prisma.serviceRequest.update({
     where: { id: sr.id },
     data: {
       status: dto.status as ServiceRequestStatus,
       closureSummary: dto.closureSummary,
+      // closedAt → Live/History split (includes CANCELLED); resolvedAt → MTTR (excludes it).
+      closedAt,
       ...resolvedAtUpdate(sr.status, dto.status, SR_RESOLVED_STATUSES)
     }
   });
@@ -317,6 +333,7 @@ async updateForClient(
       data: {
         status: ServiceRequestStatus.CLOSED,
         closureSummary,
+        closedAt: new Date(),
         ...resolvedAtUpdate(sr.status, ServiceRequestStatus.CLOSED, SR_RESOLVED_STATUSES)
       }
     });

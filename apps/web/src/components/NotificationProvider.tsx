@@ -134,6 +134,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                     boxShadow: "0 8px 24px rgba(15, 23, 42, 0.18)",
                     fontSize: 13,
                     alignItems: "center",
+                    // Filled toasts read white on their colour fill (the success/green
+                    // variant otherwise renders dark text in dark mode).
+                    color: "#fff",
+                    "& .MuiAlert-icon": { color: "#fff" },
                   }}
                   action={
                     <IconButton

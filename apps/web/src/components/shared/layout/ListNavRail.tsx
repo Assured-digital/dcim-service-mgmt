@@ -79,7 +79,9 @@ function RailRow({ item, isActive, onPick, pal }: { item: RailItem; isActive: bo
 export function ListNavRail({
   title, sections, children, mode = "light",
 }: {
-  title: string
+  // Optional — the top-bar breadcrumb already identifies the surface, so most
+  // rails omit it (passing a title renders a header row for the rare case one helps).
+  title?: string
   sections: RailSection[]
   children?: React.ReactNode
   mode?: ThemeMode
@@ -92,15 +94,17 @@ export function ListNavRail({
       p: 1, display: "flex", flexDirection: "column", gap: 0.25,
       overflowY: "auto",
     }}>
-      <Box sx={{
-        px: 1.25, pt: 0.5, pb: 1.25,
-        borderBottom: "1px solid", borderColor: pal.headerBorder,
-        mb: 0.5,
-      }}>
-        <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 16, fontWeight: 700, color: pal.title }}>
-          {title}
-        </Typography>
-      </Box>
+      {title ? (
+        <Box sx={{
+          px: 1.25, pt: 0.5, pb: 1.25,
+          borderBottom: "1px solid", borderColor: pal.headerBorder,
+          mb: 0.5,
+        }}>
+          <Typography sx={{ fontFamily: "Space Grotesk, Manrope", fontSize: 16, fontWeight: 700, color: pal.title }}>
+            {title}
+          </Typography>
+        </Box>
+      ) : null}
       {sections.map(section => (
         <React.Fragment key={section.label}>
           <Typography sx={{ ...sectionLabelBaseSx, color: pal.sectionLabel }}>{section.label}</Typography>

@@ -12,7 +12,9 @@ import AutorenewIcon from "@mui/icons-material/Autorenew"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { EmptyState, ErrorState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { LiveHistoryTabs, type LiveHistoryView } from "../components/LiveHistoryTabs"
 import { useThemeMode } from "../lib/theme"
+import { partitionByHistory } from "../lib/recordStatus"
 import { daysUntilRenewal } from "../lib/workPackages"
 
 const WpToolbar = makeGridToolbar("work-packages")
@@ -41,10 +43,16 @@ export default function WorkPackagesPage() {
   const [value, setValue] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
+  const [view, setView] = React.useState<LiveHistoryView>("live")
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["work-packages"],
     queryFn: async () => (await api.get<WorkPackage[]>("/work-packages")).data
   })
+
+  // Split active scopes from terminal (completed/cancelled) ones — History holds the closed.
+  const { live, historical } = React.useMemo(() => partitionByHistory(data ?? [], (w) => w.status), [data])
+  const shown = view === "live" ? live : historical
 
   async function handleCreate() {
     if (!title.trim()) return
@@ -106,9 +114,11 @@ export default function WorkPackagesPage() {
 
         {error ? <Box sx={{ p: 2 }}><ErrorState title="Failed to load work packages" /></Box> : null}
 
+        <LiveHistoryTabs view={view} onChange={setView} liveCount={live.length} historyCount={historical.length} />
+
         <Box sx={{ height: 620 }}>
           <DataGrid
-            rows={data ?? []}
+            rows={shown}
             columns={columns}
             loading={isLoading}
             density="compact"

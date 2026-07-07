@@ -38,6 +38,7 @@ import { CreateTaskModal } from "./modals/CreateTaskModal"
 import { TaskQuickDetailModal } from "./modals/TaskQuickDetailModal"
 import {
   EditableTitleCard,
+  EditableField as InlineEditable,
   SlimExpandCommentBox,
   ActivityFeedItem,
   type ResolvedMention,
@@ -256,111 +257,6 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Inline editable text (spec section 5.1)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface InlineEditableProps {
-  value: string
-  placeholder?: string
-  multiline?: boolean
-  ariaLabel: string
-  onCommit: (next: string) => void
-  textSx?: object
-}
-
-const InlineEditable = React.memo(function InlineEditable({
-  value,
-  placeholder,
-  multiline = false,
-  ariaLabel,
-  onCommit,
-  textSx,
-}: InlineEditableProps) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const [editing, setEditing] = React.useState(false)
-
-  React.useLayoutEffect(() => {
-    if (!editing && ref.current && ref.current.innerText !== value) {
-      ref.current.innerText = value
-    }
-  }, [value, editing])
-
-  const handleClick = React.useCallback(() => {
-    if (editing) return
-    setEditing(true)
-    requestAnimationFrame(() => {
-      const el = ref.current
-      if (!el) return
-      el.focus()
-      const sel = window.getSelection()
-      if (sel) {
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        sel.removeAllRanges()
-        sel.addRange(range)
-      }
-    })
-  }, [editing])
-
-  const commit = React.useCallback(() => {
-    const el = ref.current
-    const next = (el?.innerText ?? "").trim()
-    if (!next) {
-      if (el) el.innerText = value
-    } else if (next !== value) {
-      onCommit(next)
-    }
-    setEditing(false)
-  }, [value, onCommit])
-
-  const handleKey = React.useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        if (ref.current) ref.current.innerText = value
-        setEditing(false)
-        ref.current?.blur()
-      }
-      if (!multiline && e.key === "Enter") {
-        e.preventDefault()
-        ref.current?.blur()
-      }
-    },
-    [value, multiline]
-  )
-
-  const isEmpty = !value && !editing
-
-  return (
-    <Box
-      ref={ref}
-      role="textbox"
-      aria-label={ariaLabel}
-      contentEditable={editing}
-      suppressContentEditableWarning
-      onClick={handleClick}
-      onBlur={commit}
-      onKeyDown={handleKey}
-      sx={{
-        outline: "none",
-        cursor: editing ? "text" : "pointer",
-        borderRadius: 1,
-        px: 0.75,
-        py: 0.5,
-        whiteSpace: multiline ? "pre-wrap" : "normal",
-        border: "1.5px solid",
-        borderColor: editing ? "primary.main" : "transparent",
-        bgcolor: "transparent",
-        color: isEmpty ? "text.disabled" : "text.primary",
-        "&:hover": editing ? undefined : { bgcolor: "action.hover" },
-        ...textSx,
-      }}
-    >
-      {isEmpty ? placeholder ?? "" : null}
-    </Box>
-  )
-})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Assessment section (spec 9.5)
@@ -413,8 +309,9 @@ const AssessmentSectionContent = React.memo(function AssessmentSectionContent({
             value={valueByKey[field.key]}
             placeholder={field.placeholder}
             multiline
+            commit="blur"
             ariaLabel={field.label}
-            onCommit={commitByKey[field.key]}
+            onSave={commitByKey[field.key]}
             textSx={{
               fontSize: "0.8125rem",
               lineHeight: 1.5,

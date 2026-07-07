@@ -47,3 +47,45 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* ── Colour scheme + scrollbars ──────────────────────────────────────────────
+   Declare the page's colour scheme per theme scope so the browser renders native
+   chrome (scrollbars, form controls, spinners) to match — without this the app
+   never tells the browser it's dark, so scrollbars default to light. The app is
+   dark-only today (FORCE_DARK in lib/theme.tsx); the light scope is kept so the
+   theme stays reversible. */
+:root:not([data-theme="dark"]) {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Refined thin dark scrollbars app-wide (scoped to the dark theme for
+   reversibility). Firefox uses scrollbar-color; WebKit/Chromium uses the
+   ::-webkit-scrollbar pseudo-elements. Transparent track + a slate thumb that
+   lifts on hover; the padding-via-transparent-border trick keeps the thumb slim. */
+[data-theme="dark"] {
+  scrollbar-color: #3a475c transparent;
+  scrollbar-width: thin;
+}
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #3a475c;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #4b5b73;
+  background-clip: content-box;
+}
+[data-theme="dark"] ::-webkit-scrollbar-corner {
+  background: transparent;
+}

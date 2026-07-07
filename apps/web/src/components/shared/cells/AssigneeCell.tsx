@@ -1,7 +1,7 @@
 import React from "react"
 import { Box, Typography } from "@mui/material"
 import { Avatar } from "../primitives/Avatar"
-import type { ThemeMode } from "../tokens/colors"
+import { getActiveThemeMode, type ThemeMode } from "../tokens/colors"
 import { userLabel } from "../../../lib/userDisplay"
 
 // Engine-agnostic assignee cell — the shared initials Avatar + display name, with
@@ -19,7 +19,10 @@ import { userLabel } from "../../../lib/userDisplay"
 export function AssigneeCell({
   user,
   emptyLabel = "Unassigned",
-  mode = "light",
+  // Default to the ACTIVE theme mode (app is dark-only) rather than a hardcoded
+  // "light" — so callers that omit `mode` (e.g. TaskDetailPage's Assignee row) no
+  // longer render dark slate text on the dark surface. Explicit `mode` still wins.
+  mode = getActiveThemeMode(),
 }: {
   user?: { displayName?: string | null; email?: string | null } | null
   emptyLabel?: React.ReactNode

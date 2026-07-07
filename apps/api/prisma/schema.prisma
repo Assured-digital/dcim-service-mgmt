@@ -719,6 +719,7 @@ model ServiceRequest {
   dueAt            DateTime?
   dueAtManual      Boolean              @default(false)
   closureSummary   String?
+  closedAt         DateTime?
   assigneeId       String?
   assignee         User?                @relation("AssignedSR", fields: [assigneeId], references: [id])
   linkedEntityType String?
@@ -994,6 +995,7 @@ model Incident {
   priority         String           @default("medium")
   dueAt            DateTime?
   dueAtManual      Boolean          @default(false)
+  closedAt         DateTime?
   linkedEntityType String?
   linkedEntityId   String?
   assigneeId       String?
@@ -1016,6 +1018,7 @@ model Task {
   status           TaskStatus @default(OPEN)
   priority         String     @default("medium")
   dueAt            DateTime?
+  closedAt         DateTime?
   assigneeId       String?
   assignee         User?      @relation("AssignedTask", fields: [assigneeId], references: [id])
   incidentId       String?
