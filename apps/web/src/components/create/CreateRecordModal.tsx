@@ -56,11 +56,13 @@ export function CreateRecordModal({
   const { notify } = useNotification()
   const client = useSelectedClient()
   const titleRef = React.useRef<HTMLInputElement>(null)
+  const descriptionRef = React.useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [values, setValues] = React.useState<Record<string, string>>({})
   const [titleError, setTitleError] = React.useState<string | null>(null)
+  const [descriptionError, setDescriptionError] = React.useState<string | null>(null)
   const [createAnother, setCreateAnother] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
@@ -71,6 +73,7 @@ export function CreateRecordModal({
     setDescription("")
     setValues({ ...cfg.defaults })
     setTitleError(null)
+    setDescriptionError(null)
   }, [open, recordType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!cfg) return null
@@ -84,6 +87,11 @@ export function CreateRecordModal({
     if (!title.trim()) {
       setTitleError(`Give the ${typeLower} a title before creating it`)
       titleRef.current?.focus()
+      return
+    }
+    if (cfg.requireDescription && !description.trim()) {
+      setDescriptionError(`Give the ${typeLower} a description before creating it`)
+      descriptionRef.current?.focus()
       return
     }
     setSaving(true)
@@ -104,6 +112,7 @@ export function CreateRecordModal({
         setDescription("")
         setValues({ ...cfg.defaults })
         setTitleError(null)
+        setDescriptionError(null)
         requestAnimationFrame(() => titleRef.current?.focus())
       } else {
         onClose()
@@ -213,7 +222,14 @@ export function CreateRecordModal({
             <FormTextField
               label="Description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value)
+                if (descriptionError) setDescriptionError(null)
+              }}
+              required={cfg.requireDescription}
+              error={!!descriptionError}
+              helperText={descriptionError ?? undefined}
+              inputRef={descriptionRef}
               multiline
               rows={3}
             />
