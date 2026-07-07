@@ -1,17 +1,18 @@
 import React from "react"
 import {
   GridToolbarContainer,
-  GridToolbarColumnsButton,
   GridToolbarExport,
   GridToolbarQuickFilter,
 } from "@mui/x-data-grid"
 import type { ThemeMode } from "./shared/tokens/colors"
 
+// Column visibility + per-column filter/sort are driven by each column header's
+// own menu (the ⋮ → Manage columns / Filter / Sort / Hide) — the single, consistent
+// way to shape a table across the app — so the toolbar carries only Export + search.
 export function makeGridToolbar(fileName: string, { showSearch = true }: { showSearch?: boolean } = {}) {
   return function GridInnerToolbar() {
     return (
       <GridToolbarContainer sx={{ px: 1, py: 0.5, gap: 1, borderBottom: "1px solid #e2e8f0" }}>
-        <GridToolbarColumnsButton slotProps={{ button: { sx: { fontSize: 12 } } }} />
         <GridToolbarExport
           csvOptions={{ fileName: `${fileName}-${new Date().toISOString().split("T")[0]}`, utf8WithBom: true }}
           printOptions={{ disableToolbarButton: true }}
