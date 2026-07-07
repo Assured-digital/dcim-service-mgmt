@@ -12,6 +12,7 @@ import { NotificationType } from "@prisma/client";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
+import { resolvedAtUpdate, INCIDENT_RESOLVED_STATUSES } from "../metrics/resolved-status";
 
 type ListFilters = {
   dateFrom?: string;
@@ -283,7 +284,8 @@ export class IncidentsService {
 
     const updated = await this.prisma.incident.update({
       where: { id: incident.id },
-      data: { status, closedAt }
+      // closedAt → Live/History split; resolvedAt → MTTR metrics. Both stamped here.
+      data: { status, closedAt, ...resolvedAtUpdate(incident.status, status, INCIDENT_RESOLVED_STATUSES) }
     });
 
     await emitAudit(this.prisma, {

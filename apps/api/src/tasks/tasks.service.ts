@@ -11,6 +11,7 @@ import { applyCompletedWorkOrder } from "../work-orders/apply-pending";
 import { emitNotification } from "../notifications/emit-notification";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
+import { resolvedAtUpdate, TASK_RESOLVED_STATUSES } from "../metrics/resolved-status";
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -197,7 +198,9 @@ export class TasksService {
 
     const updated = await this.prisma.task.update({
       where: { id: task.id },
-      data: { status, closedAt },
+      // closedAt drives the Live/History split (includes CANCELLED-style terminals);
+      // resolvedAt drives MTTR metrics (excludes cancelled). Both are stamped here.
+      data: { status, closedAt, ...resolvedAtUpdate(task.status, status, TASK_RESOLVED_STATUSES) },
       include: {
         incident: {
           select: { id: true, reference: true, title: true }

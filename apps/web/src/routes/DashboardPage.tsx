@@ -16,6 +16,7 @@ import { buildRecentActivity, type RecentActivityItem } from "../lib/recentActiv
 import { deriveRag, type Risk as RIRisk, type Issue as RIIssue } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
 import { SectionBar, DASH_CARD_SX, CARD_CONTENT_SX } from "../components/dashboard/primitives"
+import MetricsTrends from "../components/dashboard/MetricsTrends"
 import ChecksPanel from "../components/dashboard/ChecksPanel"
 import { type DashCheck, isInRework } from "../lib/checksPanel"
 import { OnboardingCard, EstateHero, AllClearLine, deriveColdState, type EstateSite } from "../components/dashboard/ColdStart"
@@ -808,6 +809,13 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+          </Stack>
+
+          {/* Resolution-performance trends (MTTR + SLA compliance over time),
+              driven by the honest resolvedAt server aggregates. */}
+          <Stack spacing="12px">
+            <SectionBar label="Resolution & SLA trends" />
+            <MetricsTrends />
           </Stack>
         </Stack>
       ) : null}

@@ -727,6 +727,7 @@ model ServiceRequest {
   createdById      String?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
+  resolvedAt       DateTime?
   comments         Comment[]            @relation("ServiceRequestComments")
 
   auditEvents AuditEvent[]
@@ -1002,6 +1003,7 @@ model Incident {
   createdById      String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
+  resolvedAt       DateTime?
 
   tasks Task[]
 }
@@ -1026,6 +1028,7 @@ model Task {
   createdById      String?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+  resolvedAt       DateTime?
 }
 
 model DocumentReference {

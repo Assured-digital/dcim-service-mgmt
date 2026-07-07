@@ -11,6 +11,7 @@ import { emitNotification } from "../notifications/emit-notification";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
+import { resolvedAtUpdate, SR_RESOLVED_STATUSES } from "../metrics/resolved-status";
 
 type ListFilters = {
   dateFrom?: string;
@@ -200,7 +201,9 @@ async updateStatusForClient(
     data: {
       status: dto.status as ServiceRequestStatus,
       closureSummary: dto.closureSummary,
-      closedAt
+      // closedAt → Live/History split (includes CANCELLED); resolvedAt → MTTR (excludes it).
+      closedAt,
+      ...resolvedAtUpdate(sr.status, dto.status, SR_RESOLVED_STATUSES)
     }
   });
 
@@ -330,7 +333,8 @@ async updateForClient(
       data: {
         status: ServiceRequestStatus.CLOSED,
         closureSummary,
-        closedAt: new Date()
+        closedAt: new Date(),
+        ...resolvedAtUpdate(sr.status, ServiceRequestStatus.CLOSED, SR_RESOLVED_STATUSES)
       }
     });
 
