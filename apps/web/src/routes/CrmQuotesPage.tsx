@@ -6,6 +6,8 @@ import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined"
 import { DataGrid, GridColDef } from "@mui/x-data-grid"
 import { EmptyState, ErrorState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { LiveHistoryTabs, type LiveHistoryView } from "../components/LiveHistoryTabs"
+import { partitionByHistory } from "../lib/recordStatus"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { FormTextField, EnumSelect, DateField } from "../components/fields"
 import { QuoteLineItemsEditor } from "../components/QuoteLineItemsEditor"
@@ -112,10 +114,15 @@ export default function CrmQuotesPage() {
   const { mode: themeMode } = useThemeMode()
   const canWrite = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [view, setView] = React.useState<LiveHistoryView>("live")
 
   const quotes = useQuery({ queryKey: ["quotes"], queryFn: () => listQuotes() })
   const rows = quotes.data ?? []
   const hasValues = rows.some(q => q.value !== undefined)
+
+  // Live = draft/sent; History = accepted/rejected/expired/withdrawn.
+  const { live, historical } = React.useMemo(() => partitionByHistory(rows, (q) => q.status), [rows])
+  const shown = view === "live" ? live : historical
 
   const columns: GridColDef<QuoteView>[] = React.useMemo(() => [
     { field: "reference", headerName: "Ref", width: 140,
@@ -168,9 +175,11 @@ export default function CrmQuotesPage() {
           <Box sx={{ p: 2 }}><ErrorState title="Failed to load quotes" /></Box>
         ) : null}
 
+        <LiveHistoryTabs view={view} onChange={setView} liveCount={live.length} historyCount={historical.length} />
+
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <DataGrid
-            rows={rows}
+            rows={shown}
             columns={columns}
             loading={quotes.isLoading}
             density="compact"

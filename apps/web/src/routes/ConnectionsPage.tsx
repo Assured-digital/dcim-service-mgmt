@@ -20,6 +20,8 @@ import HubIcon from "@mui/icons-material/Hub"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
+import { LiveHistoryTabs, type LiveHistoryView } from "../components/LiveHistoryTabs"
+import { partitionByHistory } from "../lib/recordStatus"
 import { StatusPill, entityStatusIntent } from "../components/shared"
 import { ListToolbar, ToolbarButton } from "../components/shared/ListToolbar"
 
@@ -110,17 +112,19 @@ export default function ConnectionsPage() {
   const [installedAt, setInstalledAt] = React.useState("")
   const [lastValidatedAt, setLastValidatedAt] = React.useState("")
   const [saving, setSaving] = React.useState(false)
-  const [statusFilter, setStatusFilter] = React.useState("ALL")
+  const [view, setView] = React.useState<LiveHistoryView>("live")
 
   const connections = useQuery({
-    queryKey: ["connections", statusFilter],
-    queryFn: async () =>
-      (
-        await api.get<Connection[]>("/connections", {
-          params: { status: statusFilter === "ALL" ? undefined : statusFilter }
-        })
-      ).data
+    queryKey: ["connections"],
+    queryFn: async () => (await api.get<Connection[]>("/connections")).data
   })
+
+  // Live = active topology (planned/active/degraded); History = retired links.
+  const { live, historical } = React.useMemo(
+    () => partitionByHistory(connections.data ?? [], (c) => c.status),
+    [connections.data]
+  )
+  const shown = view === "live" ? live : historical
 
   const assets = useQuery({
     queryKey: ["assets"],
@@ -161,21 +165,6 @@ export default function ConnectionsPage() {
     <Box>
       <Card>
         <ListToolbar>
-          <TextField
-            select
-            size="small"
-            label="Status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            sx={{ minWidth: 180 }}
-          >
-            <MenuItem value="ALL">All statuses</MenuItem>
-            {STATUS_OPTIONS.map((s) => (
-              <MenuItem key={s} value={s}>
-                {s}
-              </MenuItem>
-            ))}
-          </TextField>
           <Box sx={{ flex: 1 }} />
           {canManage ? (
             <ToolbarButton variant="primary" startIcon={<HubIcon sx={{ fontSize: "15px !important" }} />} onClick={() => setOpen(true)}>
@@ -193,9 +182,11 @@ export default function ConnectionsPage() {
         ) : null}
 
         {(connections.data?.length ?? 0) > 0 ? (
+          <>
+            <LiveHistoryTabs view={view} onChange={setView} liveCount={live.length} historyCount={historical.length} />
           <Box sx={{ height: 620 }}>
             <DataGrid
-              rows={connections.data ?? []}
+              rows={shown}
               columns={connectionColumns}
               density="compact"
               initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
@@ -206,6 +197,7 @@ export default function ConnectionsPage() {
               sx={dataGridSx(true)}
             />
           </Box>
+          </>
         ) : null}
       </Card>
 
