@@ -10,6 +10,7 @@ import { emitAudit } from "../audit-events/emit-audit"
 import { applyCompletedWorkOrder, abandonWorkOrder } from "../work-orders/apply-pending"
 import { emitNotification } from "../notifications/emit-notification"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
+import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -65,11 +66,12 @@ export class ChangesService {
     if (!clientId) throw new ForbiddenException("Missing client scope")
   }
 
-  async listForClient(clientId: string, viewer: ScopeViewer) {
+  async listForClient(clientId: string, viewer: ScopeViewer, filters: ListScope = {}) {
     this.assertClientScope(clientId)
+    const scope = buildListScope(TERMINAL_STATUSES.change, filters)
     const rows = await this.prisma.changeRequest.findMany({
-      where: applyAssignedScope({ clientId }, viewer),
-      orderBy: { createdAt: "desc" },
+      where: applyAssignedScope({ clientId, ...scope.where }, viewer),
+      orderBy: scope.orderBy ?? { createdAt: "desc" },
       include: {
         assignee: { select: userDisplaySelect },
         approvals: { orderBy: { decidedAt: "desc" }, take: 1 }
@@ -170,6 +172,13 @@ export class ChangesService {
   }, viewer: ScopeViewer) {
     const change = await this.getForClient(clientId, id, viewer)
 
+    // Resolved-date (Live/History split): a Change is terminal at COMPLETED / CLOSED /
+    // CANCELLED / REJECTED. Stamp on entering terminal, clear on reopen, preserve if
+    // already terminal (so closedAt marks the FIRST time it left the active pipeline).
+    const CHANGE_TERMINAL = ["COMPLETED", "CLOSED", "CANCELLED", "REJECTED"]
+    const nowTerminal = CHANGE_TERMINAL.includes(dto.status)
+    const wasTerminal = CHANGE_TERMINAL.includes(change.status)
+
     const updated = await this.prisma.changeRequest.update({
       where: { id: change.id },
       data: {
@@ -178,7 +187,7 @@ export class ChangesService {
         postImplReview: dto.postImplReview,
         actualStart: dto.status === "IN_PROGRESS" ? new Date() : undefined,
         actualEnd: dto.status === "COMPLETED" ? new Date() : undefined,
-        closedAt: dto.status === "CLOSED" ? new Date() : undefined
+        closedAt: nowTerminal ? (wasTerminal ? undefined : new Date()) : null
       }
     })
 

@@ -10,6 +10,7 @@ import { emitAudit } from "../audit-events/emit-audit";
 import { applyCompletedWorkOrder } from "../work-orders/apply-pending";
 import { emitNotification } from "../notifications/emit-notification";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
+import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -46,7 +47,7 @@ type ListFilters = {
   assigneeId?: string;
   linkedEntityType?: string;
   linkedEntityId?: string;
-};
+} & ListScope;
 
 @Injectable()
 export class TasksService {
@@ -59,6 +60,7 @@ export class TasksService {
   async listForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
+    const scope = buildListScope(TERMINAL_STATUSES.task, filters);
     const rows = await this.prisma.task.findMany({
       where: applyAssignedScope(
         {
@@ -66,11 +68,12 @@ export class TasksService {
           assigneeId: filters.assigneeId || undefined,
           linkedEntityType: filters.linkedEntityType || undefined,
           linkedEntityId: filters.linkedEntityId || undefined,
-          createdAt
+          createdAt,
+          ...scope.where
         },
         viewer
       ),
-      orderBy: { updatedAt: "desc" },
+      orderBy: scope.orderBy ?? { updatedAt: "desc" },
       include: {
         assignee: {
           select: userDisplaySelect
@@ -185,9 +188,16 @@ export class TasksService {
     comment?: string
   ) {
     const task = await this.getForClient(clientId, id, viewer);
+
+    // Resolved-date bookkeeping (Live/History split): DONE is the only terminal Task
+    // state. Stamp on entering it, clear on reopen, preserve if already DONE.
+    const nowTerminal = status === TaskStatus.DONE;
+    const wasTerminal = task.status === TaskStatus.DONE;
+    const closedAt = nowTerminal ? (wasTerminal ? undefined : new Date()) : null;
+
     const updated = await this.prisma.task.update({
       where: { id: task.id },
-      data: { status },
+      data: { status, closedAt },
       include: {
         incident: {
           select: { id: true, reference: true, title: true }

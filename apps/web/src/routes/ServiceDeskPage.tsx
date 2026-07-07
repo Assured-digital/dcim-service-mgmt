@@ -3,14 +3,13 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Chip, Dialog, DialogActions,
+  Box, Button, ButtonGroup, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, ListItemIcon, Menu, MenuItem, Stack,
   TextField, Tooltip, Typography
 } from "@mui/material"
 import {
   DataGrid, GridColDef,
   GridFooterContainer, GridPagination,
-  GridPreferencePanelsValue,
   GridSortModel,
   GridToolbarExport, useGridApiRef,
 } from "@mui/x-data-grid"
@@ -31,7 +30,7 @@ import BuildIcon from "@mui/icons-material/Build"
 import TaskAltIcon from "@mui/icons-material/TaskAlt"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
-import ViewColumnIcon from "@mui/icons-material/ViewColumn"
+import HistoryIcon from "@mui/icons-material/History"
 import { TypeBadge, PriorityPill, StatusPill, AssigneeCell, ListNavRail, RecordTypePicker, type RailSection, type BadgeKind } from "../components/shared"
 import { formatDate } from "../lib/format"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
@@ -51,6 +50,17 @@ const SLA_FILTER_LABELS: Record<SlaFilter, string> = {
   breached: "Breached",
   "due-soon": "Due soon",
   "on-track": "On track",
+}
+
+// Short singular label per kind for the "New …" split-button primary action —
+// so the button announces the type it will actually create (contextual default).
+const NEW_KIND_LABEL: Record<TicketKind, string> = {
+  SR: "service request",
+  INC: "incident",
+  CHG: "change",
+  TASK: "task",
+  RSK: "risk",
+  ISS: "issue",
 }
 import { CreateIncidentModal } from "./modals/CreateIncidentModal"
 import { CreateChangeModal } from "./modals/CreateChangeModal"
@@ -203,7 +213,7 @@ function ViewSelector({
 }
 
 // ── Unified queue: footer (Export on the left, pagination on the right) ──
-// Columns selector lives in the top bar via apiRef.showPreferences("columns").
+// Column visibility / filter / sort are driven by each column header's menu.
 function UnifiedFooter() {
   const fileName = `service-desk-tickets-${new Date().toISOString().split("T")[0]}`
   return (
@@ -272,8 +282,37 @@ function TruncatedSubject({ text }: { text: string }) {
 
 // ── Unified queue: columns ────────────────────────────────────────────────
 
-function buildUnifiedColumns(assigneeOptions: string[], mode: ThemeMode): GridColDef<Ticket>[] {
+function buildUnifiedColumns(assigneeOptions: string[], mode: ThemeMode, isHistory = false): GridColDef<Ticket>[] {
   const overdueColor = semanticToken("danger", mode).solid
+  // History swaps the "Due" column (irrelevant for resolved work) for a "Resolved"
+  // column showing when the record closed — the History window's sort/anchor date.
+  const lastColumn: GridColDef<Ticket> = isHistory
+    ? {
+        field: "closedAt", headerName: "Resolved", width: 130,
+        valueGetter: (v) => v ? new Date(v as string) : null,
+        renderCell: (p) => (
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            {formatDate((p.row as Ticket).closedAt) || "—"}
+          </Typography>
+        ),
+      }
+    : {
+        field: "dueAt", headerName: "Due", width: 120,
+        valueGetter: (v) => v ? new Date(v as string) : null,
+        renderCell: (p) => {
+          const t = p.row as Ticket
+          const dateStr = formatDate(t.dueAt) || "—"
+          return (
+            <Typography sx={{
+              fontSize: 12,
+              color: t.overdue ? overdueColor : "text.secondary",
+              fontWeight: t.overdue ? 600 : 400,
+            }}>
+              {dateStr}
+            </Typography>
+          )
+        },
+      }
   return [
     {
       field: "kind", headerName: "Type", width: 70,
@@ -345,23 +384,7 @@ function buildUnifiedColumns(assigneeOptions: string[], mode: ThemeMode): GridCo
         )
       },
     },
-    {
-      field: "dueAt", headerName: "Due", width: 120,
-      valueGetter: (v) => v ? new Date(v as string) : null,
-      renderCell: (p) => {
-        const t = p.row as Ticket
-        const dateStr = formatDate(t.dueAt) || "—"
-        return (
-          <Typography sx={{
-            fontSize: 12,
-            color: t.overdue ? overdueColor : "text.secondary",
-            fontWeight: t.overdue ? 600 : 400,
-          }}>
-            {dateStr}
-          </Typography>
-        )
-      },
-    },
+    lastColumn,
   ]
 }
 
@@ -371,8 +394,24 @@ function UnifiedServiceDeskView() {
   const navigate = useNavigate()
   const { mode } = useThemeMode()
   const [searchParams, setSearchParams] = useSearchParams()
+
+  // Lifecycle axis (?life): Live = active work (scope=live feed); History = resolved
+  // work within a rolling window (closedSince feed). History is table-only.
+  const life: "live" | "history" = searchParams.get("life") === "history" ? "history" : "live"
+  const isHistory = life === "history"
+  const windowParam = searchParams.get("window") ?? "90"
+  const closedSince = React.useMemo(() => {
+    if (!isHistory || windowParam === "all") return undefined
+    const days = Number(windowParam) || 90
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() - days)
+    return d.toISOString()
+  }, [isHistory, windowParam])
+
   const rawView = searchParams.get("view")
-  const viewParam: QueueView = rawView === "board" ? "board" : "table"
+  // The board is a live-only workflow view; History is always a table.
+  const viewParam: QueueView = !isHistory && rawView === "board" ? "board" : "table"
 
   // Filter/type/search/sort all derive from the URL (single source of truth) —
   // shared with the depth-1 working-queue rail via lib/serviceDeskQueue.
@@ -395,7 +434,7 @@ function UnifiedServiceDeskView() {
     ROLES.ENGINEER, ROLES.CLIENT_VIEWER
   ])
 
-  const { data: tickets, isLoading, error } = useTickets()
+  const { data: tickets, isLoading, error } = useTickets(isHistory ? { closedSince } : { scope: "live" })
 
   const counts = React.useMemo(() => {
     const c = { open: 0, overdue: 0, unassigned: 0, waiting: 0, closed: 0, mine: 0, awaiting: 0, new: 0 }
@@ -412,16 +451,38 @@ function UnifiedServiceDeskView() {
     return c
   }, [tickets, currentUser])
 
-  // Per-TYPE badge counts reflect the active TICKETS view ONLY — never the type
-  // filter — so selecting a type doesn't zero the others. Filter with the type
-  // forced to "all" (same view / SLA / search), then tally by kind. "all" row =
-  // total of the active view. Same useTickets() feed, no extra fetch.
+  // History filter: the feed is already terminal-only, so we only apply the type
+  // filter + the "mine" saved view + search (the live open/overdue/unassigned views
+  // don't apply to resolved work).
+  const applyHistoryFilter = React.useCallback((list: Ticket[], typeF: TicketKind | "all") => {
+    const q = qParam.trim().toLowerCase()
+    return list.filter(t => {
+      if (typeF !== "all" && t.kind !== typeF) return false
+      if (savedView === "mine" && (!currentUser || t.assignee?.id !== currentUser.userId)) return false
+      if (q) {
+        const hay = `${t.subject} ${t.reference} ${t.assignee?.displayName ?? ""}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [qParam, savedView, currentUser])
+
+  // Per-TYPE badge counts reflect the active saved-view ONLY — never the type filter
+  // — so selecting a type doesn't zero the others. Type forced to "all", tally by kind.
   const typeCounts = React.useMemo(() => {
-    const viewOnly = filterTickets(tickets, { ...queueParams, typeFilter: "all" }, currentUser)
+    const viewOnly = isHistory
+      ? applyHistoryFilter(tickets, "all")
+      : filterTickets(tickets, { ...queueParams, typeFilter: "all" }, currentUser)
     const c: Record<TicketKind | "all", number> = { all: viewOnly.length, SR: 0, INC: 0, CHG: 0, TASK: 0, RSK: 0, ISS: 0 }
     for (const t of viewOnly) c[t.kind]++
     return c
-  }, [tickets, queueParams, currentUser])
+  }, [tickets, queueParams, currentUser, isHistory, applyHistoryFilter])
+
+  // History rail counts — window total + my resolved (the whole feed is resolved).
+  const historyCounts = React.useMemo(() => ({
+    all: tickets.length,
+    mine: currentUser ? tickets.filter(t => t.assignee?.id === currentUser.userId).length : 0,
+  }), [tickets, currentUser])
 
   const assigneeOptions = React.useMemo(() => {
     const set = new Set<string>()
@@ -434,13 +495,22 @@ function UnifiedServiceDeskView() {
     return hasUnassigned ? ["Unassigned", ...sorted] : sorted
   }, [tickets])
 
-  const unifiedColumns = React.useMemo(() => buildUnifiedColumns(assigneeOptions, mode), [assigneeOptions, mode])
+  const unifiedColumns = React.useMemo(() => buildUnifiedColumns(assigneeOptions, mode, isHistory), [assigneeOptions, mode, isHistory])
 
-  // Filter via the shared selector (same logic the depth-1 rail uses). The
-  // DataGrid still owns sorting via sortModel, so no sortTickets() here.
+  // Live → shared selector (same logic the depth-1 rail uses). History → the
+  // terminal-only filter above. The DataGrid owns sorting via sortModel.
   const filtered = React.useMemo(
-    () => filterTickets(tickets, queueParams, currentUser),
-    [tickets, queueParams, currentUser],
+    () => isHistory ? applyHistoryFilter(tickets, typeFilter) : filterTickets(tickets, queueParams, currentUser),
+    [isHistory, applyHistoryFilter, tickets, typeFilter, queueParams, currentUser],
+  )
+
+  // History defaults to newest-resolved-first (its anchor date). An explicit ?sort
+  // still wins; Live keeps its updatedAt default. Memoised so the DataGrid isn't
+  // handed a fresh sortModel array reference every render.
+  const hasSortParam = searchParams.get("sort") !== null
+  const effectiveSort = React.useMemo<GridSortModel>(
+    () => (isHistory && !hasSortParam ? [{ field: "closedAt", sort: "desc" }] : sortModel),
+    [isHistory, hasSortParam, sortModel],
   )
 
   // Debounced write of the search box into ?q= (replace, so keystrokes don't
@@ -490,6 +560,10 @@ function UnifiedServiceDeskView() {
     setSearchParams(params)   // push
   }
 
+  // Contextual "New ticket" default — the current Type filter drives the primary
+  // create action (SR when the filter is "all"). The caret still offers every type.
+  const defaultKind: TicketKind = typeFilter === "all" ? "SR" : (typeFilter as TicketKind)
+
   function handlePickType(kind: BadgeKind) {
     if (kind === "SR")  setSrOpen(true)
     if (kind === "INC") setIncOpen(true)
@@ -513,19 +587,60 @@ function UnifiedServiceDeskView() {
     setSearchParams(params, { replace: true })
   }
 
-  // Two independent single-select sections: saved-view (Tickets) and kind (Type).
-  const ticketsSection: RailSection = {
-    label: "Tickets",
-    activeId: savedView,
-    onPick: handleNavPick,
+  function handleLifeChange(next: "live" | "history") {
+    if (next === life) return
+    const params = new URLSearchParams(searchParams)
+    if (next === "history") params.set("life", "history")
+    else params.delete("life")
+    // Saved-view + board semantics differ across lifecycles — reset them on switch.
+    params.delete("status")
+    params.delete("view")
+    setSearchParams(params)
+  }
+
+  function handleWindowChange(next: string) {
+    const params = new URLSearchParams(searchParams)
+    if (next === "90") params.delete("window")   // 90d is the default — keep the URL clean
+    else params.set("window", next)
+    setSearchParams(params, { replace: true })
+  }
+
+  // Lifecycle switch lives at the top of the rail — Live (active work) vs History
+  // (resolved, windowed). Selecting History reveals the window selector by the search.
+  const lifecycleSection: RailSection = {
+    label: "View",
+    activeId: life,
+    onPick: (id) => handleLifeChange(id as "live" | "history"),
     items: [
-      { id: "open", label: "All open", count: counts.open, icon: <InboxIcon sx={{ fontSize: 18 }} /> },
-      { id: "mine", label: "My tickets", count: counts.mine, icon: <PersonIcon sx={{ fontSize: 18 }} /> },
-      { id: "unassigned", label: "Unassigned", count: counts.unassigned, icon: <HelpOutlineIcon sx={{ fontSize: 18 }} /> },
-      { id: "closed", label: "Resolved 30d", count: counts.closed, icon: <CheckCircleOutlineIcon sx={{ fontSize: 18 }} /> },
-      { id: "overdue", label: "Overdue", count: counts.overdue, icon: <PriorityHighIcon sx={{ fontSize: 18 }} /> },
+      { id: "live", label: "Live", icon: <InboxIcon sx={{ fontSize: 18 }} /> },
+      { id: "history", label: "History", icon: <HistoryIcon sx={{ fontSize: 18 }} /> },
     ],
   }
+
+  // Two independent single-select sections: saved-view (Tickets) and kind (Type).
+  // The saved-view set differs by lifecycle: Live keeps the operational filters;
+  // History (all resolved) only distinguishes all vs mine.
+  const ticketsSection: RailSection = isHistory
+    ? {
+        label: "Resolved",
+        activeId: savedView === "mine" ? "mine" : "open",
+        onPick: handleNavPick,
+        items: [
+          { id: "open", label: "All resolved", count: historyCounts.all, icon: <CheckCircleOutlineIcon sx={{ fontSize: 18 }} /> },
+          { id: "mine", label: "My resolved", count: historyCounts.mine, icon: <PersonIcon sx={{ fontSize: 18 }} /> },
+        ],
+      }
+    : {
+        label: "Tickets",
+        activeId: savedView,
+        onPick: handleNavPick,
+        items: [
+          { id: "open", label: "All open", count: counts.open, icon: <InboxIcon sx={{ fontSize: 18 }} /> },
+          { id: "mine", label: "My tickets", count: counts.mine, icon: <PersonIcon sx={{ fontSize: 18 }} /> },
+          { id: "unassigned", label: "Unassigned", count: counts.unassigned, icon: <HelpOutlineIcon sx={{ fontSize: 18 }} /> },
+          { id: "overdue", label: "Overdue", count: counts.overdue, icon: <PriorityHighIcon sx={{ fontSize: 18 }} /> },
+        ],
+      }
   const typeSection: RailSection = {
     label: "Type",
     activeId: typeFilter,
@@ -545,7 +660,7 @@ function UnifiedServiceDeskView() {
     <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
       {/* Drill-down (record/association) is owned by the DrillDownNavigator; this
           body is always the depth-0 queue, so the rail + chrome always show. */}
-      <ListNavRail title="Service Desk" sections={[ticketsSection, typeSection]} mode={mode} />
+      <ListNavRail sections={[lifecycleSection, ticketsSection, typeSection]} mode={mode} />
 
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "var(--color-background-secondary)" }}>
         {/* Header — Search on the left, View + New ticket on the right. */}
@@ -556,7 +671,7 @@ function UnifiedServiceDeskView() {
         }}>
             <TextField
               size="small"
-              placeholder="Search tickets…"
+              placeholder={isHistory ? "Search resolved…" : "Search tickets…"}
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
               sx={{ flex: 1, maxWidth: 420 }}
@@ -576,31 +691,43 @@ function UnifiedServiceDeskView() {
             ) : null}
 
             <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: "auto" }}>
-              <Button
-                size="small"
-                startIcon={<ViewColumnIcon sx={{ fontSize: 16 }} />}
-                onClick={() => apiRef.current?.showPreferences(GridPreferencePanelsValue.columns)}
-                disabled={viewParam !== "table"}
-                sx={{
-                  fontSize: 12, fontWeight: 500, textTransform: "none",
-                  color: "primary.main", px: 0.75, py: 0.25, minWidth: 0,
-                  "& .MuiButton-startIcon": { mr: 0.5 },
-                }}
-              >
-                Columns
-              </Button>
+              {/* History window selector — appears beside Columns only in History. */}
+              {isHistory ? (
+                <TextField
+                  select
+                  size="small"
+                  value={windowParam}
+                  onChange={e => handleWindowChange(e.target.value)}
+                  sx={{ minWidth: 140, "& .MuiInputBase-root": { fontSize: 12.5, height: 32, bgcolor: "var(--color-background-secondary)" } }}
+                >
+                  <MenuItem value="30" sx={{ fontSize: 13 }}>Last 30 days</MenuItem>
+                  <MenuItem value="90" sx={{ fontSize: 13 }}>Last 90 days</MenuItem>
+                  <MenuItem value="365" sx={{ fontSize: 13 }}>Last year</MenuItem>
+                  <MenuItem value="all" sx={{ fontSize: 13 }}>All time</MenuItem>
+                </TextField>
+              ) : null}
 
-              <ViewSelector viewParam={viewParam} onViewChange={handleViewToggle} />
+              {!isHistory ? <ViewSelector viewParam={viewParam} onViewChange={handleViewToggle} /> : null}
 
               {canRaise ? (
-                <Button
-                  size="small" variant="contained"
-                  startIcon={<AddIcon sx={{ fontSize: 13 }} />}
-                  onClick={() => setPickerOpen(true)}
-                  sx={{ fontSize: 12 }}
-                >
-                  New ticket
-                </Button>
+                <ButtonGroup size="small" variant="contained" sx={{ boxShadow: "none" }}>
+                  <Button
+                    startIcon={<AddIcon sx={{ fontSize: 13 }} />}
+                    onClick={() => handlePickType(defaultKind)}
+                    sx={{ fontSize: 12, textTransform: "none", whiteSpace: "nowrap" }}
+                  >
+                    New {NEW_KIND_LABEL[defaultKind]}
+                  </Button>
+                  <Tooltip title="Choose a different type">
+                    <Button
+                      onClick={() => setPickerOpen(true)}
+                      aria-label="Choose a different ticket type"
+                      sx={{ px: 0.25, minWidth: 32 }}
+                    >
+                      <ArrowDropDownIcon sx={{ fontSize: 18 }} />
+                    </Button>
+                  </Tooltip>
+                </ButtonGroup>
               ) : null}
             </Stack>
           </Box>
@@ -619,8 +746,8 @@ function UnifiedServiceDeskView() {
           {!isLoading && !error && viewParam === "table" && filtered.length === 0 ? (
             <Box sx={{ p: 3 }}>
               <EmptyState
-                title="No tickets match this filter"
-                detail="Try a different view or clear the type filter."
+                title={isHistory ? "No resolved records in this window" : "No tickets match this filter"}
+                detail={isHistory ? "Widen the time window or clear the type filter." : "Try a different view or clear the type filter."}
               />
             </Box>
           ) : null}
@@ -633,7 +760,7 @@ function UnifiedServiceDeskView() {
                 columns={unifiedColumns}
                 density="compact"
                 rowHeight={64}
-                sortModel={sortModel}
+                sortModel={effectiveSort}
                 onSortModelChange={handleSortChange}
                 initialState={{
                   pagination: { paginationModel: { pageSize: 50 } },

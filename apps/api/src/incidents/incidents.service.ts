@@ -11,12 +11,13 @@ import { emitNotification } from "../notifications/emit-notification";
 import { NotificationType } from "@prisma/client";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
+import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
 
 type ListFilters = {
   dateFrom?: string;
   dateTo?: string;
   assigneeId?: string;
-};
+} & ListScope;
 
 function makeIncidentRef() {
   const y = new Date().getFullYear();
@@ -67,16 +68,18 @@ export class IncidentsService {
   async listForClient(clientId: string, viewer: ScopeViewer, filters: ListFilters = {}) {
     this.assertClientScope(clientId);
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo);
+    const scope = buildListScope(TERMINAL_STATUSES.incident, filters);
     const rows = await this.prisma.incident.findMany({
       where: applyAssignedScope(
         {
           clientId,
           assigneeId: filters.assigneeId || undefined,
-          createdAt
+          createdAt,
+          ...scope.where
         },
         viewer
       ),
-      orderBy: { updatedAt: "desc" },
+      orderBy: scope.orderBy ?? { updatedAt: "desc" },
       include: {
         assignee: {
           select: userDisplaySelect
@@ -270,9 +273,17 @@ export class IncidentsService {
     comment?: string
   ) {
     const incident = await this.getForClient(clientId, id, viewer);
+
+    // Resolved-date bookkeeping (Live/History split): stamp on entering a terminal
+    // state, clear on reopen, preserve if already terminal (undefined = no-op).
+    const INC_TERMINAL: IncidentStatus[] = [IncidentStatus.RESOLVED, IncidentStatus.CLOSED];
+    const nowTerminal = INC_TERMINAL.includes(status);
+    const wasTerminal = INC_TERMINAL.includes(incident.status as IncidentStatus);
+    const closedAt = nowTerminal ? (wasTerminal ? undefined : new Date()) : null;
+
     const updated = await this.prisma.incident.update({
       where: { id: incident.id },
-      data: { status }
+      data: { status, closedAt }
     });
 
     await emitAudit(this.prisma, {

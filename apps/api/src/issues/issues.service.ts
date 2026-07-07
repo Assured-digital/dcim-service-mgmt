@@ -8,6 +8,7 @@ import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
 import { emitNotification } from "../notifications/emit-notification"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
+import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope"
 import { NotificationType, Role } from "@prisma/client"
 
 function makeRef() {
@@ -69,20 +70,22 @@ export class IssuesService {
     dateTo?: string
     linkedEntityType?: string
     linkedEntityId?: string
-  } = {}) {
+  } & ListScope = {}) {
     this.assertClientScope(clientId)
     const createdAt = this.getCreatedAtRange(filters.dateFrom, filters.dateTo)
+    const scope = buildListScope(TERMINAL_STATUSES.issue, filters)
     const rows = await this.prisma.issue.findMany({
       where: applyAssignedScope(
         {
           clientId,
           linkedEntityType: filters.linkedEntityType || undefined,
           linkedEntityId: filters.linkedEntityId || undefined,
-          createdAt
+          createdAt,
+          ...scope.where
         },
         viewer
       ),
-      orderBy: { createdAt: "desc" },
+      orderBy: scope.orderBy ?? { createdAt: "desc" },
       include: { assignee: { select: userDisplaySelect } }
     })
     return rows.map((r) => ({ ...r, assignee: toUserDisplay(r.assignee) }))
@@ -213,12 +216,17 @@ export class IssuesService {
     resolution?: string
   }, viewer: ScopeViewer) {
     const issue = await this.getForClient(clientId, id, viewer)
+    // Resolved-date (Live/History split): RESOLVED and CLOSED are terminal for an Issue.
+    // Stamp on entering terminal, clear on reopen, preserve if already terminal.
+    const ISSUE_TERMINAL = ["RESOLVED", "CLOSED"]
+    const nowTerminal = ISSUE_TERMINAL.includes(dto.status)
+    const wasTerminal = ISSUE_TERMINAL.includes(issue.status)
     const updated = await this.prisma.issue.update({
       where: { id: issue.id },
       data: {
         status: dto.status,
         resolution: dto.resolution,
-        closedAt: dto.status === "CLOSED" ? new Date() : undefined
+        closedAt: nowTerminal ? (wasTerminal ? undefined : new Date()) : null
       }
     })
     await emitAudit(this.prisma, {

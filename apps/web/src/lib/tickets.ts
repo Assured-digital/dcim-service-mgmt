@@ -30,6 +30,9 @@ export interface Ticket {
   /** Due date. ISO string. Real persisted `dueAt` for SR / INC / TASK; derived
    *  from `scheduledEnd` for CHG. Null when no due date is set. */
   dueAt: string | null
+  /** Resolved date (closedAt) — ISO string, set when the record reached a terminal
+   *  status. Drives the History view's window + "Resolved" column. Null when live. */
+  closedAt: string | null
   /** Canonical detail route for this kind. */
   detailPath: string
 
@@ -190,6 +193,7 @@ function normaliseSR(r: RawSR, now: number): Ticket {
     updatedAt: r.updatedAt,
     overdue,
     dueAt: due ? due.toISOString() : null,
+    closedAt: (r as { closedAt?: string | null }).closedAt ?? null,
     detailPath: `/service-desk/sr/${r.id}`,
   }
 }
@@ -211,6 +215,7 @@ function normaliseIncident(r: RawIncident, now: number): Ticket {
     overdue,
     dueAt: due ? due.toISOString() : null,
     severity: r.severity,
+    closedAt: (r as { closedAt?: string | null }).closedAt ?? null,
     detailPath: `/service-desk/inc/${r.id}`,
   }
 }
@@ -234,6 +239,7 @@ function normaliseChange(r: RawChange, now: number): Ticket {
     changeType: r.changeType,
     scheduledStart: r.scheduledStart,
     scheduledEnd: r.scheduledEnd,
+    closedAt: (r as { closedAt?: string | null }).closedAt ?? null,
     detailPath: `/service-desk/chg/${r.id}`,
   }
 }
@@ -256,6 +262,7 @@ function normaliseTask(r: RawTask, now: number): Ticket {
     updatedAt: r.updatedAt,
     overdue,
     dueAt: due ? due.toISOString() : null,
+    closedAt: (r as { closedAt?: string | null }).closedAt ?? null,
     detailPath: `/service-desk/task/${r.id}`,
   }
 }
@@ -279,6 +286,7 @@ function normaliseRisk(r: RawRisk): Ticket {
     overdue: false,
     dueAt: null,
     ragSeverity: deriveRag(r.likelihood, r.impact),
+    closedAt: (r as { closedAt?: string | null }).closedAt ?? null,
     detailPath: `/service-desk/risk/${r.id}`,
   }
 }
@@ -298,6 +306,7 @@ function normaliseIssue(i: RawIssue): Ticket {
     overdue: false,
     dueAt: null,
     ragSeverity: i.severity,
+    closedAt: (i as { closedAt?: string | null }).closedAt ?? null,
     detailPath: `/service-desk/issue/${i.id}`,
   }
 }
@@ -333,35 +342,47 @@ export interface UseTicketsResult {
  * Query keys include the selected client id so super-users see fresh data
  * on client switch (a pre-existing bug in the three original pages).
  */
-export function useTickets(): UseTicketsResult {
+// Live/History scoping for the queue feed. Default (no opts) fetches ALL records —
+// keeps the Dashboard / My Work / rail consumers unchanged. The Service Desk queue
+// passes scope:"live" (open work) or closedSince (History window).
+export interface UseTicketsOptions {
+  scope?: "live"
+  closedSince?: string
+}
+
+export function useTickets(opts: UseTicketsOptions = {}): UseTicketsResult {
   const clientId = getSelectedClientId() ?? "self"
   const now = Date.now()
+
+  // One cache bucket per scope so Live and History feeds don't clobber each other.
+  const scopeKey = opts.closedSince ? `hist:${opts.closedSince}` : opts.scope === "live" ? "live" : "all"
+  const params = opts.closedSince ? { closedSince: opts.closedSince } : opts.scope === "live" ? { scope: "live" } : {}
 
   const results = useQueries({
     queries: [
       {
-        queryKey: ["tickets", clientId, "sr"],
-        queryFn: async () => (await api.get<RawSR[]>("/service-requests")).data,
+        queryKey: ["tickets", clientId, "sr", scopeKey],
+        queryFn: async () => (await api.get<RawSR[]>("/service-requests", { params })).data,
       },
       {
-        queryKey: ["tickets", clientId, "inc"],
-        queryFn: async () => (await api.get<RawIncident[]>("/incidents")).data,
+        queryKey: ["tickets", clientId, "inc", scopeKey],
+        queryFn: async () => (await api.get<RawIncident[]>("/incidents", { params })).data,
       },
       {
-        queryKey: ["tickets", clientId, "chg"],
-        queryFn: async () => (await api.get<RawChange[]>("/changes")).data,
+        queryKey: ["tickets", clientId, "chg", scopeKey],
+        queryFn: async () => (await api.get<RawChange[]>("/changes", { params })).data,
       },
       {
-        queryKey: ["tickets", clientId, "task"],
-        queryFn: async () => (await api.get<RawTask[]>("/tasks")).data,
+        queryKey: ["tickets", clientId, "task", scopeKey],
+        queryFn: async () => (await api.get<RawTask[]>("/tasks", { params })).data,
       },
       {
-        queryKey: ["tickets", clientId, "risk"],
-        queryFn: async () => (await api.get<RawRisk[]>("/risks")).data,
+        queryKey: ["tickets", clientId, "risk", scopeKey],
+        queryFn: async () => (await api.get<RawRisk[]>("/risks", { params })).data,
       },
       {
-        queryKey: ["tickets", clientId, "issue"],
-        queryFn: async () => (await api.get<RawIssue[]>("/issues")).data,
+        queryKey: ["tickets", clientId, "issue", scopeKey],
+        queryFn: async () => (await api.get<RawIssue[]>("/issues", { params })).data,
       },
     ],
   })
