@@ -46,7 +46,6 @@ const MaintenancePage          = React.lazy(() => import("./MaintenancePage"))
 const MaintenanceDetailPage    = React.lazy(() => import("./MaintenanceDetailPage"))
 const ConnectionsPage          = React.lazy(() => import("./ConnectionsPage"))
 const ConnectionDetailPage     = React.lazy(() => import("./ConnectionDetailPage"))
-const RisksIssuesNavigator     = React.lazy(() => import("./RisksIssuesNavigator"))
 const SettingsPage             = React.lazy(() => import("./SettingsPage"))
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -62,12 +61,23 @@ function RequireRoles({ roles, children }: { roles: string[]; children: React.Re
 
 function LegacyRiskDetailRedirect() {
   const { id } = useParams()
-  return <Navigate to={id ? `/risks-issues/risks/${id}` : "/risks-issues"} replace />
+  return <Navigate to={id ? `/service-desk/risk/${id}` : "/service-desk"} replace />
 }
 
 function LegacyIssueDetailRedirect() {
   const { id } = useParams()
-  return <Navigate to={id ? `/risks-issues/issues/${id}` : "/risks-issues"} replace />
+  return <Navigate to={id ? `/service-desk/issue/${id}` : "/service-desk"} replace />
+}
+
+// Risks & Issues have been merged into Service Desk (one queue). The retired
+// /risks-issues subtree redirects: records map to their Service Desk detail URL,
+// the list (and anything else) to the unified queue.
+function RisksIssuesRedirect() {
+  const params = useParams()
+  const [type, id] = (params["*"] ?? "").split("/").filter(Boolean)
+  if (type === "risks" && id) return <Navigate to={`/service-desk/risk/${id}`} replace />
+  if (type === "issues" && id) return <Navigate to={`/service-desk/issue/${id}`} replace />
+  return <Navigate to="/service-desk" replace />
 }
 
 function LegacyServiceRequestDetailRedirect() {
@@ -190,10 +200,10 @@ export default function App() {
               /risks-issues/* subtree (list → record → association), driven entirely
               by the URL (mirrors /service-desk/*). More-specific siblings below still
               win by RR v6 route ranking (static/dynamic outrank the splat). */}
-          <Route path="risks-issues/*" element={<RisksIssuesNavigator />} />
-          {/* Legacy risk/issue redirects */}
-          <Route path="risks" element={<Navigate to="/risks-issues" replace />} />
-          <Route path="issues" element={<Navigate to="/risks-issues" replace />} />
+          <Route path="risks-issues/*" element={<RisksIssuesRedirect />} />
+          {/* Legacy risk/issue redirects → Service Desk (R&I merged in) */}
+          <Route path="risks" element={<Navigate to="/service-desk" replace />} />
+          <Route path="issues" element={<Navigate to="/service-desk" replace />} />
           <Route path="risks/:id" element={<LegacyRiskDetailRedirect />} />
           <Route path="issues/:id" element={<LegacyIssueDetailRedirect />} />
 

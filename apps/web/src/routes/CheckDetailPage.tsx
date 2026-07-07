@@ -62,6 +62,7 @@ import { ErrorState, LoadingState } from "../components/PageState"
 import { useBreadcrumb } from "./Shell"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { DateField, AssigneePicker } from "../components/fields"
 import { checkSync } from "../lib/offline/checkQueue"
 import { useCheckExecutionSync, type CheckSyncStatus } from "../lib/offline/useCheckExecutionSync"
 import { useOnlineStatus } from "../lib/useOnlineStatus"
@@ -2084,30 +2085,21 @@ export default function CheckDetailPage() {
             both auto-save (PATCH /checks/:id) and the picker is the assignable set, never raw /users. */}
         {canManage ? (
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: "12px", mb: "22px" }}>
-            <TextField
-              type="date"
+            <DateField
               label="Scheduled date"
               size="small"
-              InputLabelProps={{ shrink: true }}
               value={check.scheduledAt ? check.scheduledAt.slice(0, 10) : ""}
-              onChange={e => patchCheck({ scheduledAt: e.target.value || null })}
+              onChange={val => patchCheck({ scheduledAt: val || null })}
               disabled={savingMeta}
-              fullWidth
             />
-            <TextField
-              select
+            <AssigneePicker
               label="Assigned engineer"
               size="small"
               value={check.assignee?.id ?? ""}
-              onChange={e => patchCheck({ assigneeId: e.target.value || null })}
+              onChange={val => patchCheck({ assigneeId: val || null })}
+              users={assignableUsers}
               disabled={savingMeta}
-              fullWidth
-            >
-              <MenuItem value="">Unassigned</MenuItem>
-              {(assignableUsers ?? []).map(u => (
-                <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>
-              ))}
-            </TextField>
+            />
           </Box>
         ) : null}
 

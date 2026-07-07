@@ -17,11 +17,16 @@ export interface AssigneePickerProps
   extends Omit<EnumSelectProps, "options" | "includeEmpty"> {
   users?: AssignableUser[]
   includeUnassigned?: boolean
+  // Label for the leading empty option. Defaults to "Unassigned"; override for
+  // user pickers whose empty state means something else (e.g. "Use current user"
+  // on a Maintenance "Performed by" picker).
+  emptyLabel?: string
 }
 
 export function AssigneePicker({
   users,
   includeUnassigned = true,
+  emptyLabel = "Unassigned",
   label = "Assignee",
   ...rest
 }: AssigneePickerProps) {
@@ -34,7 +39,7 @@ export function AssigneePicker({
     <EnumSelect
       label={label}
       options={options}
-      includeEmpty={includeUnassigned ? "Unassigned" : undefined}
+      includeEmpty={includeUnassigned ? emptyLabel : undefined}
       {...rest}
     />
   )

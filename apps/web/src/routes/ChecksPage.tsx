@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import {
-  Box, Button, Dialog, DialogContent, DialogTitle,
-  MenuItem, Stack, TextField, Tooltip, Typography
+  Box, Button, Stack, Tooltip, Typography
 } from "@mui/material"
+import { FormDialog, EnumSelect, DateField, AssigneePicker, FormTextField } from "../components/fields"
 import FactCheckIcon from "@mui/icons-material/FactCheck"
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline"
 import EventIcon from "@mui/icons-material/Event"
@@ -205,48 +205,28 @@ export default function ChecksPage() {
         ) : null}
       </Box>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Schedule engineering check</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField select label="Template" value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)} required fullWidth>
-              <MenuItem value="">Select a template...</MenuItem>
-              {(templates ?? []).map(t => (
-                <MenuItem key={t.id} value={t.id}>{t.name} — {t.checkType}</MenuItem>
-              ))}
-            </TextField>
-            <TextField select label="Site" value={siteId}
-              onChange={(e) => setSiteId(e.target.value)} required fullWidth>
-              <MenuItem value="">Select a site...</MenuItem>
-              {(sites ?? []).map(s => (
-                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField select label="Assign engineer (optional)" value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)} fullWidth>
-              <MenuItem value="">Unassigned</MenuItem>
-              {(users ?? []).map(u => (
-                <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>
-              ))}
-            </TextField>
-            <TextField type="date" label="Scheduled date (optional)"
-              InputLabelProps={{ shrink: true }}
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)} fullWidth />
-            <TextField label="Scope notes (optional)" multiline rows={2}
-              value={scopeNotes}
-              onChange={(e) => setScopeNotes(e.target.value)} fullWidth />
-            <Stack direction="row" justifyContent="flex-end" spacing={1}>
-              <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button variant="contained" onClick={handleCreate}
-                disabled={saving || !templateId || !siteId}>
-                {saving ? "Creating..." : "Schedule check"}
-              </Button>
-            </Stack>
-          </Stack>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        maxWidth="sm"
+        title="Schedule engineering check"
+        submitLabel="Schedule check"
+        submittingLabel="Creating…"
+        submitting={saving}
+        canSubmit={!!templateId && !!siteId}
+        onSubmit={handleCreate}
+      >
+        <EnumSelect span="full" label="Template" required value={templateId}
+          onChange={setTemplateId} includeEmpty="Select a template..."
+          options={(templates ?? []).map(t => ({ value: t.id, label: `${t.name} — ${t.checkType}` }))} />
+        <EnumSelect span="full" label="Site" required value={siteId}
+          onChange={setSiteId} includeEmpty="Select a site..."
+          options={(sites ?? []).map(s => ({ value: s.id, label: s.name }))} />
+        <AssigneePicker span="full" label="Assign engineer (optional)" value={assigneeId} onChange={setAssigneeId} />
+        <DateField span="full" label="Scheduled date (optional)" value={scheduledAt} onChange={setScheduledAt} />
+        <FormTextField span="full" label="Scope notes (optional)" multiline rows={2}
+          value={scopeNotes} onChange={(e) => setScopeNotes(e.target.value)} />
+      </FormDialog>
     </Box>
   )
 }

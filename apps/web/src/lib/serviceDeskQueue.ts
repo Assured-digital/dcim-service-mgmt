@@ -11,8 +11,8 @@ import { isNewStatus, type Ticket, type TicketKind } from "./tickets"
 
 export const DEFAULT_SORT: GridSortModel = [{ field: "updatedAt", sort: "desc" }]
 
-export const TYPE_PARAM_TO_KIND: Record<string, TicketKind> = { sr: "SR", inc: "INC", chg: "CHG", task: "TASK" }
-export const KIND_TO_TYPE_PARAM: Record<TicketKind, string> = { SR: "sr", INC: "inc", CHG: "chg", TASK: "task" }
+export const TYPE_PARAM_TO_KIND: Record<string, TicketKind> = { sr: "SR", inc: "INC", chg: "CHG", task: "TASK", risk: "RSK", issue: "ISS" }
+export const KIND_TO_TYPE_PARAM: Record<TicketKind, string> = { SR: "sr", INC: "inc", CHG: "chg", TASK: "task", RSK: "risk", ISS: "issue" }
 
 // ── SLA status (single source of truth — shared with the Dashboard widget) ──
 // breached = past due; due-soon = due within the next 24h; on-track = due later.

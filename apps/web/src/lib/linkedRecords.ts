@@ -103,9 +103,9 @@ export function routeForSegment(seg: string, id: string): string {
     case "task":
       return `/service-desk/task/${id}`
     case "risk":
-      return `/risks-issues/risks/${id}`
+      return `/service-desk/risk/${id}`
     case "issue":
-      return `/risks-issues/issues/${id}`
+      return `/service-desk/issue/${id}`
     default:
       return "#"
   }

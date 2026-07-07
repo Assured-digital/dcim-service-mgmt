@@ -15,6 +15,7 @@ import { StatusPill, entityStatusIntent } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { FormTextField, EnumSelect, DateField, AssigneePicker } from "../components/fields"
 import { type ApiError } from "../lib/api"
 import {
   OPEN_STAGES, OPPORTUNITY_STAGE_LABELS, OPPORTUNITY_TYPES, OPPORTUNITY_TYPE_LABELS,
@@ -63,47 +64,37 @@ function OpportunityCreateDrawer({ open, onClose }: { open: boolean; onClose: ()
         </Typography>
 
         <Stack spacing={2} sx={{ flex: 1, overflowY: "auto", pr: 0.5 }}>
-          <TextField label="Title" value={form.title} onChange={e => set({ title: e.target.value })}
-            required fullWidth InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Title" value={form.title} onChange={e => set({ title: e.target.value })} required />
 
-          <TextField select label="Type" value={form.type ?? "NEW_BUSINESS"} onChange={e => set({ type: e.target.value })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            {OPPORTUNITY_TYPES.map(t => <MenuItem key={t} value={t}>{OPPORTUNITY_TYPE_LABELS[t]}</MenuItem>)}
-          </TextField>
+          <EnumSelect label="Type" value={form.type ?? "NEW_BUSINESS"} onChange={val => set({ type: val })}
+            options={OPPORTUNITY_TYPES.map(t => ({ value: t, label: OPPORTUNITY_TYPE_LABELS[t] }))} />
 
-          <TextField label="Value (£)" type="number" value={form.value ?? ""}
-            onChange={e => set({ value: e.target.value === "" ? undefined : Number(e.target.value) })}
-            fullWidth InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Value (£)" type="number" value={form.value ?? ""}
+            onChange={e => set({ value: e.target.value === "" ? undefined : Number(e.target.value) })} />
 
-          <TextField label="Expected close" type="date"
+          <DateField label="Expected close"
             value={form.expectedCloseDate ? form.expectedCloseDate.slice(0, 10) : ""}
-            onChange={e => set({ expectedCloseDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-            fullWidth InputLabelProps={{ shrink: true }} />
+            onChange={val => set({ expectedCloseDate: val ? new Date(val).toISOString() : undefined })} />
 
-          <TextField select label="Owner" value={form.ownerId ?? ""}
-            onChange={e => set({ ownerId: e.target.value || undefined })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            <MenuItem value="">— Unassigned —</MenuItem>
-            {(assignable ?? []).map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-          </TextField>
+          <AssigneePicker label="Owner" value={form.ownerId ?? ""}
+            onChange={val => set({ ownerId: val || undefined })} users={assignable} />
 
-          <TextField select label="Primary contact" value={form.contactId ?? ""}
-            onChange={e => set({ contactId: e.target.value || undefined })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            <MenuItem value="">— None —</MenuItem>
-            {(contacts.data ?? []).map(c => <MenuItem key={c.id} value={c.id}>{contactDisplayName(c)}</MenuItem>)}
-          </TextField>
+          <EnumSelect label="Primary contact" value={form.contactId ?? ""}
+            onChange={val => set({ contactId: val || undefined })} includeEmpty="— None —"
+            options={(contacts.data ?? []).map(c => ({ value: c.id, label: contactDisplayName(c) }))} />
 
           <Stack direction="row" spacing={1.2}>
-            <TextField label="Next step" value={form.nextStep ?? ""} onChange={e => set({ nextStep: e.target.value || undefined })}
-              fullWidth InputLabelProps={{ shrink: true }} />
-            <TextField label="By" type="date" value={form.nextStepDate ? form.nextStepDate.slice(0, 10) : ""}
-              onChange={e => set({ nextStepDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-              sx={{ width: 170 }} InputLabelProps={{ shrink: true }} />
+            <Box sx={{ flex: 1 }}>
+              <FormTextField label="Next step" value={form.nextStep ?? ""} onChange={e => set({ nextStep: e.target.value || undefined })} />
+            </Box>
+            <Box sx={{ width: 170 }}>
+              <DateField label="By" value={form.nextStepDate ? form.nextStepDate.slice(0, 10) : ""}
+                onChange={val => set({ nextStepDate: val ? new Date(val).toISOString() : undefined })} />
+            </Box>
           </Stack>
 
-          <TextField label="Notes" value={form.notes ?? ""} onChange={e => set({ notes: e.target.value || undefined })}
-            fullWidth multiline minRows={3} InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Notes" value={form.notes ?? ""} onChange={e => set({ notes: e.target.value || undefined })}
+            multiline minRows={3} />
 
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>

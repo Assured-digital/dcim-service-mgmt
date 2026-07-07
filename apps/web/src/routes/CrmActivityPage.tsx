@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Alert, Autocomplete, Box, Button, Card, Chip, Drawer, MenuItem, Stack, TextField, Typography
 } from "@mui/material"
+import { FormTextField, EnumSelect, DateField, FieldLabel, AssigneePicker } from "../components/fields"
 import AddCommentIcon from "@mui/icons-material/AddComment"
 import CallIcon from "@mui/icons-material/Call"
 import GroupsIcon from "@mui/icons-material/Groups"
@@ -87,33 +88,32 @@ function ActivityFormDrawer({ state, onClose }: { state: DrawerState; onClose: (
         </Typography>
 
         <Stack spacing={2} sx={{ flex: 1, overflowY: "auto", pr: 0.5 }}>
-          <TextField select label="Type" value={form.type} onChange={e => set({ type: e.target.value })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            {ACTIVITY_TYPES.map(t => <MenuItem key={t} value={t}>{ACTIVITY_TYPE_LABELS[t]}</MenuItem>)}
-          </TextField>
+          <EnumSelect label="Type" value={form.type} onChange={val => set({ type: val })}
+            options={ACTIVITY_TYPES.map(t => ({ value: t, label: ACTIVITY_TYPE_LABELS[t] }))} />
 
-          <TextField label="Subject" value={form.subject} onChange={e => set({ subject: e.target.value })}
-            required fullWidth InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Subject" value={form.subject} onChange={e => set({ subject: e.target.value })} required />
 
-          <TextField label="When" type="datetime-local"
+          <DateField label="When" type="datetime-local"
             value={form.occurredAt ? form.occurredAt.slice(0, 16) : ""}
-            onChange={e => set({ occurredAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-            fullWidth InputLabelProps={{ shrink: true }}
+            onChange={val => set({ occurredAt: val ? new Date(val).toISOString() : undefined })}
             helperText="Leave blank for now" />
 
-          <Autocomplete
-            multiple
-            options={contacts.data ?? []}
-            value={selectedContacts}
-            onChange={(_e, v) => set({ contactIds: v.map(c => c.id) })}
-            getOptionLabel={c => contactDisplayName(c)}
-            isOptionEqualToValue={(o, v) => o.id === v.id}
-            renderInput={params => <TextField {...params} label="Contacts involved" InputLabelProps={{ shrink: true }} />}
-            size="small"
-          />
+          <Box>
+            <FieldLabel>Contacts involved</FieldLabel>
+            <Autocomplete
+              multiple
+              options={contacts.data ?? []}
+              value={selectedContacts}
+              onChange={(_e, v) => set({ contactIds: v.map(c => c.id) })}
+              getOptionLabel={c => contactDisplayName(c)}
+              isOptionEqualToValue={(o, v) => o.id === v.id}
+              renderInput={params => <TextField {...params} placeholder="Search contacts…" />}
+              size="small"
+            />
+          </Box>
 
-          <TextField label="Notes" value={form.body ?? ""} onChange={e => set({ body: e.target.value || undefined })}
-            fullWidth multiline minRows={4} InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Notes" value={form.body ?? ""} onChange={e => set({ body: e.target.value || undefined })}
+            multiline minRows={4} />
 
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>
@@ -159,20 +159,14 @@ function FollowUpDrawer({ activity, onClose }: { activity: ActivityView | null; 
         </Typography>
 
         <Stack spacing={2} sx={{ flex: 1, overflowY: "auto", pr: 0.5 }}>
-          <TextField label="Task title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            required fullWidth InputLabelProps={{ shrink: true }} />
-          <TextField label="Due" type="date" value={form.dueAt ? form.dueAt.slice(0, 10) : ""}
-            onChange={e => setForm(f => ({ ...f, dueAt: e.target.value ? new Date(e.target.value).toISOString() : undefined }))}
-            fullWidth InputLabelProps={{ shrink: true }} />
-          <TextField select label="Assignee" value={form.assigneeId ?? ""}
-            onChange={e => setForm(f => ({ ...f, assigneeId: e.target.value || undefined }))}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            <MenuItem value="">— Unassigned —</MenuItem>
-            {(assignable ?? []).map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-          </TextField>
-          <TextField label="Details" value={form.description ?? ""}
+          <FormTextField label="Task title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
+          <DateField label="Due" value={form.dueAt ? form.dueAt.slice(0, 10) : ""}
+            onChange={val => setForm(f => ({ ...f, dueAt: val ? new Date(val).toISOString() : undefined }))} />
+          <AssigneePicker label="Assignee" value={form.assigneeId ?? ""}
+            onChange={val => setForm(f => ({ ...f, assigneeId: val || undefined }))} users={assignable} />
+          <FormTextField label="Details" value={form.description ?? ""}
             onChange={e => setForm(f => ({ ...f, description: e.target.value || undefined }))}
-            fullWidth multiline minRows={3} InputLabelProps={{ shrink: true }} />
+            multiline minRows={3} />
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>
 

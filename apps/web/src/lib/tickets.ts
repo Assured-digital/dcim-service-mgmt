@@ -1,9 +1,16 @@
 import { useQueries } from "@tanstack/react-query"
 import { api } from "./api"
 import { getSelectedClientId } from "./scope"
+import {
+  deriveRag, RISK_STATUS_LABELS, ISSUE_STATUS_LABELS,
+  type Risk as RawRisk, type Issue as RawIssue,
+} from "./risksIssuesQueue"
 
 // ── Kind + unified ticket shape ────────────────────────────────────────────
-export type TicketKind = "SR" | "INC" | "CHG" | "TASK"
+// The Service Desk queue unifies the six governed work-items. RSK/ISS (Risks &
+// Issues) were merged in — they carry a RAG `ragSeverity` instead of a ticket
+// `priority`, and never participate in the new/awaiting/overdue views.
+export type TicketKind = "SR" | "INC" | "CHG" | "TASK" | "RSK" | "ISS"
 export type ChipIntent = "new" | "open" | "wait" | "done" | "overdue"
 
 export interface Ticket {
@@ -31,6 +38,9 @@ export interface Ticket {
   changeType?: string
   scheduledStart?: string | null
   scheduledEnd?: string | null
+  /** RAG severity (RED/AMBER/GREEN) for RSK/ISS — the Priority column renders this
+   *  as a RAG pill instead of the ticket PriorityPill. Undefined for tickets. */
+  ragSeverity?: string
 }
 
 // ── Raw shapes from each endpoint ──────────────────────────────────────────
@@ -123,12 +133,29 @@ const TASK_INTENT: Record<string, ChipIntent> = {
   BLOCKED: "wait",
   DONE: "done",
 }
+// Risk / Issue statuses map onto the shared chip intents. They never bucket as
+// "new" (isNewStatus returns false for RSK/ISS) so active R&I read as "open".
+const RISK_INTENT: Record<string, ChipIntent> = {
+  IDENTIFIED: "open",
+  UNDER_REVIEW: "open",
+  MITIGATING: "open",
+  ACCEPTED: "done",
+  CLOSED: "done",
+}
+const ISSUE_INTENT: Record<string, ChipIntent> = {
+  OPEN: "open",
+  IN_PROGRESS: "open",
+  RESOLVED: "done",
+  CLOSED: "done",
+}
 
 function intentFor(kind: TicketKind, status: string): ChipIntent {
   const map =
     kind === "SR" ? SR_INTENT
     : kind === "INC" ? INC_INTENT
     : kind === "CHG" ? CHG_INTENT
+    : kind === "RSK" ? RISK_INTENT
+    : kind === "ISS" ? ISSUE_INTENT
     : TASK_INTENT
   return map[status] ?? "new"
 }
@@ -233,12 +260,55 @@ function normaliseTask(r: RawTask, now: number): Ticket {
   }
 }
 
+// Risk / Issue: no ticket priority (RAG severity instead) and no due/overdue
+// concept in the queue — they carry a review date, surfaced on their detail page,
+// not as a queue overdue. So overdue=false, dueAt=null; ragSeverity drives the
+// Priority column. Risk severity is derived (likelihood×impact); Issue is raw RAG.
+function normaliseRisk(r: RawRisk): Ticket {
+  return {
+    id: r.id,
+    kind: "RSK",
+    reference: r.reference,
+    subject: r.title,
+    status: r.status,
+    chipIntent: intentFor("RSK", r.status),
+    priority: "",
+    assignee: r.assignee,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    overdue: false,
+    dueAt: null,
+    ragSeverity: deriveRag(r.likelihood, r.impact),
+    detailPath: `/service-desk/risk/${r.id}`,
+  }
+}
+
+function normaliseIssue(i: RawIssue): Ticket {
+  return {
+    id: i.id,
+    kind: "ISS",
+    reference: i.reference,
+    subject: i.title,
+    status: i.status,
+    chipIntent: intentFor("ISS", i.status),
+    priority: "",
+    assignee: i.assignee,
+    createdAt: i.createdAt,
+    updatedAt: i.updatedAt,
+    overdue: false,
+    dueAt: null,
+    ragSeverity: i.severity,
+    detailPath: `/service-desk/issue/${i.id}`,
+  }
+}
+
 // ── Helpers exposed for callers ───────────────────────────────────────────
 /** True when a ticket sits in its initial "newly raised" status. */
 export function isNewStatus(t: Ticket): boolean {
   if (t.kind === "SR") return t.status === "NEW"
   if (t.kind === "INC") return t.status === "NEW"
   if (t.kind === "TASK") return false   // Task has no "new" state; OPEN is its initial active status.
+  if (t.kind === "RSK" || t.kind === "ISS") return false  // R&I don't participate in the "new" view.
   return t.status === "DRAFT" || t.status === "SUBMITTED"
 }
 
@@ -285,10 +355,18 @@ export function useTickets(): UseTicketsResult {
         queryKey: ["tickets", clientId, "task"],
         queryFn: async () => (await api.get<RawTask[]>("/tasks")).data,
       },
+      {
+        queryKey: ["tickets", clientId, "risk"],
+        queryFn: async () => (await api.get<RawRisk[]>("/risks")).data,
+      },
+      {
+        queryKey: ["tickets", clientId, "issue"],
+        queryFn: async () => (await api.get<RawIssue[]>("/issues")).data,
+      },
     ],
   })
 
-  const [srQ, incQ, chgQ, taskQ] = results
+  const [srQ, incQ, chgQ, taskQ, riskQ, issueQ] = results
   const isLoading = results.some(r => r.isLoading)
   const isFetching = results.some(r => r.isFetching)
   const error = results.find(r => r.error)?.error ?? null
@@ -300,6 +378,8 @@ export function useTickets(): UseTicketsResult {
     ...((incQ.data ?? []).map(r => normaliseIncident(r, now))),
     ...((chgQ.data ?? []).map(r => normaliseChange(r, now))),
     ...((taskQ.data ?? []).map(r => normaliseTask(r, now))),
+    ...(((riskQ.data ?? []) as RawRisk[]).map(r => normaliseRisk(r))),
+    ...(((issueQ.data ?? []) as RawIssue[]).map(i => normaliseIssue(i))),
   ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
   return { data, isLoading, error, isFetching, dataUpdatedAt, refetch }
@@ -311,6 +391,8 @@ export const KIND_DETAIL_FIELDS: Record<TicketKind, string[]> = {
   INC: ["severity", "firstResponse", "sla", "opened", "updated"],
   CHG: ["changeType", "scheduledStart", "scheduledEnd", "approvals", "implementationNotes", "postImplReview", "opened", "updated"],
   TASK: ["priority", "assignee", "dueAt", "opened", "updated"],
+  RSK: ["likelihood", "impact", "assignee", "reviewDate", "opened", "updated"],
+  ISS: ["severity", "assignee", "reviewDate", "opened", "updated"],
 }
 
 // ── Status-flow specs per kind (lifted from the three detail pages) ────────
@@ -349,6 +431,11 @@ export const STATUS_FLOW: Record<TicketKind, Record<string, string[]>> = {
     BLOCKED: ["OPEN", "IN_PROGRESS", "DONE"],
     DONE: ["OPEN"],
   },
+  // Risk/Issue transitions live in config/transitions/{risk,issue}Transitions.ts and
+  // are driven by their own detail pages — the queue doesn't transition them, so
+  // these stay empty (present only to satisfy the exhaustive Record).
+  RSK: {},
+  ISS: {},
 }
 
 // Full human-readable type label per kind (e.g. the working-queue rail row).
@@ -358,6 +445,8 @@ export const KIND_LABELS: Record<TicketKind, string> = {
   INC: "Incident",
   CHG: "Change Request",
   TASK: "Task",
+  RSK: "Risk",
+  ISS: "Issue",
 }
 
 export const STATUS_LABELS: Record<TicketKind, Record<string, string>> = {
@@ -394,6 +483,8 @@ export const STATUS_LABELS: Record<TicketKind, Record<string, string>> = {
     BLOCKED: "Blocked",
     DONE: "Done",
   },
+  RSK: RISK_STATUS_LABELS,
+  ISS: ISSUE_STATUS_LABELS,
 }
 
 // Kind-specific detail endpoint (used to build legacy redirects).
@@ -403,5 +494,7 @@ export function detailPathFor(kind: TicketKind, id: string): string {
     case "INC": return `/service-desk/inc/${id}`
     case "CHG": return `/service-desk/chg/${id}`
     case "TASK": return `/service-desk/task/${id}`
+    case "RSK": return `/service-desk/risk/${id}`
+    case "ISS": return `/service-desk/issue/${id}`
   }
 }

@@ -1,12 +1,13 @@
 import React from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Alert, Box, Button, Card, Drawer, MenuItem, Stack, TextField, Typography } from "@mui/material"
+import { Alert, Box, Button, Card, Drawer, Stack, Typography } from "@mui/material"
 import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined"
 import { DataGrid, GridColDef } from "@mui/x-data-grid"
 import { EmptyState, ErrorState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
 import { StatusPill, entityStatusIntent } from "../components/shared"
+import { FormTextField, EnumSelect, DateField } from "../components/fields"
 import { QuoteLineItemsEditor } from "../components/QuoteLineItemsEditor"
 import { useThemeMode } from "../lib/theme"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
@@ -68,38 +69,28 @@ function QuoteCreateDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         </Typography>
 
         <Stack spacing={2} sx={{ flex: 1, overflowY: "auto", pr: 0.5 }}>
-          <TextField label="Title" value={form.title} onChange={e => set({ title: e.target.value })}
-            required fullWidth InputLabelProps={{ shrink: true }} />
+          <FormTextField label="Title" value={form.title} onChange={e => set({ title: e.target.value })} required />
 
-          <TextField select label="Opportunity" value={form.opportunityId ?? ""}
-            onChange={e => set({ opportunityId: e.target.value || undefined })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            <MenuItem value="">— None —</MenuItem>
-            {(opportunities.data ?? []).map(o => (
-              <MenuItem key={o.id} value={o.id}>{o.reference} — {o.title}</MenuItem>
-            ))}
-          </TextField>
+          <EnumSelect label="Opportunity" value={form.opportunityId ?? ""}
+            onChange={val => set({ opportunityId: val || undefined })} includeEmpty="— None —"
+            options={(opportunities.data ?? []).map(o => ({ value: o.id, label: `${o.reference} — ${o.title}` }))} />
 
-          <TextField select label="Recipient contact" value={form.contactId ?? ""}
-            onChange={e => set({ contactId: e.target.value || undefined })}
-            fullWidth InputLabelProps={{ shrink: true }}>
-            <MenuItem value="">— None —</MenuItem>
-            {(contacts.data ?? []).map(c => <MenuItem key={c.id} value={c.id}>{contactDisplayName(c)}</MenuItem>)}
-          </TextField>
+          <EnumSelect label="Recipient contact" value={form.contactId ?? ""}
+            onChange={val => set({ contactId: val || undefined })} includeEmpty="— None —"
+            options={(contacts.data ?? []).map(c => ({ value: c.id, label: contactDisplayName(c) }))} />
 
-          <TextField label="Valid until" type="date"
+          <DateField label="Valid until"
             value={form.validUntil ? form.validUntil.slice(0, 10) : ""}
-            onChange={e => set({ validUntil: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-            fullWidth InputLabelProps={{ shrink: true }} />
+            onChange={val => set({ validUntil: val ? new Date(val).toISOString() : undefined })} />
 
           <Box>
             <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-text-muted)", mb: 1 }}>Line items</Typography>
             <QuoteLineItemsEditor lines={lines} onChange={setLines} />
           </Box>
 
-          <TextField label="Description" value={form.description ?? ""}
+          <FormTextField label="Description" value={form.description ?? ""}
             onChange={e => set({ description: e.target.value || undefined })}
-            fullWidth multiline minRows={2} InputLabelProps={{ shrink: true }} />
+            multiline minRows={2} />
 
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>
@@ -156,10 +147,10 @@ export default function CrmQuotesPage() {
   ], [hasValues])
 
   return (
-    <Box>
-      <Card>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 480 }}>
+      <Card sx={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <Box sx={{
-          borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.25,
+          borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.25, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5
         }}>
           <Typography sx={{ fontSize: 14, fontWeight: 600, color: themeMode === "dark" ? "#e2e8f0" : "#334155" }}>
@@ -177,7 +168,7 @@ export default function CrmQuotesPage() {
           <Box sx={{ p: 2 }}><ErrorState title="Failed to load quotes" /></Box>
         ) : null}
 
-        <Box sx={{ height: 620 }}>
+        <Box sx={{ flex: 1, minHeight: 0 }}>
           <DataGrid
             rows={rows}
             columns={columns}

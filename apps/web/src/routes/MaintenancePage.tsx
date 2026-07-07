@@ -6,10 +6,6 @@ import {
   Box,
   Button,
   Card,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   MenuItem,
   Stack,
   TextField,
@@ -21,6 +17,7 @@ import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { makeGridToolbar, dataGridSx } from "../components/DataGridShell"
 import { ListToolbar, ToolbarButton } from "../components/shared/ListToolbar"
+import { FormDialog, EnumSelect, DateField, AssigneePicker, FormTextField } from "../components/fields"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 
 type MaintenanceRecord = {
@@ -208,86 +205,30 @@ export default function MaintenancePage() {
         ) : null}
       </Card>
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Log maintenance</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField select label="Asset" value={assetId} onChange={(e) => setAssetId(e.target.value)} required fullWidth>
-              <MenuItem value="">Select asset...</MenuItem>
-              {(assets.data ?? []).map((asset) => (
-                <MenuItem key={asset.id} value={asset.id}>
-                  {asset.assetTag} - {asset.name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField select label="Work type" value={workType} onChange={(e) => setWorkType(e.target.value)} required fullWidth>
-              {WORK_TYPES.map((type) => (
-                <MenuItem key={type} value={type}>
-                  {type.replaceAll("_", " ")}
-                </MenuItem>
-              ))}
-            </TextField>
-            {workType === "OTHER" ? (
-              <TextField
-                label="Custom work type"
-                value={workTypeOther}
-                onChange={(e) => setWorkTypeOther(e.target.value)}
-                required
-                fullWidth
-              />
-            ) : null}
-            <TextField
-              type="date"
-              label="Performed at"
-              InputLabelProps={{ shrink: true }}
-              value={performedAt}
-              onChange={(e) => setPerformedAt(e.target.value)}
-              required
-              fullWidth
-            />
-            <TextField
-              type="date"
-              label="Next due (optional)"
-              InputLabelProps={{ shrink: true }}
-              value={nextDueAt}
-              onChange={(e) => setNextDueAt(e.target.value)}
-              fullWidth
-            />
-            <TextField
-              select
-              label="Performed by (optional)"
-              value={performedById}
-              onChange={(e) => setPerformedById(e.target.value)}
-              fullWidth
-            >
-              <MenuItem value="">Use current user</MenuItem>
-              {(users.data ?? []).map((user) => (
-                <MenuItem key={user.id} value={user.id}>
-                  {user.displayName}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Notes (optional)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              multiline
-              rows={3}
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleCreate}
-            disabled={saving || !assetId || !performedAt || (workType === "OTHER" && !workTypeOther.trim())}
-          >
-            {saving ? "Saving..." : "Create record"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <FormDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        maxWidth="sm"
+        title="Log maintenance"
+        submitLabel="Create record"
+        submittingLabel="Saving…"
+        submitting={saving}
+        canSubmit={!!assetId && !!performedAt && !(workType === "OTHER" && !workTypeOther.trim())}
+        onSubmit={handleCreate}
+      >
+        <EnumSelect span="full" label="Asset" required value={assetId} onChange={setAssetId} includeEmpty="Select asset..."
+          options={(assets.data ?? []).map((asset) => ({ value: asset.id, label: `${asset.assetTag} - ${asset.name}` }))} />
+        <EnumSelect span="full" label="Work type" required value={workType} onChange={setWorkType}
+          options={WORK_TYPES.map((type) => ({ value: type, label: type.replaceAll("_", " ") }))} />
+        {workType === "OTHER" ? (
+          <FormTextField span="full" label="Custom work type" required value={workTypeOther} onChange={(e) => setWorkTypeOther(e.target.value)} />
+        ) : null}
+        <DateField span="full" label="Performed at" required value={performedAt} onChange={setPerformedAt} />
+        <DateField span="full" label="Next due (optional)" value={nextDueAt} onChange={setNextDueAt} />
+        <AssigneePicker span="full" label="Performed by (optional)" value={performedById} onChange={setPerformedById}
+          users={users.data} emptyLabel="Use current user" />
+        <FormTextField span="full" label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} multiline rows={3} />
+      </FormDialog>
     </Box>
   )
 }

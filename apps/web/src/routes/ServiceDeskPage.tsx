@@ -29,6 +29,8 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import BuildIcon from "@mui/icons-material/Build"
 import TaskAltIcon from "@mui/icons-material/TaskAlt"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
+import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined"
 import ViewColumnIcon from "@mui/icons-material/ViewColumn"
 import { TypeBadge, PriorityPill, StatusPill, AssigneeCell, ListNavRail, RecordTypePicker, type RailSection, type BadgeKind } from "../components/shared"
 import { formatDate } from "../lib/format"
@@ -53,6 +55,8 @@ const SLA_FILTER_LABELS: Record<SlaFilter, string> = {
 import { CreateIncidentModal } from "./modals/CreateIncidentModal"
 import { CreateChangeModal } from "./modals/CreateChangeModal"
 import { CreateTaskModal } from "./modals/CreateTaskModal"
+import { CreateRiskModal, CreateIssueModal } from "./RisksIssuesPage"
+import { RAG_LABELS } from "../lib/risksIssuesQueue"
 import ServiceDeskBoard from "./ServiceDeskBoard"
 
 // ── Create Service Request Modal (exported) ───────────────────────────────
@@ -294,12 +298,28 @@ function buildUnifiedColumns(assigneeOptions: string[], mode: ThemeMode): GridCo
     },
     {
       field: "priority", headerName: "Priority", width: 110,
-      renderCell: (p) => (
-        <PriorityPill
-          priority={p.value as string}
-          label={(p.value as string).charAt(0).toUpperCase() + (p.value as string).slice(1)}
-        />
-      ),
+      renderCell: (p) => {
+        const t = p.row as Ticket
+        // Risks & Issues carry a RAG severity, not a ticket priority — render it as
+        // a RAG pill (High/Medium/Low) in the same column (Create Surface merge).
+        // Guard ragToken against any severity outside RED/AMBER/GREEN (it would
+        // otherwise return undefined and throw on tok.bg).
+        if (t.ragSeverity) {
+          const known = t.ragSeverity === "RED" || t.ragSeverity === "AMBER" || t.ragSeverity === "GREEN"
+          const tok = known ? ragToken(t.ragSeverity as "RED" | "AMBER" | "GREEN", mode) : null
+          return (
+            <Box component="span" sx={{
+              display: "inline-flex", alignItems: "center", height: 20, px: "8px",
+              borderRadius: "4px", bgcolor: tok?.bg ?? "transparent", color: tok?.text ?? "text.secondary",
+              fontSize: 11, fontWeight: 600,
+            }}>
+              {RAG_LABELS[t.ragSeverity] ?? t.ragSeverity}
+            </Box>
+          )
+        }
+        const v = p.value as string
+        return v ? <PriorityPill priority={v} label={v.charAt(0).toUpperCase() + v.slice(1)} /> : null
+      },
     },
     {
       field: "assignee", headerName: "Assignee", width: 170,
@@ -368,6 +388,8 @@ function UnifiedServiceDeskView() {
   const [incOpen, setIncOpen] = React.useState(false)
   const [chgOpen, setChgOpen] = React.useState(false)
   const [taskOpen, setTaskOpen] = React.useState(false)
+  const [riskOpen, setRiskOpen] = React.useState(false)
+  const [issueOpen, setIssueOpen] = React.useState(false)
   const canRaise = hasAnyRole([
     ...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST,
     ROLES.ENGINEER, ROLES.CLIENT_VIEWER
@@ -396,7 +418,7 @@ function UnifiedServiceDeskView() {
   // total of the active view. Same useTickets() feed, no extra fetch.
   const typeCounts = React.useMemo(() => {
     const viewOnly = filterTickets(tickets, { ...queueParams, typeFilter: "all" }, currentUser)
-    const c: Record<TicketKind | "all", number> = { all: viewOnly.length, SR: 0, INC: 0, CHG: 0, TASK: 0 }
+    const c: Record<TicketKind | "all", number> = { all: viewOnly.length, SR: 0, INC: 0, CHG: 0, TASK: 0, RSK: 0, ISS: 0 }
     for (const t of viewOnly) c[t.kind]++
     return c
   }, [tickets, queueParams, currentUser])
@@ -473,6 +495,8 @@ function UnifiedServiceDeskView() {
     if (kind === "INC") setIncOpen(true)
     if (kind === "CHG") setChgOpen(true)
     if (kind === "TASK") setTaskOpen(true)
+    if (kind === "RSK") setRiskOpen(true)
+    if (kind === "ISS") setIssueOpen(true)
   }
 
   function handleRowClick(t: Ticket) {
@@ -512,6 +536,8 @@ function UnifiedServiceDeskView() {
       { id: "INC", label: "Incidents", count: typeCounts.INC, icon: <ReportProblemIcon sx={{ fontSize: 18 }} /> },
       { id: "CHG", label: "Change", count: typeCounts.CHG, icon: <BuildIcon sx={{ fontSize: 18 }} /> },
       { id: "TASK", label: "Tasks", count: typeCounts.TASK, icon: <TaskAltIcon sx={{ fontSize: 18 }} /> },
+      { id: "RSK", label: "Risks", count: typeCounts.RSK, icon: <WarningAmberIcon sx={{ fontSize: 18 }} /> },
+      { id: "ISS", label: "Issues", count: typeCounts.ISS, icon: <FlagOutlinedIcon sx={{ fontSize: 18 }} /> },
     ],
   }
 
@@ -585,7 +611,9 @@ function UnifiedServiceDeskView() {
           {error ? <Box sx={{ p: 3 }}><ErrorState title="Failed to load tickets" /></Box> : null}
 
           {!isLoading && !error && viewParam === "board" ? (
-            <ServiceDeskBoard tickets={filtered} />
+            // Board (kanban) columns are keyed on ticket workflow statuses; Risks &
+            // Issues use their own status models, so they show in the table view only.
+            <ServiceDeskBoard tickets={filtered.filter(t => t.kind !== "RSK" && t.kind !== "ISS")} />
           ) : null}
 
           {!isLoading && !error && viewParam === "table" && filtered.length === 0 ? (
@@ -646,12 +674,16 @@ function UnifiedServiceDeskView() {
           { kind: "INC", title: "Incident",        subtitle: "Unplanned outage or service degradation" },
           { kind: "CHG", title: "Change",          subtitle: "Planned change with scheduled window" },
           { kind: "TASK", title: "Task",           subtitle: "Standalone action — no parent required" },
+          { kind: "RSK", title: "Risk",            subtitle: "Potential future problem to track and mitigate" },
+          { kind: "ISS", title: "Issue",           subtitle: "An active problem requiring resolution" },
         ]}
       />
       <CreateServiceRequestModal open={srOpen} onClose={() => setSrOpen(false)} />
       <CreateIncidentModal open={incOpen} onClose={() => setIncOpen(false)} />
       <CreateChangeModal open={chgOpen} onClose={() => setChgOpen(false)} />
       <CreateTaskModal open={taskOpen} onClose={() => setTaskOpen(false)} />
+      <CreateRiskModal open={riskOpen} onClose={() => setRiskOpen(false)} />
+      <CreateIssueModal open={issueOpen} onClose={() => setIssueOpen(false)} />
     </Box>
   )
 }

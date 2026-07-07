@@ -8,13 +8,11 @@ import {
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
 import DashboardIcon from "@mui/icons-material/Dashboard"
-import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber"
 import FactCheckIcon from "@mui/icons-material/FactCheck"
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts"
 import ApartmentIcon from "@mui/icons-material/Apartment"
 import HistoryIcon from "@mui/icons-material/History"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
-import ReportProblemIcon from "@mui/icons-material/ReportProblem"
 import WorkIcon from "@mui/icons-material/Work"
 import PlaylistAddCheckIcon from "@mui/icons-material/PlaylistAddCheck"
 import AssignmentIndIcon from "@mui/icons-material/AssignmentInd"
@@ -276,10 +274,13 @@ const scopeIndependentSections: NavSection[] = [
 const clientSections: NavSection[] = [
   { title: "", items: [{ label: "Dashboard", path: "/dashboard", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) }] },
   {
-    title: "Service Management", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, items: [
-      { label: "Service Desk", path: "/service-desk", icon: <ConfirmationNumberIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
-      { label: "Risks & Issues", path: "/risks-issues", icon: <ReportProblemIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
-      // Changes + Incidents are unified into Service Desk — they no longer have their own nav entries.
+    // Service Desk is now a single flat entry (was the "Service Management" group).
+    // Risks & Issues merged in — its records open under /service-desk/risk|issue and
+    // (Phase 2) will appear in the unified Service Desk queue, so it no longer has its
+    // own nav entry. SERVICE_DESK is visible to CLIENT_VIEWER too (they previously had
+    // R&I access, now inside Service Desk).
+    title: "", items: [
+      { label: "Service Desk", path: "/service-desk", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
     ]
   },
   {
@@ -818,6 +819,11 @@ export default function Shell() {
     "/service-desk/sr": "/service-desk",
     "/service-desk/inc": "/service-desk",
     "/service-desk/chg": "/service-desk",
+    // Risks & Issues merged into Service Desk: records open under /service-desk,
+    // and the legacy /risks-issues list still highlights the Service Desk item.
+    "/service-desk/risk": "/service-desk",
+    "/service-desk/issue": "/service-desk",
+    "/risks-issues": "/service-desk",
   }
 
   function resolveActivePage(pathname: string) {
@@ -983,11 +989,13 @@ export default function Shell() {
               const visible = section.items.filter(i => hasAnyRole(i.roles))
               if (visible.length === 0) return null
 
-              // Root (Dashboard) — no header
+              // Flat, header-less items (Dashboard, Service Desk). Use the resolved
+              // active page (handles sub-paths via PATH_PARENT_MAP) instead of a
+              // hardcoded "/dashboard" check, so every flat item highlights correctly.
               if (!section.title) {
                 return visible.filter((i): i is NavItem => !('kind' in i)).map(item => (
                   <List key={item.path} dense disablePadding sx={{ px: 1, pt: "2px" }}>
-                    <NavItem item={item} selected={loc.pathname === "/dashboard"} onClick={() => navigateTo(item.path)} expanded={navExpanded} />
+                    <NavItem item={item} selected={activePage?.path === item.path} onClick={() => navigateTo(item.path)} expanded={navExpanded} />
                   </List>
                 ))
               }

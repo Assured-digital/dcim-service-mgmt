@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query"
 import { api } from "../lib/api"
 import { Room, ROOM_TYPE_LABELS, ASSET_LIFECYCLE_OPTIONS, ElevationSide, Cabinet, Site } from "../lib/infrastructure"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
+import { FormDialog, EnumSelect, DateField, AssigneePicker, FormTextField } from "../components/fields"
 import { DeviceTypePicker } from "./DeviceTypePicker"
 import { DeviceType, formatU } from "../lib/deviceTypes"
 
@@ -870,31 +871,26 @@ export function LogMaintenanceDialog({ onClose, onSave }: {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Log maintenance</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <TextField select label="Work type" value={workType} onChange={e => setWorkType(e.target.value)} fullWidth>
-            {MAINTENANCE_WORK_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-          </TextField>
-          {workType === "OTHER" ? (
-            <TextField label="Describe the work" value={workTypeOther} onChange={e => setWorkTypeOther(e.target.value)} fullWidth />
-          ) : null}
-          <Stack direction="row" spacing={2}>
-            <TextField label="Performed at" type="date" InputLabelProps={{ shrink: true }} value={performedAt} onChange={e => setPerformedAt(e.target.value)} required fullWidth />
-            <TextField label="Next due" type="date" InputLabelProps={{ shrink: true }} value={nextDueAt} onChange={e => setNextDueAt(e.target.value)} fullWidth />
-          </Stack>
-          <TextField select label="Performed by" value={performedById} onChange={e => setPerformedById(e.target.value)} fullWidth>
-            <MenuItem value="">(current user)</MenuItem>
-            {users.map(u => <MenuItem key={u.id} value={u.id}>{u.displayName}</MenuItem>)}
-          </TextField>
-          <TextField label="Notes" value={notes} onChange={e => setNotes(e.target.value)} multiline rows={3} fullWidth />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving || !performedAt}>{saving ? "Saving..." : "Log maintenance"}</Button>
-      </DialogActions>
-    </Dialog>
+    <FormDialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      title="Log maintenance"
+      submitLabel="Log maintenance"
+      submittingLabel="Saving…"
+      submitting={saving}
+      canSubmit={!!performedAt}
+      onSubmit={handleSave}
+    >
+      <EnumSelect span="full" label="Work type" value={workType} onChange={setWorkType} options={MAINTENANCE_WORK_TYPES} />
+      {workType === "OTHER" ? (
+        <FormTextField span="full" label="Describe the work" value={workTypeOther} onChange={e => setWorkTypeOther(e.target.value)} />
+      ) : null}
+      <DateField label="Performed at" required value={performedAt} onChange={setPerformedAt} />
+      <DateField label="Next due" value={nextDueAt} onChange={setNextDueAt} />
+      <AssigneePicker span="full" label="Performed by" value={performedById} onChange={setPerformedById}
+        users={users} emptyLabel="(current user)" />
+      <FormTextField span="full" label="Notes" value={notes} onChange={e => setNotes(e.target.value)} multiline rows={3} />
+    </FormDialog>
   )
 }
