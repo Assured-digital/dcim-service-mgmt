@@ -43,6 +43,7 @@ import { shellTokens } from "../components/shared"
 import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
 import { hasAnyRole, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { getSelectedClientId, setSelectedClientId } from "../lib/scope"
+import { moduleForPath, ModuleDisabledNotice, type PlatformModuleKey } from "../lib/entitlements"
 import { useThemeMode } from "../lib/theme"
 import { personName, userInitials } from "../lib/userDisplay"
 import { useMe } from "../lib/useMe"
@@ -254,7 +255,7 @@ const CRM_LANDING = "/crm"
 type NavItem = { label: string; path: string; icon: React.ReactNode; roles: string[] }
 type NavGroup = { kind: "group"; label: string; icon: React.ReactNode; matchPaths: string[]; roles: string[]; items: NavItem[] }
 type NavSectionEntry = NavItem | NavGroup
-type NavSection = { title: string; icon?: React.ReactNode; items: NavSectionEntry[] }
+type NavSection = { title: string; icon?: React.ReactNode; items: NavSectionEntry[]; module?: PlatformModuleKey }
 
 const personalItems: NavItem[] = [
   { label: "My Work", path: "/my-work", icon: <AssignmentIndIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
@@ -279,7 +280,7 @@ const clientSections: NavSection[] = [
     // (Phase 2) will appear in the unified Service Desk queue, so it no longer has its
     // own nav entry. SERVICE_DESK is visible to CLIENT_VIEWER too (they previously had
     // R&I access, now inside Service Desk).
-    title: "", items: [
+    title: "", module: "SERVICE_DESK", items: [
       { label: "Service Desk", path: "/service-desk", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
     ]
   },
@@ -289,7 +290,7 @@ const clientSections: NavSection[] = [
     // DCIM); expands inline on mobile. Items derive from the shared
     // CRM_DESTINATIONS (single source of truth with the desktop sub-nav) so
     // the two never drift.
-    title: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />,
+    title: "CRM", module: "CRM", icon: <HandshakeIcon sx={{ fontSize: ICON_SIZE }} />,
     items: CRM_DESTINATIONS.map(d => ({ label: d.label, path: d.path, icon: d.icon, roles: d.roles })),
   },
   {
@@ -300,11 +301,11 @@ const clientSections: NavSection[] = [
     // the desktop DcimSubNav). On desktop the DCIM section is a launcher and these
     // aren't rendered inline (the sub-nav is used); on mobile the section expands
     // inline in the drawer so every DCIM page is reachable there too.
-    title: "DCIM", icon: <DnsIcon sx={{ fontSize: ICON_SIZE }} />,
+    title: "DCIM", module: "DCIM", icon: <DnsIcon sx={{ fontSize: ICON_SIZE }} />,
     items: DCIM_DESTINATIONS.map(d => ({ label: d.label, path: d.path, icon: d.icon, roles: [...ORG_SUPER_ROLES] })),
   },
   {
-    title: "Operations", icon: <EngineeringIcon sx={{ fontSize: ICON_SIZE }} />, items: [
+    title: "Operations", module: "OPERATIONS", icon: <EngineeringIcon sx={{ fontSize: ICON_SIZE }} />, items: [
       { label: "Field Work", path: "/checks", icon: <FactCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER] },
       { label: "Templates", path: "/check-templates", icon: <PlaylistAddCheckIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER] },
     ]
@@ -727,11 +728,11 @@ export default function Shell() {
   // Org-super: all org clients. Client-scoped: only the caller's assignments.
   const clients = useQuery({
     queryKey: ["clients"], enabled: isOrgSuper,
-    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string }>>("/clients")).data
+    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string; enabledModules?: string[] }>>("/clients")).data
   })
   const myClients = useQuery({
     queryKey: ["clients-mine"], enabled: !isOrgSuper,
-    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string }>>("/clients/mine")).data
+    queryFn: async () => (await api.get<Array<{ id: string; name: string; lifecycleStage?: string; enabledModules?: string[] }>>("/clients/mine")).data
   })
   // The list that populates the selector + flyout for this user. Live clients
   // first, prospects grouped after them, FORMER hidden (CRM_DESIGN.md §2).
@@ -785,6 +786,13 @@ export default function Shell() {
   }, [loc.pathname]) // eslint-disable-line
 
   const selectedClient = clientList.find(c => c.id === selectedClientId)
+
+  // A2 — the scoped client's licensed module set (null = unknown / All-clients →
+  // don't hide anything). Drives nav gating + the route guard on <Outlet/> below.
+  const enabledModules: string[] | null = selectedClient?.enabledModules ?? null
+  const pathModule = moduleForPath(loc.pathname)
+  const moduleBlocked: PlatformModuleKey | null =
+    pathModule && enabledModules && !enabledModules.includes(pathModule) ? pathModule : null
 
   function handleClientChange(clientId: string) {
     setSelectedClientIdState(clientId); setSelectedClientId(clientId || null)
@@ -986,6 +994,8 @@ export default function Shell() {
         {selectedClientId ? (
           <>
             {clientSections.map(section => {
+              // A2 — hide a module the scoped client isn't licensed for.
+              if (section.module && enabledModules && !enabledModules.includes(section.module)) return null
               const visible = section.items.filter(i => hasAnyRole(i.roles))
               if (visible.length === 0) return null
 
@@ -1083,7 +1093,7 @@ export default function Shell() {
           sx={{ [`& .MuiDrawer-paper`]: { width: SIDEBAR_EXPANDED, background: shellTokens.bg, borderRight: "1px solid rgba(255,255,255,0.05)" } }}>
           {sidebarNav}
         </Drawer>
-        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: contentBg, p: "12px" }}><Suspense fallback={<LoadingState />}><Outlet /></Suspense></Box>
+        <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: contentBg, p: "12px" }}><Suspense fallback={<LoadingState />}>{moduleBlocked ? <ModuleDisabledNotice module={moduleBlocked} /> : <Outlet />}</Suspense></Box>
       </Box>
     )
   }
@@ -1204,7 +1214,7 @@ export default function Shell() {
         >
           <BreadcrumbCtx.Provider value={breadcrumbValue}>
             <Suspense fallback={<LoadingState />}>
-              <Outlet />
+              {moduleBlocked ? <ModuleDisabledNotice module={moduleBlocked} /> : <Outlet />}
             </Suspense>
           </BreadcrumbCtx.Provider>
         </Box>

@@ -168,6 +168,32 @@ model Client {
   activities        Activity[]
   opportunities     Opportunity[]
   quotes            Quote[]
+  moduleEntitlements ClientModuleEntitlement[]
+}
+
+// A2 — Feature entitlement: the licensable product modules a client may access.
+// Platform primitives (dashboard, admin, client selector) are always on and are
+// NOT entitlements.
+enum PlatformModule {
+  SERVICE_DESK
+  DCIM
+  CRM
+  OPERATIONS
+}
+
+// A2 — per-client module licensing. One row per client × module; `enabled`
+// toggles access. The nav and ModuleEntitlementGuard read this so a client only
+// sees/reaches the modules they're licensed for.
+model ClientModuleEntitlement {
+  id        String         @id @default(uuid())
+  clientId  String
+  client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  module    PlatformModule
+  enabled   Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([clientId, module])
 }
 
 // CRM (CRM_DESIGN.md §4) — a person AT the client (no login, not a User).

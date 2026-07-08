@@ -11,6 +11,7 @@ export type ClientView = {
   organizationId: string | null
   createdAt: string
   updatedAt: string
+  enabledModules?: string[] // A2 — the licensed product modules for this client
 }
 
 // Matches the existing /clients POST payload.
@@ -36,10 +37,22 @@ export async function listClients() {
   return (await api.get<ClientView[]>("/clients")).data
 }
 
+// The caller's own assigned-client set (client-scoped users). Includes
+// enabledModules so the entitlement hook can read licensing for these users too.
+export async function listMyClients() {
+  return (await api.get<ClientView[]>("/clients/mine")).data
+}
+
 export async function createClient(dto: CreateClientInput) {
   return (await api.post<ClientView>("/clients", dto)).data
 }
 
 export async function updateClient(id: string, dto: UpdateClientInput) {
   return (await api.patch<ClientView>(`/clients/${id}`, dto)).data
+}
+
+// A2 — set the client's licensed module set (full declarative list; anything
+// omitted is disabled). Org-super only (enforced server-side).
+export async function setClientModules(id: string, modules: string[]) {
+  return (await api.put<ClientView>(`/clients/${id}/modules`, { modules })).data
 }

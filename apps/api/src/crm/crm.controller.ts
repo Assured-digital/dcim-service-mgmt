@@ -1,9 +1,11 @@
 import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
-import { Role } from "@prisma/client"
+import { PlatformModule, Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { PrismaService } from "../prisma/prisma.service"
 import { CrmService } from "./crm.service"
@@ -17,7 +19,11 @@ const AD_STAFF = [
 // Reports are all-about-money → commercial roles only (decision 12).
 const COMMERCIAL = [Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER] as const
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+// A2 — CRM is a licensable module: the scoped client must have CRM enabled
+// (reference application of the entitlement guard; other module controllers to
+// follow in the mechanical sweep).
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.CRM)
 @ApiTags("crm")
 @ApiBearerAuth()
 @Controller("crm")

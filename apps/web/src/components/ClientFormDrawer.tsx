@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Alert, Box, Button, Drawer, MenuItem, Stack, TextField, Typography } from "@mui/material"
+import { Alert, Box, Button, Drawer, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material"
 import { type ApiError } from "../lib/api"
-import { createClient, updateClient, type ClientView } from "../lib/clients"
+import { createClient, setClientModules, updateClient, type ClientView } from "../lib/clients"
+import { PLATFORM_MODULES } from "../lib/entitlements"
 
 export type ClientFormMode = "create" | "edit"
 
@@ -13,6 +14,8 @@ type Props = {
   onClose: () => void
 }
 
+const ALL_MODULE_KEYS = PLATFORM_MODULES.map((m) => m.key)
+
 export default function ClientFormDrawer({ open, mode, client, onClose }: Props) {
   const qc = useQueryClient()
   const isEdit = mode === "edit"
@@ -21,6 +24,9 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
   const [status, setStatus] = useState("ACTIVE")
   const [lifecycleStage, setLifecycleStage] = useState("ACTIVE")
   const [sharePointFolderPath, setSharePointFolderPath] = useState("")
+  // A2 — the client's licensed module set (edit mode only; new clients default to
+  // all-on server-side and can be narrowed after creation).
+  const [modules, setModules] = useState<string[]>(ALL_MODULE_KEYS)
 
   // Reset form whenever the drawer opens or the target client changes.
   useEffect(() => {
@@ -30,24 +36,34 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
       setStatus(client.status)
       setLifecycleStage(client.lifecycleStage ?? "ACTIVE")
       setSharePointFolderPath(client.sharePointFolderPath ?? "")
+      setModules(client.enabledModules ?? ALL_MODULE_KEYS)
     } else {
       setName("")
       setStatus("ACTIVE")
       setLifecycleStage("ACTIVE")
       setSharePointFolderPath("")
+      setModules(ALL_MODULE_KEYS)
     }
   }, [open, mode, client])
+
+  function toggleModule(key: string) {
+    setModules((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
 
   const mutation = useMutation({
     mutationFn: async () => {
       const folder = sharePointFolderPath.trim()
       if (isEdit && client) {
-        return updateClient(client.id, { name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder })
+        await updateClient(client.id, { name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder })
+        // Module access is a separate declarative endpoint.
+        await setClientModules(client.id, modules)
+        return
       }
-      return createClient({ name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder || undefined })
+      await createClient({ name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder || undefined })
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["clients"] })
+      await qc.invalidateQueries({ queryKey: ["clients-mine"] })
       await qc.invalidateQueries({ queryKey: ["clients-admin"] })
       onClose()
     }
@@ -69,7 +85,7 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
         </Typography>
         <Typography color="text.secondary" sx={{ fontSize: 13, mb: 2 }}>
           {isEdit
-            ? "Update the client tenant name or status."
+            ? "Update the client tenant name, status, or module access."
             : "Provision a new client tenant to onboard users and data."}
         </Typography>
 
@@ -121,6 +137,38 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
             placeholder="Clients/Acme Ltd"
             helperText="Folder within the org SharePoint site — powers CRM → Documents."
           />
+
+          {isEdit ? (
+            <Box sx={{ borderTop: "1px solid", borderColor: "divider", pt: 1.5 }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.25 }}>Module access</Typography>
+              <Typography color="text.secondary" sx={{ fontSize: 12, mb: 1 }}>
+                Which products this client can see and use. Disabling one hides it from their
+                navigation and blocks access.
+              </Typography>
+              <Stack>
+                {PLATFORM_MODULES.map((m) => (
+                  <FormControlLabel
+                    key={m.key}
+                    sx={{ alignItems: "flex-start", mx: 0, mb: 0.5 }}
+                    control={
+                      <Switch
+                        size="small"
+                        checked={modules.includes(m.key)}
+                        onChange={() => toggleModule(m.key)}
+                        sx={{ mt: 0.25 }}
+                      />
+                    }
+                    label={
+                      <Box sx={{ ml: 0.5 }}>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500 }}>{m.label}</Typography>
+                        <Typography color="text.secondary" sx={{ fontSize: 11.5 }}>{m.description}</Typography>
+                      </Box>
+                    }
+                  />
+                ))}
+              </Stack>
+            </Box>
+          ) : null}
 
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
         </Stack>
