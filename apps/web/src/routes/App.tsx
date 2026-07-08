@@ -34,6 +34,7 @@ const AuditTrailPage           = React.lazy(() => import("./AuditTrailPage"))
 const UsersPage                = React.lazy(() => import("./UsersPage"))
 const AdminUsersPage           = React.lazy(() => import("./AdminUsersPage"))
 const ClientsPage              = React.lazy(() => import("./ClientsPage"))
+const KnowledgePage            = React.lazy(() => import("./KnowledgePage"))
 const MyWorkPage               = React.lazy(() => import("./MyWorkPage"))
 const OverviewPage             = React.lazy(() => import("./OverviewPage"))
 const DcimOverviewPage         = React.lazy(() => import("./DcimOverviewPage"))
@@ -214,6 +215,16 @@ export default function App() {
           {/* Incidents — now unified under Service Desk */}
           <Route path="incidents" element={<Navigate to="/service-desk?view=table" replace />} />
           <Route path="incidents/:id" element={<LegacyIncidentDetailRedirect />} />
+
+          {/* Knowledge base — a Service Desk capability */}
+          <Route
+            path="knowledge"
+            element={
+              <RequireRoles roles={[...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER]}>
+                <KnowledgePage />
+              </RequireRoles>
+            }
+          />
 
           {/* Asset Hierarchy and Register */}
           <Route path="asset-hierarchy" element={<AssetHierarchyPage />} />

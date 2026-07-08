@@ -19,6 +19,7 @@ import { AuditEventsModule } from "./audit-events/audit-events.module";
 import { ChangesModule } from "./changes/changes.module"
 import { RisksModule } from "./risks/risks.module"
 import { IssuesModule } from "./issues/issues.module"
+import { KnowledgeModule } from "./knowledge/knowledge.module"
 import { CommentsModule } from "./comments/comments.module"
 import { WorkPackagesModule } from "./work-packages/work-packages.module"
 import { ContactsModule } from "./contacts/contacts.module"
@@ -63,6 +64,7 @@ import { MetricsModule } from "./metrics/metrics.module"
     ChangesModule,
     RisksModule,
     IssuesModule,
+    KnowledgeModule,
     CommentsModule,
     WorkPackagesModule,
     ContactsModule,

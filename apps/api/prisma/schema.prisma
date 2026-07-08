@@ -169,6 +169,7 @@ model Client {
   opportunities     Opportunity[]
   quotes            Quote[]
   moduleEntitlements ClientModuleEntitlement[]
+  knowledgeArticles KnowledgeArticle[]
 }
 
 // A2 — Feature entitlement: the licensable product modules a client may access.
@@ -194,6 +195,35 @@ model ClientModuleEntitlement {
   updatedAt DateTime       @updatedAt
 
   @@unique([clientId, module])
+}
+
+// C2 — Knowledge base article (Service Desk). Either shared org-wide
+// (clientId null) or pinned to one client (clientId set). Visibility when scoped
+// to client X in org O: organizationId = O AND (clientId IS NULL OR clientId = X).
+enum KnowledgeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model KnowledgeArticle {
+  id             String          @id @default(uuid())
+  reference      String          @unique
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  clientId       String?
+  client         Client?         @relation(fields: [clientId], references: [id])
+  title          String
+  body           String
+  category       String          @default("General")
+  status         KnowledgeStatus @default(DRAFT)
+  tags           String[]
+  createdById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([clientId])
 }
 
 // CRM (CRM_DESIGN.md §4) — a person AT the client (no login, not a User).
@@ -681,6 +711,7 @@ model Organization {
 
   clients Client[]
   users   User[]
+  knowledgeArticles KnowledgeArticle[]
 }
 
 model User {

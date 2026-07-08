@@ -33,6 +33,7 @@ import HubIcon from "@mui/icons-material/Hub"
 import AccountTreeIcon from "@mui/icons-material/AccountTree"
 import ViewListIcon from "@mui/icons-material/ViewList"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
+import MenuBookIcon from "@mui/icons-material/MenuBook"
 import { api, revokeAndLogout } from "../lib/api"
 import { PAGE_GUTTER } from "../lib/layout"
 import DcimSubNav, { DCIM_DESTINATIONS } from "../components/DcimSubNav"
@@ -282,6 +283,7 @@ const clientSections: NavSection[] = [
     // R&I access, now inside Service Desk).
     title: "", module: "SERVICE_DESK", items: [
       { label: "Service Desk", path: "/service-desk", icon: <SupportAgentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
+      { label: "Knowledge", path: "/knowledge", icon: <MenuBookIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST, ROLES.ENGINEER, ROLES.CLIENT_VIEWER] },
     ]
   },
   {
