@@ -20,7 +20,7 @@ export const PLATFORM_MODULES: { key: PlatformModuleKey; label: string; descript
 // Path-prefix → module map, for the single Shell-level route guard. Keep in sync
 // with the module routes in App.tsx.
 const MODULE_ROUTE_PREFIXES: { module: PlatformModuleKey; prefixes: string[] }[] = [
-  { module: "SERVICE_DESK", prefixes: ["/service-desk", "/risks-issues", "/incidents", "/changes", "/tasks", "/service-requests"] },
+  { module: "SERVICE_DESK", prefixes: ["/service-desk", "/knowledge", "/risks-issues", "/incidents", "/changes", "/tasks", "/service-requests"] },
   { module: "CRM", prefixes: ["/crm"] },
   { module: "DCIM", prefixes: ["/dcim", "/asset-hierarchy", "/asset-register", "/asset-management", "/connections", "/maintenance", "/pending-deletions"] },
   { module: "OPERATIONS", prefixes: ["/checks", "/check-templates"] }
