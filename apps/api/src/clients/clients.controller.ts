@@ -1,12 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Put, Req } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { PlatformModule, Role } from "@prisma/client";
 import { ClientsService } from "./clients.service";
 import { Roles } from "../auth/roles.decorator";
-import { Role } from "@prisma/client";
 import { UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt.guard";
 import { RolesGuard } from "../auth/roles.guard";
-import { CreateClientDto, UpdateClientDto } from "./dto";
+import { CreateClientDto, SetClientModulesDto, UpdateClientDto } from "./dto";
 import { getJwtUser } from "../auth/request-context";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -62,5 +62,15 @@ export class ClientsController {
   async update(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateClientDto) {
     const actor = getJwtUser(req);
     return this.clients.update(actor, id, dto);
+  }
+
+  // A2 — set the client's licensed module set. Org-super only (managing
+  // entitlements is a platform-admin action, never gated by the client's own
+  // entitlement — so there's always a way to switch a module on).
+  @Put(":id/modules")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN)
+  async setModules(@Req() req: any, @Param("id") id: string, @Body() dto: SetClientModulesDto) {
+    const actor = getJwtUser(req);
+    return this.clients.setModules(actor, id, dto.modules as PlatformModule[]);
   }
 }

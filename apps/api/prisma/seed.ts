@@ -7,7 +7,8 @@ import {
   IncidentStatus,
   IncidentSeverity,
   CheckStatus,
-  MaintenanceWorkType
+  MaintenanceWorkType,
+  PlatformModule
 } from "@prisma/client"
 import * as bcrypt from "bcryptjs"
 
@@ -849,6 +850,28 @@ async function seedAssignedSamples() {
   }
 }
 
+// A2 — ensure every client has module-entitlement rows (all enabled). The
+// migration backfills existing cloud clients; this covers local `db push` + seed
+// (which does not run migration SQL). Re-seed does not override admin toggles.
+async function seedModuleEntitlements() {
+  const modules: PlatformModule[] = [
+    PlatformModule.SERVICE_DESK,
+    PlatformModule.DCIM,
+    PlatformModule.CRM,
+    PlatformModule.OPERATIONS
+  ]
+  const clients = await prisma.client.findMany({ select: { id: true } })
+  for (const client of clients) {
+    for (const module of modules) {
+      await prisma.clientModuleEntitlement.upsert({
+        where: { clientId_module: { clientId: client.id, module } },
+        update: {},
+        create: { clientId: client.id, module, enabled: true }
+      })
+    }
+  }
+}
+
 async function main() {
   if (process.env.APP_ENV === "production") {
     console.error("Refusing to run demo seed in production (APP_ENV=production).")
@@ -1034,6 +1057,8 @@ async function main() {
       createdById: admin.id
     })
   }
+
+  await seedModuleEntitlements()
 
   console.log("Seed complete:", {
     organization: organization.id,
