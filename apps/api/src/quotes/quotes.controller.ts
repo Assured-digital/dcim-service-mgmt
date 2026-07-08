@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Put, Query, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
-import { Role } from "@prisma/client"
+import { PlatformModule, Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { PrismaService } from "../prisma/prisma.service"
 import { QuotesService } from "./quotes.service"
@@ -22,7 +24,8 @@ const AD_STAFF = [
 
 const COMMERCIAL_WRITERS = [Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN, Role.SERVICE_MANAGER] as const
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.CRM)
 @ApiTags("quotes")
 @ApiBearerAuth()
 @Controller("quotes")
