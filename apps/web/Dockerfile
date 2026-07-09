@@ -16,6 +16,10 @@ COPY . .
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
+# A1 — enables the "Continue with Microsoft" SSO button (Vite build-time flag).
+ARG VITE_SSO_ENABLED
+ENV VITE_SSO_ENABLED=${VITE_SSO_ENABLED}
+
 WORKDIR /app/apps/web
 RUN npm run build
 
