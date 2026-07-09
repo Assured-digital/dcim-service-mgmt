@@ -39,6 +39,7 @@ import { PAGE_GUTTER } from "../lib/layout"
 import DcimSubNav, { DCIM_DESTINATIONS } from "../components/DcimSubNav"
 import CrmSubNav, { CRM_DESTINATIONS } from "../components/CrmSubNav"
 import NotificationBell from "../components/NotificationBell"
+import GlobalSearchBar from "../components/GlobalSearchBar"
 import { LoadingState } from "../components/PageState"
 import { shellTokens } from "../components/shared"
 import { getCurrentUser, isOrgSuperRole } from "../lib/auth"
@@ -1196,6 +1197,7 @@ export default function Shell() {
             <RecordBreadcrumbTrail breadcrumbs={effectiveBreadcrumbs} nav={nav} />
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+            {selectedClientId ? <GlobalSearchBar onNavigate={navigateTo} /> : null}
             <NotificationBell clientId={selectedClientId} />
             <Box sx={{ width: "1px", height: 22, bgcolor: "rgba(255,255,255,0.1)", mx: "10px" }} />
             <UserMenu name={userMenuName} initials={initials} email={currentUser?.email ?? ""} roleLabel={roleLabel} loggingOut={loggingOut} onLogout={onLogout} />

@@ -20,6 +20,7 @@ import { ChangesModule } from "./changes/changes.module"
 import { RisksModule } from "./risks/risks.module"
 import { IssuesModule } from "./issues/issues.module"
 import { KnowledgeModule } from "./knowledge/knowledge.module"
+import { SearchModule } from "./search/search.module"
 import { CommentsModule } from "./comments/comments.module"
 import { WorkPackagesModule } from "./work-packages/work-packages.module"
 import { ContactsModule } from "./contacts/contacts.module"
@@ -65,6 +66,7 @@ import { MetricsModule } from "./metrics/metrics.module"
     RisksModule,
     IssuesModule,
     KnowledgeModule,
+    SearchModule,
     CommentsModule,
     WorkPackagesModule,
     ContactsModule,
