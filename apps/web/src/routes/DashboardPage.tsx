@@ -11,11 +11,12 @@ import { semanticToken, ragToken, type RAGLevel, type ThemeMode } from "../compo
 import { useThemeMode } from "../lib/theme"
 import { useTickets } from "../lib/tickets"
 import { computeSlaStatus } from "../lib/serviceDeskQueue"
-import { buildNeedsAttention, type NeedsAttentionItem, type Severity } from "../lib/needsAttention"
+import { buildNeedsAttention, buildDcimAttention, buildCrmAttention, mergeAttention, type NeedsAttentionItem, type NeedsAttentionSource, type Severity } from "../lib/needsAttention"
 import { buildRecentActivity, type RecentActivityItem } from "../lib/recentActivity"
 import { deriveRag, type Risk as RIRisk, type Issue as RIIssue } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
 import { useClientEntitlements } from "../lib/entitlements"
+import { hasAnyRole, AD_STAFF_ROLES, ORG_SUPER_ROLES, ROLES } from "../lib/rbac"
 import { SectionBar, DASH_CARD_SX, CARD_CONTENT_SX } from "../components/dashboard/primitives"
 import MetricsTrends from "../components/dashboard/MetricsTrends"
 import ChecksPanel from "../components/dashboard/ChecksPanel"
@@ -251,6 +252,8 @@ const SEV_META: Record<Severity, { label: string; level: RAGLevel }> = {
   unassigned:   { label: "Unassigned", level: "AMBER" },
 }
 
+const SOURCE_LABEL: Record<NeedsAttentionSource, string> = { servicedesk: "Service Desk", dcim: "DCIM", crm: "CRM" }
+
 function NeedsAttentionRow({ item, onClick }: { item: NeedsAttentionItem; onClick: () => void }) {
   const { mode } = useThemeMode()
   const meta = SEV_META[item.severity]
@@ -286,6 +289,15 @@ function NeedsAttentionRow({ item, onClick }: { item: NeedsAttentionItem; onClic
           "14 days" — set per severity in buildNeedsAttention, no repeated severity word).
           Bold + neutral (the severity dot carries urgency, so the time is NOT coloured); the
           record reference is intentionally dropped as dashboard noise. Row links on click. */}
+      {/* Source chip — only on cross-module (DCIM/CRM) rows so Service Desk (the
+          majority) stays clean; the chip tells you which module the item is from. */}
+      {item.source !== "servicedesk" ? (
+        <Box sx={{ flexShrink: 0, px: "6px", py: "1px", borderRadius: "4px", bgcolor: "var(--color-background-secondary)", display: { xs: "none", sm: "block" } }}>
+          <Typography sx={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+            {SOURCE_LABEL[item.source]}
+          </Typography>
+        </Box>
+      ) : null}
       <Typography sx={{ flexShrink: 0, fontSize: 13, fontWeight: 600, color: "text.primary", whiteSpace: "nowrap" }}>
         {item.age}
       </Typography>
@@ -448,6 +460,14 @@ export default function DashboardPage() {
   const issues = useQuery({ queryKey: ["issues"], enabled: hasModule("SERVICE_DESK"), queryFn: async () => (await api.get<RIIssue[]>("/issues")).data })
   const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], enabled: hasModule("DCIM"), queryFn: async () => (await api.get<EstateSite[]>("/sites")).data })
 
+  // B2 — cross-module attention signals, gated by module entitlement AND the role
+  // that can read each endpoint (renewals = AD staff; reports = commercial).
+  const isAdStaff = hasAnyRole(AD_STAFF_ROLES)
+  const isCommercial = hasAnyRole([...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER])
+  const capacityOverview = useQuery({ queryKey: ["dcim-capacity-overview", clientId ?? "self"], enabled: hasModule("DCIM"), queryFn: async () => (await api.get<any>("/capacity/overview")).data })
+  const crmRenewals = useQuery({ queryKey: ["crm-renewals", clientId ?? "self"], enabled: hasModule("CRM") && isAdStaff, queryFn: async () => (await api.get<any[]>("/crm/renewals", { params: { withinDays: 30 } })).data })
+  const crmReports = useQuery({ queryKey: ["crm-reports", clientId ?? "self"], enabled: hasModule("CRM") && isCommercial, queryFn: async () => (await api.get<any>("/crm/reports", { params: { months: 6 } })).data })
+
   const isLoading = tickets.isLoading || checks.isLoading || risks.isLoading || issues.isLoading || sites.isLoading
   const hasError = !!(tickets.error || checks.error || risks.error || issues.error || sites.error)
 
@@ -499,7 +519,14 @@ export default function DashboardPage() {
   //    (breached → due-soon → unassigned), derived from the SAME ticket union the
   //    alert band reads. Capped at 5 rows in the UI; the full count drives the
   //    header total + the "N more" overflow link. ────────────────────────────────
-  const needsAttention = React.useMemo(() => buildNeedsAttention(tickets.data), [tickets.data])
+  const needsAttention = React.useMemo(
+    () => mergeAttention(
+      buildNeedsAttention(tickets.data),
+      buildDcimAttention(capacityOverview.data),
+      buildCrmAttention(crmRenewals.data, crmReports.data?.stalled),
+    ),
+    [tickets.data, capacityOverview.data, crmRenewals.data, crmReports.data]
+  )
 
   // ── Recent activity — the dense, most-recent-first context feed across ALL record
   //    types (tickets + risks + issues + checks), derived from the same already-fetched
