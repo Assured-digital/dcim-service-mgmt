@@ -52,8 +52,11 @@ export interface MetricsParams {
 // other date-range widgets.
 function toParams(p: MetricsParams) {
   return {
-    from: `${p.from}T00:00:00.000Z`,
-    to: `${p.to}T23:59:59.999Z`,
+    // Slice to the date part first — callers may pass a full ISO datetime (not
+    // just YYYY-MM-DD), and blindly appending the time produced a malformed
+    // doubled timestamp (…ZT00:00:00.000Z) that the API rejected with 400.
+    from: `${p.from.slice(0, 10)}T00:00:00.000Z`,
+    to: `${p.to.slice(0, 10)}T23:59:59.999Z`,
     bucket: p.bucket,
     assigneeId: p.assigneeId || undefined
   }
