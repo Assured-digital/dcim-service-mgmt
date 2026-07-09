@@ -8,6 +8,7 @@ import PageTitle from "../components/PageTitle"
 import Shell from "./Shell"
 
 const LoginPage                = React.lazy(() => import("./LoginPage"))
+const AuthCallbackPage         = React.lazy(() => import("./AuthCallbackPage"))
 const DashboardPage            = React.lazy(() => import("./DashboardPage"))
 const ServiceDeskNavigator     = React.lazy(() => import("./ServiceDeskNavigator"))
 const AssetHierarchyPage       = React.lazy(() => import("./AssetHierarchyPage"))
@@ -137,6 +138,7 @@ export default function App() {
       <PageTitle />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route
           path="/"
           element={

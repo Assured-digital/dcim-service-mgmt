@@ -4,7 +4,7 @@ import { getSelectedClientId } from "./scope";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 // ADR-006 — the API serves all routes under /v1 (URI versioning).
-const API_BASE = `${baseURL}/v1`;
+export const API_BASE = `${baseURL}/v1`;
 
 export type ApiError = {
   statusCode: number;
