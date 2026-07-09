@@ -9,7 +9,9 @@ import {
   FlagItemDto
 } from "./dto"
 import { Roles } from "../auth/roles.decorator"
-import { Role } from "@prisma/client"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
+import { Role, PlatformModule } from "@prisma/client"
 import { UseGuards } from "@nestjs/common"
 import { JwtAuthGuard } from "../auth/jwt.guard"
 import { RolesGuard } from "../auth/roles.guard"
@@ -17,7 +19,8 @@ import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { contentDispositionHeader } from "../attachments/content-policy"
 import { PrismaService } from "../prisma/prisma.service"
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.OPERATIONS)
 @ApiTags("checks")
 @ApiBearerAuth()
 @Controller("checks")

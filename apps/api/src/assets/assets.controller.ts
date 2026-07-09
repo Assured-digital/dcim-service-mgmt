@@ -7,11 +7,15 @@ import { Roles } from "../auth/roles.decorator";
 import { Role } from "@prisma/client";
 import { UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt.guard";
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard";
+import { RequiresModule } from "../auth/module-entitlement.decorator";
+import { PlatformModule } from "@prisma/client";
 import { RolesGuard } from "../auth/roles.guard";
 import { getJwtUser, resolveClientScope } from "../auth/request-context";
 import { PrismaService } from "../prisma/prisma.service";
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.DCIM)
 @ApiTags("assets")
 @ApiBearerAuth()
 @Controller("assets")

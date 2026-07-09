@@ -3,6 +3,9 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator"
 import { JwtAuthGuard } from "../auth/jwt.guard"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
+import { PlatformModule } from "@prisma/client"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
@@ -23,7 +26,8 @@ class FindSpaceDto {
 
 // Read-only capacity surfaces (spec §4.3). Scope resolves through the standard
 // chokepoint; the site endpoint additionally validates site→client in the service.
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.DCIM)
 @ApiTags("capacity")
 @ApiBearerAuth()
 @Controller()

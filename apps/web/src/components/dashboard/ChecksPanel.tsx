@@ -6,6 +6,7 @@ import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded"
 import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined"
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded"
 import { api } from "../../lib/api"
+import { useClientEntitlements } from "../../lib/entitlements"
 import { useThemeMode } from "../../lib/theme"
 import { ragToken, semanticToken } from "../shared"
 import { SectionBar, DASH_CARD_SX, CARD_CONTENT_SX, ScoreReadout, fmtDay } from "./primitives"
@@ -153,9 +154,13 @@ export default function ChecksPanel({ checks }: { checks: DashCheck[] }) {
   const [openSiteId, setOpenSiteId] = React.useState<string | null>(null)
   const [showAll, setShowAll] = React.useState(false)
 
+  // A2 — /checks is gated to the OPERATIONS module; skip this query (and avoid a
+  // 403) when the scoped client isn't licensed for it.
+  const opsEnabled = useClientEntitlements().hasModule("OPERATIONS")
   const followOns = useQuery({
     queryKey: ["checks", "follow-on-summary"],
     queryFn: async () => (await api.get<FollowOnSummary>("/checks/follow-on-summary")).data,
+    enabled: opsEnabled,
   })
 
   // One "now" per data snapshot — recomputed when the checks change (a Refresh re-evaluates

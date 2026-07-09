@@ -3,6 +3,9 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { IsArray, IsIn, IsInt, IsOptional, IsString, MaxLength, MinLength } from "class-validator"
 import { JwtAuthGuard } from "../auth/jwt.guard"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
+import { PlatformModule } from "@prisma/client"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
@@ -28,7 +31,8 @@ class UpdateFieldDto {
   @IsOptional() @IsInt() order?: number
 }
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.DCIM)
 @ApiTags("asset-custom-fields")
 @ApiBearerAuth()
 @Controller("asset-custom-fields")

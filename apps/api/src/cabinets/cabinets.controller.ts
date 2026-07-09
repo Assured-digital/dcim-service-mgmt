@@ -2,6 +2,9 @@ import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Req, UseGuard
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
+import { PlatformModule } from "@prisma/client"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
@@ -9,7 +12,8 @@ import { PrismaService } from "../prisma/prisma.service"
 import { CabinetsService } from "./cabinets.service"
 import { CreateCabinetDto, UpdateCabinetDto } from "./dto"
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.DCIM)
 @ApiTags("cabinets")
 @ApiBearerAuth()
 @Controller("sites/:siteId/cabinets")

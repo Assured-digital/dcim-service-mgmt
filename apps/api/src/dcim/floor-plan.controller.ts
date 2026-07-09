@@ -12,6 +12,9 @@ import {
 } from "class-validator"
 import { Type } from "class-transformer"
 import { JwtAuthGuard } from "../auth/jwt.guard"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
+import { PlatformModule } from "@prisma/client"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
@@ -88,7 +91,8 @@ class CabinetImportDto {
   @IsOptional() @IsObject() columnMap?: Record<string, string>
 }
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.DCIM)
 @ApiTags("floor-plan")
 @ApiBearerAuth()
 @Controller()

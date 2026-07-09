@@ -11,6 +11,9 @@ import {
   IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength,
 } from "class-validator"
 import { JwtAuthGuard } from "../auth/jwt.guard"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
+import { PlatformModule } from "@prisma/client"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
 import { DeviceTypesService, ImageFace } from "./device-types.service"
@@ -59,7 +62,8 @@ export class UpdateDeviceTypeDto {
 
 // The catalogue is GLOBAL, not tenant-scoped: no x-client-id / resolveClientScope
 // here. Auth still applies (see role sets above).
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.DCIM)
 @ApiTags("device-types")
 @ApiBearerAuth()
 @Controller("device-types")
@@ -124,7 +128,8 @@ export class DeviceTypesController {
 
 // The manufacturer rail (spec §3.1). Separate controller so the route is a clean
 // GET /manufacturers rather than nesting under /device-types.
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.DCIM)
 @ApiTags("device-types")
 @ApiBearerAuth()
 @Controller("manufacturers")
