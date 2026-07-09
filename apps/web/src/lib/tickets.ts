@@ -348,6 +348,9 @@ export interface UseTicketsResult {
 export interface UseTicketsOptions {
   scope?: "live"
   closedSince?: string
+  // A2 — gate all ticket queries off when the caller's client isn't licensed for
+  // Service Desk (the Dashboard passes this; the Service Desk queue is route-gated).
+  enabled?: boolean
 }
 
 export function useTickets(opts: UseTicketsOptions = {}): UseTicketsResult {
@@ -358,31 +361,39 @@ export function useTickets(opts: UseTicketsOptions = {}): UseTicketsResult {
   const scopeKey = opts.closedSince ? `hist:${opts.closedSince}` : opts.scope === "live" ? "live" : "all"
   const params = opts.closedSince ? { closedSince: opts.closedSince } : opts.scope === "live" ? { scope: "live" } : {}
 
+  const ticketsEnabled = opts.enabled ?? true
+
   const results = useQueries({
     queries: [
       {
         queryKey: ["tickets", clientId, "sr", scopeKey],
         queryFn: async () => (await api.get<RawSR[]>("/service-requests", { params })).data,
+        enabled: ticketsEnabled,
       },
       {
         queryKey: ["tickets", clientId, "inc", scopeKey],
         queryFn: async () => (await api.get<RawIncident[]>("/incidents", { params })).data,
+        enabled: ticketsEnabled,
       },
       {
         queryKey: ["tickets", clientId, "chg", scopeKey],
         queryFn: async () => (await api.get<RawChange[]>("/changes", { params })).data,
+        enabled: ticketsEnabled,
       },
       {
         queryKey: ["tickets", clientId, "task", scopeKey],
         queryFn: async () => (await api.get<RawTask[]>("/tasks", { params })).data,
+        enabled: ticketsEnabled,
       },
       {
         queryKey: ["tickets", clientId, "risk", scopeKey],
         queryFn: async () => (await api.get<RawRisk[]>("/risks", { params })).data,
+        enabled: ticketsEnabled,
       },
       {
         queryKey: ["tickets", clientId, "issue", scopeKey],
         queryFn: async () => (await api.get<RawIssue[]>("/issues", { params })).data,
+        enabled: ticketsEnabled,
       },
     ],
   })

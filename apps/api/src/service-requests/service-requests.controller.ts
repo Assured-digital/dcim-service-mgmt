@@ -3,6 +3,9 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { ServiceRequestsService } from "./service-requests.service";
 import { CreateServiceRequestDto, CloseServiceRequestDto } from "./dto";
 import { Roles } from "../auth/roles.decorator";
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard";
+import { RequiresModule } from "../auth/module-entitlement.decorator";
+import { PlatformModule } from "@prisma/client";
 import { Role } from "@prisma/client";
 import { UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt.guard";
@@ -13,7 +16,8 @@ import { ListOperationalQueryDto } from "../common/dto/list-operational.dto";
 import { toCsv } from "../common/reporting/csv";
 import { Response } from "express";
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.SERVICE_DESK)
 @ApiTags("service-requests")
 @ApiBearerAuth()
 @Controller("service-requests")

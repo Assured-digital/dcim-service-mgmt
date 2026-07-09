@@ -8,6 +8,7 @@ import {
 import type { SxProps, Theme } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { api } from "../lib/api"
+import { useClientEntitlements } from "../lib/entitlements"
 import { EditActionsButton } from "../components/EditActionsButton"
 import { EmptyState, ErrorState, LoadingState } from "../components/PageState"
 import { useNotification } from "../components/NotificationProvider"
@@ -244,6 +245,9 @@ export default function AssetDetailPage({
   })
 
   const linkedEnabled = !!assetId
+  // A2 — the linked-work panels hit Service Desk endpoints; skip them when the
+  // client isn't licensed for Service Desk (those endpoints now 403 otherwise).
+  const sdEnabled = useClientEntitlements().hasModule("SERVICE_DESK")
 
   // Query keys aligned with ParentLinkedRecords (parentLinkedKey) so the Linked-
   // records tab and this overview "recent linked" share ONE fetch + cache, and a
@@ -251,22 +255,22 @@ export default function AssetDetailPage({
   const { data: linkedTasks = [] } = useQuery({
     queryKey: parentLinkedKey("Asset", assetId, "task"),
     queryFn: async () => (await api.get<LinkedTask[]>("/tasks", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
-    enabled: linkedEnabled
+    enabled: linkedEnabled && sdEnabled
   })
   const { data: linkedServiceRequests = [] } = useQuery({
     queryKey: parentLinkedKey("Asset", assetId, "sr"),
     queryFn: async () => (await api.get<LinkedServiceRequest[]>("/service-requests", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
-    enabled: linkedEnabled
+    enabled: linkedEnabled && sdEnabled
   })
   const { data: linkedRisks = [] } = useQuery({
     queryKey: parentLinkedKey("Asset", assetId, "risk"),
     queryFn: async () => (await api.get<LinkedRisk[]>("/risks", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
-    enabled: linkedEnabled
+    enabled: linkedEnabled && sdEnabled
   })
   const { data: linkedIssues = [] } = useQuery({
     queryKey: parentLinkedKey("Asset", assetId, "issue"),
     queryFn: async () => (await api.get<LinkedIssue[]>("/issues", { params: { linkedEntityType: "Asset", linkedEntityId: assetId } })).data,
-    enabled: linkedEnabled
+    enabled: linkedEnabled && sdEnabled
   })
 
   // Assignee picker source (feeds the linked-task quick-detail modal) —
