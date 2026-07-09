@@ -1,8 +1,9 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, VERSION_NEUTRAL } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 
 @ApiTags("health")
-@Controller("health")
+// Version-neutral so container/ingress health probes keep hitting /health.
+@Controller({ path: "health", version: VERSION_NEUTRAL })
 export class HealthController {
   @Get()
   ok() {

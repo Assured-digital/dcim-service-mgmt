@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, VersioningType } from "@nestjs/common";
 import * as cookieParser from "cookie-parser";
 import { Request, Response, NextFunction } from "express";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
@@ -39,6 +39,10 @@ async function bootstrap() {
       transform: true
     })
   );
+
+  // ADR-006 — versioned APIs. All routes are served under /v1 (URI versioning);
+  // /health stays version-neutral for probes. New versions opt in per-handler via @Version.
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
 
   setupSwagger(app);
 

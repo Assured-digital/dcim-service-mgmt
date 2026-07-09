@@ -3,6 +3,8 @@ import { clearSession, getCurrentUser, getToken, setSession } from "./auth";
 import { getSelectedClientId } from "./scope";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+// ADR-006 — the API serves all routes under /v1 (URI versioning).
+const API_BASE = `${baseURL}/v1`;
 
 export type ApiError = {
   statusCode: number;
@@ -24,7 +26,7 @@ export type LoginResponse = {
 };
 
 export const api = axios.create({
-  baseURL,
+  baseURL: API_BASE,
   withCredentials: true
 });
 
@@ -55,7 +57,7 @@ async function tryRefreshAccessToken(): Promise<string | null> {
   refreshInFlight = (async () => {
     try {
       const res = await axios.post<{ accessToken: string }>(
-        `${baseURL}/auth/refresh`,
+        `${API_BASE}/auth/refresh`,
         {},
         { withCredentials: true }
       );
