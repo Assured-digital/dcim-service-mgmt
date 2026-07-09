@@ -717,7 +717,8 @@ model Organization {
 model User {
   id                    String        @id @default(uuid())
   email                 String        @unique
-  passwordHash          String
+  passwordHash          String?       // null for SSO-only users (no local password)
+  entraObjectId         String?       @unique // A1 — stable link to the Entra identity (oid)
   refreshTokenHash      String?
   refreshTokenExpiresAt DateTime?
   firstName             String?

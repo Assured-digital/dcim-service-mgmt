@@ -17,7 +17,7 @@ import {
   VisibilityOff,
   Microsoft
 } from "@mui/icons-material";
-import { api, setAuthToken, type ApiError, type LoginResponse } from "../lib/api";
+import { api, setAuthToken, API_BASE, type ApiError, type LoginResponse } from "../lib/api";
 import { setSession } from "../lib/auth";
 import { shellTokens } from "../components/shared";
 import { useNavigate } from "react-router-dom";
@@ -32,6 +32,16 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   const ssoEnabled = import.meta.env.VITE_SSO_ENABLED === "true";
+
+  // Surface an SSO failure bounced back from the OIDC callback (?sso_error=...).
+  React.useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("sso_error");
+    if (p) {
+      setError(p === "access_denied"
+        ? "Your Microsoft account has no access role assigned. Contact an administrator."
+        : "Microsoft sign-in failed. Please try again.");
+    }
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -183,9 +193,7 @@ export default function LoginPage() {
                   variant="outlined"
                   fullWidth
                   startIcon={<Microsoft />}
-                  onClick={() => {
-                    /* TODO: start OIDC / Azure AD sign-in */
-                  }}
+                  onClick={() => { window.location.href = `${API_BASE}/auth/oidc/start`; }}
                 >
                   Continue with Microsoft
                 </Button>

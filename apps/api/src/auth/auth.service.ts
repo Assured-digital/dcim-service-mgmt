@@ -68,8 +68,9 @@ export class AuthService {
 
   async validateUser(email: string, password: string) {
     const user = await this.users.findByEmail(email);
-    if (!user || !user.isActive) throw new UnauthorizedException("Invalid credentials");
-  
+    // No passwordHash → an SSO-only account: reject password login (generic message).
+    if (!user || !user.isActive || !user.passwordHash) throw new UnauthorizedException("Invalid credentials");
+
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
   
@@ -82,6 +83,17 @@ export class AuthService {
     const tokens = await this.issueTokenPair(payload);
     await this.rotateRefreshToken(user.id, tokens.refreshToken);
 
+    return { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: payload };
+  }
+
+  // A1 — issue the app session for an already-authenticated user (used by the
+  // OIDC/SSO callback once Entra has validated the identity). Same token pair +
+  // refresh-rotation as password login, so the rest of the session/RBAC/tenant
+  // machinery is identical for SSO and password users.
+  async issueSessionForUser(user: { id: string; email: string; role: Role; organizationId: string | null }) {
+    const payload = this.buildPayload(user);
+    const tokens = await this.issueTokenPair(payload);
+    await this.rotateRefreshToken(user.id, tokens.refreshToken);
     return { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: payload };
   }
 
@@ -125,6 +137,7 @@ export class AuthService {
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundException("User not found");
+    if (!user.passwordHash) throw new BadRequestException("This account signs in with Microsoft; there is no password to change");
 
     const ok = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!ok) throw new UnauthorizedException("Current password is incorrect");

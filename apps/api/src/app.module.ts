@@ -2,6 +2,7 @@ import { SitesModule } from "./sites/sites.module"
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
+import { OidcModule } from "./auth/oidc.module";
 import { ClientsModule } from "./clients/clients.module";
 import { ServiceRequestsModule } from "./service-requests/service-requests.module";
 import { AssetsModule } from "./assets/assets.module";
@@ -50,6 +51,7 @@ import { MetricsModule } from "./metrics/metrics.module"
     PrismaModule,
     StorageModule,
     AuthModule,
+    OidcModule,
     ClientsModule,
     ServiceRequestsModule,
     AssetsModule,
