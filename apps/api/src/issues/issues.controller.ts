@@ -4,6 +4,9 @@ import { Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
 import { RolesGuard } from "../auth/roles.guard"
 import { Roles } from "../auth/roles.decorator"
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard"
+import { RequiresModule } from "../auth/module-entitlement.decorator"
+import { PlatformModule } from "@prisma/client"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { PrismaService } from "../prisma/prisma.service"
 import { IssuesService } from "./issues.service"
@@ -15,7 +18,8 @@ const ALL_INTERNAL = [
   Role.SERVICE_MANAGER, Role.SERVICE_DESK_ANALYST, Role.ENGINEER
 ]
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.SERVICE_DESK)
 @ApiTags("issues")
 @ApiBearerAuth()
 @Controller("issues")

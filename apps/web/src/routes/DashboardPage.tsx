@@ -15,6 +15,7 @@ import { buildNeedsAttention, type NeedsAttentionItem, type Severity } from "../
 import { buildRecentActivity, type RecentActivityItem } from "../lib/recentActivity"
 import { deriveRag, type Risk as RIRisk, type Issue as RIIssue } from "../lib/risksIssuesQueue"
 import { getSelectedClientId } from "../lib/scope"
+import { useClientEntitlements } from "../lib/entitlements"
 import { SectionBar, DASH_CARD_SX, CARD_CONTENT_SX } from "../components/dashboard/primitives"
 import MetricsTrends from "../components/dashboard/MetricsTrends"
 import ChecksPanel from "../components/dashboard/ChecksPanel"
@@ -436,11 +437,16 @@ export default function DashboardPage() {
 
   // ── Queries — the layer already in place. Tickets via the shared useTickets
   //    hook (SR/INC/CHG/TASK); checks / risks / issues / sites direct. ────────
-  const tickets = useTickets()
-  const checks = useQuery({ queryKey: ["checks"], queryFn: async () => (await api.get<DashCheck[]>("/checks")).data })
-  const risks = useQuery({ queryKey: ["risks"], queryFn: async () => (await api.get<RIRisk[]>("/risks")).data })
-  const issues = useQuery({ queryKey: ["issues"], queryFn: async () => (await api.get<RIIssue[]>("/issues")).data })
-  const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], queryFn: async () => (await api.get<EstateSite[]>("/sites")).data })
+  // A2 — the Dashboard is a platform page shown to every client, so it must only
+  // fetch data for the modules the scoped client is licensed for (else those
+  // endpoints 403 once the backend enforces entitlement). hasModule() is true
+  // when entitlements are unknown/loading, so nothing regresses.
+  const { hasModule } = useClientEntitlements()
+  const tickets = useTickets({ enabled: hasModule("SERVICE_DESK") })
+  const checks = useQuery({ queryKey: ["checks"], enabled: hasModule("OPERATIONS"), queryFn: async () => (await api.get<DashCheck[]>("/checks")).data })
+  const risks = useQuery({ queryKey: ["risks"], enabled: hasModule("SERVICE_DESK"), queryFn: async () => (await api.get<RIRisk[]>("/risks")).data })
+  const issues = useQuery({ queryKey: ["issues"], enabled: hasModule("SERVICE_DESK"), queryFn: async () => (await api.get<RIIssue[]>("/issues")).data })
+  const sites = useQuery({ queryKey: ["infrastructure", clientId ?? "self"], enabled: hasModule("DCIM"), queryFn: async () => (await api.get<EstateSite[]>("/sites")).data })
 
   const isLoading = tickets.isLoading || checks.isLoading || risks.isLoading || issues.isLoading || sites.isLoading
   const hasError = !!(tickets.error || checks.error || risks.error || issues.error || sites.error)

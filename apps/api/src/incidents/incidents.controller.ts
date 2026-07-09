@@ -7,12 +7,16 @@ import { getJwtUser, resolveClientScope } from "../auth/request-context";
 import { ListOperationalQueryDto } from "../common/dto/list-operational.dto";
 import { toCsv } from "../common/reporting/csv";
 import { Roles } from "../auth/roles.decorator";
+import { ModuleEntitlementGuard } from "../auth/module-entitlement.guard";
+import { RequiresModule } from "../auth/module-entitlement.decorator";
+import { PlatformModule } from "@prisma/client";
 import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateIncidentDto, UpdateIncidentDto, UpdateIncidentStatusDto } from "./dto";
 import { IncidentsService } from "./incidents.service";
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequiresModule(PlatformModule.SERVICE_DESK)
 @ApiTags("incidents")
 @ApiBearerAuth()
 @Controller("incidents")
