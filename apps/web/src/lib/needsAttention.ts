@@ -20,9 +20,14 @@ import type { Ticket } from "./tickets"
 
 export type Severity = "breached" | "due-soon" | "unassigned"
 
+// B2 — the feed now merges items from multiple modules; source tags each row so
+// the dashboard can show a module chip on the cross-module (DCIM/CRM) ones.
+export type NeedsAttentionSource = "servicedesk" | "dcim" | "crm"
+
 export interface NeedsAttentionItem {
   id: string
   severity: Severity
+  source: NeedsAttentionSource
   reference: string
   subject: string
   detailPath: string
@@ -76,6 +81,7 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
     ranked.push({
       id: t.id,
       severity,
+      source: "servicedesk",
       reference: t.reference,
       subject: t.subject,
       detailPath: t.detailPath,
@@ -89,9 +95,87 @@ export function buildNeedsAttention(tickets: Ticket[], now = Date.now()): NeedsA
   return ranked.map((r): NeedsAttentionItem => ({
     id: r.id,
     severity: r.severity,
+    source: "servicedesk",
     reference: r.reference,
     subject: r.subject,
     detailPath: r.detailPath,
     age: r.age,
   }))
+}
+
+// ── Cross-module attention (B2) ─────────────────────────────────────────────
+// DCIM + CRM items folded into the same feed, sourced from ready endpoints. Each
+// is entitlement/role-gated at the call site (DashboardPage); these builders just
+// shape whatever data is passed — undefined/empty in → no items out.
+
+type CapacityOverview = { totals?: { strandedCabinets?: number; expiringReservations?: number } } | null | undefined
+
+export function buildDcimAttention(overview: CapacityOverview): NeedsAttentionItem[] {
+  const t = overview?.totals
+  if (!t) return []
+  const items: NeedsAttentionItem[] = []
+  const stranded = t.strandedCabinets ?? 0
+  if (stranded > 0) {
+    items.push({
+      id: "dcim-stranded", severity: "breached", source: "dcim", reference: "capacity",
+      subject: `${stranded} cabinet${stranded === 1 ? "" : "s"} at capacity — no room to scale`,
+      detailPath: "/dcim/overview", age: "review",
+    })
+  }
+  const expiring = t.expiringReservations ?? 0
+  if (expiring > 0) {
+    items.push({
+      id: "dcim-reservations", severity: "due-soon", source: "dcim", reference: "reservations",
+      subject: `${expiring} cabinet reservation${expiring === 1 ? "" : "s"} expiring soon`,
+      detailPath: "/dcim/overview", age: "soon",
+    })
+  }
+  return items
+}
+
+type Renewal = { id: string; reference?: string; title?: string; renewalDate?: string | null }
+type StalledOpp = { id: string; reference?: string; title?: string; stage?: string; daysInStage?: number }
+
+export function buildCrmAttention(
+  renewals: Renewal[] | undefined,
+  stalled: StalledOpp[] | undefined,
+  now = Date.now()
+): NeedsAttentionItem[] {
+  const items: NeedsAttentionItem[] = []
+  const DAY = 86_400_000
+  for (const r of renewals ?? []) {
+    if (!r.renewalDate) continue
+    const due = new Date(r.renewalDate).getTime()
+    if (Number.isNaN(due)) continue
+    const days = Math.round((due - now) / DAY)
+    if (days > 30) continue
+    items.push({
+      id: `crm-renewal-${r.id}`,
+      severity: days <= 0 ? "breached" : "due-soon",
+      source: "crm",
+      reference: r.reference ?? "renewal",
+      subject: `Renewal ${days <= 0 ? "overdue" : "due"}: ${r.title ?? r.reference ?? "work package"}`,
+      detailPath: `/work-packages/${r.id}`,
+      age: days <= 0 ? `${formatDurationLong(now - due)} ago` : `in ${formatDurationLong(due - now)}`,
+    })
+  }
+  for (const s of stalled ?? []) {
+    const d = s.daysInStage ?? 0
+    items.push({
+      id: `crm-stalled-${s.id}`,
+      severity: d > 30 ? "breached" : "due-soon",
+      source: "crm",
+      reference: s.reference ?? "opportunity",
+      subject: `Stalled: ${s.title ?? s.reference ?? "opportunity"}${s.stage ? ` (${s.stage.toLowerCase()})` : ""}`,
+      detailPath: `/crm/opportunities/${s.id}`,
+      age: `${d}d in stage`,
+    })
+  }
+  return items
+}
+
+// Merge module feeds into one severity-ordered list (breached → due-soon →
+// unassigned). Stable within a tier (preserves each builder's own ordering).
+export function mergeAttention(...lists: NeedsAttentionItem[][]): NeedsAttentionItem[] {
+  return lists.flat().sort((a, b) => TIER_RANK[a.severity] - TIER_RANK[b.severity])
 }
