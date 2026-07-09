@@ -72,6 +72,7 @@ jobs:
             --file apps/web/Dockerfile \
             --build-arg REGISTRY=${{ env.ACR_LOGIN_SERVER }} \
             --build-arg VITE_API_BASE_URL=${{ env.API_PUBLIC_URL }} \
+            --build-arg VITE_SSO_ENABLED=true \
             --output none \
             .
 
