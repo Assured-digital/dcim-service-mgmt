@@ -25,7 +25,7 @@ env:
   API_APP: adsm-api-prod
   WEB_APP: adsm-web-prod
   MIGRATE_JOB: job-migrate-prod
-  API_PUBLIC_URL: https://adsm-api-prod.happypond-cb5f4d7f.uksouth.azurecontainerapps.io
+  API_PUBLIC_URL: https://api.assured-digital.com
 
 jobs:
   deploy:
