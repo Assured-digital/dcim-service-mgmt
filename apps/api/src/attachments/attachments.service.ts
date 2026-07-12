@@ -65,6 +65,13 @@ export class AttachmentsService {
     return trimmed.slice(0, MAX_CAPTION_LENGTH);
   }
 
+  // Which backend an attachment's bytes live under: its own marker, else the
+  // configured legacy provider (rows written before the marker / a backend switch),
+  // else undefined → the storage layer falls back to the active provider.
+  private providerFor(marker: string | null | undefined): string | undefined {
+    return marker ?? process.env.STORAGE_LEGACY_PROVIDER ?? undefined;
+  }
+
   private toSummary(row: {
     id: string;
     filename: string;
@@ -131,6 +138,7 @@ export class AttachmentsService {
         contentType,
         size: file.size,
         storageKey,
+        storageProvider: this.storage.activeName(),
         caption: this.normalizeCaption(caption),
         uploadedById: actorUserId ?? undefined
       }
@@ -168,7 +176,7 @@ export class AttachmentsService {
     this.assertClientScope(clientId);
     const att = await this.prisma.attachment.findFirst({ where: { id, clientId } });
     if (!att) throw new NotFoundException("Attachment not found");
-    const stream = await this.storage.getObject(att.storageKey);
+    const stream = await this.storage.getObject(att.storageKey, this.providerFor(att.storageProvider));
     return {
       meta: { filename: att.filename, contentType: att.contentType, size: att.size },
       stream
@@ -184,7 +192,7 @@ export class AttachmentsService {
     await this.assertCheckNotLocked(clientId, att.recordType, att.recordId);
     // Remove the bytes first, then the metadata row. If the byte delete fails we keep
     // the row so the operation is retryable rather than leaving a dangling pointer.
-    await this.storage.deleteObject(att.storageKey);
+    await this.storage.deleteObject(att.storageKey, this.providerFor(att.storageProvider));
     await this.prisma.attachment.delete({ where: { id: att.id } });
     return { ok: true };
   }

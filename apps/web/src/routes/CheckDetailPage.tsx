@@ -50,7 +50,7 @@ import TaskDetailPage from "./TaskDetailPage"
 import RiskDetailPage from "./RiskDetailPage"
 import IssueDetailPage from "./IssueDetailPage"
 import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
-import { AttachmentsContent } from "../components/AttachmentsContent"
+import { DocumentsPanel } from "../components/DocumentsPanel"
 import { EntityHistoryDialog } from "../components/EntityHistoryDialog"
 import { AttachmentPreviewModal } from "../components/AttachmentPreviewModal"
 import { useNotification } from "../components/NotificationProvider"
@@ -2603,10 +2603,10 @@ export default function CheckDetailPage() {
 
           <Card>
             <RightPanelSection
-              title="Attachments"
+              title="Documents"
               icon={<AttachFileIcon sx={{ fontSize: 12 }} />}
             >
-              <AttachmentsContent
+              <DocumentsPanel
                 attachments={check?.attachments ?? []}
                 recordType="check"
                 recordId={check?.id ?? ""}

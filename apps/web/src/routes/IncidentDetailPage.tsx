@@ -65,7 +65,8 @@ import { transitions as incidentTransitions } from "../config/transitions/incide
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { LinkedRecordsContent } from "../components/LinkedRecordsContent"
 import { TasksSectionContent } from "../components/TasksSectionContent"
-import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
+import { type AttachmentsHandle } from "../components/AttachmentsContent"
+import { DocumentsPanel } from "../components/DocumentsPanel"
 import type { AttachmentSummary } from "../lib/attachments"
 import { LinkRecordDialog } from "../components/LinkRecordDialog"
 import { deleteRecordLink, type ResolvedLink } from "../lib/linkedRecords"
@@ -869,10 +870,10 @@ export default function IncidentDetailPage() {
       },
       {
         id: "attachments",
-        title: "Attachments",
+        title: "Documents",
         headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
-          <AttachmentsContent
+          <DocumentsPanel
             ref={attachRef}
             attachments={incident?.attachments ?? []}
             recordType="incident"
