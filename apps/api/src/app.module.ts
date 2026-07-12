@@ -45,6 +45,7 @@ import { WorkNotesModule } from "./work-notes/work-notes.module"
 import { SensorReadingsModule } from "./sensor-readings/sensor-readings.module"
 import { AssetCustomFieldsModule } from "./asset-custom-fields/asset-custom-fields.module"
 import { MetricsModule } from "./metrics/metrics.module"
+import { SharePointProvisioningModule } from "./sharepoint-provisioning/provisioning.module"
 
 @Module({
   imports: [
@@ -92,7 +93,8 @@ import { MetricsModule } from "./metrics/metrics.module"
     WorkNotesModule,
     SensorReadingsModule,
     AssetCustomFieldsModule,
-    MetricsModule
+    MetricsModule,
+    SharePointProvisioningModule
   ],
   controllers: [HealthController]
 })
