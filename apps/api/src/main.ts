@@ -44,7 +44,13 @@ async function bootstrap() {
   // /health stays version-neutral for probes. New versions opt in per-handler via @Version.
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
 
-  setupSwagger(app);
+  // API docs are an API-surface disclosure — mount them only where explicitly
+  // enabled (local + test set SWAGGER_ENABLED=true). Prod leaves it unset, so the
+  // full OpenAPI contract is never served publicly. Secure-by-default: off unless
+  // opted in, so a forgotten env var fails closed, not open.
+  if (process.env.SWAGGER_ENABLED === "true") {
+    setupSwagger(app);
+  }
 
   const port = Number(process.env.PORT ?? 3001);
 
