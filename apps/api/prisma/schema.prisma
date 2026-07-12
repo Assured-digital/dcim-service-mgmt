@@ -135,6 +135,10 @@ model Client {
   lifecycleStage String        @default("ACTIVE")
   // CRM_DESIGN.md §8 — folder within the org SharePoint site (dormant until phase 7a)
   sharePointFolderPath String?
+  // C1 — the client's OWN SharePoint site (Graph site id). Under the site-per-client
+  // model its Documents (shared) + Evidence (internal) libraries hold this client's
+  // docs; the app resolves the drive from this id. Dormant until GRAPH_ENABLED.
+  sharePointSiteId String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

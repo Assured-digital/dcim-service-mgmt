@@ -24,6 +24,11 @@ export class CreateClientDto {
   @IsString()
   @MaxLength(400)
   sharePointFolderPath?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  sharePointSiteId?: string;
 }
 
 export class UpdateClientDto {
@@ -45,6 +50,11 @@ export class UpdateClientDto {
   @IsString()
   @MaxLength(400)
   sharePointFolderPath?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  sharePointSiteId?: string;
 }
 
 // A2 — the full enabled-module set for a client (declarative; anything omitted

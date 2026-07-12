@@ -24,6 +24,7 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
   const [status, setStatus] = useState("ACTIVE")
   const [lifecycleStage, setLifecycleStage] = useState("ACTIVE")
   const [sharePointFolderPath, setSharePointFolderPath] = useState("")
+  const [sharePointSiteId, setSharePointSiteId] = useState("")
   // A2 — the client's licensed module set (edit mode only; new clients default to
   // all-on server-side and can be narrowed after creation).
   const [modules, setModules] = useState<string[]>(ALL_MODULE_KEYS)
@@ -36,12 +37,14 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
       setStatus(client.status)
       setLifecycleStage(client.lifecycleStage ?? "ACTIVE")
       setSharePointFolderPath(client.sharePointFolderPath ?? "")
+      setSharePointSiteId(client.sharePointSiteId ?? "")
       setModules(client.enabledModules ?? ALL_MODULE_KEYS)
     } else {
       setName("")
       setStatus("ACTIVE")
       setLifecycleStage("ACTIVE")
       setSharePointFolderPath("")
+      setSharePointSiteId("")
       setModules(ALL_MODULE_KEYS)
     }
   }, [open, mode, client])
@@ -53,13 +56,14 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
   const mutation = useMutation({
     mutationFn: async () => {
       const folder = sharePointFolderPath.trim()
+      const siteId = sharePointSiteId.trim()
       if (isEdit && client) {
-        await updateClient(client.id, { name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder })
+        await updateClient(client.id, { name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder, sharePointSiteId: siteId })
         // Module access is a separate declarative endpoint.
         await setClientModules(client.id, modules)
         return
       }
-      await createClient({ name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder || undefined })
+      await createClient({ name: name.trim(), status, lifecycleStage, sharePointFolderPath: folder || undefined, sharePointSiteId: siteId || undefined })
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["clients"] })
@@ -136,6 +140,16 @@ export default function ClientFormDrawer({ open, mode, client, onClose }: Props)
             InputLabelProps={{ shrink: true }}
             placeholder="Clients/Acme Ltd"
             helperText="Folder within the org SharePoint site — powers CRM → Documents."
+          />
+
+          <TextField
+            label="SharePoint site ID"
+            value={sharePointSiteId}
+            onChange={(e) => setSharePointSiteId(e.target.value)}
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            placeholder="contoso.sharepoint.com,<siteGuid>,<webGuid>"
+            helperText="C1 — this client's own SharePoint site (Graph site id). Holds their Documents + Evidence libraries."
           />
 
           {isEdit ? (

@@ -118,6 +118,7 @@ export class ClientsService {
         status: dto.status ?? "ACTIVE",
         lifecycleStage: dto.lifecycleStage ?? "ACTIVE",
         sharePointFolderPath: dto.sharePointFolderPath?.trim() || undefined,
+        sharePointSiteId: dto.sharePointSiteId?.trim() || undefined,
         // New clients start with every module enabled (matches the existing-client
         // backfill); org-super can narrow this from the Clients admin page.
         moduleEntitlements: {
@@ -145,7 +146,8 @@ export class ClientsService {
         name: nextName,
         status: dto.status,
         lifecycleStage: dto.lifecycleStage,
-        sharePointFolderPath: dto.sharePointFolderPath?.trim() ?? undefined
+        sharePointFolderPath: dto.sharePointFolderPath?.trim() ?? undefined,
+        sharePointSiteId: dto.sharePointSiteId?.trim() ?? undefined
       }
     });
     return this.get(actor, id);
