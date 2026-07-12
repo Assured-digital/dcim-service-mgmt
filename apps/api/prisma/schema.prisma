@@ -1311,6 +1311,10 @@ model Attachment {
   contentType  String // server-validated canonical MIME (magic-byte verified)
   size         Int // bytes
   storageKey   String // object key in the bucket
+  // C1 — which storage backend holds the bytes (s3 | azure | sharepoint). Null =
+  // pre-marker rows, served by STORAGE_LEGACY_PROVIDER. New rows stamp the active
+  // provider so a backend switch stays dual-read (legacy Blob + new SharePoint).
+  storageProvider String?
   caption      String? // optional short label captured with the evidence (frictionless); editable until the owning check locks
   uploadedById String?
   createdAt    DateTime @default(now())
