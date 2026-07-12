@@ -50,6 +50,9 @@ services:
         condition: service_completed_successfully
     env_file:
       - apps/api/.env
+    environment:
+      # Local dev always serves the API docs at /api (prod leaves this unset).
+      - SWAGGER_ENABLED=true
     ports:
       - "3001:3001"
     volumes:
