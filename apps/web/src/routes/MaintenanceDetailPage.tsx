@@ -53,7 +53,8 @@ import {
 import { useBreadcrumb } from "./Shell"
 import { useAssignableUsers } from "../lib/useAssignableUsers"
 import { userLabel } from "../lib/userDisplay"
-import { AttachmentsContent, type AttachmentsHandle } from "../components/AttachmentsContent"
+import { type AttachmentsHandle } from "../components/AttachmentsContent"
+import { DocumentsPanel } from "../components/DocumentsPanel"
 import type { AttachmentSummary } from "../lib/attachments"
 import { statusColors, accentToken, type ThemeMode } from "../components/shared"
 import { useThemeMode } from "../lib/theme"
@@ -1107,11 +1108,11 @@ export default function MaintenanceDetailPage() {
     return [
       {
         id: "attachments",
-        title: "Attachments",
+        title: "Documents",
         defaultOpen: false,
         headerAdd: { onClick: () => attachRef.current?.openPicker(), tooltip: "Attach file" },
         content: (
-          <AttachmentsContent
+          <DocumentsPanel
             ref={attachRef}
             attachments={recordData?.attachments ?? []}
             recordType="maintenance"
