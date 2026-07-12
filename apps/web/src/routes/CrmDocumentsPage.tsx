@@ -115,10 +115,10 @@ export default function CrmDocumentsPage() {
             <ErrorState title="Couldn't reach SharePoint" detail="The Graph request failed. Check the integration configuration." />
           ) : result?.status === "disabled" ? (
             <EmptyState title="SharePoint integration is off"
-              detail="Set GRAPH_ENABLED and SHAREPOINT_SITE_ID and grant the app Sites.Read.All / Files.Read.All to browse client documents here." />
+              detail="Set GRAPH_ENABLED and grant the app Sites.Selected on the client sites to browse documents here." />
           ) : result?.status === "unmapped" ? (
-            <EmptyState title="No SharePoint folder mapped"
-              detail="Set this client's SharePoint folder path in Admin → Clients to browse its documents." />
+            <EmptyState title="No SharePoint site mapped"
+              detail="Set this client's SharePoint site in Admin → Clients to browse its documents." />
           ) : (result?.items.length ?? 0) === 0 ? (
             <EmptyState title={activeSearch ? "No matches" : "Empty folder"}
               detail={activeSearch ? "No files matched your search." : "This folder has no files yet."} />

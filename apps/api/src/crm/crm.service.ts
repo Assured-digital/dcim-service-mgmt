@@ -4,7 +4,7 @@ import { PrismaService } from "../prisma/prisma.service"
 import { canSeeCommercial } from "../auth/role-scope"
 import { OpportunitiesService } from "../opportunities/opportunities.service"
 import { TasksService } from "../tasks/tasks.service"
-import { MsGraphService, type DriveItem } from "../msgraph/msgraph.service"
+import { MsGraphService, SP_LIBRARY, type DriveItem } from "../msgraph/msgraph.service"
 
 const DAY = 86_400_000
 const RENEWAL_BUFFER_DAYS = 14 // sweep fires at renewalDate − noticePeriodDays − buffer
@@ -31,12 +31,13 @@ export class CrmService {
   > {
     if (!clientId) throw new ForbiddenException("Missing client scope")
     if (!this.graph.isConfigured()) return { status: "disabled" }
-    const client = await this.prisma.client.findUnique({ where: { id: clientId }, select: { sharePointFolderPath: true } })
-    const base = client?.sharePointFolderPath?.trim()
-    if (!base) return { status: "unmapped" }
+    const client = await this.prisma.client.findUnique({ where: { id: clientId }, select: { sharePointSiteId: true, sharePointFolderPath: true } })
+    const siteId = client?.sharePointSiteId?.trim()
+    if (!siteId) return { status: "unmapped" }
+    const base = client?.sharePointFolderPath?.trim() ?? ""
     const rel = this.safeSubPath(subPath)
-    const fullPath = rel ? `${base.replace(/\/+$/g, "")}/${rel}` : base
-    const items = await this.graph.listChildren(fullPath)
+    const fullPath = [base, rel].filter(Boolean).join("/")
+    const items = await this.graph.listChildren(siteId, SP_LIBRARY.DOCUMENTS, fullPath)
     return { status: "ok", folderPath: base, subPath: rel, items }
   }
 
@@ -48,10 +49,11 @@ export class CrmService {
     if (!clientId) throw new ForbiddenException("Missing client scope")
     if (!this.graph.isConfigured()) return { status: "disabled" }
     if (!query?.trim()) throw new BadRequestException("A search term is required")
-    const client = await this.prisma.client.findUnique({ where: { id: clientId }, select: { sharePointFolderPath: true } })
-    const base = client?.sharePointFolderPath?.trim()
-    if (!base) return { status: "unmapped" }
-    const items = await this.graph.searchInFolder(base, query.trim())
+    const client = await this.prisma.client.findUnique({ where: { id: clientId }, select: { sharePointSiteId: true, sharePointFolderPath: true } })
+    const siteId = client?.sharePointSiteId?.trim()
+    if (!siteId) return { status: "unmapped" }
+    const base = client?.sharePointFolderPath?.trim() ?? ""
+    const items = await this.graph.searchInLibrary(siteId, SP_LIBRARY.DOCUMENTS, base, query.trim())
     return { status: "ok", items }
   }
 
