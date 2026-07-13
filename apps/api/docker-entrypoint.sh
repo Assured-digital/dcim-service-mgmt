@@ -29,6 +29,15 @@ echo "Entrypoint starting (APP_ENV=$APP_ENV)..."
 echo "Ensuring Prisma client is generated..."
 npx prisma generate
 
+# Provisioning-job mode: run the SharePoint provisioner sweep and exit. Used ONLY
+# by the isolated provisioning Container Apps Job (env JOB_MODE=provision) — never
+# the API. Runs after generate (client ready), before any schema/seed/API steps,
+# so it never touches the DB schema.
+if [ "$JOB_MODE" = "provision" ]; then
+    echo "JOB_MODE=provision -> running SharePoint provisioning sweep..."
+    exec node dist/src/provision-cli.js
+fi
+
 if [ "$APP_ENV" = "production" ]; then
     echo "Production mode: schema managed by migrate deploy (run as a job), skipping db push."
 
