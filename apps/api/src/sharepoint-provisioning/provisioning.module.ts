@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common"
 import { PrismaModule } from "../prisma/prisma.module"
 import { SharePointProvisioningService } from "./provisioning.service"
+import { ProvisioningTriggerService } from "./job-trigger.service"
 
 // Provides the provisioner service. It's constructed in the API too (harmless — it
 // only acts when sweep()/provisionClient() is called, which ONLY the provisioning
@@ -8,7 +9,7 @@ import { SharePointProvisioningService } from "./provisioning.service"
 // perform the elevated calls anyway).
 @Module({
   imports: [PrismaModule],
-  providers: [SharePointProvisioningService],
-  exports: [SharePointProvisioningService]
+  providers: [SharePointProvisioningService, ProvisioningTriggerService],
+  exports: [SharePointProvisioningService, ProvisioningTriggerService]
 })
 export class SharePointProvisioningModule {}

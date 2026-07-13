@@ -9,6 +9,7 @@ import { PlatformModule } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateClientDto, UpdateClientDto } from "./dto";
 import { JwtUser, resolveAssignedClient } from "../auth/request-context";
+import { ProvisioningTriggerService } from "../sharepoint-provisioning/job-trigger.service";
 
 // A2 — the licensable product modules. Platform primitives (dashboard, admin,
 // client selector) are always on and are NOT entitlements.
@@ -23,7 +24,10 @@ type EntitlementRow = { module: PlatformModule; enabled: boolean };
 
 @Injectable()
 export class ClientsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private provisioningTrigger: ProvisioningTriggerService
+  ) {}
 
   // Projects the join-table rows down to the simple enabled-module list the
   // frontend nav consumes.
@@ -127,6 +131,12 @@ export class ClientsService {
       },
       include: { moduleEntitlements: { select: { module: true, enabled: true } } }
     });
+    // Fire-and-forget: kick the isolated provisioning job to create this client's
+    // SharePoint site (best-effort, non-blocking; the sweep is idempotent + self-
+    // healing). Skipped when a site id was set manually at creation.
+    if (!client.sharePointSiteId) {
+      void this.provisioningTrigger.triggerProvisioning();
+    }
     const { moduleEntitlements, ...rest } = client;
     return { ...rest, enabledModules: this.enabledModulesOf(moduleEntitlements) };
   }
