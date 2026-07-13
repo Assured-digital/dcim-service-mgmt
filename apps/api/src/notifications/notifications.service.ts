@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common"
 import { NotificationType } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
+import { sendNotificationEmails } from "./notification-email"
 
 // Newest-first list cap. The bell consumes the most recent slice; a hard cap keeps
 // the response bounded (the [recipientId, readAt, createdAt] index serves the order).
@@ -48,6 +49,15 @@ export class NotificationsService {
           sourceId: params.sourceId,
           commentId: params.commentId
         }))
+      })
+
+      // Best-effort email fan-out for mentions (dormant unless NOTIFICATIONS_EMAIL_ENABLED).
+      await sendNotificationEmails(this.prisma, {
+        type: NotificationType.MENTION,
+        recipientIds,
+        actorId: params.actorId,
+        sourceType: params.sourceType,
+        sourceId: params.sourceId
       })
     } catch (err) {
       // Best-effort: never propagate — the comment has already been posted.

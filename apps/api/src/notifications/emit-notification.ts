@@ -1,6 +1,7 @@
 import { Logger } from "@nestjs/common"
 import { NotificationType } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
+import { sendNotificationEmails } from "./notification-email"
 
 // Single writer for event-driven notifications — a plain function taking the prisma
 // client (NOT injectable), mirroring emitAudit (audit-events/emit-audit.ts) so it
@@ -52,6 +53,16 @@ export async function emitNotification(
         sourceId: input.sourceId,
         commentId: input.commentId ?? null
       }))
+    })
+
+    // Best-effort email fan-out (dormant unless NOTIFICATIONS_EMAIL_ENABLED). Same
+    // deduped recipient list; the in-app write above is the primary record.
+    await sendNotificationEmails(prisma, {
+      type: input.type,
+      recipientIds,
+      actorId: input.actorId,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId
     })
   } catch (err) {
     // Best-effort: never propagate — the primary update has already been committed.
