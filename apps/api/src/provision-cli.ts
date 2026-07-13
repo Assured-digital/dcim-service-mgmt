@@ -1,5 +1,5 @@
 import { NestFactory } from "@nestjs/core"
-import { AppModule } from "./app.module"
+import { SharePointProvisioningModule } from "./sharepoint-provisioning/provisioning.module"
 import { SharePointProvisioningService } from "./sharepoint-provisioning/provisioning.service"
 
 // Entry point for the SharePoint provisioning JOB (Container Apps Job on the API
@@ -8,7 +8,9 @@ import { SharePointProvisioningService } from "./sharepoint-provisioning/provisi
 // missing a SharePoint site, provisions each, then exits. Inert unless
 // SP_PROVISION_ENABLED=true.
 async function main() {
-  const app = await NestFactory.createApplicationContext(AppModule, { logger: ["log", "warn", "error"] })
+  // Minimal context — Prisma + the provisioner only. Deliberately NOT AppModule,
+  // so the auth stack (JwtStrategy → JWT_SECRET) isn't required in the job.
+  const app = await NestFactory.createApplicationContext(SharePointProvisioningModule, { logger: ["log", "warn", "error"] })
   try {
     const svc = app.get(SharePointProvisioningService)
     if (!svc.enabled()) {
