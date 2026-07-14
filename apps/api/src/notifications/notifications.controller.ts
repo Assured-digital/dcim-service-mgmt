@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Param, Patch, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Headers, Param, Patch, Put, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
@@ -7,6 +7,7 @@ import { Roles } from "../auth/roles.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { PrismaService } from "../prisma/prisma.service"
 import { NotificationsService } from "./notifications.service"
+import { UpdateNotificationPreferencesDto } from "./dto"
 
 // Any authenticated app user can have notifications addressed to them (mentions
 // today target AD-staff, but the read API is the recipient's own inbox regardless
@@ -58,5 +59,19 @@ export class NotificationsController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.notifications.markRead(clientId, user.userId, id)
+  }
+
+  // Per-user notification preferences (not client-scoped — a person's settings
+  // are global, not per-tenant).
+  @Get("preferences")
+  @Roles(...ALL_AUTHED)
+  async getPreferences(@Req() req: any) {
+    return this.notifications.getPreferences(getJwtUser(req).userId)
+  }
+
+  @Put("preferences")
+  @Roles(...ALL_AUTHED)
+  async updatePreferences(@Req() req: any, @Body() dto: UpdateNotificationPreferencesDto) {
+    return this.notifications.updatePreferences(getJwtUser(req).userId, dto.preferences)
   }
 }

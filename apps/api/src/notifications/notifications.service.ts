@@ -3,6 +3,7 @@ import { NotificationType } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
 import { sendNotificationEmails } from "./notification-email"
+import { resolveChannels, NOTIFICATION_TYPES, DEFAULT_CHANNELS } from "./preferences"
 
 // Newest-first list cap. The bell consumes the most recent slice; a hard cap keeps
 // the response bounded (the [recipientId, readAt, createdAt] index serves the order).
@@ -39,22 +40,25 @@ export class NotificationsService {
       ]
       if (!recipientIds.length) return
 
-      await this.prisma.notification.createMany({
-        data: recipientIds.map((recipientId) => ({
-          recipientId,
-          type: NotificationType.MENTION,
-          actorId: params.actorId,
-          clientId: params.clientId,
-          sourceType: params.sourceType,
-          sourceId: params.sourceId,
-          commentId: params.commentId
-        }))
-      })
-
-      // Best-effort email fan-out for mentions (dormant unless NOTIFICATIONS_EMAIL_ENABLED).
+      const channels = await resolveChannels(this.prisma, recipientIds, NotificationType.MENTION)
+      const inApp = recipientIds.filter((id) => channels.get(id)?.inApp)
+      if (inApp.length) {
+        await this.prisma.notification.createMany({
+          data: inApp.map((recipientId) => ({
+            recipientId,
+            type: NotificationType.MENTION,
+            actorId: params.actorId,
+            clientId: params.clientId,
+            sourceType: params.sourceType,
+            sourceId: params.sourceId,
+            commentId: params.commentId
+          }))
+        })
+      }
+      // Best-effort email to those who opted into email for mentions.
       await sendNotificationEmails(this.prisma, {
         type: NotificationType.MENTION,
-        recipientIds,
+        recipientIds: recipientIds.filter((id) => channels.get(id)?.email),
         actorId: params.actorId,
         sourceType: params.sourceType,
         sourceId: params.sourceId
@@ -92,17 +96,29 @@ export class NotificationsService {
       if (params.recipientId === params.actorId) return // self-reply
       if (params.mentionedUserIds.includes(params.recipientId)) return // already MENTIONed
 
-      await this.prisma.notification.create({
-        data: {
-          recipientId: params.recipientId,
+      const ch = (await resolveChannels(this.prisma, [params.recipientId], NotificationType.REPLY)).get(params.recipientId)
+      if (ch?.inApp) {
+        await this.prisma.notification.create({
+          data: {
+            recipientId: params.recipientId,
+            type: NotificationType.REPLY,
+            actorId: params.actorId,
+            clientId: params.clientId,
+            sourceType: params.sourceType,
+            sourceId: params.sourceId,
+            commentId: params.commentId
+          }
+        })
+      }
+      if (ch?.email) {
+        await sendNotificationEmails(this.prisma, {
           type: NotificationType.REPLY,
+          recipientIds: [params.recipientId],
           actorId: params.actorId,
-          clientId: params.clientId,
           sourceType: params.sourceType,
-          sourceId: params.sourceId,
-          commentId: params.commentId
-        }
-      })
+          sourceId: params.sourceId
+        })
+      }
     } catch (err) {
       // Best-effort: never propagate — the reply has already been posted.
       this.logger.error(
@@ -169,5 +185,43 @@ export class NotificationsService {
       data: { readAt: new Date() }
     })
     return { updated: res.count }
+  }
+
+  // ── B3 Phase 2 — per-user notification preferences (type × channel) ─────────
+  // Returns every type with its effective setting (stored row, else the default),
+  // so the settings UI always renders the full, current picture.
+  async getPreferences(userId: string) {
+    const rows = await this.prisma.userNotificationPreference.findMany({
+      where: { userId },
+      select: { type: true, inApp: true, email: true }
+    })
+    const byType = new Map(rows.map((r) => [r.type, r]))
+    return {
+      preferences: NOTIFICATION_TYPES.map((type) => {
+        const r = byType.get(type)
+        return {
+          type,
+          inApp: r?.inApp ?? DEFAULT_CHANNELS[type].inApp,
+          email: r?.email ?? DEFAULT_CHANNELS[type].email
+        }
+      })
+    }
+  }
+
+  async updatePreferences(
+    userId: string,
+    prefs: { type: NotificationType; inApp: boolean; email: boolean }[]
+  ) {
+    const valid = prefs.filter((p) => NOTIFICATION_TYPES.includes(p.type))
+    await this.prisma.$transaction(
+      valid.map((p) =>
+        this.prisma.userNotificationPreference.upsert({
+          where: { userId_type: { userId, type: p.type } },
+          create: { userId, type: p.type, inApp: p.inApp, email: p.email },
+          update: { inApp: p.inApp, email: p.email }
+        })
+      )
+    )
+    return this.getPreferences(userId)
   }
 }
