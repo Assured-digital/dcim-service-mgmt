@@ -15,6 +15,7 @@ import {
   notificationVerb,
   routeForNotificationSource,
   sourceTypeLabel,
+  SYSTEM_NOTIFICATION_KINDS,
   type NotificationItem,
 } from "../lib/notifications"
 
@@ -146,7 +147,10 @@ export default function NotificationBell({ clientId }: { clientId: string }) {
             </Box>
           ) : (
             items.map((n) => {
-              const actorName = n.actor?.displayName ?? "Someone"
+              // System (sweep) alerts carry no actor — show a "Reminder" sender rather
+              // than "Someone", so "Reminder flagged as overdue in a task" reads right.
+              const actorName =
+                n.actor?.displayName ?? (SYSTEM_NOTIFICATION_KINDS.has(n.type) ? "Reminder" : "Someone")
               const unread = !n.readAt
               return (
                 <Box

@@ -59,13 +59,20 @@ export async function sendNotificationEmails(prisma: PrismaService, input: Notif
       ASSIGNED: `You've been assigned a ${label}`,
       MENTION: `${actorName} mentioned you on a ${label}`,
       STATUS_CHANGED: `Status updated on a ${label}`,
-      REPLY: `${actorName} replied to you on a ${label}`
+      REPLY: `${actorName} replied to you on a ${label}`,
+      COMMENT: `New comment on a ${label}`,
+      DUE_SOON: `A ${label} is due soon`,
+      OVERDUE: `A ${label} is overdue`
     }
     const LINE: Record<string, string> = {
       ASSIGNED: `${actorName} assigned you a ${label}.`,
       MENTION: `${actorName} mentioned you on a ${label}.`,
       STATUS_CHANGED: `${actorName} updated the status of a ${label}.`,
-      REPLY: `${actorName} replied to you on a ${label}.`
+      REPLY: `${actorName} replied to you on a ${label}.`,
+      COMMENT: `${actorName} commented on a ${label}.`,
+      // Time-based sweep alerts have no human actor — keep the copy actorless.
+      DUE_SOON: `A ${label} you're on is due soon.`,
+      OVERDUE: `A ${label} you're on is now overdue.`
     }
     const subject = SUBJECT[input.type] ?? `Update on a ${label}`
     const line = LINE[input.type] ?? `${actorName} updated a ${label}.`

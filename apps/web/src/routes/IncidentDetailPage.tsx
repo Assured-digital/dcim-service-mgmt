@@ -932,6 +932,7 @@ export default function IncidentDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={incident.reference}
+        watchTarget={{ recordType: "Incident", recordId: incident.id }}
         typeBadge={null}
         currentStatus={incident.status}
         statusConfig={incidentStatusConfig}

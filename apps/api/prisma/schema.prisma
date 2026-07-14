@@ -122,6 +122,9 @@ enum NotificationType {
   REPLY
   ASSIGNED
   STATUS_CHANGED
+  COMMENT
+  DUE_SOON
+  OVERDUE
 }
 
 model Client {
@@ -750,6 +753,7 @@ model User {
   performedMaintenance    MaintenanceLog[]       @relation("PerformedMaintenance")
   clientAssignments       UserClientAssignment[]
   notificationPreferences UserNotificationPreference[] @relation("UserNotificationPrefs")
+  recordWatches           RecordWatch[]                @relation("UserRecordWatches")
   receivedNotifications   Notification[]         @relation("ReceivedNotifications")
   triggeredNotifications  Notification[]         @relation("TriggeredNotifications")
 }
@@ -1442,6 +1446,36 @@ model UserNotificationPreference {
   updatedAt DateTime         @updatedAt
 
   @@unique([userId, type])
+}
+
+// B3 Phase 2b — the Watch feature (Jira-style): a user opts into a record's
+// notifications. Watchers receive STATUS_CHANGED + COMMENT for that record (filtered
+// by their global preferences). recordType is the PascalCase model name, matching
+// Notification.sourceType. Commenting on a record auto-adds a watch.
+model RecordWatch {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation("UserRecordWatches", fields: [userId], references: [id], onDelete: Cascade)
+  recordType String
+  recordId   String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, recordType, recordId])
+  @@index([recordType, recordId])
+}
+
+// B3 Phase 3 — idempotency ledger for the time-based notification sweep. One row per
+// (record, signal) once we've notified for it, so a daily sweep fires each DUE_SOON /
+// OVERDUE alert exactly once instead of re-notifying every run. `signal` is a plain
+// string ("DUE_SOON" | "OVERDUE"), not an enum — the marker outlives enum churn.
+model NotificationSweepMarker {
+  id         String   @id @default(uuid())
+  recordType String
+  recordId   String
+  signal     String
+  createdAt  DateTime @default(now())
+
+  @@unique([recordType, recordId, signal])
 }
 
 model UserClientAssignment {

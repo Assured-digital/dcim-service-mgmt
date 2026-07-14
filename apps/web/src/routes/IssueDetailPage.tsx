@@ -878,6 +878,7 @@ export default function IssueDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={issue.reference}
+        watchTarget={{ recordType: "Issue", recordId: issue.id }}
         typeBadge={issueTypeBadge(mode)}
         currentStatus={issue.status}
         statusConfig={issueStatusConfig}

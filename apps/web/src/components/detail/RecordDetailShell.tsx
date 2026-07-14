@@ -23,6 +23,8 @@ import LinkOffIcon from "@mui/icons-material/LinkOff"
 import { useNavigate } from "react-router-dom"
 import { StatusPopover, type PopoverOption } from "./StatusPopover"
 import { DueDatePopover } from "./DueDatePopover"
+import { WatchToggle } from "./WatchToggle"
+import type { WatchRecordType } from "../../lib/watch"
 import { useNotification } from "../NotificationProvider"
 import { useBreadcrumb } from "../../routes/Shell"
 import { useInDrillDownNavigator } from "../shared/layout/DrillDownNavigator"
@@ -109,6 +111,9 @@ export interface RecordDetailShellProps {
   detailFields: DetailField[]
   metadata?: RecordMetadata
   rightSections?: RightSection[]
+  // When set, a Jira-style Watch toggle renders in the right-column header row (and
+  // the drawer status cluster). Only the six watchable work-item types pass this.
+  watchTarget?: { recordType: WatchRecordType; recordId: string }
   loading?: boolean
   error?: string
 }
@@ -458,6 +463,7 @@ function RecordDetailShellImpl({
   detailFields,
   metadata,
   rightSections,
+  watchTarget,
   loading,
   error,
 }: RecordDetailShellProps) {
@@ -792,10 +798,15 @@ function RecordDetailShellImpl({
       </IconButton>
     ) : null
 
-  // Drawer-header form: status pill + overflow sit adjacent.
+  const watchToggle = watchTarget ? (
+    <WatchToggle recordType={watchTarget.recordType} recordId={watchTarget.recordId} />
+  ) : null
+
+  // Drawer-header form: status pill + watch + overflow sit adjacent.
   const statusCluster = (
     <Stack direction="row" alignItems="center" spacing={0.75}>
       {statusButton}
+      {watchToggle}
       {moreButton}
     </Stack>
   )
@@ -962,6 +973,7 @@ function RecordDetailShellImpl({
             >
               {statusButton}
               <Stack direction="row" alignItems="center" spacing={0.75}>
+                {watchToggle}
                 {!inNavigator ? (
                   <IconButton
                     size="small"

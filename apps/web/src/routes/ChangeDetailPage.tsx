@@ -1248,6 +1248,7 @@ export default function ChangeDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={change.reference}
+        watchTarget={{ recordType: "ChangeRequest", recordId: change.id }}
         typeBadge={null}
         currentStatus={change.status}
         statusConfig={changeStatusConfig}

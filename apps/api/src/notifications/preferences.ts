@@ -9,7 +9,10 @@ export const DEFAULT_CHANNELS: Record<NotificationType, Channels> = {
   ASSIGNED: { inApp: true, email: true },
   MENTION: { inApp: true, email: true },
   STATUS_CHANGED: { inApp: true, email: false },
-  REPLY: { inApp: true, email: false }
+  REPLY: { inApp: true, email: false },
+  COMMENT: { inApp: true, email: false },
+  DUE_SOON: { inApp: true, email: false },
+  OVERDUE: { inApp: true, email: true }
 }
 
 export const NOTIFICATION_TYPES = Object.keys(DEFAULT_CHANNELS) as NotificationType[]

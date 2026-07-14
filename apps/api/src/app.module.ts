@@ -46,6 +46,7 @@ import { SensorReadingsModule } from "./sensor-readings/sensor-readings.module"
 import { AssetCustomFieldsModule } from "./asset-custom-fields/asset-custom-fields.module"
 import { MetricsModule } from "./metrics/metrics.module"
 import { SharePointProvisioningModule } from "./sharepoint-provisioning/provisioning.module"
+import { RecordWatchModule } from "./record-watch/watch.module"
 
 @Module({
   imports: [
@@ -94,7 +95,8 @@ import { SharePointProvisioningModule } from "./sharepoint-provisioning/provisio
     SensorReadingsModule,
     AssetCustomFieldsModule,
     MetricsModule,
-    SharePointProvisioningModule
+    SharePointProvisioningModule,
+    RecordWatchModule
   ],
   controllers: [HealthController]
 })
