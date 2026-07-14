@@ -44,12 +44,16 @@ export class WatchService {
 
   async unwatch(clientId: string, userId: string, recordType: string, recordId: string) {
     this.assertScope(clientId)
+    await this.assertInScope(clientId, recordType, recordId)
     await this.prisma.recordWatch.deleteMany({ where: { userId, recordType, recordId } })
     return this.getStatus(clientId, userId, recordType, recordId)
   }
 
   async getStatus(clientId: string, userId: string, recordType: string, recordId: string) {
     this.assertScope(clientId)
+    // Scope the read too: the count/status must not be probeable for a record outside
+    // the caller's client (isolation is enforced per surface, GET included).
+    await this.assertInScope(clientId, recordType, recordId)
     const [mine, watcherCount] = await Promise.all([
       this.prisma.recordWatch.findUnique({
         where: { userId_recordType_recordId: { userId, recordType, recordId } },
