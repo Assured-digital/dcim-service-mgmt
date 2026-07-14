@@ -6,10 +6,10 @@ import { resolveLinkedRecords } from "../record-links/resolve-links"
 import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
-import { emitNotification } from "../notifications/emit-notification"
+import { DomainEventsService } from "../events/domain-events.service"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope"
-import { NotificationType, Role } from "@prisma/client"
+import { Role } from "@prisma/client"
 
 function makeRef() {
   const y = new Date().getFullYear()
@@ -41,7 +41,7 @@ const ISSUE_FIELD_SPEC: FieldSpec = {
 
 @Injectable()
 export class IssuesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private events: DomainEventsService) {}
 
   private getCreatedAtRange(dateFrom?: string, dateTo?: string) {
     if (!dateFrom && !dateTo) return undefined
@@ -198,13 +198,12 @@ export class IssuesService {
     // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
     // skipped inside the helper (recipient === actor).
     if (updated.assigneeId && updated.assigneeId !== issue.assigneeId) {
-      await emitNotification(this.prisma, {
-        type: NotificationType.ASSIGNED,
-        recipientIds: [updated.assigneeId],
-        actorId: actorUserId,
+      this.events.assigned({
+        recordType: "Issue",
+        recordId: issue.id,
         clientId,
-        sourceType: "Issue",
-        sourceId: issue.id
+        actorId: actorUserId,
+        assigneeId: updated.assigneeId
       })
     }
 
@@ -247,13 +246,12 @@ export class IssuesService {
     })
 
     // Notify the current assignee that the status moved. Best-effort; self-skip in helper.
-    await emitNotification(this.prisma, {
-      type: NotificationType.STATUS_CHANGED,
-      recipientIds: [issue.assigneeId],
-      actorId: actorUserId,
+    this.events.statusChanged({
+      recordType: "Issue",
+      recordId: issue.id,
       clientId,
-      sourceType: "Issue",
-      sourceId: issue.id
+      actorId: actorUserId,
+      assigneeId: issue.assigneeId
     })
 
     return updated

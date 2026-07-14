@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { NotificationType, Role, TaskStatus } from "@prisma/client";
+import { Role, TaskStatus } from "@prisma/client";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { resolveCreator } from "../users/creator";
@@ -8,7 +8,7 @@ import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
 import { applyCompletedWorkOrder } from "../work-orders/apply-pending";
-import { emitNotification } from "../notifications/emit-notification";
+import { DomainEventsService } from "../events/domain-events.service";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
 import { resolvedAtUpdate, TASK_RESOLVED_STATUSES } from "../metrics/resolved-status";
@@ -52,7 +52,7 @@ type ListFilters = {
 
 @Injectable()
 export class TasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private events: DomainEventsService) {}
 
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope");
@@ -226,13 +226,12 @@ export class TasksService {
     });
 
     // Notify the current assignee that the status moved. Best-effort; self-skip in helper.
-    await emitNotification(this.prisma, {
-      type: NotificationType.STATUS_CHANGED,
-      recipientIds: [task.assigneeId],
-      actorId: actorUserId,
+    this.events.statusChanged({
+      recordType: "Task",
+      recordId: task.id,
       clientId,
-      sourceType: "Task",
-      sourceId: task.id
+      actorId: actorUserId,
+      assigneeId: task.assigneeId
     });
 
     // MAC↔ITSM fusion: a completed install task activates the asset it staged.
@@ -316,13 +315,12 @@ export class TasksService {
     // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
     // skipped inside the helper (recipient === actor).
     if (updated.assigneeId && updated.assigneeId !== task.assigneeId) {
-      await emitNotification(this.prisma, {
-        type: NotificationType.ASSIGNED,
-        recipientIds: [updated.assigneeId],
-        actorId: actorUserId,
+      this.events.assigned({
+        recordType: "Task",
+        recordId: task.id,
         clientId,
-        sourceType: "Task",
-        sourceId: task.id
+        actorId: actorUserId,
+        assigneeId: updated.assigneeId
       })
     }
 

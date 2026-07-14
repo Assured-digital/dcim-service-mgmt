@@ -95,7 +95,7 @@ describe("TasksService scoping (rule A — list + detail)", () => {
 
   beforeEach(() => {
     rows = makeRows();
-    svc = new TasksService(mockPrisma(rows));
+    svc = new TasksService(mockPrisma(rows), { statusChanged() {}, assigned() {} } as any);
   });
 
   it("ENGINEER list returns ONLY their own records", async () => {
@@ -130,7 +130,7 @@ describe("TasksService assignee lock (rule B — ENGINEER cannot reassign)", () 
   let svc: TasksService;
 
   beforeEach(() => {
-    svc = new TasksService(mockPrisma(makeRows()));
+    svc = new TasksService(mockPrisma(makeRows()), { statusChanged() {}, assigned() {} } as any);
   });
 
   it("ENGINEER changing the assignee on update → 403", async () => {

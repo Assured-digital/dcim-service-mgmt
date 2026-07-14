@@ -1,5 +1,6 @@
 import { SitesModule } from "./sites/sites.module"
 import { Module } from "@nestjs/common";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
 import { OidcModule } from "./auth/oidc.module";
@@ -48,9 +49,12 @@ import { MetricsModule } from "./metrics/metrics.module"
 import { SharePointProvisioningModule } from "./sharepoint-provisioning/provisioning.module"
 import { RecordWatchModule } from "./record-watch/watch.module"
 import { ReportingModule } from "./reporting/reporting.module"
+import { EventsModule } from "./events/events.module"
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
+    EventsModule,
     PrismaModule,
     StorageModule,
     AuthModule,

@@ -7,8 +7,7 @@ import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
-import { emitNotification } from "../notifications/emit-notification";
-import { NotificationType } from "@prisma/client";
+import { DomainEventsService } from "../events/domain-events.service";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
@@ -60,7 +59,7 @@ const INCIDENT_FIELD_SPEC: FieldSpec = {
 
 @Injectable()
 export class IncidentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private events: DomainEventsService) {}
 
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope");
@@ -252,13 +251,12 @@ export class IncidentsService {
     // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
     // skipped inside the helper (recipient === actor).
     if (updated.assigneeId && updated.assigneeId !== incident.assigneeId) {
-      await emitNotification(this.prisma, {
-        type: NotificationType.ASSIGNED,
-        recipientIds: [updated.assigneeId],
-        actorId: actorUserId,
+      this.events.assigned({
+        recordType: "Incident",
+        recordId: incident.id,
         clientId,
-        sourceType: "Incident",
-        sourceId: incident.id
+        actorId: actorUserId,
+        assigneeId: updated.assigneeId
       });
     }
 
@@ -308,13 +306,12 @@ export class IncidentsService {
     // Notify the current assignee that the status moved. Best-effort; if the actor IS
     // the assignee (the common case) the helper self-skips, so this fires mainly when
     // someone else (a manager/analyst) transitions the record.
-    await emitNotification(this.prisma, {
-      type: NotificationType.STATUS_CHANGED,
-      recipientIds: [incident.assigneeId],
-      actorId: actorUserId,
+    this.events.statusChanged({
+      recordType: "Incident",
+      recordId: incident.id,
       clientId,
-      sourceType: "Incident",
-      sourceId: incident.id
+      actorId: actorUserId,
+      assigneeId: incident.assigneeId
     });
 
     return updated;
