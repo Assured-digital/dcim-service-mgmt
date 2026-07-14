@@ -5,19 +5,15 @@ import { graphSendMail, mailSendConfigured } from "../msgraph/send-mail"
 
 const logger = new Logger("notificationEmail")
 
-// Phase 1 emails only the high-signal "someone needs you" types. STATUS_CHANGED /
-// REPLY stay in-app until per-user preferences (Phase 2) let people opt in.
-const EMAIL_TYPES: NotificationType[] = [NotificationType.ASSIGNED, NotificationType.MENTION]
-
-// sourceType -> web path segment. These legacy paths redirect to the canonical
-// detail page, so the deep-link resolves regardless of routing changes.
+// sourceType (PascalCase model name, matching the bell's routes) -> canonical web
+// path. Callers pass only recipients who opted into email (Phase 2 preferences).
 const RECORD_PATH: Record<string, string> = {
-  incident: "incidents",
-  service_request: "service-requests",
-  change: "changes",
-  task: "tasks",
-  risk: "risks",
-  issue: "issues"
+  Incident: "service-desk/inc",
+  ServiceRequest: "service-desk/sr",
+  ChangeRequest: "service-desk/chg",
+  Task: "service-desk/task",
+  Risk: "risks-issues/risks",
+  Issue: "risks-issues/issues"
 }
 
 function recordUrl(sourceType: string, sourceId: string): string | null {
@@ -40,7 +36,7 @@ export type NotificationEmailInput = {
 // mailSendConfigured() and the type is email-eligible.
 export async function sendNotificationEmails(prisma: PrismaService, input: NotificationEmailInput): Promise<void> {
   try {
-    if (!mailSendConfigured() || !EMAIL_TYPES.includes(input.type) || input.recipientIds.length === 0) return
+    if (!mailSendConfigured() || input.recipientIds.length === 0) return
 
     const [recipients, actor] = await Promise.all([
       prisma.user.findMany({
@@ -59,14 +55,20 @@ export async function sendNotificationEmails(prisma: PrismaService, input: Notif
       (actor && (actor.knownAs || `${actor.firstName ?? ""} ${actor.lastName ?? ""}`.trim() || actor.email)) || "Someone"
     const label = input.sourceType.replace(/_/g, " ")
     const url = recordUrl(input.sourceType, input.sourceId)
-    const subject =
-      input.type === NotificationType.ASSIGNED
-        ? `You've been assigned a ${label}`
-        : `${actorName} mentioned you on a ${label}`
-    const line =
-      input.type === NotificationType.ASSIGNED
-        ? `${actorName} assigned you a ${label}.`
-        : `${actorName} mentioned you on a ${label}.`
+    const SUBJECT: Record<string, string> = {
+      ASSIGNED: `You've been assigned a ${label}`,
+      MENTION: `${actorName} mentioned you on a ${label}`,
+      STATUS_CHANGED: `Status updated on a ${label}`,
+      REPLY: `${actorName} replied to you on a ${label}`
+    }
+    const LINE: Record<string, string> = {
+      ASSIGNED: `${actorName} assigned you a ${label}.`,
+      MENTION: `${actorName} mentioned you on a ${label}.`,
+      STATUS_CHANGED: `${actorName} updated the status of a ${label}.`,
+      REPLY: `${actorName} replied to you on a ${label}.`
+    }
+    const subject = SUBJECT[input.type] ?? `Update on a ${label}`
+    const line = LINE[input.type] ?? `${actorName} updated a ${label}.`
     const html =
       `<p>${line}</p>` +
       (url ? `<p><a href="${url}">Open it in AD Service Management</a></p>` : "") +

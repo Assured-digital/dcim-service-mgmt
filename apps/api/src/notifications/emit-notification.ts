@@ -2,6 +2,7 @@ import { Logger } from "@nestjs/common"
 import { NotificationType } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
 import { sendNotificationEmails } from "./notification-email"
+import { resolveChannels } from "./preferences"
 
 // Single writer for event-driven notifications — a plain function taking the prisma
 // client (NOT injectable), mirroring emitAudit (audit-events/emit-audit.ts) so it
@@ -43,23 +44,29 @@ export async function emitNotification(
     ]
     if (!recipientIds.length) return
 
-    await prisma.notification.createMany({
-      data: recipientIds.map((recipientId) => ({
-        recipientId,
-        type: input.type,
-        actorId: input.actorId,
-        clientId: input.clientId,
-        sourceType: input.sourceType,
-        sourceId: input.sourceId,
-        commentId: input.commentId ?? null
-      }))
-    })
+    // Per-recipient channel preferences (in-app / email) with sensible defaults.
+    const channels = await resolveChannels(prisma, recipientIds, input.type)
 
-    // Best-effort email fan-out (dormant unless NOTIFICATIONS_EMAIL_ENABLED). Same
-    // deduped recipient list; the in-app write above is the primary record.
+    const inAppRecipients = recipientIds.filter((id) => channels.get(id)?.inApp)
+    if (inAppRecipients.length) {
+      await prisma.notification.createMany({
+        data: inAppRecipients.map((recipientId) => ({
+          recipientId,
+          type: input.type,
+          actorId: input.actorId,
+          clientId: input.clientId,
+          sourceType: input.sourceType,
+          sourceId: input.sourceId,
+          commentId: input.commentId ?? null
+        }))
+      })
+    }
+
+    // Best-effort email to recipients who opted into email for this type.
+    const emailRecipients = recipientIds.filter((id) => channels.get(id)?.email)
     await sendNotificationEmails(prisma, {
       type: input.type,
-      recipientIds,
+      recipientIds: emailRecipients,
       actorId: input.actorId,
       sourceType: input.sourceType,
       sourceId: input.sourceId

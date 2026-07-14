@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { api, type ApiError } from "../lib/api";
+import NotificationSettings from "../components/NotificationSettings";
 
 const NEW_PASSWORD_RULE = /(?=.*[A-Za-z])(?=.*\d)/;
 const NEW_PASSWORD_HELPER = "At least 8 characters, including a letter and a number.";
@@ -187,6 +188,8 @@ export default function SettingsPage() {
           </Box>
         </Box>
       </Box>
+
+      <NotificationSettings />
     </Box>
   );
 }

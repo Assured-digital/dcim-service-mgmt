@@ -749,6 +749,7 @@ model User {
   reviewingChecks         Check[]                @relation("CheckReviewer")
   performedMaintenance    MaintenanceLog[]       @relation("PerformedMaintenance")
   clientAssignments       UserClientAssignment[]
+  notificationPreferences UserNotificationPreference[] @relation("UserNotificationPrefs")
   receivedNotifications   Notification[]         @relation("ReceivedNotifications")
   triggeredNotifications  Notification[]         @relation("TriggeredNotifications")
 }
@@ -1426,6 +1427,21 @@ model Notification {
   // "my unread notifications, newest first" — the bell's primary query.
   @@index([recipientId, readAt, createdAt])
   @@index([clientId])
+}
+
+// B3 Phase 2 — per-user notification preferences: for each event type, which
+// channels the user wants (in-app / email). An absent row means the sensible
+// default (notifications/preferences.ts). Unique per (user, type).
+model UserNotificationPreference {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation("UserNotificationPrefs", fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  inApp     Boolean          @default(true)
+  email     Boolean          @default(false)
+  updatedAt DateTime         @updatedAt
+
+  @@unique([userId, type])
 }
 
 model UserClientAssignment {

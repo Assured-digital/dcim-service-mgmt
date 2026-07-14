@@ -60,6 +60,32 @@ export async function markAllNotificationsRead(): Promise<void> {
   await api.patch("/notifications/read-all")
 }
 
+// ── Preferences (Phase 2) — per-type × per-channel (in-app / email) ─────────────
+export interface NotificationPreference {
+  type: NotificationKind
+  inApp: boolean
+  email: boolean
+}
+
+export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  ASSIGNED: "Assigned to me",
+  MENTION: "Mentioned me",
+  STATUS_CHANGED: "Status changed",
+  REPLY: "Reply to my comment",
+}
+
+export async function fetchNotificationPreferences(): Promise<NotificationPreference[]> {
+  const { data } = await api.get<{ preferences: NotificationPreference[] }>("/notifications/preferences")
+  return data.preferences
+}
+
+export async function updateNotificationPreferences(
+  preferences: NotificationPreference[]
+): Promise<NotificationPreference[]> {
+  const { data } = await api.put<{ preferences: NotificationPreference[] }>("/notifications/preferences", { preferences })
+  return data.preferences
+}
+
 // ── source → detail route ─────────────────────────────────────────────────────
 // sourceType is the Comment entityType vocabulary (PascalCase model names — see
 // apps/api/src/comments/resolve-comment-scope.ts). Mirrors linkedRecords.ts route
