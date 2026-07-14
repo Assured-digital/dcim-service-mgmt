@@ -10,6 +10,8 @@ import { CrmController } from "./crm.controller"
 @Module({
   imports: [PrismaModule, OpportunitiesModule, TasksModule, MsGraphModule],
   providers: [CrmService, MailSyncService],
-  controllers: [CrmController]
+  controllers: [CrmController],
+  // Exported so the Reporting module (D3) can compose the commercial report.
+  exports: [CrmService]
 })
 export class CrmModule {}

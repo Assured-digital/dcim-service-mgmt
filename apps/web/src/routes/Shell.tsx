@@ -8,6 +8,7 @@ import {
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
 import DashboardIcon from "@mui/icons-material/Dashboard"
+import AssessmentIcon from "@mui/icons-material/Assessment"
 import FactCheckIcon from "@mui/icons-material/FactCheck"
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts"
 import ApartmentIcon from "@mui/icons-material/Apartment"
@@ -276,6 +277,9 @@ const scopeIndependentSections: NavSection[] = [
 
 const clientSections: NavSection[] = [
   { title: "", items: [{ label: "Dashboard", path: "/dashboard", icon: <DashboardIcon sx={{ fontSize: ICON_SIZE }} />, roles: Object.values(ROLES) }] },
+  // Cross-module Reporting (D3) — role-gated (management / AD-staff), NOT a licensable
+  // module; the sections inside are entitlement-gated server-side.
+  { title: "", items: [{ label: "Reporting", path: "/reporting", icon: <AssessmentIcon sx={{ fontSize: ICON_SIZE }} />, roles: [...ORG_SUPER_ROLES, ROLES.SERVICE_MANAGER, ROLES.SERVICE_DESK_ANALYST] }] },
   {
     // Service Desk is now a single flat entry (was the "Service Management" group).
     // Risks & Issues merged in — its records open under /service-desk/risk|issue and

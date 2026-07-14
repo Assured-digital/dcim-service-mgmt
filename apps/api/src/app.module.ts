@@ -47,6 +47,7 @@ import { AssetCustomFieldsModule } from "./asset-custom-fields/asset-custom-fiel
 import { MetricsModule } from "./metrics/metrics.module"
 import { SharePointProvisioningModule } from "./sharepoint-provisioning/provisioning.module"
 import { RecordWatchModule } from "./record-watch/watch.module"
+import { ReportingModule } from "./reporting/reporting.module"
 
 @Module({
   imports: [
@@ -96,7 +97,8 @@ import { RecordWatchModule } from "./record-watch/watch.module"
     AssetCustomFieldsModule,
     MetricsModule,
     SharePointProvisioningModule,
-    RecordWatchModule
+    RecordWatchModule,
+    ReportingModule
   ],
   controllers: [HealthController]
 })
