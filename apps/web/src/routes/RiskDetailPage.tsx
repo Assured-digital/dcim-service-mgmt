@@ -1079,6 +1079,7 @@ export default function RiskDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={risk.reference}
+        watchTarget={{ recordType: "Risk", recordId: risk.id }}
         typeBadge={riskTypeBadge(mode)}
         currentStatus={risk.status}
         statusConfig={riskStatusConfig}

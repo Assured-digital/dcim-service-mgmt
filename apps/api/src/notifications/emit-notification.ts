@@ -3,6 +3,7 @@ import { NotificationType } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
 import { sendNotificationEmails } from "./notification-email"
 import { resolveChannels } from "./preferences"
+import { listWatcherIds } from "../record-watch/watchers"
 
 // Single writer for event-driven notifications — a plain function taking the prisma
 // client (NOT injectable), mirroring emitAudit (audit-events/emit-audit.ts) so it
@@ -20,6 +21,11 @@ import { resolveChannels } from "./preferences"
 
 const logger = new Logger("emitNotification")
 
+// Types where the record's WATCHERS are notified alongside the direct recipients.
+// COMMENT is handled explicitly in the comment flow (it needs mention-awareness), so
+// it is deliberately NOT here.
+const WATCH_NOTIFY_TYPES = new Set<NotificationType>([NotificationType.STATUS_CHANGED])
+
 export type EmitNotificationInput = {
   type: NotificationType
   recipientIds: (string | null | undefined)[]
@@ -35,13 +41,21 @@ export async function emitNotification(
   input: EmitNotificationInput
 ): Promise<void> {
   try {
-    const recipientIds = [
+    let recipientIds = [
       ...new Set(
         input.recipientIds.filter(
           (id): id is string => !!id && id !== input.actorId
         )
       )
     ]
+
+    // Watchers of the record also receive activity notifications (e.g. STATUS_CHANGED),
+    // in addition to the direct recipients (assignee).
+    if (WATCH_NOTIFY_TYPES.has(input.type)) {
+      const watchers = await listWatcherIds(prisma, input.sourceType, input.sourceId, input.actorId)
+      recipientIds = [...new Set([...recipientIds, ...watchers])]
+    }
+
     if (!recipientIds.length) return
 
     // Per-recipient channel preferences (in-app / email) with sensible defaults.

@@ -981,6 +981,7 @@ export default function ServiceRequestDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={sr.reference}
+        watchTarget={{ recordType: "ServiceRequest", recordId: sr.id }}
         typeBadge={null}
         currentStatus={sr.status}
         statusConfig={srStatusConfig}

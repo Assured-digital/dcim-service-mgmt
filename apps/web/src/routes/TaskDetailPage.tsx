@@ -833,6 +833,7 @@ export default function TaskDetailPage() {
         backLabel="Back"
         onBack={handleBack}
         recordRef={task.reference}
+        watchTarget={{ recordType: "Task", recordId: task.id }}
         typeBadge={null}
         currentStatus={task.status}
         statusConfig={statusConfig}

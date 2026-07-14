@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable } from "@nestjs/common"
-import { Prisma } from "@prisma/client"
+import { Prisma, NotificationType } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import { NotificationsService } from "../notifications/notifications.service"
+import { emitNotification } from "../notifications/emit-notification"
+import { autoWatch, listWatcherIds } from "../record-watch/watchers"
 import { computeDisplayName, toUserDisplay, userDisplaySelect, type UserDisplayPick } from "../users/display"
 import { emitAudit } from "../audit-events/emit-audit"
 import { assertEntityInScope } from "./resolve-comment-scope"
@@ -20,6 +22,10 @@ type CommentRow = {
   author: UserDisplayPick | null
   mentions: { targetType: string; targetId: string }[]
 }
+
+// Watch feature: the six work-item types whose comments notify watchers + auto-watch
+// the author. PascalCase — matches Comment.entityType and Notification.sourceType.
+const WATCHABLE_COMMENT_TYPES = new Set(["Incident", "ServiceRequest", "ChangeRequest", "Task", "Risk", "Issue"])
 
 @Injectable()
 export class CommentsService {
@@ -67,6 +73,44 @@ export class CommentsService {
 
   private async presentOne<T extends CommentRow>(row: T) {
     return (await this.present([row]))[0]
+  }
+
+  // Watch feature (Phase 2b). A new comment: (1) auto-watches the author on the record
+  // (so they follow the thread they joined), and (2) fires a COMMENT notification to the
+  // record's WATCHERS — excluding the author, anyone @mentioned (they get MENTION), and
+  // the reply target (they get REPLY), so nobody is double-notified. Best-effort:
+  // emitNotification never throws and the comment is already committed. Only the six
+  // work-item types are watchable (recordType is PascalCase, matching Comment.entityType
+  // and Notification.sourceType).
+  private async notifyWatchersOnComment(params: {
+    clientId: string
+    actorId: string
+    entityType: string
+    entityId: string
+    commentId: string
+    mentions: { targetType: string; targetId: string }[]
+    replyTargetId?: string | null
+  }) {
+    if (!WATCHABLE_COMMENT_TYPES.has(params.entityType)) return
+    await autoWatch(this.prisma, params.actorId, params.entityType, params.entityId)
+    const excluded = new Set<string>([
+      params.actorId,
+      ...params.mentions.filter((m) => m.targetType === "user").map((m) => m.targetId),
+      ...(params.replyTargetId ? [params.replyTargetId] : [])
+    ])
+    const watchers = (
+      await listWatcherIds(this.prisma, params.entityType, params.entityId, params.actorId)
+    ).filter((id) => !excluded.has(id))
+    if (!watchers.length) return
+    await emitNotification(this.prisma, {
+      type: NotificationType.COMMENT,
+      recipientIds: watchers,
+      actorId: params.actorId,
+      clientId: params.clientId,
+      sourceType: params.entityType,
+      sourceId: params.entityId,
+      commentId: params.commentId
+    })
   }
 
   // Two-level threaded read. Returns top-level comments (posts) each with a nested
@@ -154,6 +198,14 @@ export class CommentsService {
       commentId: comment.id,
       mentions
     })
+    await this.notifyWatchersOnComment({
+      clientId,
+      actorId: authorId,
+      entityType: dto.entityType,
+      entityId: dto.entityId,
+      commentId: comment.id,
+      mentions
+    })
     await emitAudit(this.prisma, {
       entityType: dto.entityType,
       entityId: dto.entityId,
@@ -196,6 +248,14 @@ export class CommentsService {
       actorId: authorId,
       sourceType: dto.entityType,
       sourceId: dto.entityId,
+      commentId: comment.id,
+      mentions
+    })
+    await this.notifyWatchersOnComment({
+      clientId,
+      actorId: authorId,
+      entityType: dto.entityType,
+      entityId: dto.entityId,
       commentId: comment.id,
       mentions
     })
@@ -295,6 +355,15 @@ export class CommentsService {
       sourceId: parent.entityId,
       commentId: reply.id,
       mentionedUserIds: mentions.filter((m) => m.targetType === "user").map((m) => m.targetId)
+    })
+    await this.notifyWatchersOnComment({
+      clientId,
+      actorId: authorId,
+      entityType: parent.entityType,
+      entityId: parent.entityId,
+      commentId: reply.id,
+      mentions,
+      replyTargetId: parent.authorId
     })
 
     await emitAudit(this.prisma, {
