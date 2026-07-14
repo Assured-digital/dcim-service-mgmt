@@ -123,6 +123,8 @@ enum NotificationType {
   ASSIGNED
   STATUS_CHANGED
   COMMENT
+  DUE_SOON
+  OVERDUE
 }
 
 model Client {
@@ -1460,6 +1462,20 @@ model RecordWatch {
 
   @@unique([userId, recordType, recordId])
   @@index([recordType, recordId])
+}
+
+// B3 Phase 3 — idempotency ledger for the time-based notification sweep. One row per
+// (record, signal) once we've notified for it, so a daily sweep fires each DUE_SOON /
+// OVERDUE alert exactly once instead of re-notifying every run. `signal` is a plain
+// string ("DUE_SOON" | "OVERDUE"), not an enum — the marker outlives enum churn.
+model NotificationSweepMarker {
+  id         String   @id @default(uuid())
+  recordType String
+  recordId   String
+  signal     String
+  createdAt  DateTime @default(now())
+
+  @@unique([recordType, recordId, signal])
 }
 
 model UserClientAssignment {

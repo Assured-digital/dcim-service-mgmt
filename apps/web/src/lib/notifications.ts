@@ -5,7 +5,18 @@ import { api } from "./api"
 // x-client-id is auto-injected by the api interceptor; recipient = the JWT user.
 // All shapes mirror NotificationsService.listForUser / unreadCount (apps/api).
 
-export type NotificationKind = "MENTION" | "REPLY" | "ASSIGNED" | "STATUS_CHANGED" | "COMMENT"
+export type NotificationKind =
+  | "MENTION"
+  | "REPLY"
+  | "ASSIGNED"
+  | "STATUS_CHANGED"
+  | "COMMENT"
+  | "DUE_SOON"
+  | "OVERDUE"
+
+// System (actor-less) notification kinds — the time-based sweep alerts. The bell shows
+// a "Reminder" sender for these instead of a person.
+export const SYSTEM_NOTIFICATION_KINDS = new Set<string>(["DUE_SOON", "OVERDUE"])
 
 // The feed line reads "{actor} {verb}" — one verb per kind. Mirrors the backend
 // NotificationType enum. Unknown kinds fall back to a neutral phrase.
@@ -15,6 +26,8 @@ const NOTIFICATION_VERBS: Record<string, string> = {
   ASSIGNED: "assigned this to you",
   STATUS_CHANGED: "updated the status",
   COMMENT: "commented",
+  DUE_SOON: "flagged as due soon",
+  OVERDUE: "flagged as overdue",
 }
 
 export function notificationVerb(type: string): string {
@@ -74,6 +87,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   STATUS_CHANGED: "Status changed",
   REPLY: "Reply to my comment",
   COMMENT: "New comment (watching)",
+  DUE_SOON: "Due soon",
+  OVERDUE: "Overdue",
 }
 
 export async function fetchNotificationPreferences(): Promise<NotificationPreference[]> {

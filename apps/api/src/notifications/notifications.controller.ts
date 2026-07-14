@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Patch, Put, Req, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Put, Req, UseGuards } from "@nestjs/common"
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger"
 import { Role } from "@prisma/client"
 import { JwtAuthGuard } from "../auth/jwt.guard"
@@ -7,6 +7,7 @@ import { Roles } from "../auth/roles.decorator"
 import { getJwtUser, resolveClientScope } from "../auth/request-context"
 import { PrismaService } from "../prisma/prisma.service"
 import { NotificationsService } from "./notifications.service"
+import { NotificationSweepService } from "./notification-sweep.service"
 import { UpdateNotificationPreferencesDto } from "./dto"
 
 // Any authenticated app user can have notifications addressed to them (mentions
@@ -23,7 +24,11 @@ const ALL_AUTHED = [
 @ApiBearerAuth()
 @Controller("notifications")
 export class NotificationsController {
-  constructor(private notifications: NotificationsService, private prisma: PrismaService) {}
+  constructor(
+    private notifications: NotificationsService,
+    private sweep: NotificationSweepService,
+    private prisma: PrismaService
+  ) {}
 
   @Get()
   @Roles(...ALL_AUTHED)
@@ -59,6 +64,17 @@ export class NotificationsController {
     const user = getJwtUser(req)
     const clientId = await resolveClientScope(user, requestedClientId, this.prisma)
     return this.notifications.markRead(clientId, user.userId, id)
+  }
+
+  // The time-based notification sweep (B3 Phase 3). Idempotent; runs org-wide over
+  // due/overdue work-items. Mirrors the CRM sweep — triggered by an external schedule
+  // (Azure Container Apps job), NOT an in-process cron. Org-super only (system action).
+  @Post("sweep")
+  @Roles(Role.ORG_OWNER, Role.ORG_ADMIN, Role.ADMIN)
+  async runSweep(@Req() req: any) {
+    const organizationId = getJwtUser(req).organizationId
+    if (!organizationId) throw new BadRequestException("No organization scope on this user")
+    return this.sweep.runSweep(organizationId)
   }
 
   // Per-user notification preferences (not client-scoped — a person's settings

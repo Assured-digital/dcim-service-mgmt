@@ -24,7 +24,11 @@ const logger = new Logger("emitNotification")
 // Types where the record's WATCHERS are notified alongside the direct recipients.
 // COMMENT is handled explicitly in the comment flow (it needs mention-awareness), so
 // it is deliberately NOT here.
-const WATCH_NOTIFY_TYPES = new Set<NotificationType>([NotificationType.STATUS_CHANGED])
+const WATCH_NOTIFY_TYPES = new Set<NotificationType>([
+  NotificationType.STATUS_CHANGED,
+  NotificationType.DUE_SOON,
+  NotificationType.OVERDUE
+])
 
 export type EmitNotificationInput = {
   type: NotificationType
