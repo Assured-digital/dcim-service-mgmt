@@ -142,4 +142,23 @@ export class NotificationSweepService {
     )
     return { clientsSwept: clientIds.length, dueSoonNotified: dueSoon, overdueNotified: overdue }
   }
+
+  // System entry for the scheduled job (JOB_MODE=notif-sweep) — runs the sweep across
+  // EVERY organization in-process, no HTTP/auth. Aggregates the per-org tallies.
+  async runAllOrgs() {
+    const orgs = await this.prisma.organization.findMany({ select: { id: true } })
+    let clientsSwept = 0
+    let dueSoonNotified = 0
+    let overdueNotified = 0
+    for (const org of orgs) {
+      const r = await this.runSweep(org.id)
+      clientsSwept += r.clientsSwept
+      dueSoonNotified += r.dueSoonNotified
+      overdueNotified += r.overdueNotified
+    }
+    this.logger.log(
+      `Notification sweep (all orgs) complete: orgs=${orgs.length} clients=${clientsSwept} dueSoon=${dueSoonNotified} overdue=${overdueNotified}`
+    )
+    return { orgs: orgs.length, clientsSwept, dueSoonNotified, overdueNotified }
+  }
 }
