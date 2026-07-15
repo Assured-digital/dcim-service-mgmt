@@ -38,6 +38,15 @@ if [ "$JOB_MODE" = "provision" ]; then
     exec node dist/src/provision-cli.js
 fi
 
+# Notification-sweep-job mode: run the time-based due-soon/overdue sweep across all orgs
+# and exit. Used ONLY by the scheduled notification-sweep Container Apps Job (env
+# JOB_MODE=notif-sweep) — never the API. In-process, no HTTP/auth. Runs after generate
+# (client ready), before any schema/seed/API steps, so it never touches the DB schema.
+if [ "$JOB_MODE" = "notif-sweep" ]; then
+    echo "JOB_MODE=notif-sweep -> running notification sweep (all orgs)..."
+    exec node dist/src/notification-sweep-cli.js
+fi
+
 if [ "$APP_ENV" = "production" ]; then
     echo "Production mode: schema managed by migrate deploy (run as a job), skipping db push."
 

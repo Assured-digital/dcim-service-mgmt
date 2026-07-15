@@ -1,12 +1,14 @@
 import { Module } from "@nestjs/common"
 import { PrismaModule } from "../prisma/prisma.module"
 import { NotificationsService } from "./notifications.service"
-import { NotificationSweepService } from "./notification-sweep.service"
+import { NotificationSweepModule } from "./notification-sweep.module"
 import { NotificationsController } from "./notifications.controller"
 
 @Module({
-  imports: [PrismaModule],
-  providers: [NotificationsService, NotificationSweepService],
+  // NotificationSweepModule provides NotificationSweepService (also used standalone by
+  // the JOB_MODE=notif-sweep CLI); the controller injects it for POST /notifications/sweep.
+  imports: [PrismaModule, NotificationSweepModule],
+  providers: [NotificationsService],
   controllers: [NotificationsController],
   // Exported so the comment-create path (CommentsModule) can emit on mention.
   exports: [NotificationsService]

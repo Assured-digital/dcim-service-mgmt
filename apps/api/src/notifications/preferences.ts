@@ -3,16 +3,17 @@ import type { PrismaService } from "../prisma/prisma.service"
 
 export type Channels = { inApp: boolean; email: boolean }
 
-// Defaults when a user has no explicit preference for a type. Preserves the
-// pre-preferences behaviour: everything in-app; ASSIGNED + MENTION also email.
+// Defaults when a user has no explicit preference for a type. Email is OFF by default
+// for every type (opt-in per user via notification settings); in-app stays on. The
+// master switch NOTIFICATIONS_EMAIL_ENABLED still governs whether email sends at all.
 export const DEFAULT_CHANNELS: Record<NotificationType, Channels> = {
-  ASSIGNED: { inApp: true, email: true },
-  MENTION: { inApp: true, email: true },
+  ASSIGNED: { inApp: true, email: false },
+  MENTION: { inApp: true, email: false },
   STATUS_CHANGED: { inApp: true, email: false },
   REPLY: { inApp: true, email: false },
   COMMENT: { inApp: true, email: false },
   DUE_SOON: { inApp: true, email: false },
-  OVERDUE: { inApp: true, email: true }
+  OVERDUE: { inApp: true, email: false }
 }
 
 export const NOTIFICATION_TYPES = Object.keys(DEFAULT_CHANNELS) as NotificationType[]
