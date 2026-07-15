@@ -4,6 +4,8 @@ import { MetricsService } from "./metrics.service";
 
 @Module({
   controllers: [MetricsController],
-  providers: [MetricsService]
+  providers: [MetricsService],
+  // Exported so the Reporting module (D3) can compose MTTR/SLA into the summary.
+  exports: [MetricsService]
 })
 export class MetricsModule {}

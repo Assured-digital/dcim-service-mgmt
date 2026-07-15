@@ -37,6 +37,7 @@ const AdminUsersPage           = React.lazy(() => import("./AdminUsersPage"))
 const ClientsPage              = React.lazy(() => import("./ClientsPage"))
 const KnowledgePage            = React.lazy(() => import("./KnowledgePage"))
 const MyWorkPage               = React.lazy(() => import("./MyWorkPage"))
+const ReportingPage            = React.lazy(() => import("./ReportingPage"))
 const OverviewPage             = React.lazy(() => import("./OverviewPage"))
 const DcimOverviewPage         = React.lazy(() => import("./DcimOverviewPage"))
 const PlaceEquipmentPage       = React.lazy(() => import("./PlaceEquipmentPage"))
@@ -149,6 +150,7 @@ export default function App() {
         >
           <Route index element={<MyWorkPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="reporting" element={<ReportingPage />} />
           <Route path="dcim/overview" element={<DcimOverviewPage />} />
           <Route path="dcim/place" element={<PlaceEquipmentPage />} />
           <Route path="dcim/monitoring" element={<MonitoringPage />} />
