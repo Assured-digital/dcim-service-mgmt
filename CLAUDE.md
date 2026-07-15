@@ -274,6 +274,8 @@ validates it. There is NO "hidden selector / auto-scope" special-case — do not
   attachments + linked-records right-panel sections).
 - `docs/release-readiness.md` — release checklist (open PROD blockers: rotate prod DB password,
   error-response leak check, regression sweep, load test).
+- `docs/glossary.md` — naming glossary mapping the architecture docs' terms (Rack/Data Centre/Ticket)
+  to the canonical code/UI terms (Cabinet/Site/six work-item types). Code terms win — no rename.
 - Also present: `docs/DEPLOYMENT-PLAN.md`, `docs/rbac-role-matrix-audit.md`,
   `docs/regression-sweep-checklist.md`, `docs/triage-smoke-test.md`.
 
