@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from "@nestjs/common"
-import { NotificationType, Role } from "@prisma/client"
+import { Role } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import { resolveCreator } from "../users/creator"
 import { toUserDisplay, userDisplaySelect } from "../users/display"
@@ -8,7 +8,7 @@ import { resolveAttachments } from "../attachments/resolve-attachments"
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record"
 import { emitAudit } from "../audit-events/emit-audit"
 import { applyCompletedWorkOrder, abandonWorkOrder } from "../work-orders/apply-pending"
-import { emitNotification } from "../notifications/emit-notification"
+import { DomainEventsService } from "../events/domain-events.service"
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope"
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope"
 
@@ -60,7 +60,7 @@ const CHANGE_FIELD_SPEC: FieldSpec = {
 
 @Injectable()
 export class ChangesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private events: DomainEventsService) {}
 
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope")
@@ -209,13 +209,12 @@ export class ChangesService {
 
     // Notify the current assignee that the status moved. Best-effort; self-skip in helper.
     // (Approval-driven status changes via addApproval are out of Phase 1 scope.)
-    await emitNotification(this.prisma, {
-      type: NotificationType.STATUS_CHANGED,
-      recipientIds: [change.assigneeId],
-      actorId: actorUserId,
+    this.events.statusChanged({
+      recordType: "ChangeRequest",
+      recordId: change.id,
       clientId,
-      sourceType: "ChangeRequest",
-      sourceId: change.id
+      actorId: actorUserId,
+      assigneeId: change.assigneeId
     })
 
     // MAC↔ITSM fusion: a completed decommission change retires its staged asset;
@@ -335,13 +334,12 @@ export class ChangesService {
     // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
     // skipped inside the helper (recipient === actor).
     if (updated.assigneeId && updated.assigneeId !== change.assigneeId) {
-      await emitNotification(this.prisma, {
-        type: NotificationType.ASSIGNED,
-        recipientIds: [updated.assigneeId],
-        actorId: actorUserId,
+      this.events.assigned({
+        recordType: "ChangeRequest",
+        recordId: change.id,
         clientId,
-        sourceType: "ChangeRequest",
-        sourceId: change.id
+        actorId: actorUserId,
+        assigneeId: updated.assigneeId
       })
     }
 

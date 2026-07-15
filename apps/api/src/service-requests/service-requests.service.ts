@@ -1,13 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { NotificationType, Role, ServiceRequestStatus } from "@prisma/client";
+import { Role, ServiceRequestStatus } from "@prisma/client";
 import { resolveCreator } from "../users/creator";
 import { toUserDisplay, userDisplaySelect } from "../users/display";
 import { resolveLinkedRecords } from "../record-links/resolve-links";
 import { resolveAttachments } from "../attachments/resolve-attachments";
 import { diffRecord, type FieldSpec } from "../audit-events/diff-record";
 import { emitAudit } from "../audit-events/emit-audit";
-import { emitNotification } from "../notifications/emit-notification";
+import { DomainEventsService } from "../events/domain-events.service";
 import { resolveSlaHours, computeDueAt } from "../sla/sla";
 import { applyAssignedScope, type ScopeViewer } from "../auth/role-scope";
 import { buildListScope, TERMINAL_STATUSES, type ListScope } from "../common/list-scope";
@@ -57,7 +57,7 @@ const SR_FIELD_SPEC: FieldSpec = {
 
 @Injectable()
 export class ServiceRequestsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private events: DomainEventsService) {}
 
   private assertClientScope(clientId: string) {
     if (!clientId) throw new ForbiddenException("Missing client scope");
@@ -225,13 +225,12 @@ async updateStatusForClient(
   });
 
   // Notify the current assignee that the status moved. Best-effort; self-skip in helper.
-  await emitNotification(this.prisma, {
-    type: NotificationType.STATUS_CHANGED,
-    recipientIds: [sr.assigneeId],
-    actorId: actorUserId,
+  this.events.statusChanged({
+    recordType: "ServiceRequest",
+    recordId: sr.id,
     clientId,
-    sourceType: "ServiceRequest",
-    sourceId: sr.id
+    actorId: actorUserId,
+    assigneeId: sr.assigneeId
   });
 
   return updated;
@@ -307,13 +306,12 @@ async updateForClient(
   // Notify the new assignee on a real (re)assignment. Best-effort; self-assign is
   // skipped inside the helper (recipient === actor).
   if (updated.assigneeId && updated.assigneeId !== sr.assigneeId) {
-    await emitNotification(this.prisma, {
-      type: NotificationType.ASSIGNED,
-      recipientIds: [updated.assigneeId],
-      actorId: actorUserId,
+    this.events.assigned({
+      recordType: "ServiceRequest",
+      recordId: sr.id,
       clientId,
-      sourceType: "ServiceRequest",
-      sourceId: sr.id
+      actorId: actorUserId,
+      assigneeId: updated.assigneeId
     });
   }
 
